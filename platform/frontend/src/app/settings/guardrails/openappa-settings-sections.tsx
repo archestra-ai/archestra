@@ -1,6 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
@@ -17,6 +18,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
@@ -30,6 +37,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Whether tool calls are checked against the policy at all. */
 export function OpenAppaEnforcementSetting() {
@@ -126,14 +134,22 @@ export function OpenAppaBreakTheGlassSettings() {
         disabled={disabled}
         environmentVariable="ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"
         options={[
-          { value: "block", label: "Block until approved" },
+          {
+            value: "block",
+            label: "Block until approved",
+            description: "Require human approval in every session.",
+          },
           {
             value: "unattended",
             label: "Waive in unattended sessions",
             description:
               "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
           },
-          { value: "everywhere", label: "Waive everywhere" },
+          {
+            value: "everywhere",
+            label: "Waive everywhere",
+            description: "Waive human approval in all sessions.",
+          },
         ]}
       />
       <BreakTheGlassRow
@@ -149,8 +165,17 @@ export function OpenAppaBreakTheGlassSettings() {
         disabled={disabled}
         environmentVariable="ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE"
         options={[
-          { value: "refuse", label: "Keep the block" },
-          { value: "allow", label: "Waive the block" },
+          {
+            value: "refuse",
+            label: "Keep the block",
+            description: "Refuse operations that cannot be approved.",
+          },
+          {
+            value: "allow",
+            label: "Waive the block",
+            description:
+              "Continue and turn Guardrails off for the session. Explicit policy blocks never waive.",
+          },
         ]}
       />
     </SettingsBlock>
@@ -400,7 +425,14 @@ function BreakTheGlassRow<T extends string>(props: {
 }) {
   const current = props.options.find((option) => option.value === props.value);
   return (
-    <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
+    <div
+      className={cn(
+        "grid gap-3 p-4 lg:items-center lg:gap-8",
+        props.environmentVariable
+          ? "lg:grid-cols-[minmax(0,1fr)_max-content]"
+          : "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]",
+      )}
+    >
       <div className="min-w-0 space-y-1">
         <h3 className="text-sm font-medium leading-5">{props.title}</h3>
         <div className="text-sm leading-5 text-muted-foreground">
@@ -412,8 +444,8 @@ function BreakTheGlassRow<T extends string>(props: {
           <p className="text-sm font-medium leading-5">
             {current?.label ?? props.value}
           </p>
-          <p className="text-xs leading-4 text-muted-foreground">
-            Set with{" "}
+          <p className="text-xs leading-4 text-muted-foreground lg:whitespace-nowrap">
+            <span>Set with </span>
             <code className="font-mono">
               {/* Wrap a long name only after an underscore. */}
               {props.environmentVariable.split("_").map((part, index) => (
@@ -426,7 +458,29 @@ function BreakTheGlassRow<T extends string>(props: {
                   {part}
                 </span>
               ))}
+              <span>={props.value}</span>
             </code>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <UnstyledButton
+                  aria-label={`${props.title} environment values`}
+                  className="ml-1 inline-flex align-middle"
+                >
+                  <Info className="size-3.5" />
+                </UnstyledButton>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm space-y-2" align="end">
+                {props.options.map((option) => (
+                  <div key={option.value}>
+                    <code className="font-mono">{option.value}</code>
+                    <span> — {option.label}.</span>
+                    {option.description ? (
+                      <p className="mt-1">{option.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </TooltipContent>
+            </Tooltip>
           </p>
         </div>
       ) : props.value ? (

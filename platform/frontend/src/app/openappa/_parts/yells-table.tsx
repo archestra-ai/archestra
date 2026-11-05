@@ -56,6 +56,7 @@ import {
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { useYellInvestigation } from "./use-yell-investigation";
+import { yellSummary } from "./yell-summary";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
@@ -134,7 +135,7 @@ export function YellsTable() {
                     <span aria-hidden="true">·</span>
                     <YellCaller yell={yell} />
                   </Faded>
-                  <BrokeTheGlassMark yell={yell} />
+                  <YellGuardrailsMark yell={yell} />
                   <YellSignals yell={yell} />
                 </div>
               </div>
@@ -478,9 +479,17 @@ function TimeCell({ yell }: { yell: OpenAppaYell }) {
       <Faded yell={yell} className="flex">
         <LogTime showTooltip={false} timestamp={yell.createdAt} />
       </Faded>
-      <BrokeTheGlassMark yell={yell} />
-      <WaivedCallMark yell={yell} />
+      <YellGuardrailsMark yell={yell} />
     </div>
+  );
+}
+
+/** The same guardrails marker on desktop/mobile rows and the detail page. */
+export function YellGuardrailsMark({ yell }: { yell: OpenAppaYell }) {
+  return yell.kind === "agent" ? (
+    <BrokeTheGlassMark yell={yell} />
+  ) : (
+    <WaivedCallMark yell={yell} />
   );
 }
 
@@ -512,7 +521,7 @@ const WAIVED_CALL_HINT = {
 } as const;
 
 /** A shield-off icon with its explanation on hover; nothing for a plain yell. */
-export function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {
+function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {
   if (!yell.superyell) return null;
   return (
     <Tooltip>
@@ -538,7 +547,7 @@ function MessageLine({ yell }: { yell: OpenAppaYell }) {
         }
       >
         <p className="min-w-0 flex-1 truncate text-[13px]">
-          {yell.message.replace(/\s+/g, " ").trim()}
+          {yellSummary(yell)}
         </p>
       </TruncatedTooltip>
     </Faded>

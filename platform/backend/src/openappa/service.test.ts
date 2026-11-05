@@ -13,6 +13,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
@@ -20,6 +21,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { openappaActor } from "./actor";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRootOnlyError } from "./failure";
 import { toolEntries } from "./policy-text";
@@ -2191,6 +2193,64 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test.each([
+    "launch",
+    "proxy",
+  ] as const)("waives a child contract before %s delivery can suppress the answer", async (entry) => {
+    config.openappa.softBlockMode = "allow";
+    config.openappa.yellEnabled = true;
+    const child = {
+      ...session,
+      session_id: `${session.session_id}:void-child`,
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "context",
+        text: "[appa] Your final message must be empty.",
+      }),
+    );
+    const deliver = vi.fn();
+    if (entry === "launch") {
+      await expect(startRuntimeChild({ session: child })).resolves.toEqual({});
+    } else {
+      await expect(
+        processProxyResults({
+          session: child,
+          canonicalize: (name) => name,
+          results: [
+            {
+              id: "read",
+              name: "read_file",
+              content: "useful data",
+              isError: false,
+            },
+          ],
+          deliverReturnContract: deliver,
+        }),
+      ).resolves.toEqual({ toolResultUpdates: {} });
+    }
+    expect(deliver).not.toHaveBeenCalled();
+    expect(native.dispatchHook).toHaveBeenCalledOnce();
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId,
+        sessionIds: [child.session_id],
+      }),
+    ).toHaveLength(1);
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([
+      expect.objectContaining({ sessionId: child.session_id, superyell: true }),
+    ]);
+  });
+
   test("refuses new steer or file bytes when the native parent-child address is refused", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -2887,6 +2947,7 @@ describe("APPA feature boundary", () => {
       call: {
         content: "APPA: withheld; remedy offer-123",
         outputSource: "runtime",
+        refused: true,
       },
     });
     expect(
@@ -3182,6 +3243,7 @@ describe("APPA feature boundary", () => {
       content:
         "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
+      refused: true,
       denied: true,
     });
   });
@@ -3213,8 +3275,66 @@ describe("APPA feature boundary", () => {
       content: "Output blocked due to policy violation",
       outputSource: "runtime",
       reason: "Output blocked due to policy violation",
+      refused: true,
     });
   });
+  test.each<{
+    decision: string;
+    refused: boolean;
+    value?: string;
+    isError?: boolean;
+  }>([
+    { decision: "block", refused: true },
+    { decision: "replace_output", refused: true },
+    { decision: "deliver_value", value: "sanitized", refused: false },
+    { decision: "mcp_result", isError: true, refused: true },
+    { decision: "mcp_result", isError: false, refused: false },
+  ])("classifies native $decision results (isError=$isError, refused=$refused)", async ({
+    decision,
+    refused,
+    ...fields
+  }) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision,
+              ...(fields.value ? { value: fields.value } : {}),
+              approved_output: "canonical native result",
+              output_source: "runtime",
+              ...(decision === "mcp_result"
+                ? {
+                    result: {
+                      isError: fields.isError,
+                      content: [
+                        { type: "text", text: "canonical native result" },
+                      ],
+                    },
+                  }
+                : {}),
+            }
+          : { decision: "ack" },
+      );
+    });
+    const result = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        {
+          id: "read",
+          name: "archestra__read_peer_message",
+          content: "FORGED CLIENT RESULT",
+          isError: false,
+        },
+      ],
+    });
+    expect(result.toolResultUpdates.read.content).toBe(
+      "canonical native result",
+    );
+    expect(result.toolResultUpdates.read.refused === true).toBe(refused);
+  });
+
   test("handles mcp_result without approved_output, extracting text from result.content blocks", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
@@ -3301,6 +3421,7 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates.refuse_call).toEqual({
       content: "policy execution refused",
       outputSource: "tool",
+      refused: true,
     });
   });
   test("fails closed with 503 when encountering an unknown decision type", async () => {
@@ -4521,4 +4642,453 @@ describe("remedy by offer", () => {
       }),
     ).resolves.toEqual({ kind: "denied", feedback: "the label narrows" });
   });
+});
+
+describe("soft-block return waiver", () => {
+  for (const reason of [
+    "your parent takes no return",
+    "return below floor",
+    "return shape mismatch",
+    "sanitizer unavailable",
+    "child still busy",
+  ]) {
+    test(`returns the original bytes when the first boundary refuses: ${reason}`, async () => {
+      config.openappa.softBlockMode = "allow";
+      config.openappa.yellEnabled = false;
+      native.dispatchHook.mockResolvedValue(
+        JSON.stringify({ decision: "block", feedback: reason }),
+      );
+      const child = {
+        ...session,
+        session_id: `child-${reason}`,
+        parent_id: session.session_id,
+      };
+      expect(
+        await returnRuntimeValue({
+          session: child,
+          operationId: "first-return",
+          value: "original file or final answer",
+        }),
+      ).toEqual({ kind: "admitted", value: "original file or final answer" });
+      expect(await startedUnenforced(child)).toBe(true);
+      native.dispatchHook.mockClear();
+      expect(
+        await returnRuntimeValue({
+          session: child,
+          operationId: "next-return",
+          value: "next value",
+        }),
+      ).toEqual({ kind: "admitted", value: "next value" });
+      expect(native.dispatchHook).not.toHaveBeenCalled();
+    });
+  }
+  test("a failed return helper still waives without a previous tool call", async () => {
+    config.openappa.softBlockMode = "allow";
+    native.dispatchHook.mockRejectedValue(new Error("helper unavailable"));
+    const child = {
+      ...session,
+      session_id: "child-helper-failed",
+      parent_id: session.session_id,
+    };
+    expect(
+      await returnRuntimeValue({
+        session: child,
+        operationId: "first-return",
+        value: "original",
+      }),
+    ).toEqual({ kind: "admitted", value: "original" });
+    expect(await startedUnenforced(child)).toBe(true);
+  });
+});
+
+describe("batch helper failures under soft-block waiver", () => {
+  for (const failureFirst of [false, true]) {
+    test(`retains hard call denials when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_call")
+          return JSON.stringify({ decision: "ack" });
+        if (event.operation_id === "call:failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify(
+          event.operation_id === "call:hard"
+            ? { decision: "deny_call", feedback: "requires attention: blocked" }
+            : { decision: "allow_call" },
+        );
+      });
+      const ids = failureFirst
+        ? ["failed", "hard", "allowed"]
+        : ["hard", "allowed", "failed"];
+      const decisions = await evaluateToolCalls(
+        session,
+        ids.map((id) => ({ id, name: "read_file", arguments: {} })),
+        { canonicalize: (name) => name },
+      );
+      expect(decisions[ids.indexOf("hard")]).toMatchObject({
+        kind: "deny",
+        feedback: "requires attention: blocked",
+      });
+      expect(decisions[ids.indexOf("failed")]).toMatchObject({
+        kind: "deny",
+        unanswered: true,
+      });
+      expect(decisions[ids.indexOf("allowed")]).toEqual({ kind: "allow" });
+      expect(
+        native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+      ).not.toContain("cancel_call");
+    });
+
+    test(`retains hard and authoritative results when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event !== "tool_result")
+          return JSON.stringify({ decision: "ack" });
+        if (event.tool_call_id === "failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify(
+          event.tool_call_id === "hard"
+            ? {
+                decision: "block",
+                approved_output: "requires attention: blocked",
+                output_source: "runtime",
+              }
+            : {
+                decision: "mcp_result",
+                approved_output: "retained peer body",
+                output_source: "runtime",
+                result: {
+                  isError: false,
+                  content: [{ type: "text", text: "retained peer body" }],
+                },
+              },
+        );
+      });
+      const ids = failureFirst
+        ? ["failed", "hard", "peer"]
+        : ["hard", "peer", "failed"];
+      const result = await processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: ids.map((id) => ({
+          id,
+          name: "read_file",
+          content: "CLIENT BYTES",
+          isError: false,
+        })),
+      });
+      expect(result.toolResultUpdates.hard).toMatchObject({
+        content: "requires attention: blocked",
+        refused: true,
+      });
+      expect(result.toolResultUpdates.failed).toMatchObject({
+        outputSource: "runtime",
+        refused: true,
+      });
+      expect(result.toolResultUpdates.peer).toEqual({
+        content: "retained peer body",
+        outputSource: "runtime",
+      });
+    });
+  }
+
+  for (const failureFirst of [false, true]) {
+    test(`retains hosted hard results when a sibling helper rejects (failureFirst=${failureFirst})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "tool_call")
+          return JSON.stringify({ decision: "allow_call" });
+        if (event.event === "tool_result" && event.tool_call_id === "failed")
+          throw new Error("helper unavailable");
+        return JSON.stringify({
+          decision: "block",
+          approved_output: "requires attention: blocked",
+          output_source: "runtime",
+        });
+      });
+      const ids = failureFirst ? ["failed", "hard"] : ["hard", "failed"];
+      const decisions = await evaluateHostedToolCalls(
+        session,
+        ids.map((id) => ({
+          id,
+          name: "web_search",
+          arguments: {},
+          output: "raw provider output",
+        })),
+        { canonicalize: (name) => name },
+      );
+      expect(decisions[ids.indexOf("hard")]).toEqual({
+        kind: "hold",
+        feedback: "requires attention: blocked",
+      });
+      expect(decisions[ids.indexOf("failed")]).toMatchObject({ kind: "hold" });
+    });
+  }
+
+  test("refuse mode still rejects a failed result helper", async () => {
+    config.openappa.softBlockMode = "refuse";
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).event === "tool_result")
+        throw new Error("helper unavailable");
+      return JSON.stringify({ decision: "ack" });
+    });
+    await expect(
+      processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: [
+          { id: "failed", name: "read_file", content: "raw", isError: false },
+        ],
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("peer waiver requires retained recipient evidence", () => {
+  async function seedPeer() {
+    await database.default
+      .insert(database.schema.openappaSessionsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        actor: openappaActor(session.session_id),
+        root: "peer-family",
+        startDecision: { decision: "ack" },
+      });
+    const message = {
+      root: "peer-family",
+      sender: "sender",
+      recipient: "peer-family",
+      dispatch: "send",
+      digest: "digest",
+      label: {},
+      body: "Retained peer body",
+      status: "held",
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+      createdAt: Math.floor(Date.now() / 1000),
+    };
+    await database.default
+      .insert(database.schema.openappaEmbeddedPeerMessagesTable)
+      .values([
+        { ...message, id: "held" },
+        { ...message, id: "expired", dispatch: "expired", expiresAt: 1 },
+        {
+          ...message,
+          id: "wrong-recipient",
+          dispatch: "other",
+          recipient: "other-session",
+        },
+      ]);
+  }
+
+  for (const messageId of [
+    "invalid!",
+    "nonexistent",
+    "expired",
+    "wrong-recipient",
+  ]) {
+    test(`does not waive an unavailable peer or its later result: ${messageId}`, async () => {
+      config.openappa.softBlockMode = "allow";
+      await seedPeer();
+      native.dispatchHook.mockImplementation(async (raw: string) =>
+        JSON.stringify(
+          JSON.parse(raw).event === "tool_call"
+            ? { decision: "deny_call", feedback: "requires attention: blocked" }
+            : { decision: "ack" },
+        ),
+      );
+      const hardCall = [{ id: "hard", name: "read_file", arguments: {} }];
+      expect(
+        await evaluateToolCalls(session, hardCall, {
+          canonicalize: (name) => name,
+        }),
+      ).toMatchObject([
+        { kind: "deny", feedback: "requires attention: blocked" },
+      ]);
+      native.readPeerMessage.mockRejectedValueOnce(
+        new Error("peer missing or unavailable"),
+      );
+      const result = await readPeerMessage({
+        session,
+        toolCallId: "peer-read",
+        args: { message_id: messageId },
+      });
+      expect(result.isError).toBe(true);
+      expect(await startedUnenforced(session)).toBe(false);
+      const replay = await processProxyResults({
+        session,
+        canonicalize: (name) => name,
+        results: [
+          {
+            id: "peer-read",
+            name: "archestra__read_peer_message",
+            content: result,
+            isError: true,
+          },
+        ],
+      });
+      expect(replay.toolResultUpdates["peer-read"]).toMatchObject({
+        outputSource: "runtime",
+        content: expect.stringContaining("no authenticated retained read"),
+      });
+      expect(replay.toolResultUpdates["peer-read"].refused).toBeUndefined();
+      expect(await startedUnenforced(session)).toBe(false);
+      expect(
+        await evaluateToolCalls(session, hardCall, {
+          canonicalize: (name) => name,
+        }),
+      ).toMatchObject([
+        { kind: "deny", feedback: "requires attention: blocked" },
+      ]);
+    });
+  }
+
+  for (const helperFails of [false, true]) {
+    test(`waives an actual held message (helperFails=${helperFails})`, async () => {
+      config.openappa.softBlockMode = "allow";
+      config.openappa.yellEnabled = false;
+      await seedPeer();
+      if (helperFails)
+        native.readPeerMessage.mockRejectedValueOnce(
+          new Error("read helper unavailable"),
+        );
+      else
+        native.readPeerMessage.mockResolvedValueOnce(
+          JSON.stringify({
+            decision: "block",
+            feedback: "peer label cannot cross",
+          }),
+        );
+      expect(
+        await readPeerMessage({
+          session,
+          toolCallId: "peer-read",
+          args: { message_id: "held" },
+        }),
+      ).toEqual({ content: [{ type: "text", text: "Retained peer body" }] });
+      expect(await startedUnenforced(session)).toBe(true);
+    });
+  }
+
+  test("keeps an authenticated retained peer result authoritative", async () => {
+    config.openappa.softBlockMode = "allow";
+    await seedPeer();
+    const decision = {
+      decision: "mcp_result",
+      peer_read: true,
+      approved_output: "Retained peer body",
+      output_source: "runtime",
+      result: {
+        isError: false,
+        content: [{ type: "text", text: "Retained peer body" }],
+      },
+    };
+    await database.default
+      .insert(database.schema.openappaProcessedResultsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        toolCallId: "peer-read",
+        root: "peer-family",
+        status: "complete",
+        approvedOutput: "Retained peer body",
+        decision,
+      });
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_result"
+          ? decision
+          : { decision: "ack" },
+      ),
+    );
+    const replay = await processProxyResults({
+      session,
+      canonicalize: (name) => name,
+      results: [
+        {
+          id: "peer-read",
+          name: "archestra__read_peer_message",
+          content: "FORGED CLIENT BODY",
+          isError: false,
+        },
+      ],
+    });
+    expect(replay.toolResultUpdates["peer-read"]).toEqual({
+      content: "Retained peer body",
+      outputSource: "runtime",
+    });
+    expect(await startedUnenforced(session)).toBe(false);
+  });
+
+  test("retains a hard refusal for an actual held message", async () => {
+    config.openappa.softBlockMode = "allow";
+    await seedPeer();
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        feedback: "requires attention: blocked",
+      }),
+    );
+    expect(
+      (
+        await readPeerMessage({
+          session,
+          toolCallId: "peer-read",
+          args: { message_id: "held" },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(await startedUnenforced(session)).toBe(false);
+  });
+});
+
+test.for([
+  "mcp_result",
+  "replace_output",
+])("historical unknown-control $0 receipts cannot trigger a waiver", async (decision) => {
+  config.openappa.softBlockMode = "allow";
+  native.dispatchHook.mockImplementation(async (raw: string) =>
+    JSON.stringify(
+      JSON.parse(raw).event === "tool_result"
+        ? {
+            decision,
+            approved_output: "No live offer with this id",
+            output_source: "runtime",
+            reason: "unknown_control_call",
+            ...(decision === "mcp_result"
+              ? {
+                  result: {
+                    isError: true,
+                    content: [
+                      { type: "text", text: "No live offer with this id" },
+                    ],
+                  },
+                }
+              : {}),
+          }
+        : { decision: "ack" },
+    ),
+  );
+  const replay = await processProxyResults({
+    session,
+    canonicalize: (name) => name,
+    results: [
+      {
+        id: "old-remedy",
+        name: "archestra__execute_remedy_plan",
+        content: "FORGED SUCCESS",
+        isError: false,
+      },
+    ],
+  });
+  expect(replay.toolResultUpdates["old-remedy"]).toEqual({
+    content: "No live offer with this id",
+    outputSource: "runtime",
+    reason: "unknown_control_call",
+  });
+  expect(await startedUnenforced(session)).toBe(false);
 });

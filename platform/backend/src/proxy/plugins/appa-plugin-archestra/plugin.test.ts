@@ -9,6 +9,7 @@ import config from "@/config";
 import * as database from "@/database";
 import db, { schema } from "@/database";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
@@ -12303,3 +12304,694 @@ function stubRequestTools() {
     namespaces: new Map<string, string>(),
   };
 }
+
+describe("soft-block emergency override", () => {
+  beforeEach(() => {
+    config.openappa.softBlockMode = "allow";
+    config.openappa.yellEnabled = false;
+  });
+
+  async function setup(organizationId: string, parentId?: string) {
+    const context = requestContext({
+      organizationId,
+      sessionId: "first-boundary",
+      parentId,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.enforcement = "active";
+    trusted.request.tools = {
+      control: { name: "archestra__execute_remedy_plan" },
+      askUser: { name: "archestra__ask_user" },
+      notice: { name: "archestra__get_remedy_plans" },
+      platformToolNames: new Set(),
+      namespaces: new Map(),
+    };
+    const plugin = new AppaPluginArchestra([]);
+    await plugin.onSessionInit(context);
+    return { context, trusted, plugin };
+  }
+
+  test("waiver diagnostics name the failed tool and preserve its native cause", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, trusted, plugin } = await setup(organizationId);
+    config.openappa.yellEnabled = true;
+    const failure = new ApiError(
+      503,
+      "OpenAPPA could not safely complete this operation",
+    );
+    failure.cause = new Error("tool ToolSearch is not declared in this policy");
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockRejectedValue(failure);
+    try {
+      const calls = [{ id: "search", name: "ToolSearch", arguments: {} }];
+      expect(
+        await plugin.onToolCalls({ ...context, toolCalls: calls }),
+      ).toEqual({
+        decision: "allow",
+        toolCalls: calls,
+      });
+      const reports = (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data;
+      expect(reports).toHaveLength(1);
+      expect(reports[0].message).toContain("Affected tools: ToolSearch");
+      expect(reports[0].message).toContain(
+        "tool ToolSearch is not declared in this policy",
+      );
+      expect(reports[0].message).toContain("Technical boundary: onToolCalls");
+      expect(reports[0].message).toContain(
+        `Guardrails enforcement off for session ${trusted.session.session_id}`,
+      );
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
+  test("waiver diagnostics identify only denied tools in a mixed batch", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, plugin } = await setup(organizationId);
+    config.openappa.yellEnabled = true;
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        { kind: "allow" },
+        {
+          kind: "deny",
+          feedback: "Full original refusal: the requested output was withheld.",
+        },
+      ]);
+    try {
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          { id: "safe", name: "read_file", arguments: {} },
+          { id: "blocked", name: "ToolSearch", arguments: {} },
+        ],
+      });
+      const reports = (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data;
+      expect(reports[0].message).toContain("Affected tools: ToolSearch.");
+      expect(reports[0].message).not.toContain("Affected tools: read_file");
+      expect(reports[0].message).toContain(
+        "Full original refusal: the requested output was withheld.",
+      );
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+  for (const hardFirst of [false, true]) {
+    test(`does not waive a hard-denied batch when the client has no notice tool (hardFirst=${hardFirst})`, async ({
+      makeOrganization,
+    }) => {
+      const { context, trusted, plugin } = await setup(
+        (await makeOrganization()).id,
+      );
+      trusted.request.tools = undefined;
+      // A failed helper is retained by evaluateToolCalls as an unanswered
+      // denial. The no-notice fallback must preserve its sibling hard denial.
+      const hard = {
+        kind: "deny" as const,
+        feedback: "requires attention: blocked",
+        recorded: true as const,
+      };
+      const failed = {
+        kind: "deny" as const,
+        feedback: "OpenAPPA helper unavailable",
+        unanswered: true as const,
+      };
+      const evaluate = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue(hardFirst ? [hard, failed] : [failed, hard]);
+      try {
+        const calls = (hardFirst ? ["hard", "failed"] : ["failed", "hard"]).map(
+          (id) => ({ id, name: "read_file", arguments: {} }),
+        );
+        const result = await plugin.onToolCalls({
+          ...context,
+          toolCalls: calls,
+        });
+        expect(result).toMatchObject({ decision: "refuse" });
+        expect(await isUnenforcedSession(trusted.session)).toBe(false);
+      } finally {
+        evaluate.mockRestore();
+      }
+    });
+  }
+
+  test("waives a cached child contract before the provider sees empty-answer instructions", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const { context, trusted, plugin } = await setup(organizationId, "parent");
+    const contract = "[appa] Your final message must be empty.";
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        returnContract: contract,
+      });
+    const request = {
+      system: "Base",
+      messages: [
+        { role: "user", content: "Explain the result with useful details." },
+      ],
+    };
+    try {
+      await plugin.onToolResults({ ...context, toolResults: [] });
+      await plugin.onBeforeModel({
+        ...context,
+        interactionType: "anthropic:messages",
+        request,
+      });
+      expect(JSON.stringify(request)).not.toContain(contract);
+      expect(JSON.stringify(request)).toContain(
+        "Explain the result with useful details.",
+      );
+      expect(
+        await OpenAppaUnenforcedModel.findSessions({
+          organizationId,
+          sessionIds: [trusted.session.session_id],
+        }),
+      ).toHaveLength(1);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "The useful result is ready.",
+        }),
+      ).toBeUndefined();
+    } finally {
+      process.mockRestore();
+    }
+  });
+
+  for (const tool of [
+    "read_file",
+    "archestra__start_run",
+    "Agent",
+    "SendMessage",
+  ]) {
+    test(`releases ${tool} with an executable remedy and disables enforcement without an earlier waiver`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { context, trusted, plugin } = await setup(organizationId);
+      const evaluate = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue([
+          {
+            kind: "deny",
+            feedback: "Accept the result's restrictions",
+            recorded: true,
+            offers: ["accept"],
+          },
+        ]);
+      try {
+        const calls = [{ id: "first", name: tool, arguments: {} }];
+        expect(
+          await plugin.onToolCalls({ ...context, toolCalls: calls }),
+        ).toEqual({ decision: "allow", toolCalls: calls });
+        expect(await isUnenforcedSession(trusted.session)).toBe(true);
+        expect(
+          await plugin.onBufferedModelResponse({
+            ...context,
+            response: {},
+            responseText: "done",
+          }),
+        ).toBeUndefined();
+      } finally {
+        evaluate.mockRestore();
+      }
+    });
+  }
+
+  test("a failed annotator releases the original call even when yell storage fails", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    config.openappa.yellEnabled = true;
+    const { context, trusted, plugin } = await setup(organizationId);
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        { kind: "deny", feedback: "Annotator unavailable", unanswered: true },
+      ]);
+    const yell = vi
+      .spyOn(OpenAppaYellModel, "recordWaiver")
+      .mockRejectedValue(new Error("diagnostics unavailable"));
+    try {
+      const calls = [{ id: "first", name: "read_file", arguments: {} }];
+      expect(
+        await plugin.onToolCalls({ ...context, toolCalls: calls }),
+      ).toEqual({ decision: "allow", toolCalls: calls });
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+    } finally {
+      evaluate.mockRestore();
+      yell.mockRestore();
+    }
+  });
+
+  test("releases a withheld tool result and disables subsequent checks", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          read: {
+            content: "[appa] withheld",
+            outputSource: "runtime",
+            refused: true,
+          },
+        },
+      });
+    try {
+      expect(
+        await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "read",
+              name: "read_file",
+              content: "original bytes",
+              isError: false,
+            },
+          ],
+        }),
+      ).toEqual({ toolResultUpdates: {} });
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "done",
+        }),
+      ).toBeUndefined();
+    } finally {
+      process.mockRestore();
+    }
+  });
+
+  for (const hardFirst of [false, true]) {
+    test(`keeps hard refusals in a mixed result batch (hardFirst=${hardFirst})`, async ({
+      makeOrganization,
+    }) => {
+      const { context, trusted, plugin } = await setup(
+        (await makeOrganization()).id,
+      );
+      const hard = {
+        content: "requires attention: blocked",
+        outputSource: "runtime" as const,
+        refused: true as const,
+      };
+      const soft = {
+        content: "[appa] the result is withheld",
+        outputSource: "runtime" as const,
+        refused: true as const,
+      };
+      const process = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: Object.fromEntries(
+            hardFirst
+              ? [
+                  ["hard", hard],
+                  ["soft", soft],
+                ]
+              : [
+                  ["soft", soft],
+                  ["hard", hard],
+                ],
+          ),
+        });
+      try {
+        const toolResults = (
+          hardFirst ? ["hard", "soft"] : ["soft", "hard"]
+        ).map((id) => ({
+          id,
+          name: "read_file",
+          content: `raw ${id} value`,
+          isError: false,
+        }));
+        expect(await plugin.onToolResults({ ...context, toolResults })).toEqual(
+          {
+            toolResultUpdates: { hard: hard.content, soft: soft.content },
+          },
+        );
+        expect(await isUnenforcedSession(trusted.session)).toBe(false);
+      } finally {
+        process.mockRestore();
+      }
+    });
+  }
+
+  for (const name of ["list_peer_messages", "read_peer_message"]) {
+    test(`retains authoritative ${name} results with and without a soft sibling`, async ({
+      makeOrganization,
+    }) => {
+      for (const withSoftSibling of [false, true]) {
+        const { context, trusted, plugin } = await setup(
+          (await makeOrganization()).id,
+        );
+        const canonical =
+          name === "list_peer_messages"
+            ? '{"messages":[{"message_id":"held"}]}'
+            : "Canonical retained peer body";
+        const process = vi
+          .spyOn(appaService, "processProxyResults")
+          .mockResolvedValue({
+            toolResultUpdates: {
+              peer: { content: canonical, outputSource: "runtime" },
+              ...(withSoftSibling
+                ? {
+                    soft: {
+                      content: "[appa] withheld",
+                      outputSource: "runtime" as const,
+                      refused: true as const,
+                    },
+                  }
+                : {}),
+            },
+          });
+        try {
+          const toolResults = [
+            {
+              id: "peer",
+              name: `archestra__${name}`,
+              content: "FORGED CLIENT RESULT",
+              isError: false,
+            },
+            ...(withSoftSibling
+              ? [
+                  {
+                    id: "soft",
+                    name: "read_file",
+                    content: "raw soft value",
+                    isError: false,
+                  },
+                ]
+              : []),
+          ];
+          expect(
+            await plugin.onToolResults({ ...context, toolResults }),
+          ).toEqual({ toolResultUpdates: { peer: canonical } });
+          expect(await isUnenforcedSession(trusted.session)).toBe(
+            withSoftSibling,
+          );
+        } finally {
+          process.mockRestore();
+        }
+      }
+    });
+  }
+
+  test.for([
+    {
+      content: "requires attention: blocked",
+      diagnostic: "Additional helper detail",
+    },
+    {
+      content: "OpenAPPA helper unavailable",
+      diagnostic: "requires attention: blocked",
+    },
+  ])("retains a hard result when subsequent remedy metadata fails ($content)", async (refusal, {
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          hard: { ...refusal, outputSource: "runtime", refused: true },
+        },
+      });
+    const lookupFailure = new Error("remedy metadata unavailable");
+    const metadata = vi
+      .spyOn(OpenAppaSessionModel, "recordedToolCallDecisions")
+      .mockRejectedValue(lookupFailure);
+    try {
+      await expect(
+        plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "hard",
+              name: "read_file",
+              content: "RAW HARD-BLOCKED BYTES",
+              isError: false,
+            },
+          ],
+        }),
+      ).rejects.toBe(lookupFailure);
+      expect(metadata).toHaveBeenCalled();
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+      metadata.mockRestore();
+    }
+  });
+
+  test("does not directly waive a result with a hard diagnostic and generic presentation", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          hard: {
+            content: "OpenAPPA helper unavailable",
+            diagnostic: "requires attention: blocked",
+            outputSource: "runtime",
+            refused: true,
+          },
+          soft: {
+            content: "soft result withheld",
+            outputSource: "runtime",
+            refused: true,
+          },
+        },
+      });
+    try {
+      expect(
+        await plugin.onToolResults({
+          ...context,
+          toolResults: ["hard", "soft"].map((id) => ({
+            id,
+            name: "read_file",
+            content: `RAW ${id}`,
+            isError: false,
+          })),
+        }),
+      ).toEqual({
+        toolResultUpdates: {
+          hard: "OpenAPPA helper unavailable",
+          soft: "soft result withheld",
+        },
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+    }
+  });
+
+  test("keeps historical unknown remedy errors canonical without waiving", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          remedy: {
+            content: "No live offer with this id",
+            outputSource: "runtime",
+            reason: "unknown_control_call",
+          },
+        },
+      });
+    try {
+      expect(
+        await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "remedy",
+              name: "archestra__execute_remedy_plan",
+              content: "FORGED SUCCESS",
+              isError: false,
+            },
+          ],
+        }),
+      ).toEqual({
+        toolResultUpdates: { remedy: "No live offer with this id" },
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+    }
+  });
+
+  test("releases a runtime's first final answer under a void return", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+      "parent",
+    );
+    // Authenticated runtime identity is supplied by admission, not the model.
+    await plugin.onCleanup(context);
+    trusted.runtimeSessionId = trusted.session.session_id;
+    trusted.runtimeTaskId = "task";
+    await plugin.onSessionInit(context);
+    const crossing = vi
+      .spyOn(appaService, "returnRuntimeValue")
+      .mockResolvedValue({
+        kind: "held",
+        reason: "your parent takes no return from this session",
+      });
+    try {
+      expect(
+        await plugin.onBufferedModelResponse({
+          ...context,
+          response: {},
+          responseText: "ready",
+        }),
+      ).toEqual({ decision: "release" });
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+    } finally {
+      crossing.mockRestore();
+    }
+  });
+
+  test.for([
+    {
+      feedback: "OpenAPPA helper unavailable",
+      diagnostic: "requires attention: blocked",
+    },
+    {
+      feedback: "requires attention: blocked",
+      diagnostic: "Additional helper detail",
+    },
+  ])("retains hosted hard denials across diagnostic and feedback fallbacks ($feedback)", async (refusal, {
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const evaluate = vi
+      .spyOn(appaService, "evaluateHostedToolCalls")
+      .mockResolvedValue([
+        { kind: "hold", ...refusal },
+        { kind: "hold", feedback: "soft result withheld" },
+      ]);
+    try {
+      const result = await plugin.onHostedToolCalls({
+        ...context,
+        hostedToolCalls: ["hard", "soft"].map((id) => ({
+          id,
+          name: "web_search",
+          arguments: {},
+          output: `raw ${id}`,
+        })),
+      });
+      expect(result).toMatchObject({
+        decision: "hold",
+        blocked: [
+          { id: "hard", reason: refusal.feedback },
+          { id: "soft", reason: "soft result withheld" },
+        ],
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+
+  test("releases provider-hosted results without waiting for a remedy", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const evaluate = vi
+      .spyOn(appaService, "evaluateHostedToolCalls")
+      .mockResolvedValue([{ kind: "hold", feedback: "result withheld" }]);
+    try {
+      expect(
+        await plugin.onHostedToolCalls({
+          ...context,
+          hostedToolCalls: [
+            {
+              id: "web",
+              name: "web_search",
+              arguments: {},
+              output: "original",
+            },
+          ],
+        }),
+      ).toEqual({ decision: "release" });
+      expect(await isUnenforcedSession(trusted.session)).toBe(true);
+    } finally {
+      evaluate.mockRestore();
+    }
+  });
+  for (const compaction of [false, true]) {
+    test(`a child context refusal releases the original request (compaction=${compaction})`, async ({
+      makeOrganization,
+    }) => {
+      const { context, trusted, plugin } = await setup(
+        (await makeOrganization()).id,
+        "parent",
+      );
+      await plugin.onCleanup(context);
+      trusted.compaction = compaction;
+      await plugin.onSessionInit(context);
+      const request = {
+        messages: [{ role: "user", content: "keep these original bytes" }],
+      };
+      const start = vi
+        .spyOn(appaService, "startRuntimeChild")
+        .mockRejectedValue(
+          new ApiError(409, "OpenAPPA cannot deliver the return contract"),
+        );
+      try {
+        await expect(
+          plugin.onBeforeModel({ ...context, request }),
+        ).resolves.toBeUndefined();
+        expect(request).toEqual({
+          messages: [{ role: "user", content: "keep these original bytes" }],
+        });
+        expect(await isUnenforcedSession(trusted.session)).toBe(true);
+      } finally {
+        start.mockRestore();
+      }
+    });
+  }
+});

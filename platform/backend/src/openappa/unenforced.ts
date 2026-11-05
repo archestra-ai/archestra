@@ -13,6 +13,11 @@ import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
+import {
+  rememberSoftBlockWaiver,
+  softBlocksAllowed,
+  softBlockWaivedLocally,
+} from "./soft-block";
 
 /**
  * What OpenAPPA did not see while Guardrails enforcement was off.
@@ -67,6 +72,20 @@ export async function observeUnenforcedSession(
 export async function startedUnenforced(
   session: OpenAppaSession,
 ): Promise<boolean> {
+  if (softBlockWaivedLocally(session)) {
+    // An inherited waiver must become this session's own waiver so its
+    // children and forks can discover it without walking arbitrary ancestry.
+    rememberSoftBlockWaiver(session);
+    try {
+      await superyellSession(session);
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Could not persist the inherited soft-block waiver; the local session remains waived",
+      );
+    }
+    return true;
+  }
   const decision = await decideUnenforced(session);
   if (decision.record) {
     await OpenAppaUnenforcedModel.recordSession({
@@ -88,7 +107,10 @@ export async function startedUnenforced(
 export async function isUnenforcedSession(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  return (await decideUnenforced(session)).unenforced;
+  return (
+    softBlockWaivedLocally(session) ||
+    (await decideUnenforced(session)).unenforced
+  );
 }
 
 /**
@@ -247,8 +269,18 @@ async function decideUnenforced(session: OpenAppaSession): Promise<{
     sessionIds: [
       session.session_id,
       ...(session.parent_id ? [session.parent_id] : []),
+      ...(softBlocksAllowed() && session.fork_of ? [session.fork_of] : []),
     ],
   });
+  if (
+    softBlocksAllowed() &&
+    session.fork_of &&
+    recorded.some(
+      (row) => row.sessionId === session.fork_of && row.reason === "superyell",
+    )
+  ) {
+    return { unenforced: true, record: "superyell" };
+  }
   const ownRow = recorded.find(
     (row) =>
       row.sessionId === session.session_id &&

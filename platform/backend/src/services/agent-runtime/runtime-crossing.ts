@@ -12,6 +12,7 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
+import { softBlocksAllowed, waiveSoftBlock } from "@/openappa/soft-block";
 import { isUnenforcedSession } from "@/openappa/unenforced";
 import {
   getGuardrailsDeployment,
@@ -85,9 +86,12 @@ export async function guardRuntimeCrossing(
 > {
   if (!(await isGuardrailsV2Active())) return { kind: "inactive" };
   const crossing = crossingFromContext(context);
-  if (crossing) return { kind: "proof", crossing };
+  if (crossing) {
+    if (await isUnenforcedSession(crossing.source)) return { kind: "inactive" };
+    return { kind: "proof", crossing };
+  }
   const { unsupportedClientAction } = await getGuardrailsDeployment();
-  if (unsupportedClientAction === "block") {
+  if (unsupportedClientAction === "block" && !softBlocksAllowed()) {
     return {
       kind: "refused",
       reason: reportCrossingRefusal({
@@ -132,6 +136,14 @@ export async function refuseUnrecognizedCaller(params: {
   }
   if (!resolved.session.parent_id) return undefined;
   if (await isUnenforcedSession(resolved.session)) return undefined;
+  if (
+    await waiveSoftBlock(
+      resolved.session,
+      "runtime_access",
+      "OpenAPPA requires a parent crossing proof",
+    )
+  )
+    return undefined;
   return reportCrossingRefusal({
     reason: "proof_missing",
     message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
@@ -171,6 +183,10 @@ export async function bindRuntimeChild(params: {
     );
   }
   if (!params.crossing.spawn) {
+    if (
+      await waiveSoftBlock(params.crossing.source, "runtime_bind", NOT_A_SPAWN)
+    )
+      return undefined;
     throw new RuntimeCrossingRefusal(
       reportCrossingRefusal({
         reason: "not_a_spawn",
@@ -195,6 +211,14 @@ export async function bindRuntimeChild(params: {
     });
     return bound.contract;
   } catch (error) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_bind",
+        error instanceof Error ? error.message : String(error),
+      )
+    )
+      return undefined;
     if (error instanceof RuntimeCrossingRefusal) throw error;
     if (error instanceof ApiError) {
       throw new RuntimeCrossingRefusal(
@@ -232,6 +256,15 @@ export async function admitRuntimeSteer(params: {
       operationId: params.crossing.callId,
     });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_steer",
+        error.message,
+      ))
+    )
+      return relation.child;
     if (error instanceof ApiError) {
       throw new RuntimeCrossingRefusal(
         reportCrossingRefusal({
@@ -291,6 +324,14 @@ export async function classifyRuntimeCaller(params: {
     return { kind: "producer", child: resolved.session };
   }
   if (!resolved.session.parent_id) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_access",
+        "OpenAPPA runtime has no parent trajectory",
+      )
+    )
+      return { kind: "producer", child: resolved.session };
     return {
       kind: "refused",
       reason: reportCrossingRefusal({
@@ -301,6 +342,14 @@ export async function classifyRuntimeCaller(params: {
     };
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_access",
+        "OpenAPPA runtime belongs to another trajectory",
+      )
+    )
+      return { kind: "producer", child: resolved.session };
     return {
       kind: "refused",
       reason: reportCrossingRefusal({
@@ -327,13 +376,27 @@ export async function crossRuntimeOutput(params: {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;
   if (relation.kind === "producer") return { kind: "producer" };
+  if (await isUnenforcedSession(relation.child)) return { kind: "producer" };
   const prefix = `runtime-return:${params.taskId}:`;
-  const records = await loadChildReturns({
-    organizationId: params.organizationId,
-    parentSessionId: params.crossing.source.session_id,
-    childSessionId: relation.child.session_id,
-    operationPrefix: prefix,
-  });
+  let records: Awaited<ReturnType<typeof loadChildReturns>>;
+  try {
+    records = await loadChildReturns({
+      organizationId: params.organizationId,
+      parentSessionId: params.crossing.source.session_id,
+      childSessionId: relation.child.session_id,
+      operationPrefix: prefix,
+    });
+  } catch (error) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_output",
+        error instanceof Error ? error.message : String(error),
+      )
+    )
+      return { kind: "producer" };
+    throw error;
+  }
   const matches = records.filter(
     (record) =>
       record.childSessionId === relation.child.session_id &&
@@ -351,6 +414,14 @@ export async function crossRuntimeOutput(params: {
     }),
   });
   if (!last) {
+    if (
+      await waiveSoftBlock(
+        params.crossing.source,
+        "runtime_output",
+        "No admitted runtime result",
+      )
+    )
+      return { kind: "producer" };
     return withheld(
       "This turn has no admitted result yet. The raw output was not returned.",
     );

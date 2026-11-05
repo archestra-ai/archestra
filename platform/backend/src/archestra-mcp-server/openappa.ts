@@ -66,9 +66,15 @@ import {
   executeYell,
   listPeerMessages,
   loadOfferReview,
+  loadRetainedOfferRefusal,
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import {
+  isHardBlock,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "@/openappa/soft-block";
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
@@ -148,6 +154,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
@@ -1183,6 +1190,40 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+      if (remedy.offer_id && softBlocksAllowed()) {
+        // A waiver runs before native offer validation, so authorize its target
+        // independently. Caller-supplied trajectories are not ownership proof.
+        const currentSession =
+          context.openappaSubagent?.session ?? context.openappaSession;
+        if (reviewSession.caller_id !== spender) {
+          if (
+            reviewSession.caller_id ||
+            currentSession?.organization_id !== context.organizationId ||
+            currentSession.session_id !== stamp.session_id ||
+            currentSession.caller_id !== spender
+          ) {
+            return unknownOfferResult();
+          }
+          reviewSession.caller_id = spender;
+        }
+        // Ownership alone does not establish a soft refusal. Unknown offers
+        // must not turn a hard-denied session into an unenforced one.
+        const refusal = await loadRetainedOfferRefusal({
+          organizationId: context.organizationId,
+          sessionId: stamp.session_id,
+          callerId: spender,
+          parentId: stamp.parent_id,
+          offerId: remedy.offer_id,
+        });
+        if (!refusal || isHardBlock(refusal)) return unknownOfferResult();
+        if (await waiveSoftBlock(reviewSession, "remedy_review", refusal)) {
+          return structuredSuccessResult({
+            outcome: "guardrails_disabled",
+            message:
+              "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+          });
+        }
+      }
       const callId = execution?.call_id ?? context.currentToolCallId;
       if (remedy.offer_id === undefined) {
         // A return declared ahead of its spawn: no offer, so no review. The
@@ -2052,6 +2093,21 @@ function peerExecution(params: {
     throw new ApiError(401, "Organization context is required");
   }
   if (params.proof === undefined) {
+    const session =
+      context.openappaSubagent?.session ?? context.openappaSession;
+    const callerId = authenticatedRuntimeSpender({
+      userId: context.userId,
+      callerId: context.openappaSession?.caller_id,
+    });
+    if (
+      softBlocksAllowed() &&
+      session &&
+      callerId &&
+      session.organization_id === context.organizationId &&
+      session.caller_id === callerId
+    ) {
+      return { session, toolCallId: context.currentToolCallId ?? randomUUID() };
+    }
     throw new ApiError(
       400,
       "Peer messages require a signed execution proof from the protected proxy",

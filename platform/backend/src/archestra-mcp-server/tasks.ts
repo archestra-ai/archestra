@@ -351,14 +351,8 @@ export async function startDelegatedTask(params: {
   let planningExcludedSet = excludedSet;
   const nonExcludedIds = assignedIds.filter((id) => !excludedSet.has(id));
   if (fallbackEnabled && nonExcludedIds.length > 1) {
-    let readinessActor: A2AActor | null = null;
-    try {
-      readinessActor = requireActor(params.context);
-    } catch {
-      readinessActor = null;
-    }
-    if (readinessActor) {
-      const actor = readinessActor;
+    const actor = tryRequireActor(params.context);
+    if (actor) {
       const readinessChecks = await Promise.all(
         nonExcludedIds.map(async (candidateId) => {
           const candidateAgent = await AgentModel.findById(candidateId);
@@ -668,7 +662,13 @@ async function launchDelegatedTask(params: {
         ),
       );
     }
-    await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    try {
+      await preflightAgentRuntimeModelReadiness({ runtime, agent, actor });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return failedLaunch("refused", errorResult(error.message));
+      throw error;
+    }
 
     if (params.credentialGrantIds && params.credentialGrantIds.length > 0) {
       const consumed = await ephemeralCredentialGrantManager.consumeGrants({
@@ -2362,6 +2362,14 @@ export function requireActor(context: ArchestraContext): A2AActor {
     kind: "user",
     organizationId: context.organizationId,
   };
+}
+
+function tryRequireActor(context: ArchestraContext): A2AActor | null {
+  try {
+    return requireActor(context);
+  } catch {
+    return null;
+  }
 }
 
 /** The current turn of a run the caller may see, addressed by its run_id. */

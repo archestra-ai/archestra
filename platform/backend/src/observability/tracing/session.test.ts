@@ -174,22 +174,43 @@ test("failed hooks preserve the error while exported spans and logs omit policy 
   );
 });
 
-test("updateActiveChatSpanAgent renames the active chat span and records subagent failover provenance", async () => {
+test("updateActiveChatSpanAgent renames the active chat span, rewrites teams and labels, and records subagent failover provenance", async () => {
   await startActiveChatSpan({
     sessionId: "session-failover",
     agentId: "agent-primary",
     agentName: "Lobster Code Review Grok",
     agentType: "agent",
+    labels: [
+      { key: "provider", value: "xai" },
+      { key: "tier", value: "primary" },
+    ],
+    teams: [
+      {
+        id: "team-primary",
+        name: "Primary Team",
+        labels: [{ key: "env", value: "prod" }],
+      },
+    ],
     callback: async () => {
       updateActiveChatSpanAgent({
         agentId: "agent-fallback-1",
         agentName: "Lobster Code Review Kimi",
         agentType: "agent",
+        labels: [{ key: "provider", value: "moonshot" }],
+        teams: [
+          {
+            id: "team-fallback",
+            name: "Fallback Team",
+            labels: [{ key: "region", value: "eu" }],
+          },
+        ],
       });
       updateActiveChatSpanAgent({
         agentId: "agent-fallback-2",
         agentName: "Lobster Code Review Copilot",
         agentType: "agent",
+        labels: [{ key: "provider", value: "copilot" }],
+        teams: [],
       });
     },
   });
@@ -203,7 +224,17 @@ test("updateActiveChatSpanAgent renames the active chat span and records subagen
     "archestra.subagent.initial_agent_id": "agent-primary",
     "archestra.subagent.initial_agent_name": "Lobster Code Review Grok",
     "archestra.subagent.failover_count": 2,
+    "archestra.agent.label.provider": "copilot",
+    "archestra.agent.team.ids": [],
+    "archestra.agent.team.names": [],
   });
+  expect(chatSpan?.attributes["archestra.agent.label.tier"]).toBeUndefined();
+  expect(
+    chatSpan?.attributes["archestra.agent.team.label.env"],
+  ).toBeUndefined();
+  expect(
+    chatSpan?.attributes["archestra.agent.team.label.region"],
+  ).toBeUndefined();
 
   const logRecord = logExporter.getFinishedLogRecords()[0];
   expect(JSON.parse(String(logRecord?.body))).toMatchObject({

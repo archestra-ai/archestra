@@ -627,6 +627,7 @@ export async function runTaskInAgentRuntime(params: {
     agentId: string;
     agentName?: string;
     agentType?: AgentType;
+    labels?: { key: string; value: string }[];
     runtime: ResolvedAgentRuntime;
     limits: AgentRunLimits | null | undefined;
     modelId: string | null;
@@ -694,6 +695,7 @@ export async function runTaskInAgentRuntime(params: {
             agentId: nextAgent.id,
             agentName: nextAgent.name,
             agentType: nextAgent.agentType ?? undefined,
+            labels: nextAgent.labels,
             runtime: nextRuntime,
             limits: nextLimits,
             modelId: nextAgent.modelId,
@@ -839,6 +841,7 @@ export async function runTaskInAgentRuntime(params: {
         agentId: currentCandidate.agentId,
         agentName: currentCandidate.agentName,
         agentType: currentCandidate.agentType,
+        labels: currentCandidate.labels,
         teams,
       });
     }

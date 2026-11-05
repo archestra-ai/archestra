@@ -33,8 +33,33 @@ import { sessionContext } from "./session";
 
 const activeChatSpanState = new WeakMap<
   Span,
-  { initialAgentId: string; initialAgentName: string; failoverCount: number }
+  {
+    initialAgentId: string;
+    initialAgentName: string;
+    failoverCount: number;
+    agentLabelKeys: Set<string>;
+    agentTeamLabelKeys: Set<string>;
+  }
 >();
+
+function deleteSpanAttribute(span: Span, key: string): void {
+  const mutableAttributes = (
+    span as unknown as { attributes?: Record<string, unknown> }
+  ).attributes;
+  if (mutableAttributes && key in mutableAttributes) {
+    delete mutableAttributes[key];
+  }
+}
+
+function collectTeamLabelKeys(teams: SpanTeamInfo[] | undefined): Set<string> {
+  const keys = new Set<string>();
+  for (const team of teams ?? []) {
+    for (const label of team.labels ?? []) {
+      keys.add(label.key);
+    }
+  }
+  return keys;
+}
 
 /**
  * Updates the active parent chat span when in-place subagent failover switches
@@ -45,6 +70,7 @@ export function updateActiveChatSpanAgent(params: {
   agentId: string;
   agentName: string;
   agentType?: AgentType;
+  labels?: { key: string; value: string }[];
   teams?: SpanTeamInfo[];
   span?: Span;
 }): void {
@@ -76,8 +102,42 @@ export function updateActiveChatSpanAgent(params: {
   if (params.agentType) {
     span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
   }
-  if (params.teams) {
+  if (params.labels !== undefined) {
+    if (state) {
+      for (const key of state.agentLabelKeys) {
+        deleteSpanAttribute(span, `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${key}`);
+      }
+      state.agentLabelKeys.clear();
+    }
+    for (const label of params.labels) {
+      span.setAttribute(
+        `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
+        label.value,
+      );
+      state?.agentLabelKeys.add(label.key);
+    }
+  }
+  if (params.teams !== undefined) {
+    if (state) {
+      for (const key of state.agentTeamLabelKeys) {
+        deleteSpanAttribute(span, `archestra.agent.team.label.${key}`);
+      }
+      state.agentTeamLabelKeys.clear();
+    }
+    span.setAttribute(
+      "archestra.agent.team.ids",
+      params.teams.map((team) => team.id),
+    );
+    span.setAttribute(
+      "archestra.agent.team.names",
+      params.teams.map((team) => team.name),
+    );
     setTeamAttributes(span, params.teams, "agent");
+    if (state) {
+      for (const key of collectTeamLabelKeys(params.teams)) {
+        state.agentTeamLabelKeys.add(key);
+      }
+    }
   }
 }
 
@@ -143,6 +203,10 @@ export async function startActiveChatSpan<T>(params: {
           initialAgentId: params.agentId,
           initialAgentName: params.agentName,
           failoverCount: 0,
+          agentLabelKeys: new Set(
+            (params.labels ?? []).map((label) => label.key),
+          ),
+          agentTeamLabelKeys: collectTeamLabelKeys(params.teams),
         });
         setSessionId(span, params.sessionId);
 

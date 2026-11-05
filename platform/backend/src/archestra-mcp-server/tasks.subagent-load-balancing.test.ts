@@ -2,6 +2,12 @@ import {
   TOOL_START_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
+import { context as otelContext, trace } from "@opentelemetry/api";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
@@ -26,6 +32,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import { startActiveChatSpan } from "@/observability/tracing";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import {
@@ -1629,5 +1636,166 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       copilotSubagent.id,
     ]);
     expect(mockedStart).toHaveBeenCalledTimes(4);
+  });
+
+  test("surfaces the model-readiness refusal message when start_agent_run targets an unready Codex subagent", async ({
+    makeAgent,
+  }) => {
+    const codexSubagent = await makeAgent({
+      organizationId,
+      name: "Lobster Code Review Codex",
+      agentType: "agent",
+      runtime: runtimeConfig({
+        command: ["archestra-codex"],
+        inferenceProtocol: "openai_responses",
+      }),
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      codexSubagent.id,
+    );
+    await AgentToolModel.create(gateway.id, delegationTool.id);
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const mockedStart = await mockDetachedTaskStart();
+
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: codexSubagent.id, message: "Review PR #99" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "Connect your own ChatGPT Subscription",
+    );
+    expect(mockedStart).not.toHaveBeenCalled();
+  });
+
+  test("skips unready fallback subagents during in-place runtime failover and updates the active chat span to the winning fallback", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, {
+      agentRuntimeTiers: {
+        tiers: [{ name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 0 }],
+        defaultTier: "S",
+      },
+    });
+
+    const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
+    const unreadyCodexFallback = await makeAgent({
+      organizationId,
+      name: "Unready Codex Fallback",
+      agentType: "agent",
+      runtime: runtimeConfig({
+        command: ["archestra-codex"],
+        inferenceProtocol: "openai_responses",
+      }),
+    });
+    const subagentC = await createRuntimeSubagent(makeAgent, "Subagent C");
+
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: a2aContext.id,
+      agentId: subagentA.id,
+    });
+
+    const launchedAgentIds: string[] = [];
+    vi.spyOn(backend, "launch").mockImplementation(
+      async (spec: AgentRunLaunchSpec) => {
+        launchedAgentIds.push(spec.agentRuntimeId);
+        if (spec.agentRuntimeId === subagentA.id) {
+          throw new Error("Kubernetes pod publish failed on Subagent A");
+        }
+      },
+    );
+    vi.spyOn(backend, "waitUntilRunning").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end();
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end(
+          "===ARCHESTRA-FINAL-ANSWER===\nReview completed on Subagent C",
+        );
+      },
+    );
+    vi.spyOn(backend, "waitForCompletion").mockResolvedValue({
+      outcome: "succeeded",
+    });
+    vi.spyOn(backend, "teardown").mockResolvedValue();
+    vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
+
+    const exporter = new InMemorySpanExporter();
+    const originalProvider = trace.getTracerProvider();
+    trace.disable();
+    const sdk = new NodeSDK({
+      autoDetectResources: false,
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      logRecordProcessors: [],
+    });
+    sdk.start();
+
+    try {
+      const runtimeA = resolveAgentRuntime(subagentA);
+      if (!runtimeA) throw new Error("Expected subagentA runtime");
+      const result = await startActiveChatSpan({
+        agentId: subagentA.id,
+        agentName: subagentA.name,
+        agentType: subagentA.agentType ?? undefined,
+        sessionId: a2aContext.id,
+        callback: () =>
+          runTaskInAgentRuntime({
+            runtime: runtimeA,
+            taskId: task.id,
+            agentId: subagentA.id,
+            actor: { kind: "user", id: actorId, organizationId },
+            organizationId,
+            runMode: "one_shot",
+            task: "Review PR #44",
+            modelId,
+            llmApiKeyId,
+            subagentExecutionPolicy: {
+              retries: 0,
+              fallbackAgentIds: [unreadyCodexFallback.id, subagentC.id],
+            },
+          }),
+      });
+
+      expect(result.text).toBe("Review completed on Subagent C");
+      expect(launchedAgentIds).toEqual([subagentA.id, subagentC.id]);
+
+      const updatedTask = await A2ATaskModel.findById(task.id);
+      expect(updatedTask?.agentId).toBe(subagentC.id);
+
+      const chatSpan = exporter
+        .getFinishedSpans()
+        .find((s) => s.name === "chat Subagent C");
+      expect(chatSpan).toBeDefined();
+      expect(chatSpan?.attributes).toMatchObject({
+        "gen_ai.agent.id": subagentC.id,
+        "gen_ai.agent.name": "Subagent C",
+        "archestra.subagent.initial_agent_id": subagentA.id,
+        "archestra.subagent.initial_agent_name": "Subagent A",
+        "archestra.subagent.failover_count": 1,
+      });
+    } finally {
+      await sdk.shutdown();
+      trace.disable();
+      otelContext.disable();
+      trace.setGlobalTracerProvider(originalProvider);
+    }
   });
 });

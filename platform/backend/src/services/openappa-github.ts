@@ -105,7 +105,10 @@ export async function githubSourceFetch(
 }
 
 /** Template generation can return before its files and branch are readable. */
-export async function githubSetupRead<T>(request: GithubRequest): Promise<T> {
+export async function githubSetupRead<T>(request: {
+  url: string;
+  token: string;
+}): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await githubJson<T>({ ...request, errors: githubSyncErrors });

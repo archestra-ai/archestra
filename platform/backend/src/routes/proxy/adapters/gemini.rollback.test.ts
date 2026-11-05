@@ -155,6 +155,43 @@ describe("Gemini policy batch association", () => {
     }
   });
 
+  test("saves single-candidate calls in emitted order after reordered approval", () => {
+    const adapter = geminiAdapterFactory.createStreamAdapter();
+    adapter.processChunk(
+      createMockResponse(
+        [0, 1].map((index) => ({
+          functionCall: {
+            id: `call-${index}`,
+            name: "lookup",
+            args: { index },
+          },
+          thoughtSignature: `signature-${index}`,
+        })),
+      ) as GeminiStreamChunk,
+    );
+    const approved = [...adapter.state.toolCalls]
+      .reverse()
+      .map((call) => ({ ...call, name: "policy_notice" }));
+    const frames = adapter
+      .formatToolCallsSSE?.(approved)
+      .map((event) => JSON.parse(String(event).slice(6)));
+    const emitted = frames
+      ?.flatMap((frame) => frame.candidates)
+      .flatMap((candidate) => candidate.content.parts);
+    adapter.state.toolCalls.splice(
+      0,
+      adapter.state.toolCalls.length,
+      ...approved,
+    );
+    expect(emitted?.map((part) => part.functionCall.id)).toEqual([
+      "call-0",
+      "call-1",
+    ]);
+    expect(adapter.toProviderResponse().candidates?.[0].content?.parts).toEqual(
+      emitted,
+    );
+  });
+
   test("rejects added and ambiguous approved call ids", () => {
     const response = createMockResponse([
       { functionCall: { id: "original", name: "lookup", args: {} } },

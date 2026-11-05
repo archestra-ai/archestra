@@ -1044,8 +1044,18 @@ class GeminiStreamAdapter
     // held back and never reached the client, so recording them would describe
     // a turn that did not happen — and would leave a record owing function
     // responses that nothing will ever send.
+    const approved = approvedGeminiCalls(
+      this.originalToolCalls,
+      this.state.toolCalls,
+    );
+    // Native frames retain provider order even when policy reorders its batch.
     const emittedToolCalls =
-      this.replacedText === null ? this.state.toolCalls : [];
+      this.replacedText === null
+        ? this.originalToolCalls.flatMap((original) => {
+            const call = approved.get(original.id);
+            return call ? [call] : [];
+          })
+        : [];
     for (let i = 0; i < emittedToolCalls.length; i++) {
       const toolCall = emittedToolCalls[i];
       let parsedArgs: Record<string, unknown> = {};
@@ -1079,10 +1089,6 @@ class GeminiStreamAdapter
       parts.push({ text: this.replacedText });
     }
 
-    const approved = approvedGeminiCalls(
-      this.originalToolCalls,
-      this.state.toolCalls,
-    );
     const separateCandidates =
       this.candidateParts.size > 1 ||
       (this.candidateParts.size === 1 && !this.candidateParts.has(0))

@@ -304,7 +304,41 @@ class GeminiOpenaiStreamAdapter
   }
 
   toProviderResponse(): GeminiResponse {
-    return this.inner.toProviderResponse();
+    const response = this.inner.toProviderResponse();
+    const candidate = response.candidates?.[0];
+    const parts = candidate?.content?.parts;
+    if (!candidate?.content || !parts || this.state.toolCalls.length === 0)
+      return response;
+    // This wrapper emits the approved batch order; native Gemini emits provider
+    // order. Keep its Gemini-shaped audit record aligned with the OpenAI frames.
+    const byId = new Map(
+      parts.flatMap((part) =>
+        "functionCall" in part && part.functionCall
+          ? [[part.functionCall.id, part] as const]
+          : [],
+      ),
+    );
+    const calls = this.state.toolCalls.flatMap((call) => {
+      const part = byId.get(call.id);
+      return part ? [part] : [];
+    });
+    let index = 0;
+    return {
+      ...response,
+      candidates: [
+        {
+          ...candidate,
+          content: {
+            ...candidate.content,
+            parts: parts.map((part) =>
+              "functionCall" in part && part.functionCall
+                ? (calls[index++] ?? part)
+                : part,
+            ),
+          },
+        },
+      ],
+    };
   }
 
   private toOpenaiSse(

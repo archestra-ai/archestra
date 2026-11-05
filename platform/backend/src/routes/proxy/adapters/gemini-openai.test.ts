@@ -135,6 +135,54 @@ describe("GeminiOpenaiResponseAdapter", () => {
 });
 
 describe("GeminiOpenaiStreamAdapter", () => {
+  test("saves reordered approved calls in the OpenAI client's emitted order", () => {
+    const adapter = makeGeminiOpenaiAdapterFactory({
+      chatcmplId: "call-order",
+      createdUnix: 1,
+      requestedModel: "pool",
+    }).createStreamAdapter();
+    adapter.processChunk({
+      candidates: [
+        {
+          index: 0,
+          content: {
+            role: "model",
+            parts: [0, 1].map((index) => ({
+              functionCall: {
+                id: `call-${index}`,
+                name: "lookup",
+                args: { index },
+              },
+              thoughtSignature: `signature-${index}`,
+            })),
+          },
+        },
+      ],
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+    const approved = [...adapter.state.toolCalls].reverse();
+    const frames = adapter.formatToolCallsSSE?.(approved);
+    const emitted = JSON.parse(String(frames?.[0]).slice(6)).choices[0].delta
+      .tool_calls;
+    adapter.state.toolCalls.splice(
+      0,
+      adapter.state.toolCalls.length,
+      ...approved,
+    );
+    const logged = adapter.toProviderResponse().candidates?.[0].content?.parts;
+    expect(
+      emitted.map((call: { id: string }) => decodeSignedToolCallId(call.id).id),
+    ).toEqual(["call-1", "call-0"]);
+    expect(
+      logged?.map((part) =>
+        "functionCall" in part ? part.functionCall?.id : undefined,
+      ),
+    ).toEqual(["call-1", "call-0"]);
+    expect(logged?.map((part) => part.thoughtSignature)).toEqual([
+      "signature-1",
+      "signature-0",
+    ]);
+  });
+
   test("keeps the retained call's signature when policy removes an earlier call", () => {
     const adapter = makeGeminiOpenaiAdapterFactory({
       chatcmplId: "chatcmpl-test",

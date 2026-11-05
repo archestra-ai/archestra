@@ -58,7 +58,7 @@ Limit which accounts can sign in through an identity provider:
 
 ## Change an Email Claim
 
-For OIDC providers, keep **User ID Claim** unchanged when changing **Email Claim**. Archestra uses the provider and user ID to recognize an existing SSO user.
+For OIDC providers, keep **User ID Claim** unchanged when changing **Email Claim**. Archestra uses the provider and user ID to recognize an existing SSO user. A changed **User ID Claim** blocks every existing user's next sign-in.
 
 With OIDC profile updates enabled, the user's next successful sign-in updates their email on the same account. Saving the mapping leaves their email and active sessions unchanged. If that account also has a password, use the updated email with the existing password afterward.
 
@@ -117,6 +117,7 @@ If SSO fails while password authentication is disabled, recover via the command 
 | --- | --- | --- |
 | `state_mismatch` | Cookies blocked or mismatched callback URL | Enable browser third-party cookies and verify the IdP redirect URI matches the case-sensitive `{ProviderId}`. |
 | `account not linked` | Mismatched or unverified email | Confirm the user signs in with the email address registered on Archestra, and verify the email in the IdP. |
+| "Account Belongs to Someone Else" | The identity provider gave this email to a different person, such as a new hire who inherited a former employee's address | Someone with [`member:delete`](/docs/reference/permissions#member:delete) removes the previous account in **Settings → Users** with **Remove**. The person then signs in again and gets a new, empty account. |
 | `account_not_found` (SAML) | Missing user attributes | Configure your SAML IdP to include `NameID` in `emailAddress` format, plus `email`, `firstName`, and `lastName`. |
 | `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. |
 | User missing team membership | Group claim omitted or identifier typo | Confirm the IdP sends the group claim in the ID token and that the group name in **Settings → Teams** matches verbatim. |

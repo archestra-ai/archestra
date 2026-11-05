@@ -170,7 +170,7 @@ pub(crate) struct Input {
 
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
-pub(crate) const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
+const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -356,4 +356,128 @@ pub(crate) fn validate(input: &Input) -> napi::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HookEventKind, Input, MAX_PRECHECK_REFUSAL_BYTES, validate};
+    use serde_json::{Value, json};
+
+    const QUOTED: &str = "0123456789abcdef";
+
+    #[test]
+    fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
+        let accepted = serde_json::from_str::<crate::input::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "caller_id": "user:spender",
+                "trajectory": {"v": 1, "session_id": "session"},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        );
+        assert!(accepted.is_ok());
+        assert_eq!(accepted.unwrap().caller_id.as_deref(), Some("user:spender"));
+
+        for claimed in [
+            r#""owner_caller_id": "user:owner""#,
+            r#""session_id": "session""#,
+            r#""tool": "read_untrusted""#,
+            r#""spelling": "client_tool""#,
+            r#""dispatch": "run_tool""#,
+            r#""protected": "header""#,
+        ] {
+            let payload = format!(
+                r#"{{
+                    "organization_id": "organization",
+                    {claimed},
+                    "trajectory": {{"v": 1, "session_id": "session"}},
+                    "arguments": {{"offer_id": "0123456789abcdef"}},
+                    "execution_mode": "untracked",
+                    "original_arguments": "{{}}",
+                    "presentation": {{"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}}
+                }}"#
+            );
+            assert!(
+                serde_json::from_str::<crate::input::OfferInput>(&payload).is_err(),
+                "{claimed} must not select a route"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_client_tool_names_identify_the_rejected_field() {
+        for (field, reason) in [
+            ("spelling", "invalid tool spelling"),
+            ("dispatch", "invalid dispatch tool"),
+        ] {
+            for value in [String::new(), "tool\nname".to_owned(), "x".repeat(1025)] {
+                let mut json = serde_json::json!({
+                    "organization_id": "organization",
+                    "session_id": "session",
+                    "event": "session_start",
+                });
+                json[field] = Value::String(value);
+                let input = serde_json::from_value(json).unwrap();
+                assert_eq!(
+                    crate::errors::rejected_input(crate::input::validate(&input).unwrap_err()),
+                    reason
+                );
+            }
+        }
+    }
+
+    fn remedy_input(extra: Value) -> Input {
+        let mut input = json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "caller_id": "user:caller",
+            "event": "remedy",
+            "tool_call_id": "provider-call",
+            "arguments": { "offer_id": QUOTED },
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(input).unwrap()
+    }
+
+    #[test]
+    fn a_precheck_refusal_is_accepted_only_on_an_unruled_remedy() {
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted" })
+            ))
+            .is_ok()
+        );
+        assert!(
+            validate(&remedy_input(
+                json!({ "precheck_refusal": "[appa] Not submitted", "ruling": "approve" })
+            ))
+            .is_err()
+        );
+        let mut result = remedy_input(json!({ "precheck_refusal": "[appa] Not submitted" }));
+        result.event = HookEventKind::ToolResult;
+        result.output = Some("output".to_owned());
+        assert!(validate(&result).is_err());
+    }
+
+    #[test]
+    fn a_precheck_refusal_must_carry_bounded_text() {
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": " \n " }))).is_err());
+        let oversized = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES + 1);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
+        let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
+        assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
+    }
+
+    #[test]
+    fn a_remedy_accepts_an_anonymous_spender() {
+        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_ok());
+        assert!(validate(&remedy_input(json!({}))).is_ok());
+        assert!(validate(&remedy_input(json!({ "caller_id": "" }))).is_err());
+    }
 }

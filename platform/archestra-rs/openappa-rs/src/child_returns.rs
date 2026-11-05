@@ -990,3 +990,23 @@ mod runtime_child_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn receipt_lookup_refuses_record_or_byte_overflow_instead_of_partial_authority() {
+        let mut by_records = crate::child_returns::ReceiptLookupBudget::default();
+        for _ in 0..10_000 {
+            by_records.take(0).unwrap();
+        }
+        assert!(by_records.take(0).is_err());
+        let mut by_bytes = crate::child_returns::ReceiptLookupBudget::default();
+        by_bytes.take(8 * 1024 * 1024).unwrap();
+        assert!(by_bytes.take(1).is_err());
+        assert!(
+            crate::child_returns::ReceiptLookupBudget::default()
+                .take(usize::MAX)
+                .is_err()
+        );
+    }
+}

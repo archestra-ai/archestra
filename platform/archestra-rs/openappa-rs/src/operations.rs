@@ -246,7 +246,7 @@ fn presentation_from_row(context: Option<&Value>, tool: Option<String>) -> CallP
     presentation
 }
 
-pub(crate) fn presentation_from_receipt(
+fn presentation_from_receipt(
     context: Option<&Value>,
     tool: Option<String>,
     event: Option<&str>,
@@ -545,4 +545,105 @@ pub(crate) fn finish_operation(
 pub(crate) struct YellArguments {
     pub(crate) message: String,
     pub(crate) with_trajectory: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
+        let anonymous = serde_json::from_str::<crate::input::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        )
+        .unwrap();
+        assert!(anonymous.caller_id.is_none());
+        assert!(anonymous.trajectory.parent_id.is_none());
+        assert!(crate::operations::validate_trajectory(&anonymous.trajectory).is_ok());
+
+        let foreign = crate::input::TrajectoryStamp {
+            v: 2,
+            session_id: "session".to_owned(),
+            parent_id: None,
+        };
+        assert_eq!(
+            crate::errors::rejected_input(
+                crate::operations::validate_trajectory(&foreign).unwrap_err()
+            ),
+            "invalid trajectory"
+        );
+    }
+
+    #[test]
+    fn a_child_stamp_is_the_expected_actor_and_a_root_stamp_is_not() {
+        let child =
+            crate::operations::expected_actor("recorded-root", "child-session", Some("parent"));
+        let child_actor = crate::session::session_actor("child-session");
+        assert_eq!(child.root.0, "recorded-root");
+        assert_eq!(
+            child.child.as_ref().map(|id| id.0.as_str()),
+            Some(child_actor.as_str())
+        );
+        assert!(
+            crate::operations::expected_actor("recorded-root", "session", None)
+                .child
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_peer_read_notice_uses_its_stored_tool_as_retry_spelling() {
+        let peer = crate::operations::presentation_from_receipt(
+            None,
+            Some("acme__read_peer_message".to_owned()),
+            Some("peer_read_notice"),
+        );
+        assert_eq!(peer.spelling.as_deref(), Some("acme__read_peer_message"));
+        let ordinary = crate::operations::presentation_from_receipt(
+            None,
+            Some("read_untrusted".to_owned()),
+            Some("tool_call"),
+        );
+        assert!(ordinary.spelling.is_none());
+        assert_eq!(ordinary.tool.as_deref(), Some("read_untrusted"));
+    }
+
+    #[test]
+    fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
+        let input: crate::input::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spelling": "client.read_untrusted",
+            "dispatch": "my_gateway_archestra__run_tool"
+        }))
+        .unwrap();
+        let semantic = crate::operations::operation_semantic(&input);
+        assert!(semantic.get("spelling").is_none());
+        assert!(semantic.get("dispatch").is_none());
+        let context = crate::operations::tool_call_context(&input);
+        assert_eq!(context["spelling"], "client.read_untrusted");
+        assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
+
+        let legacy: crate::input::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {}
+        }))
+        .unwrap();
+        let old = crate::operations::tool_call_context(&legacy);
+        assert!(old.get("spelling").is_none());
+        assert!(old.get("dispatch").is_none());
+        assert!(crate::remedy::recorded_call(Some(context), serde_json::json!({})).is_ok());
+        assert!(crate::remedy::recorded_call(Some(old), serde_json::json!({})).is_ok());
+    }
 }

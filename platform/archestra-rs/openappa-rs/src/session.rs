@@ -111,7 +111,7 @@ pub(crate) fn result_presentation_options(
         })
 }
 
-pub(crate) fn native_presentation_options() -> EmbeddedPresentationOptions {
+fn native_presentation_options() -> EmbeddedPresentationOptions {
     // Default presentation options without delegation transport.
     EmbeddedPresentationOptions {
         supports_delegation: false,
@@ -232,4 +232,42 @@ pub(crate) async fn session_status(
     })
     .await
     .map_err(panicked)?
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn session_actor_preserves_existing_sha256_identifiers() {
+        assert_eq!(
+            crate::session::session_actor(""),
+            "archestra:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            crate::session::session_actor("abc"),
+            "archestra:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    /// The root formula names the organization, and a root is never a session's row
+    /// key, which remains the actor.
+    #[test]
+    fn a_root_names_its_organization() {
+        assert_eq!(
+            crate::session::root_id("org", "session"),
+            "archestra:25fa5093fa99432cd7453063ddade778c3d57e7a67f33c93ba4ad77600046654"
+        );
+        assert_ne!(
+            crate::session::root_id("org-a", "session"),
+            crate::session::root_id("org-b", "session")
+        );
+        assert_ne!(
+            crate::session::root_id("org", "session"),
+            crate::session::session_actor("session")
+        );
+    }
+
+    #[test]
+    fn legacy_presentation_fallback_never_advertises_delegation() {
+        assert!(!crate::session::native_presentation_options().supports_delegation);
+    }
 }

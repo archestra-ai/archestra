@@ -835,36 +835,6 @@ mod typed_tests {
     use serde_json::Value;
 
     #[test]
-    fn session_actor_preserves_existing_sha256_identifiers() {
-        assert_eq!(
-            crate::session::session_actor(""),
-            "archestra:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
-        assert_eq!(
-            crate::session::session_actor("abc"),
-            "archestra:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-    }
-
-    /// The root formula names the organization, and a root is never a session's row
-    /// key, which remains the actor.
-    #[test]
-    fn a_root_names_its_organization() {
-        assert_eq!(
-            crate::session::root_id("org", "session"),
-            "archestra:25fa5093fa99432cd7453063ddade778c3d57e7a67f33c93ba4ad77600046654"
-        );
-        assert_ne!(
-            crate::session::root_id("org-a", "session"),
-            crate::session::root_id("org-b", "session")
-        );
-        assert_ne!(
-            crate::session::root_id("org", "session"),
-            crate::session::session_actor("session")
-        );
-    }
-
-    #[test]
     fn remedy_operation_preserves_existing_receipt_identifiers() {
         let mut input: crate::input::Input = serde_json::from_str(
             r#"{
@@ -917,95 +887,6 @@ mod typed_tests {
     }
 
     #[test]
-    fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
-        let accepted = serde_json::from_str::<crate::input::OfferInput>(
-            r#"{
-                "organization_id": "organization",
-                "caller_id": "user:spender",
-                "trajectory": {"v": 1, "session_id": "session"},
-                "arguments": {"offer_id": "0123456789abcdef"},
-                "execution_mode": "untracked",
-                "original_arguments": "{}",
-                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
-            }"#,
-        );
-        assert!(accepted.is_ok());
-        assert_eq!(accepted.unwrap().caller_id.as_deref(), Some("user:spender"));
-
-        for claimed in [
-            r#""owner_caller_id": "user:owner""#,
-            r#""session_id": "session""#,
-            r#""tool": "read_untrusted""#,
-            r#""spelling": "client_tool""#,
-            r#""dispatch": "run_tool""#,
-            r#""protected": "header""#,
-        ] {
-            let payload = format!(
-                r#"{{
-                    "organization_id": "organization",
-                    {claimed},
-                    "trajectory": {{"v": 1, "session_id": "session"}},
-                    "arguments": {{"offer_id": "0123456789abcdef"}},
-                    "execution_mode": "untracked",
-                    "original_arguments": "{{}}",
-                    "presentation": {{"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}}
-                }}"#
-            );
-            assert!(
-                serde_json::from_str::<crate::input::OfferInput>(&payload).is_err(),
-                "{claimed} must not select a route"
-            );
-        }
-    }
-
-    #[test]
-    fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
-        let anonymous = serde_json::from_str::<crate::input::OfferInput>(
-            r#"{
-                "organization_id": "organization",
-                "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
-                "arguments": {"offer_id": "0123456789abcdef"},
-                "execution_mode": "untracked",
-                "original_arguments": "{}",
-                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
-            }"#,
-        )
-        .unwrap();
-        assert!(anonymous.caller_id.is_none());
-        assert!(anonymous.trajectory.parent_id.is_none());
-        assert!(crate::operations::validate_trajectory(&anonymous.trajectory).is_ok());
-
-        let foreign = crate::input::TrajectoryStamp {
-            v: 2,
-            session_id: "session".to_owned(),
-            parent_id: None,
-        };
-        assert_eq!(
-            crate::errors::rejected_input(
-                crate::operations::validate_trajectory(&foreign).unwrap_err()
-            ),
-            "invalid trajectory"
-        );
-    }
-
-    #[test]
-    fn a_child_stamp_is_the_expected_actor_and_a_root_stamp_is_not() {
-        let child =
-            crate::operations::expected_actor("recorded-root", "child-session", Some("parent"));
-        let child_actor = crate::session::session_actor("child-session");
-        assert_eq!(child.root.0, "recorded-root");
-        assert_eq!(
-            child.child.as_ref().map(|id| id.0.as_str()),
-            Some(child_actor.as_str())
-        );
-        assert!(
-            crate::operations::expected_actor("recorded-root", "session", None)
-                .child
-                .is_none()
-        );
-    }
-
-    #[test]
     fn retry_text_comes_from_recorded_context_and_old_rows_fall_back() {
         let recorded = presentation_from_context(Some(&serde_json::json!({
             "tool": "archestra__whoami",
@@ -1053,57 +934,6 @@ mod typed_tests {
         assert!(direct.contains("Call the read_untrusted tool again"));
         assert!(!direct.contains("run_tool"));
         assert!(presentation_from_context(None).tool.is_none());
-    }
-
-    #[test]
-    fn a_peer_read_notice_uses_its_stored_tool_as_retry_spelling() {
-        let peer = crate::operations::presentation_from_receipt(
-            None,
-            Some("acme__read_peer_message".to_owned()),
-            Some("peer_read_notice"),
-        );
-        assert_eq!(peer.spelling.as_deref(), Some("acme__read_peer_message"));
-        let ordinary = crate::operations::presentation_from_receipt(
-            None,
-            Some("read_untrusted".to_owned()),
-            Some("tool_call"),
-        );
-        assert!(ordinary.spelling.is_none());
-        assert_eq!(ordinary.tool.as_deref(), Some("read_untrusted"));
-    }
-
-    #[test]
-    fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
-        let input: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
-            "session_id": "session",
-            "event": "tool_call",
-            "tool": "read_untrusted",
-            "arguments": {"path": "report.txt"},
-            "spelling": "client.read_untrusted",
-            "dispatch": "my_gateway_archestra__run_tool"
-        }))
-        .unwrap();
-        let semantic = crate::operations::operation_semantic(&input);
-        assert!(semantic.get("spelling").is_none());
-        assert!(semantic.get("dispatch").is_none());
-        let context = crate::operations::tool_call_context(&input);
-        assert_eq!(context["spelling"], "client.read_untrusted");
-        assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
-
-        let legacy: crate::input::Input = serde_json::from_value(serde_json::json!({
-            "organization_id": "organization",
-            "session_id": "session",
-            "event": "tool_call",
-            "tool": "read_untrusted",
-            "arguments": {}
-        }))
-        .unwrap();
-        let old = crate::operations::tool_call_context(&legacy);
-        assert!(old.get("spelling").is_none());
-        assert!(old.get("dispatch").is_none());
-        assert!(super::recorded_call(Some(context), serde_json::json!({})).is_ok());
-        assert!(super::recorded_call(Some(old), serde_json::json!({})).is_ok());
     }
 
     fn owner_from(presentation: crate::operations::CallPresentation) -> OfferOwner {
@@ -1296,45 +1126,6 @@ mod typed_tests {
     }
 
     #[test]
-    fn invalid_client_tool_names_identify_the_rejected_field() {
-        for (field, reason) in [
-            ("spelling", "invalid tool spelling"),
-            ("dispatch", "invalid dispatch tool"),
-        ] {
-            for value in [String::new(), "tool\nname".to_owned(), "x".repeat(1025)] {
-                let mut json = serde_json::json!({
-                    "organization_id": "organization",
-                    "session_id": "session",
-                    "event": "session_start",
-                });
-                json[field] = Value::String(value);
-                let input = serde_json::from_value(json).unwrap();
-                assert_eq!(
-                    crate::errors::rejected_input(crate::input::validate(&input).unwrap_err()),
-                    reason
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn receipt_lookup_refuses_record_or_byte_overflow_instead_of_partial_authority() {
-        let mut by_records = crate::child_returns::ReceiptLookupBudget::default();
-        for _ in 0..10_000 {
-            by_records.take(0).unwrap();
-        }
-        assert!(by_records.take(0).is_err());
-        let mut by_bytes = crate::child_returns::ReceiptLookupBudget::default();
-        by_bytes.take(8 * 1024 * 1024).unwrap();
-        assert!(by_bytes.take(1).is_err());
-        assert!(
-            crate::child_returns::ReceiptLookupBudget::default()
-                .take(usize::MAX)
-                .is_err()
-        );
-    }
-
-    #[test]
     fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
@@ -1365,22 +1156,15 @@ mod typed_tests {
             serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
         );
     }
-
-    #[test]
-    fn legacy_presentation_fallback_never_advertises_delegation() {
-        assert!(!crate::session::native_presentation_options().supports_delegation);
-    }
 }
 
 #[cfg(test)]
 mod remedy_tests {
     use super::{RemedyAct, render_remedy_outcome};
-    use crate::input::{
-        HookEventKind, Input, MAX_PRECHECK_REFUSAL_BYTES, OfferOwner, RulingInput, validate,
-    };
+    use crate::input::{OfferOwner, RulingInput};
     use appa_runtime::api::{RemedyOutcome, RemedyPresentation};
     use appa_runtime_api::OfferedRemedy;
-    use serde_json::{Value, json};
+    use serde_json::Value;
 
     const QUOTED: &str = "0123456789abcdef";
     const OTHER: &str = "fedcba9876543210";
@@ -1555,58 +1339,6 @@ mod remedy_tests {
         assert!(text.starts_with("[appa] Denied:"), "{text}");
         assert!(text.contains("The policy still offers options that do not need this reviewer:"));
         assert!(text.ends_with(&remaining));
-    }
-
-    fn remedy_input(extra: Value) -> Input {
-        let mut input = json!({
-            "organization_id": "organization",
-            "session_id": "session",
-            "caller_id": "user:caller",
-            "event": "remedy",
-            "tool_call_id": "provider-call",
-            "arguments": { "offer_id": QUOTED },
-        });
-        input
-            .as_object_mut()
-            .unwrap()
-            .extend(extra.as_object().unwrap().clone());
-        serde_json::from_value(input).unwrap()
-    }
-
-    #[test]
-    fn a_precheck_refusal_is_accepted_only_on_an_unruled_remedy() {
-        assert!(
-            validate(&remedy_input(
-                json!({ "precheck_refusal": "[appa] Not submitted" })
-            ))
-            .is_ok()
-        );
-        assert!(
-            validate(&remedy_input(
-                json!({ "precheck_refusal": "[appa] Not submitted", "ruling": "approve" })
-            ))
-            .is_err()
-        );
-        let mut result = remedy_input(json!({ "precheck_refusal": "[appa] Not submitted" }));
-        result.event = HookEventKind::ToolResult;
-        result.output = Some("output".to_owned());
-        assert!(validate(&result).is_err());
-    }
-
-    #[test]
-    fn a_precheck_refusal_must_carry_bounded_text() {
-        assert!(validate(&remedy_input(json!({ "precheck_refusal": " \n " }))).is_err());
-        let oversized = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES + 1);
-        assert!(validate(&remedy_input(json!({ "precheck_refusal": oversized }))).is_err());
-        let largest = "x".repeat(MAX_PRECHECK_REFUSAL_BYTES);
-        assert!(validate(&remedy_input(json!({ "precheck_refusal": largest }))).is_ok());
-    }
-
-    #[test]
-    fn a_remedy_accepts_an_anonymous_spender() {
-        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_ok());
-        assert!(validate(&remedy_input(json!({}))).is_ok());
-        assert!(validate(&remedy_input(json!({ "caller_id": "" }))).is_err());
     }
 }
 

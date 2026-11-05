@@ -89,9 +89,11 @@ function Credential({ value }: { value: string }) {
       </code>
       <CopyButton
         text={value}
-        className="h-4 w-4 hover:bg-transparent"
+        className="h-4 w-4 hover:bg-transparent disabled:opacity-100"
         size={10}
-        behavior="text"
+        // The icon turns into a check for a moment. A "Copied!" label would
+        // push the rest of the sentence along while it shows.
+        copiedIconClassName="text-green-600 dark:text-green-400"
       />
     </span>
   );

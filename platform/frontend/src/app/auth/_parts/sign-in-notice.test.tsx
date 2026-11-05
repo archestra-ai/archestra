@@ -1,5 +1,5 @@
 import { DocsPage, getDocsUrl } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDefaultCredentialsEnabled } from "@/lib/auth/auth.query";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -20,6 +20,10 @@ vi.mock("next/link", () => ({
     children: React.ReactNode;
     href: string;
   }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock("@/lib/clipboard", () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -61,6 +65,21 @@ describe("SignInNotice", () => {
     expect(screen.getByRole("link", { name: /set up SSO/ })).toHaveAttribute(
       "href",
       SSO_DOCS,
+    );
+  });
+
+  it("confirms a copy without adding text that would push the sentence along", async () => {
+    render(<SignInNotice />);
+    const notice = screen.getByRole("note");
+    const textBefore = notice.textContent;
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: /Copy/ })[0]);
+    });
+
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeInTheDocument();
+    expect(notice.textContent?.replace("Copied!", "Copy to clipboard")).toBe(
+      textBefore,
     );
   });
 

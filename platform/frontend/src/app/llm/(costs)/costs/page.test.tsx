@@ -847,6 +847,86 @@ describe("OrganizationCostsPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
   });
+  it("reports a failed scope total instead of a team admin's overlapping row sum", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    const row = (teamId: string, teamName: string, cost: number) => ({
+      teamId,
+      teamName,
+      members: 1,
+      agents: 1,
+      requests: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      cost,
+      timeSeries: [],
+    });
+    teams = [
+      row("parent", "Platform", 100),
+      row("child", "Platform Search", 40),
+    ];
+    server.use(
+      http.get(`${origin}/api/statistics/costs`, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 500 },
+        ),
+      ),
+    );
+    search = new URLSearchParams("group=team&metric=billed");
+    show();
+    expect(
+      await screen.findByText("Could not load usage statistics"),
+    ).toBeVisible();
+    expect(screen.queryByText("$140.00")).not.toBeInTheDocument();
+  });
+  it("lets a team admin leave the model view a drill-down link falls back to", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    teams = [
+      {
+        teamId: "parent",
+        teamName: "Platform",
+        members: 1,
+        agents: 1,
+        requests: 3,
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: 4,
+        timeSeries: [],
+      },
+    ];
+    search = new URLSearchParams("group=person&model=example/model-a");
+    show();
+    expect(
+      await screen.findByRole("button", { name: "by Model" }),
+    ).toBeVisible();
+    await group("Team");
+    expect(
+      await within(await screen.findByRole("table")).findByText("Platform"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "by Team" })).toBeVisible();
+  });
   it("drops a breakdown a team admin's shared link asks for", async () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>

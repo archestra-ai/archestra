@@ -595,6 +595,7 @@ export function usePivotCube(
       ...(src.kind === "skill" && q.group === "skill"
         ? [skillReachQ, skillCostQ]
         : []),
+      ...(dedupeTeams ? [modelQ] : []),
     ].find((query) => query.isError);
     const base = {
       api: apiFor(src, tf, q, teamId),
@@ -603,6 +604,7 @@ export function usePivotCube(
       retry: () => {
         void primary.refetch();
         for (const query of itemQs) void query.refetch();
+        if (dedupeTeams) void modelQ.refetch();
         if (src.kind === "skill") {
           void skillReachQ.refetch();
           void skillCostQ.refetch();
@@ -915,8 +917,11 @@ export function usePivotCube(
               ? agentQ.isLoading
               : modelQ.isLoading;
         const cube = { ...assemble(facts, { totals, meta }), ...base };
-        if (!dedupeTeams || !modelQ.data)
-          return { ...cube, isLoading: loading };
+        if (!dedupeTeams) return { ...cube, isLoading: loading };
+        // Without the scope's costs, the overlapping rows have no honest
+        // total: keep loading, or show the error (the failed list has it).
+        if (!modelQ.data)
+          return { ...cube, total: 0, isLoading: !modelQ.isError };
         // A sub-team's spend also counts toward its parent team, as it does
         // for spend limits, so these rows overlap. The scope's per-model
         // costs count each request once: the total, trend and column totals

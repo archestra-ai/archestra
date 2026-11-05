@@ -99,23 +99,31 @@ export default function CostExplorer() {
   // A shared link may name a grouping, breakdown or model drill-down a team
   // admin cannot read (breakdowns come from the organization-wide usage
   // endpoint); fall back to spend by model, or drop the breakdown.
-  const query = !teamScoped
-    ? explorer.query
-    : !canGroup(explorer.query.group) || explorer.query.model
-      ? {
-          ...explorer.query,
-          metric: supports("model", explorer.query.metric)
-            ? explorer.query.metric
-            : "billed",
-          group: "model" as const,
-          split: "none" as const,
-          model: undefined,
-        }
-      : explorer.query.split !== "none"
-        ? { ...explorer.query, split: "none" as const }
-        : explorer.query;
+  const scopeQuery = (raw: PivotQuery): PivotQuery =>
+    !teamScoped
+      ? raw
+      : !canGroup(raw.group) || raw.model
+        ? {
+            ...raw,
+            metric: supports("model", raw.metric) ? raw.metric : "billed",
+            group: "model",
+            split: "none",
+            model: undefined,
+          }
+        : raw.split !== "none"
+          ? { ...raw, split: "none" }
+          : raw;
+  const query = scopeQuery(explorer.query);
+  // Controls change the query on screen, never a hidden grouping or model
+  // filter that would force the fallback again.
+  const scopeQueryRef = useRef(scopeQuery);
+  scopeQueryRef.current = scopeQuery;
   const setQ = useCallback(
-    (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
+    (value: SetStateAction<PivotQuery>) =>
+      setExplorer("query", (previous) => {
+        const shown = scopeQueryRef.current(previous);
+        return typeof value === "function" ? value(shown) : value;
+      }),
     [setExplorer],
   );
   const setFocus = useCallback(

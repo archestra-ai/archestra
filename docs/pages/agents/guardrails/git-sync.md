@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-20
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,6 +46,28 @@ Before you connect, the dialog checks what the repository holds:
 - **Found appa.toml:** that file replaces your current policy.
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
+
+## Let Each Server's Team Own Its Rules
+
+The people who can edit an MCP server can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. The server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`, and `appa.toml` includes it:
+
+```toml
+include = [
+  "batteries/archestra/appa.toml",
+  "mcp/payments_api.toml",
+]
+```
+
+1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server.
+2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
+3. Click **Approve**. The Keeper opens a pull request that changes only that file, and adds it to `appa.toml` the first time.
+4. A reviewer merges it, and Git sync applies it at the next sync.
+
+What to know:
+
+- Your repository decides who reviews: give each file its owners in `CODEOWNERS`, such as `/mcp/payments_api.toml @example/payments`, and require code owner reviews on the branch.
+- A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
+- A server file starts with `[policy]` and `version = 2`, like `appa.toml`. The Keeper writes only rules for that server's tools and the annotators they use.
 
 ## Validations in Git
 

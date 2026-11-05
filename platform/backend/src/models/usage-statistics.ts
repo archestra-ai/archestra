@@ -14,7 +14,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import type { PgColumn, PgSelect } from "drizzle-orm/pg-core";
+import { alias, type PgColumn, type PgSelect } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
@@ -420,12 +420,14 @@ class UsageStatisticsModel {
   }
 
   /**
-   * LLM requests, tokens and spend, grouped by any mix of team, credential,
-   * provider, model and day. Each dimension keeps the meaning it has on its
-   * own Costs view, so a breakdown's row totals match that view: team as in
-   * {@link StatisticsModel.getTeamStatistics} (an agent shared with several
-   * teams counts in each), credential as in the LLM proxy statistics (proxy
-   * traffic only), and model as the billed model of
+   * LLM requests, tokens and spend, grouped by any mix of team, agent, person,
+   * credential, provider, model and day. Each dimension keeps the meaning it
+   * has on its own Costs view, so a breakdown's row totals match that view:
+   * team as in {@link StatisticsModel.getTeamStatistics} (an agent shared with
+   * several teams counts in each), agent as in
+   * {@link StatisticsModel.getAgentStatistics} (legacy proxy rows count under
+   * the organization's LLM proxy), credential as in the LLM proxy statistics
+   * (proxy traffic only), and model as the billed model of
    * {@link StatisticsModel.getModelStatistics}.
    */
   static async getLlmUsage(params: {
@@ -451,6 +453,13 @@ class UsageStatisticsModel {
     const byTeam = groupBy.includes("teamId") || params.teamId !== undefined;
     const byCredential =
       groupBy.includes("credentialId") || params.credentialId !== undefined;
+    const byAgent = groupBy.includes("agentId");
+    const byUser = groupBy.includes("userId");
+    const needsAgent = byTeam || byCredential || byAgent;
+    // The organization's LLM proxy, which legacy proxy and dual-purpose
+    // `profile` rows report under (see StatisticsModel.collapseProxyRows).
+    const proxy = alias(agents, "org_llm_proxy");
+    const users = schema.usersTable;
 
     const billed = billedModelJoins();
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
@@ -469,6 +478,11 @@ class UsageStatisticsModel {
     > = {
       day: { day: utcDay(i.createdAt) },
       teamId: { teamId: teams.id, teamName: teams.name },
+      agentId: {
+        agentId: sql<string>`COALESCE(${proxy.id}, ${agents.id})`,
+        agentName: sql<string>`COALESCE(${proxy.name}, ${agents.name})`,
+      },
+      userId: { userId: i.userId, userName: users.name },
       credentialId: {
         authMethod: method,
         credentialId: credential,
@@ -485,11 +499,11 @@ class UsageStatisticsModel {
 
     const where = and(
       ...StatisticsModel.timeframeConditions(params.timeframe),
-      byTeam || byCredential
+      needsAgent
         ? eq(agents.organizationId, organizationId)
         : interactionBelongsToOrganization(organizationId),
       byTeam ? eq(teams.organizationId, organizationId) : undefined,
-      byTeam ? notDeleted(agents) : undefined,
+      byTeam || byAgent ? notDeleted(agents) : undefined,
       byCredential
         ? inArray(agents.agentType, ["llm_proxy", "profile"])
         : undefined,
@@ -511,8 +525,19 @@ class UsageStatisticsModel {
         q = q
           .leftJoin(billed.receipt, billed.receiptOn)
           .leftJoin(billed.facts, sql`true`);
-      if (byTeam || byCredential)
-        q = q.innerJoin(agents, eq(agents.id, i.profileId));
+      if (needsAgent) q = q.innerJoin(agents, eq(agents.id, i.profileId));
+      if (byAgent)
+        q = q.leftJoin(
+          proxy,
+          and(
+            inArray(agents.agentType, ["llm_proxy", "profile"]),
+            eq(proxy.organizationId, agents.organizationId),
+            eq(proxy.agentType, "llm_proxy"),
+            eq(proxy.isDefault, true),
+            notDeleted(proxy),
+          ),
+        );
+      if (byUser) q = q.leftJoin(users, eq(users.id, i.userId));
       if (byTeam)
         q = q
           .leftJoin(

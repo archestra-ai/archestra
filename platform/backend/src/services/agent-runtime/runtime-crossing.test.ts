@@ -1108,7 +1108,7 @@ describe("crossRuntimeOutput", () => {
 
     const result = await executeArchestraTool(
       TOOL_GET_AGENT_RUN_FULL_NAME,
-      { task_id: seeded.task.id },
+      { run_id: seeded.task.id },
       seeded.context,
     );
 
@@ -1117,6 +1117,51 @@ describe("crossRuntimeOutput", () => {
     expect(result.structuredContent).toMatchObject({
       output: "RAW RETURN AFTER LOOKUP FAILURE",
     });
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: seeded.organizationId,
+        sessionIds: [PARENT],
+      }),
+    ).toHaveLength(1);
+  });
+
+  test.for([
+    null,
+    "another-parent",
+  ])("waived runtime access releases raw output with parent %s", async (parentId, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    config.openappa.yellEnabled = false;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "WAIVED OUTPUT" }],
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ output: "WAIVED OUTPUT" });
     expect(
       await OpenAppaUnenforcedModel.findSessions({
         organizationId: seeded.organizationId,

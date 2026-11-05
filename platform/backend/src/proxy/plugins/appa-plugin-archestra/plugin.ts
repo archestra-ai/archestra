@@ -3744,6 +3744,7 @@ async function approveChildReturnCarriers(params: {
         !params.backgroundLaunches?.has(record.spawnCallId)
       )
         throw error;
+      await refuseSoftBlock(softBlockReason(error));
       logger.warn(
         {
           client: adapter.id,

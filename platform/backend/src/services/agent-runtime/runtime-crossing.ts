@@ -248,7 +248,8 @@ export async function admitRuntimeSteer(params: {
   if (relation.kind === "refused") {
     throw new RuntimeCrossingRefusal(relation.reason);
   }
-  if (relation.kind === "producer") return relation.child;
+  if (relation.kind === "producer" || relation.kind === "waived")
+    return relation.child;
   try {
     await addressRuntimeChild({
       session: params.crossing.source,
@@ -286,6 +287,7 @@ export async function classifyRuntimeCaller(params: {
   workspaceId: string;
 }): Promise<
   | { kind: "producer"; child: OpenAppaSession }
+  | { kind: "waived"; child: OpenAppaSession }
   | { kind: "parent"; child: OpenAppaSession }
   | RuntimeCallerRefusal
 > {
@@ -326,7 +328,7 @@ export async function classifyRuntimeCaller(params: {
         "OpenAPPA runtime has no parent trajectory",
       )
     )
-      return { kind: "producer", child: resolved.session };
+      return { kind: "waived", child: resolved.session };
     return refuse(
       "unparented",
       `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}.`,
@@ -340,7 +342,7 @@ export async function classifyRuntimeCaller(params: {
         "OpenAPPA runtime belongs to another trajectory",
       )
     )
-      return { kind: "producer", child: resolved.session };
+      return { kind: "waived", child: resolved.session };
     return refuse("different_session", BOUND_TO_ANOTHER_SESSION);
   }
   return { kind: "parent", child: resolved.session };
@@ -363,6 +365,7 @@ export async function crossRuntimeOutput(params: {
   taskId: string;
 }): Promise<
   | { kind: "producer" }
+  | { kind: "waived" }
   | { kind: "admitted"; value: string }
   | { kind: "withheld"; reason: string }
   | RuntimeCallerRefusal
@@ -370,7 +373,8 @@ export async function crossRuntimeOutput(params: {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;
   if (relation.kind === "producer") return { kind: "producer" };
-  if (await isUnenforcedSession(relation.child)) return { kind: "producer" };
+  if (relation.kind === "waived" || (await isUnenforcedSession(relation.child)))
+    return { kind: "waived" };
   const prefix = `runtime-return:${params.taskId}:`;
   let records: Awaited<ReturnType<typeof loadChildReturns>>;
   try {
@@ -388,7 +392,7 @@ export async function crossRuntimeOutput(params: {
         error instanceof Error ? error.message : String(error),
       )
     )
-      return { kind: "producer" };
+      return { kind: "waived" };
     throw error;
   }
   const matches = records.filter(
@@ -415,7 +419,7 @@ export async function crossRuntimeOutput(params: {
         "No admitted runtime result",
       )
     )
-      return { kind: "producer" };
+      return { kind: "waived" };
     return withheld(
       "This turn has no admitted result yet. The raw output was not returned.",
     );

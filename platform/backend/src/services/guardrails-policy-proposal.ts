@@ -3,6 +3,7 @@ import {
   GUARDRAILS_POLICY_MAX_LENGTH,
   type GuardrailsPolicyEdit,
   type GuardrailsPolicyProposal,
+  guardrailsPolicyBytes,
 } from "@/types/guardrails-policy-proposal";
 
 /**
@@ -99,10 +100,11 @@ function applyPolicyEdits(params: {
       400,
       "The edits leave the policy empty. Send content to replace the whole policy.",
     );
-  if (text.length > GUARDRAILS_POLICY_MAX_LENGTH)
+  const bytes = guardrailsPolicyBytes(text);
+  if (bytes > GUARDRAILS_POLICY_MAX_LENGTH)
     throw new ApiError(
       400,
-      `The edited policy is ${text.length} characters, over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit.`,
+      `The edited policy is ${bytes} bytes, over the ${GUARDRAILS_POLICY_MAX_LENGTH} limit.`,
     );
   return text;
 }

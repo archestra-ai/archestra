@@ -421,7 +421,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Who is using it");
+    await view("Tokens by person");
     await within(await screen.findByRole("table")).findByText("Example User A");
     await split("Model");
     fireEvent.click(
@@ -511,7 +511,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Who is using it");
+    await view("Tokens by person");
     const identity = await within(await screen.findByRole("table")).findByText(
       "Example User C with a long identity",
     );
@@ -632,6 +632,51 @@ describe("OrganizationCostsPage", () => {
       "Platform,model-small,4,400,40,0,0,440,1,0",
       "Research,model-small,2,200,20,0,0,220,0.5000,0",
     ]);
+  });
+
+  it("breaks each agent's usage down by person, keeping requests without a person", async () => {
+    llmUsage = [
+      {
+        day: "2026-01-01",
+        agentId: "agent-triage",
+        agentName: "Support triage",
+        userId: "user-ada",
+        userName: "Ada Lovelace",
+        ...usage({ requests: 3 }),
+      },
+      {
+        day: "2026-01-01",
+        agentId: "agent-triage",
+        agentName: "Support triage",
+        userId: null,
+        userName: null,
+        ...usage({ requests: 1 }),
+      },
+      {
+        day: "2026-01-01",
+        agentId: "agent-review",
+        agentName: "Code review",
+        userId: "user-ada",
+        userName: "Ada Lovelace",
+        ...usage({ requests: 2 }),
+      },
+    ];
+    search = new URLSearchParams({ chart: "table" });
+    show();
+    await view("Tokens by agent and person");
+    await waitFor(() =>
+      expect(
+        requests
+          .find((url) => url.pathname.endsWith("/llm-usage"))
+          ?.searchParams.get("groupBy"),
+      ).toBe("day,agentId,userId"),
+    );
+    expect(
+      screen.getByRole("button", { name: /^split by Person/ }),
+    ).toBeInTheDocument();
+    expect(await screen.findAllByText("Ada Lovelace")).not.toHaveLength(0);
+    expect(screen.getAllByText("No person recorded")).not.toHaveLength(0);
+    expect(screen.getAllByText("Support triage")).not.toHaveLength(0);
   });
 
   it("renders each selected entity in one reusable table", async () => {
@@ -756,7 +801,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Skills by reach");
+    await view("Skill activations by skill");
     expect(
       await within(await screen.findByRole("table")).findByText(
         "PDF Extraction",

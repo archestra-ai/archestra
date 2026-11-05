@@ -550918,7 +550918,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. Callers without `member:read` see only their own usage. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -552216,7 +552216,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get usage statistics for every agent in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for every agent in the active organization.",
+        "description": "Get usage statistics for every agent in the active organization. Callers without `member:read` see only their own usage of each agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for every agent in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -555485,7 +555485,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for the active organization.",
+        "description": "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required. Without `member:read`, the top agent reflects only the caller's own usage, since an agent can be someone's personal one.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -558666,7 +558666,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity. Callers without `member:read` see only their own usage, since a key or agent can be someone's personal one.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -559134,7 +559134,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity. Callers without `member:read` see only their own usage, since a key or agent can be someone's personal one.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {

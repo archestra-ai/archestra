@@ -264,13 +264,17 @@ describe("hitlReviewCard", () => {
     allowMultiple: false,
     remedy_offer_ids: ["offer"],
   };
-  const cardFor = (review: {
+  const cardFor = (params: {
     tool?: string;
     arguments?: string;
     text: string;
     summary?: string;
     toolDescription?: string;
-  }) => hitlReviewCard({ base, review });
+    inspected?: boolean;
+  }) => {
+    const { inspected, ...review } = params;
+    return hitlReviewCard({ base, review, inspected });
+  };
   const previewOf = (card: HitlReviewCard, label: string) =>
     card.options.find((option) => option.label === label)?.preview ?? "";
 
@@ -442,11 +446,22 @@ describe("hitlReviewCard", () => {
   test("keeps a long description in full and shortens the command it describes", () => {
     const description = `Push ${"the branch ".repeat(30)}now`;
     const command = `echo ${"payload ".repeat(180)}end`;
-    const { card, approve } = cardFor({
+    const review = {
       tool: "Bash",
       arguments: JSON.stringify({ command, description, cmd: command }),
       text: COVERAGE,
-    });
+    };
+    // The agent wrote the description: with the command a pointer, the card
+    // offers Allow only once the reviewer holds the complete review.
+    const { card: unread, approve: unreadApprove } = cardFor(review);
+    expect(unreadApprove).toBe(false);
+    expect(unread.options.map((option) => option.label)).not.toContain("Allow");
+    expect(
+      unwrapped(previewOf(unread, "Inspect")).startsWith(
+        `description: ${description}\ncommand: (`,
+      ),
+    ).toBe(true);
+    const { card, approve } = cardFor({ ...review, inspected: true });
     expect(approve).toBe(true);
     const preview = previewOf(card, "Allow");
     expect(fitsThePane(preview)).toBe(true);
@@ -465,8 +480,8 @@ describe("hitlReviewCard", () => {
       arguments: JSON.stringify({ command, description, cmd: command }),
       text: COVERAGE,
     });
-    expect(approve).toBe(true);
-    for (const label of ["Inspect", "Allow", "Deny"]) {
+    expect(approve).toBe(false);
+    for (const label of ["Inspect", "Deny"]) {
       const preview = previewOf(card, label);
       expect(fitsThePane(preview)).toBe(true);
       expect(
@@ -592,6 +607,54 @@ describe("hitlReviewCard", () => {
     expect(
       preview.startsWith("description: List the files\ncommand: ls -la"),
     ).toBe(true);
+  });
+
+  test("ends the tool description at a title line or an argument list", () => {
+    const lead = (toolDescription: string) =>
+      unwrapped(
+        previewOf(
+          cardFor({
+            tool: "mcp/github/run",
+            arguments: JSON.stringify({ target: "main" }),
+            text: COVERAGE,
+            toolDescription,
+          }).card,
+          "Allow",
+        ),
+      ).split("\n")[0];
+    expect(
+      lead(
+        "Create a new issue\n\nArgs:\n  owner: Repository owner.\n  repo: Name.",
+      ),
+    ).toBe("Tool description: Create a new issue");
+    expect(lead("Delete a branch\nWARNING: this cannot be undone. More.")).toBe(
+      "Tool description: Delete a branch",
+    );
+    expect(
+      lead(
+        "Permanently delete a retained runtime workspace and all\nof its files. More.",
+      ),
+    ).toBe(
+      "Tool description: Permanently delete a retained runtime workspace and all of its files.",
+    );
+  });
+
+  test("notes a hidden tool description as such, not as an argument", () => {
+    // A tool label long enough to leave room for neither the description
+    // nor its pointer, only for a one-line note.
+    const shown = Array.from({ length: 120 }, (_, index) => 1600 + index)
+      .map(
+        (length) =>
+          cardFor({
+            tool: `mcp/${"s".repeat(length)}/run`,
+            arguments: JSON.stringify({ target: "main" }),
+            text: COVERAGE,
+            toolDescription: "Run the target on the default branch.",
+          }).card.callPreview ?? "",
+      )
+      .find((preview) => preview.includes("(tool description, see Inspect)"));
+    expect(shown).toBeDefined();
+    expect(shown?.match(/more argument/g) ?? []).toHaveLength(1);
   });
 
   test("does not end the tool description sentence at an abbreviation such as e.g.", () => {

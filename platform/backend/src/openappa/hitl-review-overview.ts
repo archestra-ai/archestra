@@ -110,7 +110,8 @@ export function hitlInspectionDigest(review: HitlInspectableReview): string {
  * silently. `approve` is false when the scope does not fit: the card then
  * offers no Allow, so an approval never accepts a scope the reviewer could not
  * see, unless the reviewer holds this payload's complete review text
- * (`inspected`). `base` is the plain card, whose full question a client shows
+ * (`inspected`). It is also false when a command gave way to keep the
+ * description the agent wrote for it. `base` is the plain card, whose full question a client shows
  * if it withholds the previews.
  */
 export function hitlReviewCard(params: {
@@ -141,6 +142,10 @@ export function hitlReviewCard(params: {
   const question = named.length <= QUESTION_LIMIT ? named : "Run this call?";
   const layout = cardLayout(review, question === named ? [] : wrap(tool));
   let approve = fitLayout(layout);
+  // The agent writes a command's description. When the command gave way to
+  // keep it, the card shows only that claim, so Allow waits for Inspect.
+  if (layout.describedCommand && layout.describedCommand.use !== "full")
+    approve = false;
   let allowPreview = paneText(render(layout, true));
   let preview = paneText(render(layout, false));
   if (!fitsPane(preview) || (approve && !fitsPane(allowPreview))) {
@@ -292,6 +297,8 @@ type CardEntry = {
   /** The pointer to Inspect that replaces the value when the pane runs out. */
   pointer?: string[];
   use: "full" | "pointer" | "hidden";
+  /** Drawn in place of a hidden entry that is not an argument of the call. */
+  hiddenNote?: string[];
 };
 
 type CardLayout = {
@@ -304,6 +311,8 @@ type CardLayout = {
    */
   lead: CardEntry[];
   values: CardEntry[];
+  /** A command whose own description leads: Allow waits until it shows. */
+  describedCommand?: CardEntry;
   /** An Edit's change as -/+ lines, after the other arguments. */
   change: CardEntry[];
   summary?: CardEntry;
@@ -349,6 +358,7 @@ function cardLayout(
   const baseName = review.tool?.replace(/^(builtin:|host\/[^/]+\/)/, "");
   let lead: CardEntry[] = [];
   let values: CardEntry[] = [];
+  let describedCommand: CardEntry | undefined;
   let change: CardEntry[] = [];
   if (typeof args === "string") {
     values = [valueEntry("arguments", args)];
@@ -394,10 +404,13 @@ function cardLayout(
       isCommandExecutionTool(review.tool) &&
       typeof command === "string"
     ) {
-      if (description !== undefined)
+      const commandEntry = valueEntry("command", command);
+      if (description !== undefined) {
         lead = [valueEntry("description", description)];
+        describedCommand = commandEntry;
+      }
       values = [
-        valueEntry("command", command),
+        commandEntry,
         ...entries(without(args, ["command", "description"])),
       ];
     } else {
@@ -413,6 +426,7 @@ function cardLayout(
     title,
     lead,
     values,
+    ...(describedCommand ? { describedCommand } : {}),
     change,
     ...(review.summary ? { summary: summaryEntry(review.summary) } : {}),
     scope: scopeLines(review.text),
@@ -476,11 +490,16 @@ function summaryEntry(summary: string): CardEntry {
 }
 
 /**
- * The first sentence of a tool's definition text, whitespace collapsed. A
- * common abbreviation such as "e.g." does not end it.
+ * The first sentence of a tool's definition text, whitespace collapsed. It
+ * ends at the first blank line, and at a line break before a capital letter
+ * or a list mark, as after a title line or before an `Args:` block. A common
+ * abbreviation such as "e.g." does not end it.
  */
 function toolDescriptionSentence(text: string): string {
-  const collapsed = text.replace(/\s+/g, " ").trim();
+  const [paragraph = ""] = text
+    .trim()
+    .split(/\n[ \t]*\n|\n(?=[ \t]*[\p{Lu}\-*•#])/u);
+  const collapsed = paragraph.replace(/\s+/g, " ").trim();
   return (
     /^.+?(?<!\b(?:e\.g|i\.e|etc|vs|cf))[.!?](?= |$)/i.exec(collapsed)?.[0] ??
     collapsed
@@ -494,11 +513,16 @@ function toolDescriptionEntry(description: string): CardEntry {
     `Tool description: (${count(sentence)} characters, see Inspect)`,
   );
   if ([...sentence].length > TOOL_DESCRIPTION_LIMIT)
-    return { full: pointer, use: "full" };
+    return {
+      full: pointer,
+      use: "full",
+      hiddenNote: wrap("(tool description, see Inspect)"),
+    };
   return {
     full: wrap(`Tool description: ${safeText(sentence)}`),
     pointer,
     use: "full",
+    hiddenNote: wrap("(tool description, see Inspect)"),
   };
 }
 
@@ -568,8 +592,11 @@ function render(layout: CardLayout, withScope: boolean): string {
         ? entry.pointer
         : entry.full;
   // Hidden entries are counted where they were: the lead's above the values.
+  // One that is not an argument shows its own note instead.
   const counted = (entries: CardEntry[]) => {
-    const hidden = entries.filter((entry) => entry.use === "hidden").length;
+    const hidden = entries.filter(
+      (entry) => entry.use === "hidden" && !entry.hiddenNote,
+    ).length;
     return hidden > 0
       ? wrap(`(${hidden} more argument${hidden === 1 ? "" : "s"}, see Inspect)`)
       : [];
@@ -578,7 +605,9 @@ function render(layout: CardLayout, withScope: boolean): string {
     layout.title,
     [
       ...counted(layout.lead),
-      ...layout.lead.flatMap(shown),
+      ...layout.lead.flatMap((entry) =>
+        entry.use === "hidden" ? (entry.hiddenNote ?? []) : shown(entry),
+      ),
       ...layout.values.flatMap(shown),
       ...counted(layout.values),
     ],

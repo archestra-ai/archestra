@@ -3053,7 +3053,11 @@ async function handleStreaming<
     if (usage && !upstreamFinished) {
       const breakdown =
         usage.billingUsage ??
-        primaryBillingUsage(usage, ctx.upstreamAttempt.modelId ?? actualModel);
+        primaryBillingUsage(
+          usage,
+          ctx.upstreamAttempt.modelId ?? actualModel,
+          providerName,
+        );
       usage = {
         ...usage,
         billingQuote: undefined,

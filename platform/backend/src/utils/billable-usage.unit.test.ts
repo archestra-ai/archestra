@@ -6,6 +6,7 @@ import {
   moneyUnits,
   normalizeAnthropicUsage,
   priceTokens,
+  primaryBillingUsage,
   sumMoney,
   type TokenPrices,
 } from "./billable-usage";
@@ -330,5 +331,19 @@ describe("cache figures", () => {
         cost: "0.0000000000",
       }),
     ).toEqual({ cacheCost: 0, cacheSavings: 0, cacheReadSavings: 0 });
+  });
+});
+
+describe("primaryBillingUsage thinking tokens", () => {
+  const base = { inputTokens: 10, outputTokens: 100, reasoningTokens: 500 };
+
+  test("gemini bills reasoning tokens as output", () => {
+    const [component] = primaryBillingUsage(base, "m", "gemini").components;
+    expect(component.outputTokens).toBe(600);
+  });
+
+  test("other providers keep reported output tokens", () => {
+    const [component] = primaryBillingUsage(base, "m", "openai").components;
+    expect(component.outputTokens).toBe(100);
   });
 });

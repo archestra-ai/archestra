@@ -212,7 +212,14 @@ export function normalizeAnthropicUsage(
 export function primaryBillingUsage(
   usage: UsageView,
   model: string,
+  provider?: SupportedProvider,
 ): BillingUsage {
+  // Gemini reports thinking tokens separately from candidatesTokenCount,
+  // but bills them at the output rate.
+  const outputTokens =
+    provider === "gemini"
+      ? usage.outputTokens + (usage.reasoningTokens ?? 0)
+      : usage.outputTokens;
   return {
     version: 1,
     status: "complete",
@@ -223,7 +230,7 @@ export function primaryBillingUsage(
         model,
         kind: "message",
         inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
+        outputTokens,
         cacheReadTokens: usage.cacheReadTokens ?? 0,
         cacheWriteTokens: usage.cacheWriteTokens ?? 0,
         cacheWrite1hTokens: usage.cacheWrite1hTokens ?? 0,

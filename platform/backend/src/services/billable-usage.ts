@@ -50,7 +50,8 @@ export async function resolvePricingQuote(params: {
   let registryPromise:
     | ReturnType<typeof modelsDevClient.fetchModelsFromApi>
     | undefined;
-  const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
+  const breakdown =
+    usage.billingUsage ?? primaryBillingUsage(usage, model, provider);
   const rows = await ModelModel.findByProviderAndModelIds(provider, [
     ...new Set([
       model,
@@ -310,7 +311,8 @@ export async function priceBillingUsage(params: {
   const memo = usage.billingQuote;
   if (memo?.pricing === pricing && memo.priced?.mode === mode)
     return memo.priced;
-  const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
+  const breakdown =
+    usage.billingUsage ?? primaryBillingUsage(usage, model, provider);
   const issues = [...breakdown.issues];
   const components: PricedComponent[] = [];
   for (const component of breakdown.components) {

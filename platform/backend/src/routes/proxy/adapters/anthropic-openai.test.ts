@@ -420,8 +420,7 @@ describe.each([
     });
     feed({ type: "message_stop" });
 
-    const finishReasons = adapter
-      .formatEndSSE()
+    const finishReasons = String(adapter.formatEndSSE())
       .split("\n")
       .filter((line) => line.startsWith("data: {"))
       .map((line) => JSON.parse(line.slice(6)).choices?.[0]?.finish_reason)

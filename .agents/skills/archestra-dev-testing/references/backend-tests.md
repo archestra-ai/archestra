@@ -110,7 +110,7 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
 
 - **Never raw-assign `globalThis.fetch = ...`** — use `vi.stubGlobal`. (The shared setup restores the real fetch after every test as a safety net, so a raw assignment doesn't survive anyway.)
 - **Between files** in a shared worker, `src/test/worker-globals.ts` puts the worker's original fetch, timers, `Date` and `process` timers back, and forgets the previous file's mocks and `test.extend()` fixtures. Vitest re-runs every `vi.spyOn` restore after a file, so a spy on `setTimeout` made under fake timers (or on `fetch` while MSW listens) would otherwise reinstall the fake for every later file; and it keeps every mock and fixture, with what they reference, for the worker's lifetime. Keep that file first in a shared-worker project's `setupFiles`.
-- **Never replace a `console` method per file** in a setup file: the OpenAI, Anthropic and Google SDKs bind `console.warn` once and keep it, and the wrapper keeps its file's whole setup scope (and PGlite) alive. Install such filters once per worker, as `src/test/quiet-console.ts` does.
+- **Nothing defined in `setup.ts` may outlive its file**: any closure there keeps that file's whole setup scope, and its PGlite, alive. Wrappers that stay installed for the worker (a `console` filter the SDKs bind once and keep, the `PGlite.prototype` access tracker) live in their own modules and are installed once per worker, as `src/test/quiet-console.ts` and `src/test/database-access.ts` do.
 - Faking browser globals (`window`, `location`) confuses PGlite's environment detection; the shared setup finishes PGlite init before test code runs, but always clean such globals up in `afterAll`.
 
 ## Database

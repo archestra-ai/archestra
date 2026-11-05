@@ -2,10 +2,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { dump as dumpYaml } from "js-yaml";
-import {
-  isCommandExecutionTool,
-  withoutArgumentCopies,
-} from "./command-normalization";
+import { isCommandExecutionTool } from "./command-normalization";
 import { withoutProxyCopies } from "./derived-arguments";
 import {
   displayedReview,
@@ -854,19 +851,16 @@ function argumentsFullText(review: HitlInspectableReview): string {
   }
   if (!args || Object.keys(args).length === 0)
     return "This call has no arguments.";
+  const own = review.tool ? withoutProxyCopies(review.tool, args) : args;
   return Object.entries(args)
     .map(([key, value]) => {
       // The proxy mirrors a command tool's value under both names; show it
       // once, naming both.
       if (key === "cmd" && typeof value === "string" && args.command === value)
         return undefined;
-      // Kimi Code's `path` is evaluated as `file_path` too; show the path once.
-      if (
-        key === "file_path" &&
-        review.tool &&
-        !Object.hasOwn(withoutArgumentCopies(review.tool, args), "file_path")
-      )
-        return undefined;
+      // Other copies the proxy rules the call with (Kimi Code's `file_path`,
+      // a derived share or transfer mode) are not shown.
+      if (key !== "cmd" && !Object.hasOwn(own, key)) return undefined;
       const label =
         key === "command" && typeof value === "string" && args.cmd === value
           ? "command and cmd (identical values)"

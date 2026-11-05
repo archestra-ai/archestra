@@ -18,6 +18,7 @@ import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -69,7 +70,11 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
-import { softBlocksAllowed, waiveSoftBlock } from "@/openappa/soft-block";
+import {
+  isHardBlock,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "@/openappa/soft-block";
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
@@ -1201,20 +1206,23 @@ const registry = defineArchestraTools([
           }
           reviewSession.caller_id = spender;
         }
-      }
-      if (
-        remedy.offer_id &&
-        (await waiveSoftBlock(
-          reviewSession,
-          "remedy_review",
-          "OpenAPPA remedy or previously resolved review",
-        ))
-      ) {
-        return structuredSuccessResult({
-          outcome: "guardrails_disabled",
-          message:
-            "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+        // Ownership alone does not establish a soft refusal. Unknown offers
+        // must not turn a hard-denied session into an unenforced one.
+        const refusal = await OpenAppaSessionModel.recordedOfferRefusal({
+          organizationId: context.organizationId,
+          sessionId: stamp.session_id,
+          callerId: spender,
+          parentId: stamp.parent_id,
+          offerId: remedy.offer_id,
         });
+        if (!refusal || isHardBlock(refusal)) return unknownOfferResult();
+        if (await waiveSoftBlock(reviewSession, "remedy_review", refusal)) {
+          return structuredSuccessResult({
+            outcome: "guardrails_disabled",
+            message:
+              "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+          });
+        }
       }
       const callId = execution?.call_id ?? context.currentToolCallId;
       if (remedy.offer_id === undefined) {

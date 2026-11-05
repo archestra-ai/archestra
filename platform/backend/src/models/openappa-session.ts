@@ -317,6 +317,46 @@ class OpenAppaSessionModel {
     return row ?? null;
   }
 
+  /** Retained denial for an offer, including expired or already resolved offers. */
+  static async recordedOfferRefusal(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId: string;
+    parentId?: string;
+    offerId: string;
+  }): Promise<string | null> {
+    const operations = schema.openappaOperationsTable;
+    const [row] = await db
+      .select({ decision: operations.decision })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          eq(operations.callerId, params.callerId),
+          eq(table.callerId, params.callerId),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(operations.status, "complete"),
+          sql`${operations.decision}->'offers' @> ${JSON.stringify([{ offer_id: params.offerId }])}::jsonb`,
+        ),
+      )
+      .limit(1);
+    const decision = row?.decision;
+    if (!decision || typeof decision !== "object") return null;
+    const feedback = (decision as Record<string, unknown>).feedback;
+    return typeof feedback === "string" && feedback.trim() ? feedback : null;
+  }
+
   /** Call rulings recorded by this exact session, never inherited fork history. */
   static async recordedToolCallDecisions(params: {
     organizationId: string;

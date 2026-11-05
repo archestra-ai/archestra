@@ -12,8 +12,9 @@ import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { scopedSessionId } from "@/openappa/actor";
+import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -673,6 +674,86 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy).not.toHaveBeenCalled();
   });
 
+  async function retainRemedyDenial(params: {
+    sessionId: string;
+    parentId?: string;
+    feedback: string;
+    offerId: string;
+  }) {
+    const root = openappaActor(params.sessionId);
+    const callerId = `user:${mockContext.userId}`;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      actor: root,
+      root,
+      parentId: params.parentId ?? null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      operationId: "call:protected-operation",
+      root,
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "protected_tool" } },
+      decision: {
+        decision: "deny_call",
+        feedback: params.feedback,
+        offers: [{ offer_id: params.offerId }],
+      },
+    });
+  }
+
+  test.each([
+    "invented-offer",
+    "retained-hard-offer",
+  ])("a remedy %s cannot bypass a retained hard denial", async (offerId) => {
+    config.openappa.softBlockMode = "allow";
+    const callerId = `user:${mockContext.userId}`;
+    const sessionId = scopedSessionId(callerId, "hard-denied-session");
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    await retainRemedyDenial({
+      sessionId,
+      feedback: "requires attention: blocked",
+      offerId: "retained-hard-offer",
+    });
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: offerId,
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: session },
+    );
+    expect(result.isError).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+    expect(await isUnenforcedSession(session)).toBe(false);
+    expect(
+      await db.select().from(schema.openappaUnenforcedSessionsTable),
+    ).toEqual([]);
+    // A replay still reads the original denial; no remedy execution or
+    // session bypass has replaced it with permission to run the operation.
+    const replay = await OpenAppaSessionModel.recordedToolCallDecisions({
+      organizationId: orgId,
+      sessionId,
+      callerId,
+      toolCallIds: ["protected-operation"],
+    });
+    expect(replay.get("protected-operation")).toMatchObject({
+      decision: "deny_call",
+      feedback: "requires attention: blocked",
+    });
+  });
+
   test.each([
     "scoped",
     "unscoped",
@@ -717,7 +798,7 @@ describe("OpenAPPA tool execution", () => {
     "child",
     "current",
     "chat",
-  ] as const)("an owned %s session can waive a remedy without native offer validation", async (kind) => {
+  ] as const)("an owned %s session can waive a retained soft offer without executing it", async (kind) => {
     config.openappa.softBlockMode = "allow";
     const callerId = `user:${mockContext.userId}`;
     const parentId = scopedSessionId(callerId, "owned-session");
@@ -732,6 +813,12 @@ describe("OpenAPPA tool execution", () => {
       caller_id: callerId,
       session_id: sessionId,
     };
+    await retainRemedyDenial({
+      sessionId,
+      ...(kind === "child" ? { parentId } : {}),
+      feedback: "Original soft refusal requiring a review",
+      offerId: "expired-offer",
+    });
     const result = await executeArchestraTool(
       toolFullName,
       {

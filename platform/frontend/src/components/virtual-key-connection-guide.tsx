@@ -26,7 +26,7 @@ import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructio
 import {
   AutoModelField,
   AutoRoutingLabelAction,
-  AutoRoutingUnreachableHint,
+  AutoRoutingUnavailableHint,
 } from "@/components/auto-routing-model-control";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
@@ -599,7 +599,7 @@ export function RequestExample({
   const selectedModel = allOptions.find((option) => option.value === model);
   const autoRouting = useAutoRoutingOffer({
     enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
-    routableModels: modelOptions.map((option) => option.value),
+    routableModels: modelOptions,
     modelsPending: isPending,
   });
   const [autoPicked, setAutoPicked] = useState(initialModel === AUTO_MODEL);
@@ -622,8 +622,12 @@ export function RequestExample({
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model: isAuto ? AUTO_MODEL : (selectedModel?.pool ?? model),
-      isPool: isAuto || !!selectedModel?.pool,
-      supportedEndpoints: isAuto ? null : selectedModel?.supportedEndpoints,
+      isPool: !!selectedModel?.pool,
+      routerEndpoint:
+        isAuto && autoRouting.kind === "available"
+          ? autoRouting.endpoint
+          : undefined,
+      supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
   const providerLabel =
@@ -796,7 +800,7 @@ export function RequestExample({
           )}
         </div>
       )}
-      {!fixedModel && <AutoRoutingUnreachableHint offer={autoRouting} />}
+      {!fixedModel && <AutoRoutingUnavailableHint offer={autoRouting} />}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the

@@ -50,7 +50,7 @@ export function AutoRoutingLabelAction({
             htmlFor={SWITCH_ID}
             className={cn(
               "text-xs font-normal",
-              offer.kind === "unreachable" && "text-muted-foreground",
+              offer.kind !== "available" && "text-muted-foreground",
             )}
           >
             Use auto routing
@@ -94,13 +94,21 @@ export function AutoModelField({ id }: { id: string }) {
   );
 }
 
-/** Under the field, when auto routing is on: why this credential can't use it. */
-export function AutoRoutingUnreachableHint({
+/** Under the field, when auto routing is on: why the request can't use it. */
+export function AutoRoutingUnavailableHint({
   offer,
 }: {
   offer: AutoRoutingOffer;
 }) {
   const providerCatalog = useModelProviderCatalog();
+  if (offer.kind === "no-shared-endpoint") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Auto routing is on, but its models don't share an API endpoint, so no
+        request can use it.
+      </p>
+    );
+  }
   if (offer.kind !== "unreachable") return null;
   const tiers = offer.missing.map(({ tier }) => tier).join(" or ");
   const providers = [...new Set(offer.missing.map((m) => m.provider))]

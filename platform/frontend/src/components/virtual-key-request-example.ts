@@ -82,10 +82,15 @@ export function buildCurlExample(params: {
   supportedEndpoints?: readonly string[] | null;
   imageOperation?: ImageExampleOperation;
   /**
-   * The model is a pool's name or auto routing's `auto`, served on Chat
-   * Completions whatever it looks like (a pool may be named `openai:gpt-5.6`).
+   * The model is a pool's name, served on Chat Completions whatever it looks
+   * like (a pool may be named `openai:gpt-5.6`).
    */
   isPool?: boolean;
+  /**
+   * The Unified Model API endpoint to call whatever the model looks like, such
+   * as the one every auto routing tier model serves.
+   */
+  routerEndpoint?: "chat/completions" | "responses";
 }): string | null {
   const {
     connectionBaseUrl,
@@ -96,6 +101,7 @@ export function buildCurlExample(params: {
     supportedEndpoints,
     imageOperation,
     isPool,
+    routerEndpoint,
   } = params;
   const baseUrl = getProxyBaseUrl(connectionBaseUrl, target);
   const passthrough = keyType === "passthrough";
@@ -111,11 +117,12 @@ export function buildCurlExample(params: {
     if (passthrough) return null;
     const [provider, ...modelIdParts] = model.split(":");
     const modelId = modelIdParts.join(":");
-    const useResponses =
-      !isPool &&
-      ((provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
-        (provider === "github-copilot" &&
-          requiresResponsesApi(supportedEndpoints)));
+    const useResponses = routerEndpoint
+      ? routerEndpoint === "responses"
+      : !isPool &&
+        ((provider === "openai" && requiresOpenAiResponsesApi(modelId)) ||
+          (provider === "github-copilot" &&
+            requiresResponsesApi(supportedEndpoints)));
     return curl(
       `${baseUrl}/${useResponses ? "responses" : "chat/completions"}`,
       [`Authorization: Bearer ${keyValue}`, "Content-Type: application/json"],

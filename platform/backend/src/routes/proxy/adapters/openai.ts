@@ -1158,7 +1158,6 @@ export class OpenAIStreamAdapter
 
     let sseData: string | null = null;
     let isToolCallChunk = false;
-    let isFinal = false;
 
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
@@ -1309,20 +1308,14 @@ export class OpenAIStreamAdapter
       isToolCallChunk = true;
     }
 
-    // Handle finish reason
-    // Note: Don't set isFinal here - OpenAI sends the usage chunk AFTER the finish_reason chunk
-    // when stream_options.include_usage is true (which we always set in executeStream)
+    // A finish chunk can carry cumulative usage that a trailing usage-only
+    // chunk corrects. Keep reading even when both are present; providers that
+    // omit trailing usage complete when the iterator ends normally.
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
     }
 
-    // A provider can attach final usage to its finish chunk. Usage from an
-    // earlier chunk is not enough: keep reading for the final accounting.
-    if (chunk.usage && choice.finish_reason) {
-      isFinal = true;
-    }
-
-    return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
+    return { sseData, isToolCallChunk, isFinal: false, isResponsePreamble };
   }
 
   getSSEHeaders(): Record<string, string> {

@@ -1131,7 +1131,14 @@ describe("GitHub Copilot long-context accounting", () => {
     };
   }
 
-  test("per-chunk usage preserves the full reply and settles final tokens and spend", async ({
+  test.for([
+    { finishTokens: 4, trailingTokens: undefined },
+    { finishTokens: 4, trailingTokens: 5 },
+    { finishTokens: 0, trailingTokens: 5 },
+  ])("per-chunk usage preserves the reply and settles final accounting: %j", async ({
+    finishTokens,
+    trailingTokens,
+  }, {
     makeOrganization,
     makeAgent,
     makeUser,
@@ -1192,8 +1199,11 @@ describe("GitHub Copilot long-context accounting", () => {
       {
         ...envelope,
         choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-        usage: usage(20, 4),
+        usage: usage(20, finishTokens),
       },
+      ...(trailingTokens === undefined
+        ? []
+        : [{ ...envelope, choices: [], usage: usage(20, trailingTokens) }]),
     ];
     server.use(
       http.post(
@@ -1214,20 +1224,25 @@ describe("GitHub Copilot long-context accounting", () => {
     expect(
       frames.map((frame) => frame.choices?.[0]?.delta?.content ?? "").join(""),
     ).toBe("Hello world");
+    const finalTokens = trailingTokens ?? finishTokens;
     expect(frames.at(-1).usage).toMatchObject({
       prompt_tokens: 20,
-      completion_tokens: 4,
+      completion_tokens: finalTokens,
     });
     expect(response.body.match(/data: \[DONE\]/g)).toHaveLength(1);
     const [log] = await db
       .select()
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.profileId, c.agent.id));
-    expect(log).toMatchObject({ inputTokens: 20, outputTokens: 4 });
+    expect(log).toMatchObject({ inputTokens: 20, outputTokens: finalTokens });
     expect(log.response).toMatchObject({
       choices: [{ message: { content: "Hello world" } }],
     });
-    expect(Number(log.cost)).toBeGreaterThan(0);
+    const rates = c.catalog["github-copilot"].models[model]
+      .cost as CapturedCost;
+    const expectedCost =
+      (20 * (rates.input ?? 0) + finalTokens * (rates.output ?? 0)) / 1_000_000;
+    expect(log.cost).toBe(expectedCost.toFixed(10));
     const [receipt] = await InteractionBillingModel.findMany([log.id]);
     expect(receipt.usage).toMatchObject({ status: "complete", cost: log.cost });
     expect(

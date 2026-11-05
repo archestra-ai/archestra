@@ -911,7 +911,10 @@ describe("openaiAdapterFactory", () => {
 describe("OpenAIStreamAdapter", () => {
   type Chunk = OpenAi.Types.ChatCompletionChunk;
 
-  test("keeps reading per-chunk usage until the terminal usage arrives", () => {
+  test.each([
+    false,
+    true,
+  ])("keeps reading until terminal usage with finish-chunk usage=%s", (finishHasUsage) => {
     const adapter = openaiAdapterFactory.createStreamAdapter({
       model: "test-model",
       messages: [{ role: "user", content: "Hello" }],
@@ -959,7 +962,7 @@ describe("OpenAIStreamAdapter", () => {
     expect(
       adapter.processChunk({
         ...chunk([{ index: 0, delta: {}, finish_reason: "stop" }], 2),
-        usage: undefined,
+        usage: finishHasUsage ? chunk([], 2).usage : undefined,
       }).isFinal,
     ).toBe(false);
     expect(adapter.processChunk(chunk([], 7)).isFinal).toBe(true);

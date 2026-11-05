@@ -12415,6 +12415,44 @@ describe("soft-block emergency override", () => {
       evaluate.mockRestore();
     }
   });
+  for (const hardFirst of [false, true]) {
+    test(`does not waive a hard-denied batch when the client has no notice tool (hardFirst=${hardFirst})`, async ({
+      makeOrganization,
+    }) => {
+      const { context, trusted, plugin } = await setup(
+        (await makeOrganization()).id,
+      );
+      trusted.request.tools = undefined;
+      // A failed helper is retained by evaluateToolCalls as an unanswered
+      // denial. The no-notice fallback must preserve its sibling hard denial.
+      const hard = {
+        kind: "deny" as const,
+        feedback: "requires attention: blocked",
+        recorded: true as const,
+      };
+      const failed = {
+        kind: "deny" as const,
+        feedback: "OpenAPPA helper unavailable",
+        unanswered: true as const,
+      };
+      const evaluate = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue(hardFirst ? [hard, failed] : [failed, hard]);
+      try {
+        const calls = (hardFirst ? ["hard", "failed"] : ["failed", "hard"]).map(
+          (id) => ({ id, name: "read_file", arguments: {} }),
+        );
+        const result = await plugin.onToolCalls({
+          ...context,
+          toolCalls: calls,
+        });
+        expect(result).toMatchObject({ decision: "refuse" });
+        expect(await isUnenforcedSession(trusted.session)).toBe(false);
+      } finally {
+        evaluate.mockRestore();
+      }
+    });
+  }
 
   test("waives a cached child contract before the provider sees empty-answer instructions", async ({
     makeOrganization,

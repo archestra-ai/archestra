@@ -247,6 +247,8 @@ type AppaPluginBinding = {
   child?: AppaChildTrajectory;
   /** Child return contract for this request, injected before the provider call. */
   returnContract?: string;
+  /** Retained across fallback outcomes so a generic reason cannot waive a hard denial. */
+  hardBlockSeen?: boolean;
   /**
    * Unscoped client session id for trajectory stamps. Captured before child
    * overlay so stamps never encode a minted parent:child id.
@@ -1487,6 +1489,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           evaluateToolCalls(session, relayCandidates, evaluateOptions, policy),
         )
       : [];
+    binding.hardBlockSeen ||= relayEvaluations.some(
+      (decision) =>
+        decision.kind === "deny" &&
+        isHardBlock(decision.diagnostic ?? decision.feedback),
+    );
     const admittedRelayIds = new Set<string>();
     const withheldRelayDecisions = new Map<
       string,
@@ -1531,6 +1538,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           evaluateToolCalls(session, rest, evaluateOptions, policy),
         )
       : [];
+    binding.hardBlockSeen ||= decisions.some(
+      (decision) =>
+        decision.kind === "deny" &&
+        isHardBlock(decision.diagnostic ?? decision.feedback),
+    );
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
@@ -1580,7 +1592,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? [decision.diagnostic ?? decision.feedback]
         : [],
     );
-    if (refusals.length && !refusals.some(isHardBlock))
+    binding.hardBlockSeen ||= refusals.some(isHardBlock);
+    if (refusals.length && !binding.hardBlockSeen)
       refuseSoftBlock(
         refusals.join("\n"),
         context.toolCalls
@@ -2129,6 +2142,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       "onToolCalls",
       async () => {
         const result = await this.guardedToolCalls(context);
+        if (this.bindings.get(context.resources)?.hardBlockSeen) return result;
         if (result?.decision === "refuse")
           refuseSoftBlock(result.refusal.refusalMessage, [
             result.refusal.blockedToolName,
@@ -2240,7 +2254,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the unmodified provider bytes here; no client tool has been executed.
       if (
         !(error instanceof Error) ||
-        (error instanceof ApiError && error.statusCode === 401)
+        (error instanceof ApiError && error.statusCode === 401) ||
+        this.bindings.get(context.resources)?.hardBlockSeen
       )
         throw error;
       const trusted = getTrustedContext(context.resources);

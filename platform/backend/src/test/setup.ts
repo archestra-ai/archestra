@@ -14,6 +14,11 @@
  * - https://dev.to/benjamindaniel/how-to-test-your-nodejs-postgres-app-using-drizzle-pglite-4fb3
  */
 
+// Dependency-free; restores the globals an earlier file in this worker left
+// replaced before any other module captures them.
+import { pristineFetch } from "./worker-globals";
+// Filters Better Auth noise once per worker; see why it must not be per file.
+import "./quiet-console";
 // Binds the ports of the layers below before any other module loads.
 import "@/server/composition";
 import fs from "node:fs";
@@ -124,25 +129,6 @@ const lazyTestDb = new Proxy({} as TestDatabase, {
 }) as unknown as Parameters<
   typeof import("../database/index.js").__setTestDb
 >[0];
-const originalConsoleWarn = console.warn;
-
-console.warn = (...args: unknown[]) => {
-  const message = args.map(String).join(" ");
-
-  if (
-    message.includes(
-      "[Better Auth]: Please ensure '/.well-known/oauth-authorization-server' exists",
-    ) ||
-    message.includes(
-      "[Better Auth]: Please ensure '/.well-known/openid-configuration' exists",
-    )
-  ) {
-    return;
-  }
-
-  originalConsoleWarn(...args);
-};
-
 /**
  * Install this file's database, created lazily on first access.
  *
@@ -302,8 +288,9 @@ beforeEach(async ({ task }) => {
  * undoes vi.useFakeTimers, and in a shared worker a leaked frozen clock
  * stalls every later setTimeout and makes DB timestamps collide across
  * unrelated files. useRealTimers is a no-op when timers are already real.
+ * The fetch restored here is the worker's original (see worker-globals.ts),
+ * not whatever this file inherited.
  */
-const realFetch = globalThis.fetch;
 afterEach(({ task }) => {
   const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (rollbackMode) {
@@ -353,7 +340,7 @@ async function finishTestTransaction(): Promise<void> {
 }
 
 function restoreTestGlobals(): void {
-  globalThis.fetch = realFetch;
+  globalThis.fetch = pristineFetch;
   vi.clearAllMocks();
   vi.useRealTimers();
 
@@ -380,8 +367,6 @@ function restoreTestGlobals(): void {
  * "Database not initialized", which those import-time paths already handle.
  */
 afterAll(async () => {
-  console.warn = originalConsoleWarn;
-
   // Drain fire-and-forget async work (e.g. interaction usage tracking) BEFORE
   // swapping out this file's database. In shared workers the getDb() proxy
   // always routes to the CURRENT file's PGlite, so a background promise that

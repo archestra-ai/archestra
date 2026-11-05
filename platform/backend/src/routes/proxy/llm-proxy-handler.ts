@@ -112,6 +112,7 @@ import {
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -140,6 +141,7 @@ import {
   withoutResponsesModelOutput,
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "./common";
 import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
@@ -742,6 +744,42 @@ export async function handleLLMProxy<
   // a "Bearer:<token>" sentinel so downstream client creation can distinguish
   // auth tokens from raw API keys. Normalize both forms before virtual-key lookup.
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
+  const rawApiKeyMatchesPassthrough =
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    Boolean(
+      passthroughVirtualKeyId &&
+        passthroughUserId &&
+        rawApiKey &&
+        rawApiKey === passthroughVirtualKeyToken,
+    );
+  if (
+    rawApiKeyMatchesPassthrough &&
+    passthroughVirtualKeyId &&
+    passthroughUserId
+  ) {
+    if (providerName === "anthropic") {
+      const claudeCodeToken = await claudeCodeAccountManager.resolveProxyToken({
+        virtualKeyId: passthroughVirtualKeyId,
+        organizationId: resolvedAgent.organizationId,
+        userId: passthroughUserId,
+        agentId,
+      });
+      if (!claudeCodeToken) {
+        throw new ApiError(
+          400,
+          "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+        );
+      }
+      apiKey = `Bearer:${claudeCodeToken}`;
+      perKeyBaseUrl = ANTHROPIC_SUBSCRIPTION_UPSTREAM;
+    } else {
+      throw new ApiError(
+        400,
+        "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+      );
+    }
+  }
 
   // In-process callers forward a stored provider secret through the local
   // proxy (with the in-process proof) tagged with CHAT_API_KEY_ID_HEADER and
@@ -800,6 +838,7 @@ export async function handleLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !rawApiKeyMatchesPassthrough &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -851,6 +890,7 @@ export async function handleLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !rawApiKeyMatchesPassthrough &&
     !personalTokenUserId &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
@@ -865,21 +905,34 @@ export async function handleLLMProxy<
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
         requestedModel: requestAdapter.getModel(),
+        agentId,
+        agent: resolvedAgent,
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
-      wasVirtualKeyResolved = true;
-      virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
-      // A personal standard virtual key identifies its owner; include it in the
-      // cross-credential consistency check.
-      if (virtualResult.virtualKeyIsPersonal) {
-        regularVirtualKeyUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+      if (virtualResult.passthroughVirtualKeyId) {
+        passthroughVirtualKeyId = virtualResult.passthroughVirtualKeyId;
+        passthroughUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+        if (passthroughUserId) {
+          userId = passthroughUserId;
+          resolvedUser = await UserModel.getById(userId);
+        }
+        authMethod = "passthrough_virtual_key";
+      } else {
+        wasVirtualKeyResolved = true;
+        virtualKeyId = virtualResult.virtualKeyId;
+        // A personal standard virtual key identifies its owner; include it in the
+        // cross-credential consistency check.
+        if (virtualResult.virtualKeyIsPersonal) {
+          regularVirtualKeyUserId =
+            virtualResult.virtualKeyAuthorId ?? undefined;
+        }
+        authMethod = "virtual_key";
       }
-      authMethod = "virtual_key";
     } catch (error) {
       // The token resolved as a local virtual key on success above. If it
       // didn't and this is an internal chat forward, the secret belongs to a

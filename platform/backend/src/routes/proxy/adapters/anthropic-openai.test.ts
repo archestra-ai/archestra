@@ -367,3 +367,65 @@ describe("ResponsesFromChatAdapter response replacement", () => {
     });
   });
 });
+
+// OpenAI clients branch on finish_reason: a refusal or a turn cut off by the
+// context window must not look like a normal "stop", or the client treats a
+// truncated or refused answer as complete.
+describe.each([
+  { stopReason: "refusal", finishReason: "content_filter" },
+  { stopReason: "model_context_window_exceeded", finishReason: "length" },
+])("Anthropic stop_reason $stopReason", ({ stopReason, finishReason }) => {
+  it(`reaches a non-streamed client as finish_reason ${finishReason}`, () => {
+    const adapter = makeAnthropicOpenaiAdapterFactory(
+      ctx,
+    ).createResponseAdapter({
+      id: "msg-test",
+      type: "message",
+      role: "assistant",
+      model: "claude-test",
+      content: [{ type: "text", text: "partial", citations: null }],
+      stop_reason: stopReason,
+      stop_sequence: null,
+      usage: { input_tokens: 5, output_tokens: 2 },
+    });
+
+    expect(adapter.getOriginalResponse()).toMatchObject({
+      choices: [{ finish_reason: finishReason }],
+    });
+  });
+
+  it(`reaches a streamed client as finish_reason ${finishReason}`, () => {
+    const adapter = makeAdapter();
+    const feed = (chunk: unknown) =>
+      adapter.processChunk(chunk as Parameters<typeof adapter.processChunk>[0]);
+    feed({
+      type: "message_start",
+      message: { id: "msg-test", model: "claude-test", usage: {} },
+    });
+    feed({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    });
+    feed({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "partial" },
+    });
+    feed({ type: "content_block_stop", index: 0 });
+    feed({
+      type: "message_delta",
+      delta: { stop_reason: stopReason, stop_sequence: null },
+      usage: { output_tokens: 2 },
+    });
+    feed({ type: "message_stop" });
+
+    const finishReasons = adapter
+      .formatEndSSE()
+      .split("\n")
+      .filter((line) => line.startsWith("data: {"))
+      .map((line) => JSON.parse(line.slice(6)).choices?.[0]?.finish_reason)
+      .filter(Boolean);
+    expect(finishReasons).toEqual([finishReason]);
+  });
+});

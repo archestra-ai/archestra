@@ -123,6 +123,7 @@ import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerToolsSection } from "../_parts/mcp-server-tools-section";
 import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
+import { ServerRulesMenuItem } from "../_parts/server-rules-menu-item";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
@@ -692,6 +693,9 @@ function CatalogItemDetails({
                     <Copy className="h-4 w-4" />
                     {cloneAction.label}
                   </DropdownMenuItem>
+                )}
+                {canModify && variant !== "builtin" && (
+                  <ServerRulesMenuItem catalog={item} />
                 )}
                 {canModify && !isPlaywright && (
                   <>

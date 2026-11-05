@@ -18323,6 +18323,7 @@ export type GetChatAgentRosterResponses = {
         } | null;
         modelId: string | null;
         llmApiKeyId: string | null;
+        sharedByName: boolean;
     }>;
 };
 
@@ -18469,6 +18470,7 @@ export type GetChatAgentRosterPageResponses = {
             } | null;
             modelId: string | null;
             llmApiKeyId: string | null;
+            sharedByName: boolean;
         }>;
         pagination: {
             limit: number;
@@ -37979,6 +37981,7 @@ export type GetNewChatBootstrapResponses = {
             } | null;
             modelId: string | null;
             llmApiKeyId: string | null;
+            sharedByName: boolean;
         }>;
         apiKeys: Array<{
             id: string;
@@ -38559,6 +38562,7 @@ export type GetConversationBootstrapResponses = {
                 } | null;
                 modelId: string | null;
                 llmApiKeyId: string | null;
+                sharedByName: boolean;
             }>;
             apiKeys: Array<{
                 id: string;

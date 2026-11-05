@@ -798,6 +798,26 @@ class StatisticsModel {
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+    // One row per agent naming every team it is shared with, so an agent
+    // shared with several teams still counts each request once.
+    const agentTeams = db
+      .select({
+        agentId: teamAssignments.agentId,
+        teamNames:
+          sql<string>`string_agg(DISTINCT ${schema.teamsTable.name}, ', ' ORDER BY ${schema.teamsTable.name})`.as(
+            "team_names",
+          ),
+      })
+      .from(teamAssignments)
+      .innerJoin(
+        schema.teamsTable,
+        and(
+          eq(schema.teamsTable.id, teamAssignments.teamId),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      )
+      .groupBy(teamAssignments.agentId)
+      .as("agent_team_names");
 
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -806,7 +826,7 @@ class StatisticsModel {
         agentName: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
         organizationId: schema.agentsTable.organizationId,
-        teamName: schema.teamsTable.name,
+        teamName: agentTeams.teamNames,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: tokenSum(schema.interactionsTable.inputTokens),
@@ -824,14 +844,7 @@ class StatisticsModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .leftJoin(
-        teamAssignments,
-        eq(teamAssignments.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.teamsTable,
-        eq(teamAssignments.teamId, schema.teamsTable.id),
-      )
+      .leftJoin(agentTeams, eq(agentTeams.agentId, schema.agentsTable.id))
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
@@ -847,7 +860,7 @@ class StatisticsModel {
         schema.agentsTable.name,
         schema.agentsTable.agentType,
         schema.agentsTable.organizationId,
-        schema.teamsTable.name,
+        agentTeams.teamNames,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(

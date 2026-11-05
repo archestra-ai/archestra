@@ -122929,9 +122929,9 @@ export type GetLlmUsageData = {
         limit?: number;
         offset?: number;
         /**
-         * Comma-separated dimensions to group by: day, teamId, credentialId, provider, model. Defaults to teamId,provider,model.
+         * Comma-separated dimensions to group by: day, teamId, agentId, userId, credentialId, provider, model. Defaults to teamId,provider,model.
          */
-        groupBy?: Array<'day' | 'teamId' | 'credentialId' | 'provider' | 'model'>;
+        groupBy?: Array<'day' | 'teamId' | 'agentId' | 'userId' | 'credentialId' | 'provider' | 'model'>;
         /**
          * Only this team's usage.
          */
@@ -123035,6 +123035,16 @@ export type GetLlmUsageResponses = {
              */
             teamId?: string;
             teamName?: string;
+            /**
+             * Agent, MCP gateway or LLM proxy that made the requests, as in GET /api/statistics/agents: legacy proxy rows count under the organization's LLM proxy. Present when grouped by agentId.
+             */
+            agentId?: string;
+            agentName?: string;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
             /**
              * How the request authenticated, e.g. virtual_key. Present when grouped by credentialId.
              */

@@ -222,17 +222,17 @@ export async function buildAgentRunLaunchSpec(params: {
       "A personal Claude subscription requires a run acting as a signed-in user.",
     );
   }
-  const claudeCodeToken =
-    usesClaudeCodeSubscription && actorUserId
-      ? await claudeCodeAccountManager.requireConnection({
-          runtime: params.runtime,
-          userId: actorUserId,
-          runtimeScope: params.runtimeScope,
-        })
-      : undefined;
-  // Claude Code supplies its own OAuth token. A personal passthrough key
-  // authenticates the actor to the proxy without storing that token as a
-  // provider key, so subscription requests retain usage and run attribution.
+  if (usesClaudeCodeSubscription && actorUserId) {
+    await claudeCodeAccountManager.requireConnection({
+      runtime: params.runtime,
+      userId: actorUserId,
+      runtimeScope: params.runtimeScope,
+    });
+  }
+  // Claude Code subscription runs receive a one-off per-run passthrough virtual
+  // key in CLAUDE_CODE_OAUTH_TOKEN (and X-Archestra-Virtual-Key); the proxy
+  // swaps it for the user's connected Claude subscription token server-side so
+  // the raw OAuth token never enters the runtime pod.
   const virtualKey = usesClaudeCodeSubscription
     ? await VirtualApiKeyModel.create({
         organizationId: params.organizationId,
@@ -405,7 +405,9 @@ export async function buildAgentRunLaunchSpec(params: {
     throw error;
   }
   const secretEnv: Record<string, string> = {
-    ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
+    ...(usesClaudeCodeSubscription
+      ? { CLAUDE_CODE_OAUTH_TOKEN: virtualKeyValue }
+      : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {

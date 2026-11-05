@@ -30,6 +30,8 @@ export type SkillUsageDimension = (typeof SKILL_USAGE_DIMENSIONS)[number];
 export const LLM_USAGE_DIMENSIONS = [
   "day",
   "teamId",
+  "agentId",
+  "userId",
   "credentialId",
   "provider",
   "model",
@@ -138,6 +140,15 @@ export const LlmUsageRowSchema = z.object({
       "Team the usage is attributed to: the credential's billing team, otherwise each team the agent is shared with (the same attribution as GET /api/statistics/teams). Present when grouped by teamId.",
     ),
   teamName: z.string().optional(),
+  agentId: z
+    .string()
+    .optional()
+    .describe(
+      "Agent, MCP gateway or LLM proxy that made the requests, as in GET /api/statistics/agents: legacy proxy rows count under the organization's LLM proxy. Present when grouped by agentId.",
+    ),
+  agentName: z.string().optional(),
+  userId: UserFields.userId.optional(),
+  userName: UserFields.userName.optional(),
   authMethod: z
     .string()
     .optional()

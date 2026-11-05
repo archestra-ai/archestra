@@ -1104,13 +1104,22 @@ export class OpenAIStreamAdapter
   }
 
   private readonly reasoningOutsideCompletion: boolean;
+  private readonly clientReasoningOutsideCompletion: boolean;
 
   constructor({
     provider = "openai",
     reasoningOutsideCompletion = false,
-  }: OpenAiAdapterOptions = {}) {
+    clientReasoningOutsideCompletion = reasoningOutsideCompletion,
+  }: OpenAiAdapterOptions & {
+    /**
+     * The dialect the client reads, when it is not the provider's own: the
+     * model router and the Responses surface give OpenAI's to an xAI turn.
+     */
+    clientReasoningOutsideCompletion?: boolean;
+  } = {}) {
     this.provider = provider;
     this.reasoningOutsideCompletion = reasoningOutsideCompletion;
+    this.clientReasoningOutsideCompletion = clientReasoningOutsideCompletion;
     this.state = {
       responseId: "",
       model: "",
@@ -1446,15 +1455,15 @@ export class OpenAIStreamAdapter
   }
 
   /**
-   * The wire usage rebuilt from the proxy's counts, in the provider's own
-   * dialect: `state.usage.outputTokens` includes reasoning, so a provider that
-   * reports it outside `completion_tokens` gets it taken back out, and a
-   * streamed turn reports what the same turn would report unstreamed.
+   * The wire usage rebuilt from the proxy's counts, in the client's dialect:
+   * `state.usage.outputTokens` includes reasoning, so a client that reads it
+   * outside `completion_tokens` gets it taken back out, and a streamed turn
+   * reports what the same turn would report unstreamed.
    */
   private rebuiltUsage() {
     const usage = toOpenAiStreamUsageWithCache(this.state.usage);
     const reasoning = this.state.usage?.reasoningTokens ?? 0;
-    return usage && this.reasoningOutsideCompletion && reasoning
+    return usage && this.clientReasoningOutsideCompletion && reasoning
       ? {
           ...usage,
           completion_tokens: Math.max(0, usage.completion_tokens - reasoning),

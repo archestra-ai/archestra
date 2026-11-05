@@ -53,6 +53,8 @@ type XaiResponse = Xai.Types.ChatCompletionsResponse;
 type XaiMessages = Xai.Types.ChatCompletionsRequest["messages"];
 type XaiHeaders = Xai.Types.ChatCompletionsHeaders;
 type XaiStreamChunk = Xai.Types.ChatCompletionChunk;
+/** Whose usage dialect the client reads: xAI's own, or OpenAI's. */
+type XaiClientUsage = "xai" | "openai";
 
 // =============================================================================
 // ADAPTER CLASSES (delegate to OpenAI adapters, override provider)
@@ -110,11 +112,13 @@ class XaiRequestAdapter implements LLMRequestAdapter<XaiRequest, XaiMessages> {
 class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
   readonly provider = "xai" as const;
   private delegate: OpenAIResponseAdapter;
+  private readonly clientUsage: XaiClientUsage;
 
-  constructor(response: XaiResponse) {
+  constructor(response: XaiResponse, clientUsage: XaiClientUsage = "xai") {
     this.delegate = new OpenAIResponseAdapter(response, {
       reasoningOutsideCompletion: true,
     });
+    this.clientUsage = clientUsage;
   }
 
   getId() {
@@ -136,18 +140,35 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
     return this.delegate.getUsage();
   }
   getOriginalResponse() {
-    return this.delegate.getOriginalResponse();
+    return this.forClient(this.delegate.getOriginalResponse());
   }
   getFinishReasons() {
     return this.delegate.getFinishReasons();
   }
   toRefusalResponse(refusalMessage: string, contentMessage: string) {
-    return this.delegate.toRefusalResponse(refusalMessage, contentMessage);
+    return this.forClient(
+      this.delegate.toRefusalResponse(refusalMessage, contentMessage),
+    );
   }
   withRewrittenToolCalls(
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
   ) {
-    return this.delegate.withRewrittenToolCalls(toolCalls);
+    return this.forClient(this.delegate.withRewrittenToolCalls(toolCalls));
+  }
+
+  /** The response as the client reads it; getUsage keeps reading xAI's. */
+  private forClient(response: XaiResponse): XaiResponse {
+    const reasoning =
+      response.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+    return this.clientUsage === "openai" && response.usage && reasoning
+      ? {
+          ...response,
+          usage: {
+            ...response.usage,
+            completion_tokens: response.usage.completion_tokens + reasoning,
+          },
+        }
+      : response;
   }
 }
 
@@ -157,9 +178,10 @@ class XaiStreamAdapter
   readonly provider = "xai" as const;
   private delegate: OpenAIStreamAdapter;
 
-  constructor() {
+  constructor(clientUsage: XaiClientUsage = "xai") {
     this.delegate = new OpenAIStreamAdapter({
       reasoningOutsideCompletion: true,
+      clientReasoningOutsideCompletion: clientUsage === "xai",
     });
   }
 
@@ -379,6 +401,26 @@ export const xaiAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * xAI's factory for a client that reads OpenAI's usage, with reasoning inside
+ * `completion_tokens`: the model router and the Responses surface. The native
+ * xAI route keeps xAI's own usage. Every other member is read from
+ * `xaiAdapterFactory` when used, so a test's spy on it still applies.
+ */
+export const xaiOpenAiUsageAdapterFactory: typeof xaiAdapterFactory = new Proxy(
+  xaiAdapterFactory,
+  {
+    get(target, property, receiver) {
+      if (property === "createResponseAdapter")
+        return (response: XaiResponse) =>
+          new XaiResponseAdapter(response, "openai");
+      if (property === "createStreamAdapter")
+        return () => new XaiStreamAdapter("openai");
+      return Reflect.get(target, property, receiver);
+    },
+  },
+);
 
 /**
  * xAI speaks the OpenAI wire, but its `completion_tokens` leaves out

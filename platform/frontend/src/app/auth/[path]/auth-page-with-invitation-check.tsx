@@ -4,10 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { AuthViewWithErrorHandling } from "@/app/auth/_parts/auth-view-with-error-handling";
 import { BackendConnectivityStatus } from "@/app/auth/_parts/backend-connectivity-status";
-import { SsoSetupNote } from "@/app/auth/_parts/sso-setup-note";
+import { SignInNotice } from "@/app/auth/_parts/sign-in-notice";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
-import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingState } from "@/components/loading";
 import {
   Card,
@@ -98,9 +97,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const showExistingUserMessage =
     path === "sign-in" && invitationId && invitationData;
 
-  // The default credentials warning and the SSO setup note only concern
-  // password sign-in. With it disabled, the card already says how to sign in.
-  const showSignInNotes =
+  // The notice (default credentials, SSO setup) only concerns password
+  // sign-in. With it disabled, the card already says how to sign in.
+  const showSignInNotice =
     path === "sign-in" &&
     !invitationId &&
     !isLoadingPublicConfig &&
@@ -129,10 +128,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
           arrives and nothing above it moves.
         */}
         <div className="relative w-full max-w-md">
-          {showSignInNotes && (
-            <div className="absolute inset-x-0 top-full space-y-4 pt-4">
-              <SsoSetupNote />
-              <DefaultCredentialsWarning alwaysShow />
+          {showSignInNotice && (
+            <div className="absolute inset-x-0 top-full pt-4">
+              <SignInNotice />
             </div>
           )}
           <div className="space-y-4">

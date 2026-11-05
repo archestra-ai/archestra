@@ -16,6 +16,21 @@ async function createContext() {
   });
 }
 
+/**
+ * A context last updated an hour ago, so a test that writes to it can assert
+ * that updatedAt moved forward even when both writes land in the same
+ * millisecond.
+ */
+async function createStaleContext() {
+  const context = await createContext();
+  const [stale] = await db
+    .update(schema.a2aContextsTable)
+    .set({ updatedAt: new Date(Date.now() - 60 * 60 * 1000) })
+    .where(eq(schema.a2aContextsTable.id, context.id))
+    .returning();
+  return stale;
+}
+
 async function createTask(contextId: string) {
   return await A2ATaskModel.create({
     contextId,
@@ -38,7 +53,7 @@ function makeContent(messageId: string, role: A2AProtocolRole, text: string) {
 describe("A2AMessageModel", () => {
   describe("create", () => {
     test("updates context updatedAt when a message is created", async () => {
-      const context = await createContext();
+      const context = await createStaleContext();
       const originalUpdatedAt = context.updatedAt;
 
       const message = await A2AMessageModel.create({
@@ -90,8 +105,8 @@ describe("A2AMessageModel", () => {
 
   describe("bulkCreate", () => {
     test("updates multiple contexts when messages are bulk created", async () => {
-      const context1 = await createContext();
-      const context2 = await createContext();
+      const context1 = await createStaleContext();
+      const context2 = await createStaleContext();
       const original1 = context1.updatedAt;
       const original2 = context2.updatedAt;
 

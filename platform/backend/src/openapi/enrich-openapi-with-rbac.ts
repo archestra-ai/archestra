@@ -233,6 +233,7 @@ function createAuthenticationSection(operationId: string): string {
     return [
       "Authentication:",
       "",
+      // white-label-ok: App auth prose is rebranded by brandSpecTextInPlace before serving the spec.
       "Use a browser session or an Archestra API key. External MCP clients can send a personal token or an app-scoped OAuth access token as a Bearer token. Organization and team tokens cannot access an app because they have no viewer.",
     ].join("\n");
   }

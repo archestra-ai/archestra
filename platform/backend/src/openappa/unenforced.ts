@@ -13,7 +13,11 @@ import type {
   UnenforcedCallReason,
   UnenforcedSessionReason,
 } from "@/types/openappa-unenforced";
-import { softBlocksAllowed, softBlockWaivedLocally } from "./soft-block";
+import {
+  rememberSoftBlockWaiver,
+  softBlocksAllowed,
+  softBlockWaivedLocally,
+} from "./soft-block";
 
 /**
  * What OpenAPPA did not see while Guardrails enforcement was off.
@@ -68,7 +72,20 @@ export async function observeUnenforcedSession(
 export async function startedUnenforced(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  if (softBlockWaivedLocally(session)) return true;
+  if (softBlockWaivedLocally(session)) {
+    // An inherited waiver must become this session's own waiver so its
+    // children and forks can discover it without walking arbitrary ancestry.
+    rememberSoftBlockWaiver(session);
+    try {
+      await superyellSession(session);
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Could not persist the inherited soft-block waiver; the local session remains waived",
+      );
+    }
+    return true;
+  }
   const decision = await decideUnenforced(session);
   if (decision.record) {
     await OpenAppaUnenforcedModel.recordSession({

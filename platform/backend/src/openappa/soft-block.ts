@@ -64,7 +64,7 @@ export async function waiveSoftBlock(
   } catch (error) {
     logger.warn({ err: error }, "Could not read the soft-block session bypass");
   }
-  waived.set(key, true);
+  rememberSoftBlockWaiver(session);
   try {
     await superyellSession(session);
   } catch (error) {
@@ -106,6 +106,11 @@ export function refuseSoftBlock(reason: string, tools: string[] = []): void {
 }
 
 /** Process-local fallback when the durable bypass store is unavailable. */
+export function rememberSoftBlockWaiver(session: OpenAppaSession): void {
+  waived.set(`${session.organization_id}:${session.session_id}`, true);
+}
+
+/** Reads only the session and its bound immediate parent or fork source. */
 export function softBlockWaivedLocally(session: OpenAppaSession): boolean {
   return (
     softBlocksAllowed() &&

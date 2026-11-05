@@ -5,10 +5,8 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
-import {
-  isCommandExecutionTool,
-  withoutArgumentCopies,
-} from "./command-normalization";
+import { isCommandExecutionTool } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 import {
   type HitlReviewCard,
   hitlInspectionDigest,
@@ -544,7 +542,7 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
       remedy_offer_ids: [offerId],
     };
   }
-  const args = withoutArgumentCopies(review.tool, parsed ?? {});
+  const args = withoutProxyCopies(review.tool, parsed ?? {});
   const accepted = acceptedCoverage(review.text);
   const called = callPreview(review.tool, args);
   // A call that says nothing about itself shows its tool's description.

@@ -1,6 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
@@ -17,6 +18,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
@@ -30,6 +37,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Whether tool calls are checked against the policy at all. */
 export function OpenAppaEnforcementSetting() {
@@ -132,14 +140,22 @@ export function OpenAppaBreakTheGlassSettings() {
         environmentVariable={overriddenBy("humanApprovalMode")}
         disabled={disabled}
         options={[
-          { value: "block", label: "Block until approved" },
+          {
+            value: "block",
+            label: "Block until approved",
+            description: "Require human approval in every session.",
+          },
           {
             value: "unattended",
             label: "Waive in unattended sessions",
             description:
               "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
           },
-          { value: "everywhere", label: "Waive everywhere" },
+          {
+            value: "everywhere",
+            label: "Waive everywhere",
+            description: "Waive human approval in all sessions.",
+          },
         ]}
         onChange={(humanApprovalMode) => update.mutate({ humanApprovalMode })}
       />
@@ -147,17 +163,27 @@ export function OpenAppaBreakTheGlassSettings() {
         title="Other blocked calls"
         description={
           <>
-            How to handle denials that can't be approved. Calls explicitly set
-            to <code className="font-mono text-xs">blocked</code> in the policy
-            will never waive.
+            How to handle denials that can't be approved. An explicit
+            <code className="font-mono text-xs"> blocked </code> refusal cannot
+            trigger a waiver. After a soft refusal turns Guardrails off,
+            subsequent operations bypass all policy checks.
           </>
         }
         value={data?.unapprovableBlockMode}
         environmentVariable={overriddenBy("unapprovableBlockMode")}
         disabled={disabled}
         options={[
-          { value: "refuse", label: "Keep the block" },
-          { value: "allow", label: "Waive the block" },
+          {
+            value: "refuse",
+            label: "Keep the block",
+            description: "Refuse operations that cannot be approved.",
+          },
+          {
+            value: "allow",
+            label: "Waive the block",
+            description:
+              "Continue and turn Guardrails off for the session. Subsequent operations bypass all policy checks, including explicit blocked marks.",
+          },
         ]}
         onChange={(unapprovableBlockMode) =>
           update.mutate({ unapprovableBlockMode })
@@ -409,7 +435,14 @@ function BreakTheGlassRow<T extends string>(props: {
 }) {
   const noteId = `${props.title.replaceAll(" ", "-").toLowerCase()}-env-note`;
   return (
-    <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-center lg:gap-8">
+    <div
+      className={cn(
+        "grid gap-3 p-4 lg:items-center lg:gap-8",
+        props.environmentVariable
+          ? "lg:grid-cols-[minmax(0,1fr)_max-content]"
+          : "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]",
+      )}
+    >
       <div className="min-w-0 space-y-1">
         <h3 className="text-sm font-medium leading-5">{props.title}</h3>
         <div className="text-sm leading-5 text-muted-foreground">
@@ -446,23 +479,49 @@ function BreakTheGlassRow<T extends string>(props: {
             </SelectContent>
           </Select>
           {props.environmentVariable ? (
-            <p id={noteId} className="text-xs leading-4 text-muted-foreground">
-              Unset{" "}
-              <code className="font-mono">
-                {/* Wrap a long name only after an underscore. */}
-                {props.environmentVariable.split("_").map((part, index) => (
-                  <span key={part}>
-                    {index > 0 ? (
-                      <>
-                        _<wbr />
-                      </>
-                    ) : null}
-                    {part}
-                  </span>
-                ))}
-              </code>{" "}
-              to edit this setting.
-            </p>
+            <div className="space-y-1 text-xs leading-4 text-muted-foreground">
+              <p className="lg:whitespace-nowrap">
+                <span>Set with </span>
+                <code className="font-mono">
+                  {/* Wrap a long name only after an underscore. */}
+                  {props.environmentVariable.split("_").map((part, index) => (
+                    <span key={part}>
+                      {index > 0 ? (
+                        <>
+                          _<wbr />
+                        </>
+                      ) : null}
+                      {part}
+                    </span>
+                  ))}
+                  <span>={props.value}</span>
+                </code>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <UnstyledButton
+                      aria-label={`${props.title} environment values`}
+                      className="ml-1 inline-flex align-middle"
+                    >
+                      <Info className="size-3.5" />
+                    </UnstyledButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm space-y-2" align="end">
+                    {props.options.map((option) => (
+                      <div key={option.value}>
+                        <code className="font-mono">{option.value}</code>
+                        <span> — {option.label}.</span>
+                        {option.description ? (
+                          <p className="mt-1">{option.description}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </TooltipContent>
+                </Tooltip>
+              </p>
+              <p id={noteId}>
+                Unset the environment variable to edit this setting.
+              </p>
+            </div>
           ) : null}
         </div>
       ) : (

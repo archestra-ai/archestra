@@ -17256,13 +17256,12 @@ export type GetAgentCatalogResponses = {
                 accessAllSubagents: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
-                    algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                    algorithm: 'round_robin' | 'weighted' | 'random';
                     weights?: {
                         [key: string]: number;
                     };
                     retries: number;
                     fallbackEnabled: boolean;
-                    maxFallbacks?: number | null;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -17657,13 +17656,12 @@ export type GetAgentsResponses = {
             accessAllSubagents: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
-                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                algorithm: 'round_robin' | 'weighted' | 'random';
                 weights?: {
                     [key: string]: number;
                 };
                 retries: number;
                 fallbackEnabled: boolean;
-                maxFallbacks?: number | null;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -17814,13 +17812,12 @@ export type CreateAgentData = {
         accessAllSubagents?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
-            algorithm?: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm?: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries?: number;
             fallbackEnabled?: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -18105,13 +18102,12 @@ export type CreateAgentResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19379,13 +19375,12 @@ export type GetDefaultMcpGatewayResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -19699,13 +19694,12 @@ export type ImportAgentResponses = {
             accessAllSubagents: boolean;
             subagentLoadBalancing?: {
                 enabled: boolean;
-                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                algorithm: 'round_robin' | 'weighted' | 'random';
                 weights?: {
                     [key: string]: number;
                 };
                 retries: number;
                 fallbackEnabled: boolean;
-                maxFallbacks?: number | null;
             } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
@@ -20028,13 +20022,12 @@ export type GetAgentResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -20174,13 +20167,12 @@ export type UpdateAgentData = {
         accessAllSubagents?: boolean;
         subagentLoadBalancing?: {
             enabled?: boolean;
-            algorithm?: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm?: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries?: number;
             fallbackEnabled?: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
@@ -20367,13 +20359,12 @@ export type UpdateAgentResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -20758,13 +20749,12 @@ export type GetAgentVersionResponses = {
             } | null;
             subagentLoadBalancing: {
                 enabled: boolean;
-                algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                algorithm: 'round_robin' | 'weighted' | 'random';
                 weights?: {
                     [key: string]: number;
                 };
                 retries: number;
                 fallbackEnabled: boolean;
-                maxFallbacks?: number | null;
             } | null;
             tools: Array<{
                 toolId: string;
@@ -20978,13 +20968,12 @@ export type RestoreAgentVersionResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -21236,13 +21225,12 @@ export type CloneAgentResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -23733,13 +23721,12 @@ export type RestoreAgentResponses = {
         accessAllSubagents: boolean;
         subagentLoadBalancing?: {
             enabled: boolean;
-            algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+            algorithm: 'round_robin' | 'weighted' | 'random';
             weights?: {
                 [key: string]: number;
             };
             retries: number;
             fallbackEnabled: boolean;
-            maxFallbacks?: number | null;
         } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
@@ -43106,13 +43093,12 @@ export type GetNewChatBootstrapResponses = {
                 accessAllSubagents: boolean;
                 subagentLoadBalancing?: {
                     enabled: boolean;
-                    algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                    algorithm: 'round_robin' | 'weighted' | 'random';
                     weights?: {
                         [key: string]: number;
                     };
                     retries: number;
                     fallbackEnabled: boolean;
-                    maxFallbacks?: number | null;
                 } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
@@ -43699,13 +43685,12 @@ export type GetConversationBootstrapResponses = {
                     accessAllSubagents: boolean;
                     subagentLoadBalancing?: {
                         enabled: boolean;
-                        algorithm: 'round_robin' | 'weighted' | 'random' | 'ordered';
+                        algorithm: 'round_robin' | 'weighted' | 'random';
                         weights?: {
                             [key: string]: number;
                         };
                         retries: number;
                         fallbackEnabled: boolean;
-                        maxFallbacks?: number | null;
                     } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';

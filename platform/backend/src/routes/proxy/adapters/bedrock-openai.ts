@@ -27,6 +27,7 @@ import {
   type ConverseToOpenaiSseEncoder,
   converseResponseToOpenai,
   createConverseToOpenaiSseEncoder,
+  mapStopReason,
   type OpenaiContext,
 } from "./bedrock-openai-translator";
 
@@ -244,6 +245,10 @@ class BedrockOpenaiStreamAdapter
     this.inner.formatToolCallsSSE?.(toolCalls);
     this.pendingToolCallEventBytes = [];
     return this.encoder.formatToolCalls(toolCalls);
+  }
+
+  getOpenAiFinishReason(): string {
+    return mapStopReason(this.state.stopReason ?? undefined);
   }
 
   formatEndSSE(): Uint8Array {

@@ -2277,6 +2277,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ).toBe(`[Turn 0]\n${value}\n\n[Turn 1]\n${next}`);
     });
 
+    test("waives a background return whose spawn call closed and keeps its original output", async () => {
+      const overrides = config.openappa.breakTheGlassOverrides;
+      const yellEnabled = config.openappa.yellEnabled;
+      config.openappa.breakTheGlassOverrides = {
+        ...overrides,
+        unapprovableBlockMode: "allow",
+      };
+      config.openappa.yellEnabled = false;
+      open.clear();
+      started.clear();
+      closed.add("call_spawn");
+      try {
+        const response = await send(reported());
+        expect(response.statusCode, response.body).toBe(200);
+        expect(events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              event: "tool_result",
+              tool_call_id: "call_spawn",
+              spawned_id: `${parent()}:call_spawn`,
+            }),
+          ]),
+        );
+        expect(readOutput()).toContain(value);
+        expect(readOutput()).not.toContain("Tool output withheld");
+        expect(
+          await OpenAppaUnenforcedModel.findSessions({
+            organizationId: agent.organizationId,
+            sessionIds: [parent()],
+          }),
+        ).toEqual([expect.objectContaining({ reason: "superyell" })]);
+        const again = await send(reported());
+        expect(again.statusCode, again.body).toBe(200);
+        expect(readOutput()).toContain(value);
+      } finally {
+        config.openappa.breakTheGlassOverrides = overrides;
+        config.openappa.yellEnabled = yellEnabled;
+      }
+    });
+
     test("withholds a return its spawn call no longer takes, and the session goes on", async () => {
       // A new prompt's first call settled the turn before the subagent
       // started, so the runtime closed the spawn.

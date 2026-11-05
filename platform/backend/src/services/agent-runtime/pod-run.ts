@@ -69,10 +69,17 @@ import {
   resolveRunWorkspaceGiB,
   tierWorkspaceGiB,
 } from "./runtime-tiers";
+import { subagentLoadBalancer } from "./subagent-load-balancer";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
 export interface SubagentExecutionPolicy {
+  /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
+  callerAgentId?: string;
+  /** Assigned runtime subagent pool on the caller for distributed queue reconciliation. */
+  assignedAgentIds?: string[];
+  /** Dispatch counter value when this run was planned, used to detect intervening claims. */
+  plannedDispatchCount?: number | null;
   /** Number of automatic retries on the same subagent for retriable failures (0–3). */
   retries?: number;
   /** Ordered fallback runtime subagent IDs to try if the current subagent fails. */
@@ -618,14 +625,24 @@ export async function runTaskInAgentRuntime(params: {
     modelId: string | null;
     llmApiKeyId: string | null;
   };
-  let nextFallbackIndex = 0;
+  let remainingFallbackIds = [...fallbackAgentIds];
+  let currentPlannedDispatchCount = policy?.plannedDispatchCount ?? null;
   let prefetchedFallback: CandidateConfig | null = null;
 
   const peekNextFallbackCandidate =
     async (): Promise<CandidateConfig | null> => {
       if (prefetchedFallback) return prefetchedFallback;
-      while (nextFallbackIndex < fallbackAgentIds.length) {
-        const fallbackAgentId = fallbackAgentIds[nextFallbackIndex++];
+      while (remainingFallbackIds.length > 0) {
+        const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
+          callerAgentId: policy?.callerAgentId,
+          remainingCandidateIds: remainingFallbackIds,
+          assignedAgentIds: policy?.assignedAgentIds,
+          plannedDispatchCount: currentPlannedDispatchCount,
+        });
+        remainingFallbackIds = claimed.remainingCandidateIds;
+        currentPlannedDispatchCount = claimed.dispatchCount;
+        const fallbackAgentId = claimed.claimedAgentId;
+        if (!fallbackAgentId) break;
         const nextAgent = await AgentModel.findById(fallbackAgentId);
         if (!nextAgent || nextAgent.organizationId !== params.organizationId) {
           continue;

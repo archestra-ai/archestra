@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
-import { openaiToCohere } from "./cohere-openai-translator";
+import {
+  mapCohereFinishReason,
+  openaiToCohere,
+} from "./cohere-openai-translator";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 
@@ -67,5 +70,21 @@ describe("openaiToCohere — multimodal user content", () => {
   test("still passes a plain string user message through unchanged", () => {
     const { cohereBody } = openaiToCohere(req());
     expect(cohereBody.messages[0].content).toBe("hello");
+  });
+});
+
+describe("mapCohereFinishReason", () => {
+  test.each([
+    ["COMPLETE", "stop"],
+    ["STOP_SEQUENCE", "stop"],
+    ["MAX_TOKENS", "length"],
+    // A generation that ran out of time is cut off, not finished.
+    ["TIMEOUT", "length"],
+    ["TOOL_CALL", "tool_calls"],
+    ["ERROR", "content_filter"],
+    // Sent by Cohere's older API for a reply it judged toxic.
+    ["ERROR_TOXIC", "content_filter"],
+  ])("%s → %s", (reason, expected) => {
+    expect(mapCohereFinishReason(reason)).toBe(expected);
   });
 });

@@ -371,6 +371,63 @@ test("asks Claude Code one line and previews the call in full", async () => {
   });
 });
 
+test("describes a call without a summary by its tool's first sentence", async () => {
+  const active = session("tool-description");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "archestra__delete_workspace",
+      arguments: JSON.stringify({ run_id: "run", confirm_delete: true }),
+      toolDescription:
+        "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available.",
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(asked?.question).toBe("Full review text.");
+  expect(asked?.shortQuestion).toBe(
+    "Approve the archestra__delete_workspace call?",
+  );
+  expect(asked?.callPreview).toBe(
+    [
+      "**archestra\\_\\_delete\\_workspace call**\n*Tool description: Permanently*\n*delete a retained runtime*\n*workspace and all of its files.*",
+      "```yaml\nrun_id: run\nconfirm_delete: true\n```",
+    ].join("\n\n"),
+  );
+});
+
+test("leaves a long tool description off the plain card and escapes an unsafe one", async () => {
+  const active = session("tool-description-limits");
+  const stage = async (offerId: string, toolDescription: string) => {
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId,
+        text: "Full review text.",
+        tool: "mcp/files/read",
+        arguments: JSON.stringify({ path: "notes.txt" }),
+        toolDescription,
+      },
+    });
+    return (
+      await getHitlAskUserArguments({ session: active, offerIds: [offerId] })
+    )?.callPreview;
+  };
+  const long = await stage(
+    "offer-long",
+    `Read ${"a long clause, ".repeat(20)}and finish.`,
+  );
+  expect(long).toBeDefined();
+  expect(long).not.toContain("Tool description");
+  const unsafe = await stage("offer-unsafe", "Read a file\u202e backwards.");
+  expect(unsafe).toContain("Tool description:");
+  expect(unsafe).not.toContain("\u202e");
+});
+
 test("shows a command in full under its description, wrapped to the pane", async () => {
   const command = "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF";
   const asked = await askedAbout("command-call", "Bash", {

@@ -11475,7 +11475,7 @@ export const rotateSkillShareLink = <ThrowOnError extends boolean = false>(optio
 export const revokeSkillShareLink = <ThrowOnError extends boolean = false>(options: Options<RevokeSkillShareLinkData, ThrowOnError>) => (options.client ?? client).delete<RevokeSkillShareLinkResponses, RevokeSkillShareLinkErrors, ThrowOnError>({ url: '/api/skill-share-links/{id}', ...options });
 
 /**
- * LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned.
+ * LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. Callers without `member:read` see only their own usage.
  *
  * Authentication:
  *
@@ -11503,7 +11503,7 @@ export const getProxyCostStatistics = <ThrowOnError extends boolean = false>(opt
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 
 /**
- * Get usage statistics for every agent in the active organization.
+ * Get usage statistics for every agent in the active organization. Callers without `member:read` see only their own usage of each agent.
  *
  * Authentication:
  *
@@ -11606,7 +11606,7 @@ export const getAppStatistics = <ThrowOnError extends boolean = false>(options?:
 export const getSkillStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetSkillStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetSkillStatisticsResponses, GetSkillStatisticsErrors, ThrowOnError>({ url: '/api/statistics/skills', ...options });
 
 /**
- * Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required.
+ * Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required. Without `member:read`, the top agent reflects only the caller's own usage, since an agent can be someone's personal one.
  *
  * Authentication:
  *
@@ -11703,7 +11703,7 @@ export const getAppUsage = <ThrowOnError extends boolean = false>(options?: Opti
 export const getSkillUsage = <ThrowOnError extends boolean = false>(options?: Options<GetSkillUsageData, ThrowOnError>) => (options?.client ?? client).get<GetSkillUsageResponses, GetSkillUsageErrors, ThrowOnError>({ url: '/api/statistics/skill-usage', ...options });
 
 /**
- * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
+ * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity. Callers without `member:read` see only their own usage, since a key or agent can be someone's personal one.
  *
  * Authentication:
  *
@@ -11716,7 +11716,7 @@ export const getSkillUsage = <ThrowOnError extends boolean = false>(options?: Op
 export const getModelUsage = <ThrowOnError extends boolean = false>(options: Options<GetModelUsageData, ThrowOnError>) => (options.client ?? client).get<GetModelUsageResponses, GetModelUsageErrors, ThrowOnError>({ url: '/api/statistics/model-usage', ...options });
 
 /**
- * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
+ * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity. Callers without `member:read` see only their own usage, since a key or agent can be someone's personal one.
  *
  * Authentication:
  *

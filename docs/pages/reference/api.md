@@ -2,7 +2,7 @@
 title: "API Reference"
 description: "Authenticate scripts and CI with an API key, then browse every platform endpoint"
 order: 3
-lastUpdated: 2026-10-20
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -36,7 +36,7 @@ Click your name in the sidebar, go to **API Keys**, and click **Create API Key**
 2. Give it a role that holds only the permissions the job needs.
 3. Open the account and click **Create API key**.
 
-- To export organization-wide costs, the role needs [`llmCost:read`](/docs/reference/permissions#llmCost:read). Add [`member:read`](/docs/reference/permissions#member:read) to break costs down by person.
+- To export organization-wide costs, the role needs [`llmCost:read`](/docs/reference/permissions#llmCost:read). Add [`member:read`](/docs/reference/permissions#member:read) to break costs down by person, agent, or virtual key; without it, those breakdowns cover only the account's own usage.
 - To export every log, the role needs [`log:read`](/docs/reference/permissions#log:read) and [`log:admin`](/docs/reference/permissions#log:admin).
 - To rotate a key, create a new one, move your clients to it, and delete the old one. Disabling or deleting the account stops all its keys.
 

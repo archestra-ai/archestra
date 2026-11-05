@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.20](https://github.com/archestra-ai/archestra/compare/platform-v1.4.19...platform-v1.4.20) (2026-11-05)
+
+
+### Bug Fixes
+
+* **costs:** scope credential breakdowns of /api/statistics/llm-usage to the caller without member:read ([#10250](https://github.com/archestra-ai/archestra/issues/10250)) (backport release/1.4) ([#10253](https://github.com/archestra-ai/archestra/issues/10253)) ([43a6f8e](https://github.com/archestra-ai/archestra/commit/43a6f8e62572bbd80fa837642662e153a03eb341))
+
 ## [1.4.19](https://github.com/archestra-ai/archestra/compare/platform-v1.4.18...platform-v1.4.19) (2026-11-05)
 
 

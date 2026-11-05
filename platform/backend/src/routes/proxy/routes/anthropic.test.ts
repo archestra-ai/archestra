@@ -35,6 +35,7 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentWorkspaceModel,
   ModelModel,
   OrganizationModel,
   VirtualApiKeyModel,
@@ -2134,9 +2135,29 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       });
       expect(nonRunMessages.statusCode).toBe(400);
 
-      // 8. A closed run row (endedAt set, no active/idle workspace) cannot redeem the subscription token even while its virtual key row still exists
+      // 8. A closed run row remains valid while its own retained workspace is idle,
+      //    but is refused once a newer turn claims/releases that workspace (or when no workspace matches).
+      const workspace = await AgentWorkspaceModel.create({
+        id: task.id,
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: owner.id,
+        workloadName: run.workloadName,
+        backend: "kubernetes",
+        runtimeScope: "agent-tests",
+        state: "active",
+        activeTaskId: task.id,
+        lastTaskId: task.id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
       await AgentRunModel.close({ id: run.id });
-      const afterClosedRun = await app.inject({
+      await AgentWorkspaceModel.release({
+        workloadName: run.workloadName,
+        taskId: task.id,
+      });
+
+      const retainedIdleModels = await app.inject({
         method: "GET",
         url: `/v1/anthropic/${agent.id}/v1/models`,
         headers: {
@@ -2144,7 +2165,36 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
           "anthropic-version": "2023-06-01",
         },
       });
-      expect(afterClosedRun.statusCode).toBe(400);
+      expect(retainedIdleModels.statusCode).toBe(200);
+
+      // Advance the workspace to a newer turn while leaving the old run's virtual key row intact
+      const nextTask = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      await AgentWorkspaceModel.claim({
+        id: workspace.id,
+        organizationId: agent.organizationId,
+        actorKind: "user",
+        actorId: owner.id,
+        agentId: agent.id,
+        taskId: nextTask.id,
+      });
+      await AgentWorkspaceModel.release({
+        workloadName: run.workloadName,
+        taskId: nextTask.id,
+      });
+
+      const afterSupersededTurn = await app.inject({
+        method: "GET",
+        url: `/v1/anthropic/${agent.id}/v1/models`,
+        headers: {
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      expect(afterSupersededTurn.statusCode).toBe(400);
 
       // 9. Revoking the run's one-off virtual key immediately invalidates it with 401
       if (virtualApiKeyId) {

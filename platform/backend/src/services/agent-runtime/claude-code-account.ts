@@ -226,6 +226,8 @@ class ClaudeCodeAccountManager {
         workspace.agentId !== run.agentId ||
         workspace.actorKind !== "user" ||
         workspace.actorId !== run.actorUserId ||
+        (workspace.activeTaskId !== run.taskId &&
+          workspace.lastTaskId !== run.taskId) ||
         (workspace.state !== "idle" && workspace.state !== "active") ||
         workspace.expiresAt.getTime() <= Date.now()
       ) {

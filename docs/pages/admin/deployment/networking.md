@@ -1,7 +1,7 @@
 ---
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
-order: 4
+order: 5
 lastUpdated: 2026-10-30
 ---
 

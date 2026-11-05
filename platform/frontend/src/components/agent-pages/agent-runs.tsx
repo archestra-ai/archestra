@@ -1,5 +1,5 @@
 "use client";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import {
   ChevronLeft,
   ChevronRight,

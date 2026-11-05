@@ -1,6 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

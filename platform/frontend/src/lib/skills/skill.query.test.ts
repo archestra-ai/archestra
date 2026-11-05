@@ -14,27 +14,26 @@ import {
   useUpdateSkill,
 } from "@/lib/skills/skill.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getSkills: vi.fn(),
-    getSkill: vi.fn(),
-    getSkillSourceRepos: vi.fn(),
-    getSkillUsageStatistics: vi.fn(),
-    getExternalMcpSkill: vi.fn(),
-    getSkillVersion: vi.fn(),
-    getSkillVersions: vi.fn(),
-    createSkill: vi.fn(),
-    updateSkill: vi.fn(),
-    updateSkillGithubSync: vi.fn(),
-    deleteSkill: vi.fn(),
-    restoreSkill: vi.fn(),
-    resetSkill: vi.fn(),
-    discoverGithubSkills: vi.fn(),
-    searchSkillCatalog: vi.fn(),
-    previewGithubSkill: vi.fn(),
-    importGithubSkills: vi.fn(),
-    bulkDeleteSkills: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: vi.fn(),
+  getSkill: vi.fn(),
+  getSkillSourceRepos: vi.fn(),
+  getSkillUsageStatistics: vi.fn(),
+  getExternalMcpSkill: vi.fn(),
+  getSkillVersion: vi.fn(),
+  getSkillVersions: vi.fn(),
+  createSkill: vi.fn(),
+  updateSkill: vi.fn(),
+  updateSkillGithubSync: vi.fn(),
+  deleteSkill: vi.fn(),
+  restoreSkill: vi.fn(),
+  resetSkill: vi.fn(),
+  discoverGithubSkills: vi.fn(),
+  searchSkillCatalog: vi.fn(),
+  previewGithubSkill: vi.fn(),
+  importGithubSkills: vi.fn(),
+  bulkDeleteSkills: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({

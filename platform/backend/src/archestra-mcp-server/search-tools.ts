@@ -34,6 +34,7 @@ import {
   openappaYellEnabled,
 } from "@/openappa/service";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -394,6 +395,7 @@ export const __test = {
 
 async function openappaSearchTools(
   exclusionSets: AgentToolExclusionSets,
+  options?: { includeImplicitPolicyReads?: boolean },
 ): Promise<
   Array<{
     name: string;
@@ -403,12 +405,17 @@ async function openappaSearchTools(
   }>
 > {
   if (!openappaEnabled()) return [];
+  const includeImplicitPolicyReads =
+    options?.includeImplicitPolicyReads ?? true;
   const deployment = await getGuardrailsDeployment();
   const remediesActive = deployment.active;
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (
-      !isImplicitOpenAppaReadToolShortName(shortName) &&
+      !(
+        includeImplicitPolicyReads &&
+        isImplicitOpenAppaReadToolShortName(shortName)
+      ) &&
       !isRequiredOpenAppaToolShortName(shortName ?? "")
     )
       return [];
@@ -491,10 +498,15 @@ async function getSearchableTools(params: {
     tokenAuth: params.tokenAuth,
   });
   // OpenAPPA runtime and policy read tools are reachable on every agent when
-  // the feature is on; policy writes come only from assignment or Auto mode.
+  // the feature is on, except single-agent-scoped Agent Runtime OAuth tokens
+  // with accessAllTools off; policy writes come only from assignment or Auto mode.
+  const includeImplicitPolicyReads =
+    !isAgentRunGatewayToken(params.tokenAuth) || Boolean(agent?.accessAllTools);
   const injectedOpenappaTools = delegatedRun
     ? []
-    : await openappaSearchTools(exclusionSets);
+    : await openappaSearchTools(exclusionSets, {
+        includeImplicitPolicyReads,
+      });
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );

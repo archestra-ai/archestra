@@ -11,6 +11,7 @@ import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 // navigator.clipboard is not available in jsdom; mock it.
 Object.defineProperty(navigator, "clipboard", {
+  configurable: true,
   value: { writeText: vi.fn().mockResolvedValue(undefined) },
   writable: true,
 });

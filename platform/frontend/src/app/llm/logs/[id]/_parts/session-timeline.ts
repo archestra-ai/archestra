@@ -11,7 +11,7 @@ import { formatElapsed } from "@/lib/utils/format-duration";
 // from this.
 
 export type InteractionSummary =
-  archestraApiTypes.GetInteractionSummariesResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogSummariesResponses["200"]["data"][number];
 
 export type SessionToolCall =
   archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];

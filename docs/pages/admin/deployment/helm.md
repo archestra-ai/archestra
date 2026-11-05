@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-04
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -104,15 +104,7 @@ archestra:
 
 The HPA scales web pods only. Without it, set `archestra.replicaCount`; set `archestra.worker.replicaCount` for workers. [Size database connection capacity](/docs/admin/deployment/database#connection-capacity) for the HPA's maximum replicas and rollout overlap.
 
-Start with the [production sizing example](/docs/admin/deployment/production#cluster-capacity), then adjust `archestra.resources` and `archestra.worker.resources` for pod sizing. To spread each workload across zones:
-
-```yaml
-archestra:
-  topologySpreadConstraints:
-    - maxSkew: 1
-      topologyKey: topology.kubernetes.io/zone
-      whenUnsatisfiable: DoNotSchedule
-```
+Start from the [size](/docs/admin/deployment/scaling#pick-a-size) closest to your organization, then adjust `archestra.resources` and `archestra.worker.resources` for pod sizing. To spread pods across zones and keep serving through node drains, use the [high-availability values](/docs/admin/deployment/scaling#run-without-a-single-point-of-failure).
 
 Agent Runtime pods scale separately from web and worker pods. See [production runtime capacity](/docs/admin/deployment/production#agent-runtime) for node autoscaling and [Runtime Setup](/docs/agents/runtime/setup) for cluster prerequisites.
 

@@ -23,9 +23,11 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import OrganizationCostsPage from "./page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/limits-access");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query", async (importOriginal) => ({
@@ -844,5 +846,257 @@ describe("OrganizationCostsPage", () => {
       await screen.findByRole("button", { name: "Explore example/model+a" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Research agent")).not.toBeInTheDocument();
+  });
+  it("reports a failed scope total instead of a team admin's overlapping row sum", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    const row = (teamId: string, teamName: string, cost: number) => ({
+      teamId,
+      teamName,
+      members: 1,
+      agents: 1,
+      requests: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      cost,
+      timeSeries: [],
+    });
+    teams = [
+      row("parent", "Platform", 100),
+      row("child", "Platform Search", 40),
+    ];
+    server.use(
+      http.get(`${origin}/api/statistics/costs`, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 500 },
+        ),
+      ),
+    );
+    search = new URLSearchParams("group=team&metric=billed");
+    show();
+    expect(
+      await screen.findByText("Could not load usage statistics"),
+    ).toBeVisible();
+    expect(screen.queryByText("$140.00")).not.toBeInTheDocument();
+  });
+  it("lets a team admin leave the model view a drill-down link falls back to", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    teams = [
+      {
+        teamId: "parent",
+        teamName: "Platform",
+        members: 1,
+        agents: 1,
+        requests: 3,
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: 4,
+        timeSeries: [],
+      },
+    ];
+    search = new URLSearchParams("group=person&model=example/model-a");
+    show();
+    expect(
+      await screen.findByRole("button", { name: "by Model" }),
+    ).toBeVisible();
+    await group("Team");
+    expect(
+      await within(await screen.findByRole("table")).findByText("Platform"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "by Team" })).toBeVisible();
+  });
+  it("explores billed spend for a team admin's subscription link", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    search = new URLSearchParams("group=model&metric=subscription");
+    show();
+    const metricButton = await screen.findByRole("button", { name: /^Show / });
+    expect(metricButton).toHaveTextContent("Billed spend");
+    fireEvent.keyDown(metricButton, { key: "Enter" });
+    const options = (await screen.findAllByRole("menuitem")).map(
+      (item) => item.textContent,
+    );
+    expect(options).toContain("Billed spend");
+    expect(options.some((o) => /subscription/i.test(o ?? ""))).toBe(false);
+  });
+  it("drops a breakdown a team admin's shared link asks for", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [{ id: "parent", name: "Platform" }],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    teams = [
+      {
+        teamId: "parent",
+        teamName: "Platform",
+        members: 1,
+        agents: 1,
+        requests: 3,
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: 4,
+        timeSeries: [],
+      },
+    ];
+    search = new URLSearchParams("group=team&split=model&metric=billed");
+    show();
+    await within(await screen.findByRole("table")).findByText("Platform");
+    // Breakdowns come from the organization-wide usage endpoint.
+    expect(
+      new Set(requests.map((url) => url.pathname.split("/").pop())),
+    ).toEqual(new Set(["costs", "teams"]));
+  });
+  it("counts a team admin's overlapping team rows once in totals, trend and pivot", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [
+        { id: "parent", name: "Platform" },
+        { id: "child", name: "Platform Search" },
+      ],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    const days = ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"];
+    const series = (cacheReads: number[]) =>
+      days.map((day, i) => ({
+        timestamp: `${day}T00:00:00.000Z`,
+        value: 0,
+        cacheReadTokens: cacheReads[i],
+      }));
+    const row = (teamId: string, teamName: string, cacheReads: number[]) => ({
+      teamId,
+      teamName,
+      members: 1,
+      agents: 1,
+      requests: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: cacheReads.reduce((a, b) => a + b, 0),
+      cost: 0,
+      timeSeries: series(cacheReads),
+    });
+    // The parent's rows already include its sub-team's usage, so the rows
+    // sum to 140, 140, 360, 360 while the scope used 100, 100, 200, 200.
+    teams = [
+      row("parent", "Platform", [100, 100, 200, 200]),
+      row("child", "Platform Search", [40, 40, 160, 160]),
+    ];
+    models = [
+      {
+        ...model(),
+        cacheReadTokens: 600,
+        timeSeries: series([100, 100, 200, 200]),
+      },
+    ];
+    search = new URLSearchParams("group=team&metric=cacheRead");
+    show();
+    await within(await screen.findByRole("table")).findByText(
+      "Platform Search",
+    );
+    // The headline (and the parent's row) read 600; the rows' sum, 1,000,
+    // never appears.
+    expect((await screen.findAllByText("600")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("1,000")).not.toBeInTheDocument();
+    expect(screen.getByText("+100%")).toBeVisible();
+    expect(
+      screen.getByText(/rows can add up to more than the total/),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pivot" }));
+    const all = (await screen.findAllByRole("row")).find(
+      (r) => r.firstElementChild?.textContent === "All",
+    );
+    expect(all).toBeDefined();
+    const cells = [...(all?.children ?? [])].map((cell) => cell.textContent);
+    expect(cells.slice(1, 5)).toEqual(["100", "100", "200", "200"]);
+  });
+  it("limits a team admin without organization cost access to their teams' groupings", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.llmCost,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin: true,
+      canRead: true,
+      teams: [
+        { id: "parent", name: "Platform" },
+        { id: "child", name: "Platform Search" },
+      ],
+    } as ReturnType<typeof useTeamLimitAccess>);
+    search = new URLSearchParams("group=person&metric=tokens");
+    show();
+    expect(
+      await screen.findByRole("button", { name: "by Model" }),
+    ).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("button", { name: /^by / }), {
+      key: "Enter",
+    });
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent),
+    ).toEqual(["Time", "Team", "Model"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Team All my teams" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Platform Search" }),
+    );
+    await waitFor(() =>
+      expect(
+        requests.some((url) => url.searchParams.get("teamId") === "child"),
+      ).toBe(true),
+    );
+    expect(
+      new Set(requests.map((url) => url.pathname.split("/").pop())),
+    ).toEqual(new Set(["costs"]));
   });
 });

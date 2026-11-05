@@ -7,7 +7,7 @@ lastUpdated: 2026-11-04
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Open **Costs & Limits → Costs** to see where your organization's model spend, tokens, and requests go across virtual keys, teams, agents, models, people, apps, skills, and custom labels. Viewing organization-wide costs requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
+Open **Costs & Limits → Costs** to see where your organization's model spend, tokens, and requests go across virtual keys, teams, agents, models, people, apps, skills, and custom labels. Viewing organization-wide costs requires [`llmCost:read`](/docs/reference/permissions#llmCost:read). Team admins without it see [their teams' costs](#view-your-teams-costs).
 
 ![Costs & Limits → Costs showing headline totals and the cost explorer](/docs/automated_screenshots/llm-proxy_costs.webp)
 
@@ -67,8 +67,22 @@ Anyone signed in to Archestra can open **My Usage** in the sidebar to see their 
 
 ![My Usage showing personal spend, tokens, requests, and usage breakdown](/docs/automated_screenshots/llm-proxy_my-usage.webp)
 
+## View Your Teams' Costs
+
+A team admin can check what their teams spend against their limits without seeing the rest of the organization. Open **Costs & Limits → Costs**: without [`llmCost:read`](/docs/reference/permissions#llmCost:read), the page covers only the teams you administer and their child teams.
+
+- **Team** narrows the page to one of your teams when you administer more than one.
+- **by** groups usage by **Time**, **Team**, or **Model**, without a further breakdown.
+- **Show** offers every metric except the subscription estimate, which appears only in the summary at the top.
+
+What to know:
+
+- A request counts for a team the way its [team limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
+- Totals count each request once, even when it counts for both a team and its parent. A parent's row includes its child teams' usage, so rows can add up to more than the total.
+- Agent sharing, team membership, and which team is a child of which are read as they are now. Changing any of them, including moving a team under another parent, changes past figures here. A limit keeps the usage it already counted.
+
 ## What to Know
 
 - **A split exports every metric:** the CSV of a split **Summary** has one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
-- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api#/Statistics/getLlmUsage) groups requests, tokens, and spend by any mix of day, team, credential, provider, and model.
+- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/llm-usage) groups requests, tokens, and spend by any mix of day, team, credential, provider, and model.
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

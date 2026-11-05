@@ -1,8 +1,6 @@
-import {
-  format,
-  formatDistanceToNow,
-  formatDistanceToNowStrict,
-} from "date-fns";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { formatDistanceToNowStrict } from "date-fns/formatDistanceToNowStrict";
 
 export function formatDate({
   date,

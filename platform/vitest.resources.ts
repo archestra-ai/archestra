@@ -86,11 +86,15 @@ export function sharedVitestWorkers(
 }
 
 /**
- * The frontend suite's forks. On a machine: half the CPUs and the 8 GiB heap
- * ceiling the JSDOM-heavy tests needed on Node 24, as before. In a container
- * the kernel enforces the memory limit first, so the forks are also no more
- * than the memory holds at about 2 GiB a JSDOM worker, and the heap ceiling
- * is each worker's share of the budget.
+ * The frontend suite's forks. Its jsdom workers run many files one after
+ * another, so a file costs far less CPU than the fresh fork it used to get,
+ * while a worker holds more memory. On a machine: a third of the CPUs, each
+ * worker with a 1 GiB heap. On 18 cores that matched the old suite's 6 GB
+ * peak at a fifth of its CPU; half the CPUs with the old 8 GiB heap reached
+ * 12 GB, because V8 grows a long-lived heap toward its ceiling before it
+ * collects in earnest. In a container the kernel enforces the memory limit
+ * first, so the forks are also no more than the memory holds at about 2 GiB
+ * a JSDOM worker, and the heap ceiling is each worker's share of the budget.
  */
 export function frontendVitestResourceLimits(envelope: ResourceEnvelope): {
   maxWorkers: number;
@@ -98,7 +102,10 @@ export function frontendVitestResourceLimits(envelope: ResourceEnvelope): {
 } {
   const cpuWorkers = Math.max(1, Math.floor(envelope.availableParallelism / 2));
   if (!envelope.constrained) {
-    return { maxWorkers: cpuWorkers, maxOldSpaceMb: FRONTEND_MAX_OLD_SPACE_MB };
+    return {
+      maxWorkers: Math.max(1, Math.floor(envelope.availableParallelism / 3)),
+      maxOldSpaceMb: FRONTEND_MACHINE_OLD_SPACE_MB,
+    };
   }
   const budgetBytes = envelope.totalMemoryBytes * FRONTEND_MEMORY_FRACTION;
   const memoryWorkers = Math.max(
@@ -591,3 +598,4 @@ const FRONTEND_MEMORY_FRACTION = 0.5;
 const FRONTEND_WORKER_RSS_BYTES = 2 * 1024 ** 3;
 const FRONTEND_MIN_OLD_SPACE_MB = 1536;
 const FRONTEND_MAX_OLD_SPACE_MB = 8192;
+const FRONTEND_MACHINE_OLD_SPACE_MB = 1024;

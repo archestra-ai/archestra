@@ -63,7 +63,7 @@ export function CallExcerpt({
 // ============================================================================
 
 type LogSession =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];
 
 /** Requests fetched on each side of the call; the excerpt trims to six. */
 const REQUESTS_EACH_SIDE = 6;

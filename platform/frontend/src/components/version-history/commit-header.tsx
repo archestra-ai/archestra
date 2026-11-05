@@ -1,7 +1,7 @@
 "use client";
 
 import type { Permissions } from "@archestra/shared";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { Check, Copy, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Kbd } from "@/components/ui/kbd";

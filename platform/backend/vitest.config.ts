@@ -174,7 +174,8 @@ export default defineConfig({
     unstubGlobals: true,
     unstubEnvs: true,
 
-    maxWorkers: MAX_WORKERS,
+    // Projects copy this value and would ignore `--maxWorkers` on the CLI.
+    ...(cliSetsMaxWorkers() ? {} : { maxWorkers: MAX_WORKERS }),
 
     // Pin each fork's V8 old-space ceiling. CI divides most runner memory over
     // its workers; local runs cap each heap at 3 GB and their aggregate budget
@@ -260,6 +261,10 @@ export default defineConfig({
     ],
   },
 });
+
+function cliSetsMaxWorkers(): boolean {
+  return process.argv.some((arg) => /^--max-?workers(=|$)/i.test(arg));
+}
 
 function rawPythonPlugin() {
   return {

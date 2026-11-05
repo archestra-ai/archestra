@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 
-/** Team membership opens only the team's limits, never organization cost analytics. */
+/**
+ * Team admins open their teams' limits and their teams' costs, never the
+ * organization's: the backend scopes both to the teams they administer.
+ */
 export function useTeamLimitAccess() {
   const session = useSession();
   const read = useHasPermissions({ llmLimit: ["read"] });
@@ -46,6 +49,8 @@ export function useTeamLimitAccess() {
       globalCreate,
       globalRead: !!read?.data,
       isPending: read?.isPending || (!read?.data && membership?.isPending),
+      /** Whether {@link isTeamAdmin} is still unknown. */
+      isTeamAdminPending: !!membership?.isPending,
       allows(action: "create" | "update" | "delete", target?: LimitTarget) {
         const global = {
           create: globalCreate,

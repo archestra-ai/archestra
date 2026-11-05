@@ -23,12 +23,8 @@ const PAGE_CONFIG: Record<
     title: "Costs",
     description: (
       <>
-        Track spend, token usage and requests across your organization. View and
-        edit model token prices in{" "}
-        <Link href="/llm/models" className="text-primary hover:underline">
-          Model Settings
-        </Link>
-        .
+        Track spend, token usage and requests across your organization.{" "}
+        <ModelSettingsNote />
       </>
     ),
   },
@@ -37,6 +33,37 @@ const PAGE_CONFIG: Record<
     description: "Set spend and rate limits for LLM traffic.",
   },
 };
+
+/**
+ * The Costs description for a team admin without organization cost access.
+ * Team admins may not be able to open Model Settings, so the link is shown
+ * only to those who can.
+ */
+function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
+  return (
+    <>
+      Track spend, token usage and requests across the teams you administer.
+      {canReadModels && (
+        <>
+          {" "}
+          <ModelSettingsNote />
+        </>
+      )}
+    </>
+  );
+}
+
+function ModelSettingsNote() {
+  return (
+    <>
+      View and edit model token prices in{" "}
+      <Link href="/llm/models" className="text-primary hover:underline">
+        Model Settings
+      </Link>
+      .
+    </>
+  );
+}
 
 type CostsLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
@@ -62,6 +89,7 @@ export default function CostsLayout({
   const permissionMap: Record<string, boolean> | null = pageMap
     ? {
         ...pageMap,
+        "/llm/costs": pageMap["/llm/costs"] || limitsAccess.isTeamAdmin,
         "/llm/limits": pageMap["/llm/limits"] || limitsAccess.canRead,
       }
     : null;
@@ -75,10 +103,19 @@ export default function CostsLayout({
     return isGated ? permissionMap?.[href] === true : true;
   });
 
+  const teamScopedCosts =
+    pathname === "/llm/costs" &&
+    pageMap?.["/llm/costs"] === false &&
+    limitsAccess.isTeamAdmin;
   const config = PAGE_CONFIG[pathname] ?? {
     title: "Costs & Limits",
     description: "Monitor and manage AI model usage costs.",
   };
+  const description = teamScopedCosts ? (
+    <TeamCostsDescription canReadModels={pageMap?.["/llm/models"] === true} />
+  ) : (
+    config.description
+  );
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
@@ -90,7 +127,7 @@ export default function CostsLayout({
         description={
           pathname === "/llm/costs" && prometheusDocsUrl ? (
             <>
-              {config.description} Check{" "}
+              {description} Check{" "}
               <ExternalDocsLink
                 href={prometheusDocsUrl}
                 className="hover:underline"
@@ -101,7 +138,7 @@ export default function CostsLayout({
               to get cost-related insights at scale.
             </>
           ) : (
-            config.description
+            description
           )
         }
         tabs={tabs.length > 1 ? tabs : []}

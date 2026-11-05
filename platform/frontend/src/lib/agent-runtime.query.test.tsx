@@ -9,17 +9,11 @@ import {
   useMyAgentRuns,
 } from "./agent-runtime.query";
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getMyAgentRun: vi.fn(),
-      getMyAgentRuns: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMyAgentRun: vi.fn(),
+  getMyAgentRuns: vi.fn(),
+}));
 
 const sdk = vi.mocked(archestraApiSdk);
 

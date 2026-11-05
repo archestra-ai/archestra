@@ -437,6 +437,10 @@ class UsageStatisticsModel {
     credentialId?: string;
     provider?: string;
     model?: string;
+    /** Only this person's usage. */
+    userId?: string;
+    /** Only this service account's usage. */
+    serviceAccountId?: string;
   }): Promise<LlmUsageResponse> {
     const i = schema.interactionsTable;
     const agents = schema.agentsTable;
@@ -491,6 +495,10 @@ class UsageStatisticsModel {
         : undefined,
       params.teamId ? eq(teams.id, params.teamId) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
+      params.userId ? eq(i.userId, params.userId) : undefined,
+      params.serviceAccountId
+        ? eq(i.serviceAccountId, params.serviceAccountId)
+        : undefined,
       params.provider ? eq(provider, params.provider) : undefined,
       params.model ? eq(model, params.model) : undefined,
     );

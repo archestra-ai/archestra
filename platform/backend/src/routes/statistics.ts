@@ -508,7 +508,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetLlmUsage,
         description:
-          "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models.",
+          "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped or filtered by credential, callers without `member:read` see only their own usage, since a virtual key can be one person's own.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema.merge(PaginationQuerySchema).extend({
           groupBy: groupByQuerySchema(LLM_USAGE_DIMENSIONS, [
@@ -542,12 +542,20 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LlmUsageResponseSchema),
       },
     },
-    async ({ query: { limit, offset, ...filters }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        query: { limit, offset, ...filters },
+        organizationId,
+      } = request;
+      const byCredential =
+        filters.groupBy.includes("credentialId") ||
+        filters.credentialId !== undefined;
       return reply.send(
         await UsageStatisticsModel.getLlmUsage({
           ...filters,
           pagination: { limit, offset },
           organizationId,
+          ...(byCredential ? await ownUsageScope(request) : {}),
         }),
       );
     },

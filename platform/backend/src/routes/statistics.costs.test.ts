@@ -349,4 +349,23 @@ test("without member:read, agent and credential breakdowns cover only the caller
     url: `/api/statistics/llm-proxy?timeframe=all&credentialId=${theirKey.id}`,
   });
   expect(filtered.json().totals.billedCost).toBe(0);
+  // Nor can the grouped usage endpoint, by credential or by credential filter.
+  const usage = async (query: string) => {
+    const response = await app.inject({
+      url: `/api/statistics/llm-usage?timeframe=all&${query}`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json();
+  };
+  const [byCredential, credentialFiltered] = await Promise.all([
+    usage("groupBy=credentialId"),
+    usage(`groupBy=model&credentialId=${theirKey.id}`),
+  ]);
+  expect(
+    byCredential.data.map(
+      (row: { credentialId: string | null }) => row.credentialId,
+    ),
+  ).not.toContain(theirKey.id);
+  expect(byCredential.totals.billedCost).toBe(2);
+  expect(credentialFiltered.data).toEqual([]);
 });

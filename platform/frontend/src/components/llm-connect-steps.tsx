@@ -560,7 +560,9 @@ export function LlmConnectSteps({
       }
       credentialEnvVar={credentialEnvVar}
       routerProviders={
-        mappedProviderKeys.length > 0
+        // App clients cannot borrow provider access from the viewer's catalog.
+        mappedProviderKeys.length > 0 ||
+        (pickedClient && takesPools(pickedClient))
           ? mappedProviderKeys
               .map((mapping) => mapping.provider)
               .filter(isModelRouterSupportedProvider)

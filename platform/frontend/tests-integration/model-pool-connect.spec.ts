@@ -315,6 +315,49 @@ test.describe("Model pool Connect tab", () => {
 });
 
 test.describe("LLM Proxy pool discovery", () => {
+  test("defaults a pool-only app OAuth client to its pool rather than the viewer catalog", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await mockPool({ mswControl, request });
+    // These personal keys are visible to the viewer but cannot become the
+    // client's automatic shared-primary provider mappings.
+    await mswControl.registerMany([
+      { method: "get", url: "/api/llm-provider-api-keys", body: [openaiKey] },
+      {
+        method: "get",
+        url: "/api/llm-models/available",
+        body: [
+          {
+            id: "gpt-4o",
+            dbId: "personal-model",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    ]);
+    await page.goto("/llm/proxy");
+    await page.getByText("OAuth client", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "OAuth client", exact: true })
+      .click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: "Granted the pool" })
+      .click();
+    await expect(page.getByText('"model": "fast-chat"')).toBeVisible();
+    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await expect(
+      page.getByRole("option").filter({ hasText: POOL_NAME }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+    ).toHaveCount(0);
+  });
+
   for (const { label, granted, ungranted, noun } of [
     {
       label: "Virtual key",

@@ -2,7 +2,7 @@ import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
 
 export type Interaction =
-  archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"][number];
 
 /** A tool call a response asked for: the provider's id and the tool's name. */
 export type RequestedToolCall = { id: string; name: string };

@@ -260,9 +260,11 @@ test("an administrator changes the Yell tool, and the environment sets Human app
       (_, element) =>
         element?.tagName === "CODE" && element.textContent === name,
     );
-  expect(variable("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE")).toBeVisible();
+  expect(
+    variable("ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE=unattended"),
+  ).toBeVisible();
   expect(screen.getByText("Keep the block")).toBeVisible();
-  expect(variable("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE")).toBeVisible();
+  expect(variable("ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=refuse")).toBeVisible();
   expect(
     screen.queryByRole("combobox", { name: "Human approval" }),
   ).not.toBeInTheDocument();

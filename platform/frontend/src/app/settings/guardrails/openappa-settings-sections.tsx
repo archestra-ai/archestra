@@ -1,6 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
@@ -17,6 +18,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
@@ -126,14 +133,22 @@ export function OpenAppaBreakTheGlassSettings() {
         disabled={disabled}
         environmentVariable="ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE"
         options={[
-          { value: "block", label: "Block until approved" },
+          {
+            value: "block",
+            label: "Block until approved",
+            description: "Require human approval in every session.",
+          },
           {
             value: "unattended",
             label: "Waive in unattended sessions",
             description:
               "Agent Runtimes, Scheduled tasks, and clients sending X-Archestra-Unattended: 1. A workload's remedy plans count too.",
           },
-          { value: "everywhere", label: "Waive everywhere" },
+          {
+            value: "everywhere",
+            label: "Waive everywhere",
+            description: "Waive human approval in all sessions.",
+          },
         ]}
       />
       <BreakTheGlassRow
@@ -149,8 +164,17 @@ export function OpenAppaBreakTheGlassSettings() {
         disabled={disabled}
         environmentVariable="ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE"
         options={[
-          { value: "refuse", label: "Keep the block" },
-          { value: "allow", label: "Waive the block" },
+          {
+            value: "refuse",
+            label: "Keep the block",
+            description: "Refuse operations that cannot be approved.",
+          },
+          {
+            value: "allow",
+            label: "Waive the block",
+            description:
+              "Continue and turn Guardrails off for the session. Explicit policy blocks never waive.",
+          },
         ]}
       />
     </SettingsBlock>
@@ -413,7 +437,7 @@ function BreakTheGlassRow<T extends string>(props: {
             {current?.label ?? props.value}
           </p>
           <p className="text-xs leading-4 text-muted-foreground">
-            Set with{" "}
+            <span>Set with </span>
             <code className="font-mono">
               {/* Wrap a long name only after an underscore. */}
               {props.environmentVariable.split("_").map((part, index) => (
@@ -426,7 +450,29 @@ function BreakTheGlassRow<T extends string>(props: {
                   {part}
                 </span>
               ))}
+              <span>={props.value}</span>
             </code>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <UnstyledButton
+                  aria-label={`${props.title} environment values`}
+                  className="ml-1 inline-flex align-middle"
+                >
+                  <Info className="size-3.5" />
+                </UnstyledButton>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm space-y-2" align="end">
+                {props.options.map((option) => (
+                  <div key={option.value}>
+                    <code className="font-mono">{option.value}</code>
+                    <span> — {option.label}.</span>
+                    {option.description ? (
+                      <p className="mt-1">{option.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </TooltipContent>
+            </Tooltip>
           </p>
         </div>
       ) : props.value ? (

@@ -60,6 +60,9 @@ export function ProviderGroupedModelSelect({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
+  // One catalog for the whole list; each row subscribing would add session and
+  // organization observers per model.
+  const catalog = useModelProviderCatalog();
   const pick = (next: string) => {
     onValueChange(next);
     setOpen(false);
@@ -70,10 +73,9 @@ export function ProviderGroupedModelSelect({
 
   const byProvider = new Map<SupportedProvider | undefined, ModelOption[]>();
   for (const model of models) {
-    byProvider.set(model.provider, [
-      ...(byProvider.get(model.provider) ?? []),
-      model,
-    ]);
+    const group = byProvider.get(model.provider);
+    if (group) group.push(model);
+    else byProvider.set(model.provider, [model]);
   }
 
   const selectedMark = (optionValue: string) => (
@@ -102,7 +104,14 @@ export function ProviderGroupedModelSelect({
             {selectedPool ? (
               <span className="block truncate">{selectedPool.name}</span>
             ) : selectedModel ? (
-              <ModelLabel model={selectedModel} withIcon />
+              <ModelLabel
+                model={selectedModel}
+                providerLabel={
+                  selectedModel.provider
+                    ? catalog.label(selectedModel.provider)
+                    : undefined
+                }
+              />
             ) : (
               <span className="block truncate text-muted-foreground">
                 {placeholder}
@@ -147,23 +156,40 @@ export function ProviderGroupedModelSelect({
                 ))}
               </CommandGroup>
             )}
-            {[...byProvider.entries()].map(([provider, group]) => (
-              <CommandGroup
-                key={provider ?? "models"}
-                heading={<ProviderHeading provider={provider} />}
-                className={STICKY_GROUP}
-              >
-                {group.map((model) => (
-                  <ProviderModelItem
-                    key={model.value}
-                    model={model}
-                    onSelect={() => pick(model.value)}
-                  >
-                    {selectedMark(model.value)}
-                  </ProviderModelItem>
-                ))}
-              </CommandGroup>
-            ))}
+            {[...byProvider.entries()].map(([provider, group]) => {
+              const providerLabel = provider
+                ? catalog.label(provider)
+                : undefined;
+              return (
+                <CommandGroup
+                  key={provider ?? "models"}
+                  heading={
+                    provider && providerLabel ? (
+                      <span className="flex items-center gap-1.5">
+                        <ProviderIcon provider={provider} size={14} />
+                        <span>{providerLabel}</span>
+                      </span>
+                    ) : (
+                      <span>Models</span>
+                    )
+                  }
+                  className={STICKY_GROUP}
+                >
+                  {group.map((model) => (
+                    <CommandItem
+                      key={model.value}
+                      value={model.value}
+                      // Searching a provider's name lists all of its models.
+                      keywords={providerLabel ? [providerLabel] : undefined}
+                      onSelect={() => pick(model.value)}
+                    >
+                      <ModelLabel model={model} />
+                      {selectedMark(model.value)}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              );
+            })}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -171,59 +197,21 @@ export function ProviderGroupedModelSelect({
   );
 }
 
-function ProviderModelItem({
-  model,
-  onSelect,
-  children,
-}: {
-  model: ModelOption;
-  onSelect: () => void;
-  children: ReactNode;
-}) {
-  const catalog = useModelProviderCatalog();
-  return (
-    <CommandItem
-      value={model.value}
-      // Searching a provider's name lists all of its models.
-      keywords={model.provider ? [catalog.label(model.provider)] : undefined}
-      onSelect={onSelect}
-    >
-      <ModelLabel model={model} />
-      {children}
-    </CommandItem>
-  );
-}
-
-function ProviderHeading({
-  provider,
-}: {
-  provider: SupportedProvider | undefined;
-}) {
-  const catalog = useModelProviderCatalog();
-  if (!provider) return <span>Models</span>;
-  return (
-    <span className="flex items-center gap-1.5">
-      <ProviderIcon provider={provider} size={14} />
-      <span>{catalog.label(provider)}</span>
-    </span>
-  );
-}
-
+/** The model id, with its provider's icon when `providerLabel` is given. */
 function ModelLabel({
   model,
-  withIcon = false,
+  providerLabel,
 }: {
   model: ModelOption;
-  withIcon?: boolean;
+  providerLabel?: string;
 }) {
-  const catalog = useModelProviderCatalog();
   const name = model.modelId ?? model.value;
-  if (!withIcon || !model.provider) {
+  if (!providerLabel || !model.provider) {
     return <span className="block truncate">{name}</span>;
   }
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span className="shrink-0" title={catalog.label(model.provider)}>
+      <span className="shrink-0" title={providerLabel}>
         <ProviderIcon provider={model.provider} size={16} />
       </span>
       <span className="truncate">{name}</span>

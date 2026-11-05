@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import logger from "@/logging";
-import { EnvironmentModel, OrganizationModel } from "@/models";
+import { AgentRunModel, EnvironmentModel, OrganizationModel } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -184,6 +184,42 @@ class ClaudeCodeAccountManager {
             "Sign in with your own Claude account in the native runtime.",
         },
       ]);
+    return this.readToken(account.secretId);
+  }
+
+  /**
+   * Resolve the connected Claude subscription token for an active Agent Runtime
+   * run's one-off virtual key. Returns null when the key is not bound to an
+   * active run of the acting user/agent so non-run passthrough keys cannot
+   * resolve the server-stored account credential.
+   */
+  async resolveProxyToken(params: {
+    virtualKeyId: string;
+    organizationId: string;
+    userId: string;
+    agentId?: string;
+  }): Promise<string | null> {
+    const run = await AgentRunModel.findByVirtualApiKeyId(params.virtualKeyId);
+    if (
+      !run ||
+      run === "ambiguous" ||
+      run.organizationId !== params.organizationId ||
+      run.actorKind !== "user" ||
+      run.actorUserId !== params.userId ||
+      (params.agentId !== undefined && run.agentId !== params.agentId)
+    ) {
+      return null;
+    }
+    const account = await ClaudeCodeAccountModel.find({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+    if (!account?.secretId || isExpired(account.expiresAt)) {
+      throw new ApiError(
+        401,
+        "Your Claude Code subscription is not connected or has expired. Reconnect your Claude account and try again.",
+      );
+    }
     return this.readToken(account.secretId);
   }
 

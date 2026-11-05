@@ -44,6 +44,7 @@ import {
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { configCache } from "@/services/config-cache";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
@@ -120,6 +121,8 @@ export interface VirtualKeyValidationResult {
    * the pool the requested model names. No provider key is resolved.
    */
   modelPoolId?: string;
+  /** Set when a Claude Code subscription run's passthrough key is used in Authorization. */
+  passthroughVirtualKeyId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -186,6 +189,10 @@ export async function validateVirtualApiKey(params: {
    * model names.
    */
   allowModelPool?: boolean;
+  /** Requested agent ID from the route path, if any. */
+  agentId?: string;
+  /** Resolved gateway agent when already available to the caller. */
+  agent?: GatewayAgent;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -204,6 +211,35 @@ export async function validateVirtualApiKey(params: {
       organizationId: resolved.virtualKey.organizationId,
     });
   if (resolved.virtualKey.keyType === "passthrough") {
+    if (
+      expectedProvider === "anthropic" &&
+      resolved.virtualKey.scope === "personal" &&
+      resolved.virtualKey.authorId
+    ) {
+      const claudeCodeToken = await claudeCodeAccountManager.resolveProxyToken({
+        virtualKeyId: resolved.virtualKey.id,
+        organizationId: resolved.virtualKey.organizationId,
+        userId: resolved.virtualKey.authorId,
+        agentId: params.agentId,
+      });
+      if (claudeCodeToken) {
+        const targetAgent =
+          params.agent ??
+          (params.agentId ? await resolveAgent(params.agentId) : undefined);
+        if (targetAgent) {
+          await validatePassthroughVirtualKey({
+            tokenValue,
+            agent: targetAgent,
+          });
+        }
+        return {
+          apiKey: `Bearer:${claudeCodeToken}`,
+          baseUrl: "https://api.anthropic.com",
+          ...(await virtualKeyIdentity(resolved.virtualKey)),
+          passthroughVirtualKeyId: resolved.virtualKey.id,
+        };
+      }
+    }
     throw new ApiError(
       400,
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
@@ -1441,6 +1477,30 @@ async function authenticatePassthroughProxyRequest(params: {
         tokenValue: passthroughToken,
         agent,
       });
+      if (
+        provider === "anthropic" &&
+        bearerToken &&
+        hasArchestraTokenPrefix(bearerToken)
+      ) {
+        authenticatedBearer = true;
+        if (
+          bearerToken === passthroughToken &&
+          isTrustedAnthropicPassthroughUpstream(
+            getProviderConfiguredBaseUrl("anthropic"),
+          )
+        ) {
+          const claudeCodeToken =
+            await claudeCodeAccountManager.resolveProxyToken({
+              virtualKeyId: resolved.passthroughVirtualKeyId,
+              organizationId: agent.organizationId,
+              userId: resolved.userId,
+              agentId,
+            });
+          if (claudeCodeToken) {
+            providerApiKey = `Bearer:${claudeCodeToken}`;
+          }
+        }
+      }
       return {
         agent,
         authMethod: "passthrough_virtual_key",
@@ -1480,6 +1540,36 @@ async function authenticatePassthroughProxyRequest(params: {
       const { virtualKey } = await validateVirtualApiKeyToken(bearerToken);
       authenticatedBearer = true;
       const agent = await resolveAgent(agentId);
+      if (virtualKey.keyType === "passthrough") {
+        const resolved = await validatePassthroughVirtualKey({
+          tokenValue: bearerToken,
+          agent,
+        });
+        if (
+          provider === "anthropic" &&
+          isTrustedAnthropicPassthroughUpstream(
+            getProviderConfiguredBaseUrl("anthropic"),
+          )
+        ) {
+          const claudeCodeToken =
+            await claudeCodeAccountManager.resolveProxyToken({
+              virtualKeyId: resolved.passthroughVirtualKeyId,
+              organizationId: agent.organizationId,
+              userId: resolved.userId,
+              agentId,
+            });
+          if (claudeCodeToken) {
+            providerApiKey = `Bearer:${claudeCodeToken}`;
+          }
+        }
+        return {
+          agent,
+          authMethod: "passthrough_virtual_key",
+          userId: resolved.userId,
+          passthroughVirtualKeyId: resolved.passthroughVirtualKeyId,
+          billingTeamId: resolved.billingTeamId,
+        };
+      }
       providerApiKey = await passthroughProviderApiKey({
         tokenValue: bearerToken,
         provider,
@@ -1606,8 +1696,9 @@ function forwardPassthroughProviderApiKey(params: {
   apiKey: string;
 }) {
   const { request, provider, apiKey } = params;
-  const [name, value] =
-    provider === "anthropic"
+  const [name, value] = apiKey.startsWith("Bearer:")
+    ? ["authorization", `Bearer ${apiKey.slice(7)}`]
+    : provider === "anthropic"
       ? ["x-api-key", apiKey]
       : ["authorization", `Bearer ${apiKey}`];
   if (request.raw.headers[name] !== undefined) return;
@@ -1617,6 +1708,20 @@ function forwardPassthroughProviderApiKey(params: {
 
 function trimTrailingSlash(url: string | undefined): string | undefined {
   return url?.replace(/\/+$/, "");
+}
+
+function isTrustedAnthropicPassthroughUpstream(
+  url: string | undefined,
+): boolean {
+  const trimmed = trimTrailingSlash(url);
+  if (trimmed === "https://api.anthropic.com") return true;
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
 }
 
 /**

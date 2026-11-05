@@ -23,7 +23,11 @@ export async function fetchAnthropicModels(
     return fetchAnthropicModelsViaVertexAi();
   }
 
-  const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
+  const isClaudeSubscriptionToken =
+    apiKey.startsWith("sk-ant-oat") || apiKey.startsWith("Bearer:sk-ant-oat");
+  const baseUrl = isClaudeSubscriptionToken
+    ? "https://api.anthropic.com"
+    : baseUrlOverride || config.llm.anthropic.baseUrl;
   if (isAzureAiFoundryBaseUrl(baseUrl)) {
     return fetchAnthropicFoundryDeployments({ apiKey, baseUrl, extraHeaders });
   }
@@ -112,15 +116,16 @@ export async function fetchAnthropicModelsViaVertexAi(): Promise<ModelInfo[]> {
 export async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
 ): Promise<Record<string, string>> {
-  if (apiKey?.startsWith("sk-ant-oat")) {
+  const rawKey = apiKey?.startsWith("Bearer:") ? apiKey.slice(7) : apiKey;
+  if (rawKey?.startsWith("sk-ant-oat")) {
     return {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${rawKey}`,
       "anthropic-beta": "oauth-2025-04-20",
     };
   }
 
-  if (apiKey) {
-    return { "x-api-key": apiKey };
+  if (rawKey) {
+    return { "x-api-key": rawKey };
   }
 
   if (isAnthropicAzureFoundryEntraIdEnabled()) {

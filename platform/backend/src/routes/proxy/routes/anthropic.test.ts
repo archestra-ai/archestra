@@ -17,6 +17,7 @@
 import {
   CLAUDE_CLIENT_ID,
   CLAUDE_METADATA_SESSION_SOURCE,
+  resolveAgentRuntimeTiers,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -28,8 +29,17 @@ import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import logger from "@/logging";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  ModelModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -37,7 +47,12 @@ import {
   mintReceiptCode,
 } from "@/openappa/session-token";
 import { stampToolCallId } from "@/openappa/trajectory-stamp";
+import { secretManager } from "@/secrets-manager";
+import { handleServerError } from "@/server/error-handler";
+import { buildAgentRunLaunchSpec } from "@/services/agent-runtime/launch-spec";
+import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { anthropicAdapterFactory } from "../adapters";
@@ -204,6 +219,7 @@ describe("Anthropic anthropic-beta forwarding", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     await app.register(anthropicProxyRoutes);
     try {
       await app.inject({
@@ -612,6 +628,7 @@ describe("Anthropic Claude Code requests", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     await app.register(anthropicProxyRoutes);
     return app;
   }
@@ -1117,6 +1134,7 @@ describe("Anthropic count_tokens passthrough", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     await app.register(anthropicProxyRoutes);
     try {
       return await app.inject({
@@ -1477,6 +1495,7 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     await app.register(anthropicProxyRoutes);
 
     await ModelModel.upsert({
@@ -1597,6 +1616,7 @@ describe("Anthropic input-token fallback", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
     await app.register(anthropicProxyRoutes);
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-4-20250514",
@@ -1750,5 +1770,329 @@ describe("Anthropic input-token fallback", () => {
     expect(interaction.inputTokensEstimated).toBe(false);
     expect(interaction.inputTokens).toBe(0);
     expect(interaction.cacheReadTokens).toBe(2000);
+  });
+});
+
+describe("Claude Code subscription run one-off virtual key resolution", () => {
+  setupTestCacheManager();
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("resolves the connected subscription token only for a bound agent-run virtual key and rejects it after revocation", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    const subscriptionToken = `sk-ant-oat01-${"subscription".repeat(6)}`;
+    const agent = await makeAgent({ name: "Claude Subscription Run Agent" });
+    await OrganizationModel.patch(agent.organizationId, {
+      defaultEnvironmentNamespace: "agent-tests",
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+
+    const secret = await secretManager().createSecret(
+      { value: subscriptionToken },
+      "claude-code:account",
+      true,
+    );
+    const flowId = crypto.randomUUID();
+    const accountOwner = {
+      organizationId: agent.organizationId,
+      userId: owner.id,
+    };
+    await ClaudeCodeAccountModel.startFlow({
+      owner: accountOwner,
+      flow: { flowId },
+    });
+    await ClaudeCodeAccountModel.complete({
+      owner: accountOwner,
+      flowId,
+      secretId: secret.id,
+      metadata: {
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        models: [],
+      },
+    });
+
+    const runtime = {
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      secretId: null,
+      environmentId: null,
+      image: "example.test/claude-code:test",
+      command: ["archestra-claude-code"],
+      inferenceProtocol: "anthropic" as const,
+      backend: "kubernetes" as const,
+      steerMode: "tmux_keys" as const,
+      privileged: false,
+      environment: [],
+      credentials: [],
+      ttlHours: null,
+      idleTimeoutMinutes: null,
+      maxCostUsd: null,
+      claudeCode: {
+        authentication: "subscription" as const,
+        model: "claude-opus-4-20250514",
+      },
+    };
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const runId = crypto.randomUUID();
+    const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
+      runtime,
+      limits: resolveAgentRunLimits({
+        runtime,
+        tiers: resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 }),
+      }),
+      taskId: task.id,
+      runId,
+      agentId: agent.id,
+      actor: {
+        id: owner.id,
+        kind: "user",
+        organizationId: agent.organizationId,
+      },
+      organizationId: agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+
+    expect(virtualApiKeyId).toBeTruthy();
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(subscriptionToken);
+
+    const run = await AgentRunModel.create({
+      id: runId,
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      workloadName: `claude-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "agent-tests",
+      virtualApiKeyId,
+    });
+
+    const capturedClients: Array<{
+      apiKey: string | undefined;
+      baseUrl: string | undefined;
+    }> = [];
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(((
+      apiKey: string | undefined,
+      options: unknown,
+    ) => {
+      capturedClients.push({
+        apiKey,
+        baseUrl: (options as { baseUrl?: string })?.baseUrl,
+      });
+      return createAnthropicTestClient() as never;
+    }) as never);
+
+    const originalFetch = globalThis.fetch;
+    const capturedFetches: Array<{ url: string; authHeader: string | null }> =
+      [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init): Promise<Response> => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        if (url.startsWith("https://api.anthropic.com/")) {
+          const headers = new Headers(init?.headers);
+          capturedFetches.push({
+            url,
+            authHeader: headers.get("authorization"),
+          });
+          if (url.includes("/v1/models")) {
+            return new Response(
+              JSON.stringify({
+                data: [
+                  {
+                    type: "model",
+                    id: "claude-opus-4-20250514",
+                    display_name: "Claude Opus 4",
+                  },
+                ],
+                has_more: false,
+              }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+        }
+        return originalFetch(input, init);
+      },
+    );
+
+    const capturedPassthroughAuthHeaders: Array<string | undefined> = [];
+    const previousAnthropicBaseUrl = config.llm.anthropic.baseUrl;
+    const upstream = Fastify();
+    upstream.post("/v1/messages/count_tokens", async (request) => {
+      capturedPassthroughAuthHeaders.push(request.headers.authorization);
+      return { input_tokens: 42 };
+    });
+    await upstream.listen({ port: 0 });
+    const upstreamAddress = upstream.server.address();
+    const upstreamPort =
+      typeof upstreamAddress === "string" ? 0 : (upstreamAddress?.port ?? 0);
+    config.llm.anthropic.baseUrl = `http://localhost:${upstreamPort}`;
+
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler(handleServerError);
+    await app.register(anthropicProxyRoutes);
+
+    try {
+      const podToken = spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN;
+
+      // 1. Pod sends both X-Archestra-Virtual-Key and Authorization: Bearer <one-off-virtual-key>
+      const messagesWithCustomHeader = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${podToken}`,
+          "x-archestra-virtual-key": spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+      expect(messagesWithCustomHeader.statusCode).toBe(200);
+      expect(capturedClients.at(-1)).toEqual({
+        apiKey: `Bearer:${subscriptionToken}`,
+        baseUrl: "https://api.anthropic.com",
+      });
+
+      // 2. Caller inside the pod sends only Authorization: Bearer <one-off-virtual-key>
+      const messagesBearerOnly = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello again!" }],
+          max_tokens: 128,
+        },
+      });
+      expect(messagesBearerOnly.statusCode).toBe(200);
+      expect(capturedClients.at(-1)).toEqual({
+        apiKey: `Bearer:${subscriptionToken}`,
+        baseUrl: "https://api.anthropic.com",
+      });
+
+      // 3. GET /v1/models with the run's one-off virtual key
+      const modelsResponse = await app.inject({
+        method: "GET",
+        url: `/v1/anthropic/${agent.id}/v1/models`,
+        headers: {
+          authorization: `Bearer ${podToken}`,
+          "anthropic-version": "2023-06-01",
+        },
+      });
+      expect(modelsResponse.statusCode).toBe(200);
+      expect(capturedFetches.at(-1)).toEqual({
+        url: "https://api.anthropic.com/v1/models?limit=100",
+        authHeader: `Bearer ${subscriptionToken}`,
+      });
+
+      // 4. Catch-all passthrough endpoint (/v1/messages/count_tokens) with the run's one-off virtual key
+      const countTokensResponse = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages/count_tokens`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${podToken}`,
+          "x-archestra-virtual-key": spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Count my tokens" }],
+        },
+      });
+      expect(countTokensResponse.statusCode).toBe(200);
+      expect(capturedPassthroughAuthHeaders.at(-1)).toBe(
+        `Bearer ${subscriptionToken}`,
+      );
+
+      // 5. A non-run passthrough virtual key (e.g. /connection key, not bound to agent_runs) cannot resolve the subscription token
+      const nonRunPassthroughKey = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
+      const nonRunMessages = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${nonRunPassthroughKey}`,
+          "x-archestra-virtual-key": nonRunPassthroughKey,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Should fail" }],
+          max_tokens: 128,
+        },
+      });
+      expect(nonRunMessages.statusCode).toBe(400);
+
+      // 6. Revoking the run's one-off virtual key immediately invalidates it
+      if (virtualApiKeyId) {
+        await VirtualApiKeyModel.delete(virtualApiKeyId);
+      }
+      await AgentRunModel.clearVirtualApiKey(run.id);
+
+      const afterRevoke = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${podToken}`,
+          "x-archestra-virtual-key": spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "After run end" }],
+          max_tokens: 128,
+        },
+      });
+      expect(afterRevoke.statusCode).toBe(401);
+    } finally {
+      config.llm.anthropic.baseUrl = previousAnthropicBaseUrl;
+      await app.close();
+      await upstream.close();
+    }
   });
 });

@@ -71,6 +71,15 @@ export const StoredSubagentLoadBalancingConfigSchema = z.object({
   fallbackEnabled: z.boolean().catch(true),
 });
 
+export function normalizeSubagentLoadBalancingConfig(
+  config: unknown,
+): SubagentLoadBalancingConfig | null {
+  if (!config || typeof config !== "object") {
+    return null;
+  }
+  return StoredSubagentLoadBalancingConfigSchema.parse(config);
+}
+
 /**
  * Orders assigned subagent IDs according to the load-balancing policy.
  * - Disabled: preserves assignment order.
@@ -97,24 +106,6 @@ export function orderSubagentsByLoadBalancing(
     return [...agentIds];
   }
   const random = options?.random ?? Math.random;
-  if (config.algorithm === "round_robin") {
-    const rawSeed =
-      options?.seed !== undefined
-        ? Math.trunc(options.seed)
-        : Math.floor(random() * n);
-    const start = ((rawSeed % n) + n) % n;
-    const tail = [...agentIds.slice(start + 1), ...agentIds.slice(0, start)];
-    if (tail.length <= 1) {
-      return [agentIds[start], ...tail];
-    }
-    const round = Math.floor(Math.max(0, rawSeed) / n);
-    const tailShift = round % tail.length;
-    return [
-      agentIds[start],
-      ...tail.slice(tailShift),
-      ...tail.slice(0, tailShift),
-    ];
-  }
   if (config.algorithm === "random") {
     const result = [...agentIds];
     for (let i = result.length - 1; i > 0; i--) {
@@ -123,24 +114,45 @@ export function orderSubagentsByLoadBalancing(
     }
     return result;
   }
-  const remaining = agentIds.map((id) => ({
-    id,
-    weight: Math.max(1, Math.min(1000, Math.trunc(config.weights?.[id] ?? 1))),
-  }));
-  const ordered: string[] = [];
-  while (remaining.length > 0) {
-    const totalWeight = remaining.reduce((sum, item) => sum + item.weight, 0);
-    let threshold = random() * totalWeight;
-    let chosenIndex = remaining.length - 1;
-    for (let i = 0; i < remaining.length; i++) {
-      threshold -= remaining[i].weight;
-      if (threshold < 0) {
-        chosenIndex = i;
-        break;
+  if (config.algorithm === "weighted") {
+    const remaining = agentIds.map((id) => ({
+      id,
+      weight: Math.max(
+        1,
+        Math.min(1000, Math.trunc(config.weights?.[id] ?? 1)),
+      ),
+    }));
+    const ordered: string[] = [];
+    while (remaining.length > 0) {
+      const totalWeight = remaining.reduce((sum, item) => sum + item.weight, 0);
+      let threshold = random() * totalWeight;
+      let chosenIndex = remaining.length - 1;
+      for (let i = 0; i < remaining.length; i++) {
+        threshold -= remaining[i].weight;
+        if (threshold < 0) {
+          chosenIndex = i;
+          break;
+        }
       }
+      ordered.push(remaining[chosenIndex].id);
+      remaining.splice(chosenIndex, 1);
     }
-    ordered.push(remaining[chosenIndex].id);
-    remaining.splice(chosenIndex, 1);
+    return ordered;
   }
-  return ordered;
+  const rawSeed =
+    options?.seed !== undefined
+      ? Math.trunc(options.seed)
+      : Math.floor(random() * n);
+  const start = ((rawSeed % n) + n) % n;
+  const tail = [...agentIds.slice(start + 1), ...agentIds.slice(0, start)];
+  if (tail.length <= 1) {
+    return [agentIds[start], ...tail];
+  }
+  const round = Math.floor(Math.max(0, rawSeed) / n);
+  const tailShift = round % tail.length;
+  return [
+    agentIds[start],
+    ...tail.slice(tailShift),
+    ...tail.slice(0, tailShift),
+  ];
 }

@@ -1277,4 +1277,158 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       },
     });
   });
+
+  test("rotates fallback tails across full rounds, claims fallbacks atomically, normalizes legacy ordered configs, and fails over past misconfigured primaries without pinning them", async ({
+    makeAgent,
+  }) => {
+    const workerA = await createRuntimeSubagent(makeAgent, "Worker A");
+    const workerB = await createRuntimeSubagent(makeAgent, "Worker B");
+    const workerC = await createRuntimeSubagent(makeAgent, "Worker C");
+    const assigned = await AgentModel.findAssignedRuntimeSubagentIds(
+      gateway.id,
+      gateway.environmentId,
+    );
+    expect(assigned).toHaveLength(3);
+    const [a, b, c] = assigned as [string, string, string];
+
+    // 1. Legacy "ordered" config normalizes to distributed round_robin and rotates
+    //    both primaries and fallback tails across full rounds.
+    const legacyConfig = {
+      enabled: true,
+      algorithm: "ordered",
+      retries: 0,
+      fallbackEnabled: true,
+    } as unknown as NonNullable<Agent["subagentLoadBalancing"]>;
+
+    const plannedRounds: string[][] = [];
+    for (let i = 0; i < 6; i++) {
+      const planned = await subagentLoadBalancer.planCandidates({
+        callerAgentId: gateway.id,
+        assignedAgentIds: assigned,
+        config: legacyConfig,
+      });
+      plannedRounds.push(planned.candidateIds);
+    }
+    expect(plannedRounds).toEqual([
+      [a, b, c],
+      [b, c, a],
+      [c, a, b],
+      // Round 2 rotates the fallback tail so the first fallback alternates
+      [a, c, b],
+      [b, a, c],
+      [c, b, a],
+    ]);
+
+    // 2. Concurrent/interleaved fallback claims on the same remaining candidate list
+    //    atomically claim distinct workers instead of colliding on the first fallback.
+    const [claim1, claim2] = await Promise.all([
+      subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: gateway.id,
+        remainingCandidateIds: [a, b],
+        assignedAgentIds: assigned,
+        plannedDispatchCount: -1,
+      }),
+      subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: gateway.id,
+        remainingCandidateIds: [a, b],
+        assignedAgentIds: assigned,
+        plannedDispatchCount: -1,
+      }),
+    ]);
+    expect(new Set([claim1.claimedAgentId, claim2.claimedAgentId])).toEqual(
+      new Set([a, b]),
+    );
+
+    // 3. A primary with misconfigured admin credentials fails over to a healthy
+    //    secondary when fallbackEnabled=true, and does not pin the broken primary
+    //    when fallbackEnabled=false.
+    await AgentModel.update(a, {
+      runtime: runtimeConfig({
+        credentials: [
+          {
+            key: "MISSING_ADMIN_SECRET",
+            label: "Missing Admin Secret",
+            scope: "shared",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await mockDetachedTaskStart();
+
+    // Ensure `a` is at the front of the queue by claiming `b` and `c` first
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: b,
+      assignedAgentIds: assigned,
+    });
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: c,
+      assignedAgentIds: assigned,
+    });
+
+    // With fallbackEnabled=true, start_agent_run walks past misconfigured `a`
+    // to the round-rotated first fallback (`c` on dispatchCount=11, round=3).
+    const failoverResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Should fail over past misconfigured primary a" },
+      context,
+    );
+    expect(failoverResult.isError).toBeFalsy();
+    expect(
+      (failoverResult.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    ).toBe(c);
+
+    // With fallbackEnabled=false, when `a` is at the front of the queue,
+    // the call fails on `a`, but leaves `a` at the back of the queue so
+    // the next call succeeds on a healthy worker rather than pinning `a`.
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: b,
+      assignedAgentIds: assigned,
+    });
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: c,
+      assignedAgentIds: assigned,
+    });
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: false,
+      },
+    });
+
+    const failedOnA = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Hits misconfigured primary a with fallback disabled" },
+      context,
+    );
+    expect(failedOnA.isError).toBe(true);
+
+    const nextCallOnHealthy = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Advances past misconfigured primary a to healthy b" },
+      context,
+    );
+    expect(nextCallOnHealthy.isError).toBeFalsy();
+    expect(
+      (nextCallOnHealthy.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    ).toBe(b);
+    expect([workerA.id, workerB.id, workerC.id]).toContain(b);
+  });
 });

@@ -76,6 +76,10 @@ import { agentRunTranscriptStore } from "./transcript-store";
 export interface SubagentExecutionPolicy {
   /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
   callerAgentId?: string;
+  /** Assigned runtime subagent pool on the caller for distributed queue reconciliation. */
+  assignedAgentIds?: string[];
+  /** Dispatch counter value when this run was planned, used to detect intervening claims. */
+  plannedDispatchCount?: number | null;
   /** Number of automatic retries on the same subagent for retriable failures (0–3). */
   retries?: number;
   /** Ordered fallback runtime subagent IDs to try if the current subagent fails. */
@@ -622,19 +626,22 @@ export async function runTaskInAgentRuntime(params: {
     llmApiKeyId: string | null;
   };
   let remainingFallbackIds = [...fallbackAgentIds];
+  let currentPlannedDispatchCount = policy?.plannedDispatchCount ?? null;
   let prefetchedFallback: CandidateConfig | null = null;
 
   const peekNextFallbackCandidate =
     async (): Promise<CandidateConfig | null> => {
       if (prefetchedFallback) return prefetchedFallback;
-      if (remainingFallbackIds.length === 0) return null;
-      remainingFallbackIds =
-        await subagentLoadBalancer.orderRemainingCandidates({
+      while (remainingFallbackIds.length > 0) {
+        const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
           callerAgentId: policy?.callerAgentId,
           remainingCandidateIds: remainingFallbackIds,
+          assignedAgentIds: policy?.assignedAgentIds,
+          plannedDispatchCount: currentPlannedDispatchCount,
         });
-      while (remainingFallbackIds.length > 0) {
-        const fallbackAgentId = remainingFallbackIds.shift();
+        remainingFallbackIds = claimed.remainingCandidateIds;
+        currentPlannedDispatchCount = claimed.dispatchCount;
+        const fallbackAgentId = claimed.claimedAgentId;
         if (!fallbackAgentId) break;
         const nextAgent = await AgentModel.findById(fallbackAgentId);
         if (!nextAgent || nextAgent.organizationId !== params.organizationId) {
@@ -791,12 +798,6 @@ export async function runTaskInAgentRuntime(params: {
     }
     prefetchedFallback = null;
     currentCandidate = nextCandidate;
-    if (policy?.callerAgentId) {
-      await subagentLoadBalancer.recordCandidateClaimed({
-        callerAgentId: policy.callerAgentId,
-        claimedAgentId: currentCandidate.agentId,
-      });
-    }
     await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
   }
 

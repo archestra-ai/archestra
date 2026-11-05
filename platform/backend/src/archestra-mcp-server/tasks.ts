@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   DEFAULT_APP_NAME,
+  normalizeSubagentLoadBalancingConfig,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -235,7 +236,9 @@ export async function startDelegatedTask(params: {
   const callerAgent = params.context.agent?.id
     ? await AgentModel.findById(params.context.agent.id)
     : null;
-  const lbConfig = callerAgent?.subagentLoadBalancing ?? null;
+  const lbConfig = normalizeSubagentLoadBalancingConfig(
+    callerAgent?.subagentLoadBalancing,
+  );
   const explicitAgentId = params.agentId?.trim();
 
   const assignedIds = callerAgent
@@ -341,7 +344,7 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  const { candidateIds, claimedPrimaryAgentId } =
+  const { candidateIds, claimedPrimaryAgentId, dispatchCount } =
     await subagentLoadBalancer.planCandidates({
       callerAgentId: callerAgent.id,
       assignedAgentIds: assignedIds,
@@ -372,8 +375,7 @@ export async function startDelegatedTask(params: {
     } catch (error) {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
         callerAgentId: callerAgent.id,
-        claimedPrimaryAgentId,
-        config: lbConfig,
+        claimedAgentId: claimedPrimaryAgentId,
       });
       const { result, outcome } = failedLaunch(
         "refused",
@@ -394,8 +396,7 @@ export async function startDelegatedTask(params: {
     if (!resolved.ok) {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
         callerAgentId: callerAgent.id,
-        claimedPrimaryAgentId,
-        config: lbConfig,
+        claimedAgentId: claimedPrimaryAgentId,
       });
       const { result, outcome } = failedLaunch(
         "refused",
@@ -417,18 +418,26 @@ export async function startDelegatedTask(params: {
     result: CallToolResult;
     outcome?: RuntimeLaunchOutcome;
   } | null = null;
-  for (let index = 0; index < activeCandidates.length; index++) {
-    const candidateId = activeCandidates[index];
-    const fallbackAgentIds = activeCandidates.slice(index + 1);
+  let currentCandidateId: string | null = activeCandidates[0] ?? null;
+  let remainingFallbackIds = activeCandidates.slice(1);
+  let currentPlannedDispatchCount = dispatchCount;
+
+  while (currentCandidateId) {
     const attempt = await launchDelegatedTask({
       ...params,
-      agentId: candidateId,
+      agentId: currentCandidateId,
       credentialGrantIds: params.credentialGrantIds,
-      ephemeralCredentials: ephemeralCredentialsByAgentId?.[candidateId],
+      ephemeralCredentials: ephemeralCredentialsByAgentId?.[currentCandidateId],
       subagentExecutionPolicy: {
-        ...(trackDistributedRotation ? { callerAgentId: callerAgent.id } : {}),
+        ...(trackDistributedRotation
+          ? {
+              callerAgentId: callerAgent.id,
+              assignedAgentIds: assignedIds,
+              plannedDispatchCount: currentPlannedDispatchCount,
+            }
+          : {}),
         retries,
-        fallbackAgentIds,
+        fallbackAgentIds: remainingFallbackIds,
         requestedLimits: params.limits,
         ...(ephemeralCredentialsByAgentId
           ? { ephemeralCredentialsByAgentId }
@@ -437,36 +446,40 @@ export async function startDelegatedTask(params: {
     });
     lastAttempt = attempt;
     if (attempt.outcome?.kind === "launched") {
-      if (index > 0 && trackDistributedRotation) {
-        await subagentLoadBalancer.recordCandidateClaimed({
-          callerAgentId: callerAgent.id,
-          claimedAgentId: candidateId,
-          assignedAgentIds: assignedIds,
-        });
-      }
       await recordRuntimeLaunch(params.context, attempt.outcome);
       return attempt.result;
     }
     if (
       attempt.outcome?.kind === "failed" &&
-      (attempt.outcome.reason === "refused" ||
-        attempt.outcome.reason === "agent_not_found" ||
-        attempt.outcome.reason === "credentials_misconfigured")
+      attempt.outcome.reason === "refused"
     ) {
-      await subagentLoadBalancer.releaseUnlaunchedClaim({
-        callerAgentId: callerAgent.id,
-        claimedPrimaryAgentId,
-        config: lbConfig,
-      });
+      if (currentCandidateId === claimedPrimaryAgentId) {
+        await subagentLoadBalancer.releaseUnlaunchedClaim({
+          callerAgentId: callerAgent.id,
+          claimedAgentId: claimedPrimaryAgentId,
+        });
+      }
       await recordRuntimeLaunch(params.context, attempt.outcome);
       return attempt.result;
     }
+    if (remainingFallbackIds.length === 0) {
+      break;
+    }
+    if (trackDistributedRotation) {
+      const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: callerAgent.id,
+        remainingCandidateIds: remainingFallbackIds,
+        assignedAgentIds: assignedIds,
+        plannedDispatchCount: currentPlannedDispatchCount,
+      });
+      currentCandidateId = claimed.claimedAgentId;
+      remainingFallbackIds = claimed.remainingCandidateIds;
+      currentPlannedDispatchCount = claimed.dispatchCount;
+    } else {
+      currentCandidateId = remainingFallbackIds[0] ?? null;
+      remainingFallbackIds = remainingFallbackIds.slice(1);
+    }
   }
-  await subagentLoadBalancer.releaseUnlaunchedClaim({
-    callerAgentId: callerAgent.id,
-    claimedPrimaryAgentId,
-    config: lbConfig,
-  });
   if (lastAttempt?.outcome) {
     await recordRuntimeLaunch(params.context, lastAttempt.outcome);
   }

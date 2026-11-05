@@ -56,8 +56,8 @@ interface ScopeFilterParams<Scope extends string> {
   authorIds: undefined;
   excludeAuthorIds: undefined;
   excludeOtherPersonal: undefined;
-  /** The `ResourceAccessFilter` selection, for the list API's `access`. */
-  access: ResourceAccessRelation[];
+  /** The `ResourceAccessFilter` selection, omitted for built-in-only lists. */
+  access: ResourceAccessRelation[] | undefined;
   /** The "Shared with" selection, for the list API's `sharedWith`. */
   sharedWith: string[] | undefined;
   /** The "Owner" selection, for the list API's `owner`. */
@@ -100,9 +100,9 @@ export function useScopeFilterParams(
     authorIds: undefined,
     excludeAuthorIds: undefined,
     excludeOtherPersonal: undefined,
-    access,
-    sharedWith,
-    owner,
+    access: scope === "built_in" ? undefined : access,
+    sharedWith: scope === "built_in" ? undefined : sharedWith,
+    owner: scope === "built_in" ? undefined : owner,
     hasActiveScopeFilters: !!scope || !isDefaultAccess,
   };
 }

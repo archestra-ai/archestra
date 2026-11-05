@@ -120,7 +120,7 @@ export function agentRunLlmSessionId(run: { workloadName: string }): string {
 export const AGENT_RUNTIME_OAUTH_CLIENT_ID = "archestra-agent-runtime";
 
 /** Prefix for deterministic OAuth access token row IDs of Agent Runtime runs. */
-export const AGENT_RUN_GATEWAY_TOKEN_ID_PREFIX = "agent-run:";
+const AGENT_RUN_GATEWAY_TOKEN_ID_PREFIX = "agent-run:";
 
 /** Deterministic OAuth access token row ID for an Agent Runtime run session. */
 export function agentRunGatewayTokenId(runId: string): string {

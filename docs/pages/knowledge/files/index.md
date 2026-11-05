@@ -29,7 +29,7 @@ Archestra reads the text at upload. A file it cannot read is refused right away,
 
 ## Import from a Pipeline
 
-To keep a file current from a script, call [`PUT /api/knowledge-files/:fileId/content`](/docs/reference/api#/Knowledge%20Files/upsertKnowledgeFile). One call creates or replaces the file and indexes it into a Knowledge Base.
+To keep a file current from a script, call [`PUT /api/knowledge-files/:fileId/content`](/docs/reference/api/knowledge#tag/knowledge-files/PUT/api/knowledge-files/{fileId}/content). One call creates or replaces the file and indexes it into a Knowledge Base.
 
 - Make one UUID for each source document, and send it as `fileId` on every import. A replace keeps the file's permissions and labels.
 - The API key needs [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create), [`knowledgeSource:update`](/docs/reference/permissions#knowledgeSource:update), and access to the Knowledge Base.

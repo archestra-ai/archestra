@@ -781,6 +781,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
+  [RouteId.GetLlmProxyLogs]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSummaries]: { log: ["read"] },
+  [RouteId.GetLlmProxyLog]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogAutoRouting]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogExternalAgentIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},
@@ -1497,6 +1505,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // require member:read before returning anyone else's usage, and app/skill
   // usage narrow to the apps and skills the caller can see.
   [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer; it names no person.
+  [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },
   [RouteId.GetAppUsage]: {

@@ -32,9 +32,9 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.McpServerProxyPost,
-        tags: ["mcp-proxy"],
+        tags: ["MCP App Runtime"],
         description:
-          "Proxy a server-scoped MCP App's runtime requests with session auth",
+          "Handle MCP App JSON-RPC requests for an installed MCP server. The caller must have access to the server.",
         params: z.object({ mcpServerId: UuidIdSchema }),
         body: z.record(z.string(), z.unknown()),
       },

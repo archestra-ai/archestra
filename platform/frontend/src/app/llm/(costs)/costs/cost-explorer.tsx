@@ -2,7 +2,7 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
+import { ArrowRight, Download, Info, X } from "lucide-react";
 import Link from "next/link";
 import {
   type SetStateAction,
@@ -48,7 +48,8 @@ import {
 import {
   ApiLine,
   ChartKindToggle,
-  copyCsv,
+  csvFilename,
+  exportCsv,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -208,7 +209,7 @@ export default function CostExplorer() {
       : q.group === "app" && ["billed", "requests", "tokens"].includes(q.metric)
         ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
         : q.group === "key" && !q.model
-          ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
+          ? "Credential names and recorded IDs are shown in full. Calls without an individual credential ID cannot be distinguished further."
           : q.group === "providerKey" || q.group === "pool"
             ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
             : null;
@@ -622,17 +623,29 @@ export default function CostExplorer() {
               className="ml-auto"
               disabled={cube.rows.length === 0}
               onClick={() =>
-                copyCsv({
+                exportCsv({
                   cube,
                   metric: q.metric,
                   dimLabel: dim.label,
                   view,
                   bySplit: pivotBySplit,
+                  filename: csvFilename({
+                    scope: "costs",
+                    parts: [
+                      view === "summary" && cube.exportTable
+                        ? null
+                        : metric.label,
+                      `by ${dim.label}`,
+                      hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
+                      q.model,
+                    ],
+                    timeframe: String(timeframe),
+                  }),
                 })
               }
             >
-              <ClipboardCopy />
-              Copy as CSV
+              <Download />
+              <span>Export CSV</span>
             </Button>
           </div>
           <div className="border-t">

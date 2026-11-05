@@ -871,6 +871,71 @@ describe("service account API authentication", () => {
     expect(stored?.userId).toBe(`service-account:${serviceAccount.id}`);
   });
 
+  test("scopes agent and credential cost breakdowns to a service account's own usage without member:read", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: organization.id,
+      agentType: "llm_proxy",
+    });
+    const role = await makeCustomRole(organization.id, {
+      permission: { llmCost: ["read"] },
+    });
+    const account = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Cost automation",
+      role: role.role,
+      createdBy: null,
+    });
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: organization.id,
+      name: "Cost token",
+    });
+    // The account's own proxy traffic carries no user, only the account.
+    await makeInteraction(proxy.id, {
+      serviceAccountId: account.id,
+      model: "example",
+      cost: "3",
+    });
+    await makeInteraction(proxy.id, {
+      userId: user.id,
+      model: "example",
+      cost: "5",
+    });
+
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+    const get = async (url: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: { authorization: token },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+
+    const [agents, proxyUsage, byAgent] = await Promise.all([
+      get("/api/statistics/agents?timeframe=24h"),
+      get("/api/statistics/llm-proxy?timeframe=24h"),
+      get(
+        "/api/statistics/model-usage?timeframe=24h&model=example&groupBy=agent",
+      ),
+    ]);
+    expect(agents.map((row: { cost: number }) => row.cost)).toEqual([3]);
+    expect(proxyUsage.totals.billedCost).toBe(3);
+    expect(
+      byAgent.data.map((row: { billedCost: number }) => row.billedCost),
+    ).toEqual([3]);
+  });
+
   test("applies cost and log scopes to service account tokens", async ({
     makeAgent,
     makeCustomRole,

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import McpToolCallModel from "./mcp-tool-call";
+import StatisticsModel from "./statistics";
 import UsageStatisticsModel from "./usage-statistics";
 
 const PAGE = { limit: 100, offset: 0 } as const;
@@ -409,5 +410,206 @@ describe("UsageStatisticsModel.getSkillUsage", () => {
       contextTokens: 160,
       users: 2,
     });
+  });
+});
+
+describe("UsageStatisticsModel.getLlmUsage", () => {
+  test("breaks team and virtual key spend down by provider and model", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeVirtualApiKey,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const owner = await makeUser();
+    const platform = await makeTeam(org.id, owner.id, { name: "Platform" });
+    const research = await makeTeam(org.id, owner.id, { name: "Research" });
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const platformAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: { teams: [platform.id] },
+    });
+    const foreignProxy = await makeAgent({
+      organizationId: otherOrg.id,
+      agentType: "llm_proxy",
+    });
+    const key = await makeVirtualApiKey(org.id, { name: "research-ci" });
+
+    // The research key bills its team; traffic without a billing team is
+    // attributed to the teams the agent is shared with.
+    const viaKey = {
+      authMethod: "virtual_key" as const,
+      virtualKeyId: key.id,
+      billingTeamId: research.id,
+    };
+    await makeInteraction(proxy.id, {
+      ...viaKey,
+      type: "anthropic:messages",
+      model: "claude-sonnet",
+      cost: "2",
+      inputTokens: 100,
+      outputTokens: 10,
+      createdAt: DAY_1,
+    });
+    await makeInteraction(proxy.id, {
+      ...viaKey,
+      type: "anthropic:messages",
+      model: "claude-sonnet",
+      cost: "1",
+      inputTokens: 50,
+      outputTokens: 5,
+      createdAt: DAY_2,
+    });
+    await makeInteraction(proxy.id, {
+      ...viaKey,
+      type: "openai:chatCompletions",
+      model: "gpt-5",
+      cost: "4",
+      billingMode: "subscription",
+      inputTokens: 40,
+      outputTokens: 4,
+      createdAt: DAY_1,
+    });
+    await makeInteraction(platformAgent.id, {
+      authMethod: "internal",
+      type: "gemini:generateContent",
+      model: "gemini-pro",
+      cost: "0.5",
+      inputTokens: 20,
+      outputTokens: 2,
+      createdAt: DAY_2,
+    });
+    await makeInteraction(foreignProxy.id, {
+      type: "anthropic:messages",
+      model: "claude-sonnet",
+      cost: "100",
+      createdAt: DAY_1,
+    });
+
+    const byTeam = await UsageStatisticsModel.getLlmUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: PAGE,
+      groupBy: ["teamId", "provider", "model"],
+    });
+    expect(
+      byTeam.data.map((row) => [
+        row.teamName,
+        row.provider,
+        row.model,
+        row.requests,
+        row.billedCost,
+        row.subscriptionCost,
+      ]),
+    ).toEqual([
+      ["Research", "anthropic", "claude-sonnet", 2, 3, 0],
+      ["Platform", "gemini", "gemini-pro", 1, 0.5, 0],
+      ["Research", "openai", "gpt-5", 1, 0, 4],
+    ]);
+    expect(byTeam.totals).toMatchObject({
+      requests: 4,
+      billedCost: 3.5,
+      subscriptionCost: 4,
+      inputTokens: 210,
+      outputTokens: 21,
+    });
+
+    const byKey = await UsageStatisticsModel.getLlmUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: PAGE,
+      groupBy: ["day", "credentialId", "provider"],
+      provider: "anthropic",
+    });
+    expect(byKey.data).toEqual([
+      expect.objectContaining({
+        day: "2026-10-01",
+        authMethod: "virtual_key",
+        credentialId: key.id,
+        credentialName: "research-ci",
+        provider: "anthropic",
+        requests: 1,
+        billedCost: 2,
+        totalTokens: 110,
+      }),
+      expect.objectContaining({
+        day: "2026-10-02",
+        credentialId: key.id,
+        requests: 1,
+        billedCost: 1,
+      }),
+    ]);
+
+    const oneTeam = await UsageStatisticsModel.getLlmUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: PAGE,
+      groupBy: ["model"],
+      teamId: platform.id,
+    });
+    expect(oneTeam.data.map((row) => [row.model, row.billedCost])).toEqual([
+      ["gemini-pro", 0.5],
+    ]);
+  });
+
+  test("team rows add up to the Teams view", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const alpha = await makeTeam(org.id, owner.id, { name: "Alpha" });
+    const beta = await makeTeam(org.id, owner.id, { name: "Beta" });
+    const shared = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: { teams: [alpha.id, beta.id] },
+    });
+    await makeInteraction(shared.id, {
+      type: "anthropic:messages",
+      model: "claude-haiku",
+      cost: "1.25",
+      inputTokens: 10,
+      createdAt: DAY_1,
+    });
+    await makeInteraction(shared.id, {
+      type: "openai:responses",
+      model: "gpt-5-mini",
+      cost: "0.75",
+      inputTokens: 10,
+      createdAt: DAY_2,
+    });
+
+    const [split, teams] = await Promise.all([
+      UsageStatisticsModel.getLlmUsage({
+        timeframe: RANGE,
+        organizationId: org.id,
+        pagination: PAGE,
+        groupBy: ["teamId", "model"],
+      }),
+      StatisticsModel.getTeamStatistics({
+        timeframe: RANGE,
+        organizationId: org.id,
+      }),
+    ]);
+    const splitByTeam = new Map<string, number>();
+    for (const row of split.data)
+      splitByTeam.set(
+        row.teamId ?? "",
+        (splitByTeam.get(row.teamId ?? "") ?? 0) + row.billedCost,
+      );
+    expect(Object.fromEntries(splitByTeam)).toEqual(
+      Object.fromEntries(teams.map((team) => [team.teamId, team.cost])),
+    );
   });
 });

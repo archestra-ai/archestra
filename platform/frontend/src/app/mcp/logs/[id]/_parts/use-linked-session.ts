@@ -23,4 +23,4 @@ export function useLinkedSession(call: { sessionId: string | null }) {
 }
 
 type LogSession =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+  archestraApiTypes.GetLlmProxyLogSessionsResponses["200"]["data"][number];

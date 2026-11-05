@@ -19,13 +19,13 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
-  getInteraction,
-  getInteractionSummaries,
-  getInteractions,
-  getInteractionSessionLineage,
-  getInteractionSessions,
-  getUniqueExternalAgentIds,
-  getUniqueUserIds,
+  getLlmProxyLog,
+  getLlmProxyLogSummaries,
+  getLlmProxyLogs,
+  getLlmProxyLogSessionLineage,
+  getLlmProxyLogSessions,
+  getLlmProxyLogExternalAgentIds,
+  getLlmProxyLogUserIds,
 } = archestraApiSdk;
 
 /**
@@ -66,12 +66,12 @@ export function useInteractions({
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
+    archestraApiTypes.GetLlmProxyLogsData["query"]
   >["sortBy"];
   sortDirection?: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
+    archestraApiTypes.GetLlmProxyLogsData["query"]
   >["sortDirection"];
-  initialData?: archestraApiTypes.GetInteractionsResponses["200"];
+  initialData?: archestraApiTypes.GetLlmProxyLogsResponses["200"];
   enabled?: boolean;
   refetchInterval?: number | false;
 } = {}) {
@@ -90,7 +90,7 @@ export function useInteractions({
       sortDirection,
     ],
     queryFn: async () => {
-      const response = await getInteractions({
+      const response = await getLlmProxyLogs({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
@@ -166,7 +166,7 @@ export function useSessionToolCallAskers({
     queryKey: ["interaction-tool-call-askers", sessionId, endDate, wanted],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      const response = await getInteractionSummaries({
+      const response = await getLlmProxyLogSummaries({
         query: {
           sessionId,
           endDate: endDate ?? undefined,
@@ -252,10 +252,10 @@ export function useInteractionSummaries({
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
-    archestraApiTypes.GetInteractionSummariesData["query"]
+    archestraApiTypes.GetLlmProxyLogSummariesData["query"]
   >["sortBy"];
   sortDirection?: NonNullable<
-    archestraApiTypes.GetInteractionSummariesData["query"]
+    archestraApiTypes.GetLlmProxyLogSummariesData["query"]
   >["sortDirection"];
   enabled?: boolean;
 } = {}) {
@@ -275,7 +275,7 @@ export function useInteractionSummaries({
       sortDirection,
     ],
     queryFn: async () => {
-      const response = await getInteractionSummaries({
+      const response = await getLlmProxyLogSummaries({
         query: {
           profileId,
           externalAgentId,
@@ -321,8 +321,8 @@ export function useInteraction({
   return useQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
-      const response = await getInteraction({
-        path: { interactionId: interactionId as string },
+      const response = await getLlmProxyLog({
+        path: { logId: interactionId as string },
       });
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
@@ -336,7 +336,7 @@ export function useUniqueExternalAgentIds() {
   return useQuery({
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
-      const response = await getUniqueExternalAgentIds();
+      const response = await getLlmProxyLogExternalAgentIds();
       throwOnApiError(response.error);
       return response.data ?? [];
     },
@@ -357,7 +357,7 @@ export function useInteractionUserOptions({
   return useQuery({
     queryKey: ["interactions", "userIds", "options", search],
     queryFn: async ({ signal }) => {
-      const response = await getUniqueUserIds({
+      const response = await getLlmProxyLogUserIds({
         signal,
         query: { search: search || undefined, limit: LOG_USER_OPTIONS_LIMIT },
       });
@@ -377,7 +377,7 @@ export function useInteractionUserReferences({ ids }: { ids: string[] }) {
   return useQuery({
     queryKey: ["interactions", "userIds", "references", uniqueIds],
     queryFn: async ({ signal }) => {
-      const response = await getUniqueUserIds({
+      const response = await getLlmProxyLogUserIds({
         signal,
         query: { ids: uniqueIds, limit: 100 },
       });
@@ -402,7 +402,7 @@ export function useSessionLineage({
   return useQuery({
     queryKey: ["interactions", "sessions", sessionId, "lineage"],
     queryFn: async () => {
-      const response = await getInteractionSessionLineage({
+      const response = await getLlmProxyLogSessionLineage({
         path: { sessionId },
       });
       const none = { forkedFrom: null, forks: [], forksTruncated: false };
@@ -439,7 +439,7 @@ export function useInteractionSessions({
   endDate?: string;
   limit?: number;
   cursor?: string;
-  initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+  initialData?: archestraApiTypes.GetLlmProxyLogSessionsResponses["200"];
   toastOnError?: boolean;
   enabled?: boolean;
 } = {}) {
@@ -461,7 +461,7 @@ export function useInteractionSessions({
     // answer lands, so the table never blanks and loses its scroll.
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const response = await getInteractionSessions({
+      const response = await getLlmProxyLogSessions({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
@@ -511,11 +511,11 @@ export function useInteractionSessions({
 export function useExportSessionInteractions() {
   return useMutation({
     mutationFn: async ({ sessionId }: { sessionId: string }) => {
-      const interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"] =
+      const interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"] =
         [];
       let offset = 0;
       for (;;) {
-        const response = await getInteractions({
+        const response = await getLlmProxyLogs({
           query: {
             sessionId,
             limit: EXPORT_PAGE_SIZE,
@@ -552,7 +552,7 @@ const EXPORT_PAGE_SIZE = 100;
 
 function downloadSessionInteractionsFile(
   sessionId: string,
-  interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"],
+  interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"],
 ) {
   const payload = {
     sessionId,

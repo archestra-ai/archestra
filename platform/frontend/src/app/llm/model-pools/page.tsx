@@ -6,7 +6,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { Layers, Pencil, Plug, Plus, Server, Trash2 } from "lucide-react";
+import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -49,12 +49,8 @@ import {
   useDeleteModelPool,
   useModelPools,
 } from "@/lib/model-pools.query";
-import {
-  type ConnectablePool,
-  ConnectPoolDialog,
-} from "./_parts/connect-pool-dialog";
 import { PoolHealth } from "./_parts/member-status";
-import { PoolDialog } from "./_parts/pool-dialog";
+import { PoolDialog, type PoolDialogSection } from "./_parts/pool-dialog";
 import { memberSummary } from "./_parts/pool-form";
 import { PoolProviderIcons, PoolProviders } from "./_parts/pool-providers";
 
@@ -95,11 +91,9 @@ function ModelPools() {
   const statusFilter = searchParams.get("status") ?? "all";
 
   const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  // The pool itself, so a pool just created shows before the list refetches.
-  const [connecting, setConnecting] = useState<{
-    pool: ConnectablePool;
-    ready: boolean;
+  const [editing, setEditing] = useState<{
+    pool: ModelPool;
+    section: PoolDialogSection;
   } | null>(null);
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
@@ -145,7 +139,11 @@ function ModelPools() {
   const providers = [
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
   ].sort();
-  const editing = pools.find((pool) => pool.id === editingId) ?? null;
+  const editingPool = editing
+    ? (pools.find((pool) => pool.id === editing.pool.id) ?? editing.pool)
+    : null;
+  const openPool = (pool: ModelPool, section: PoolDialogSection = "pool") =>
+    setEditing({ pool, section });
   const rangeSelection = useBulkRangeSelectionController();
   const cardSelection = useBulkCardSelection({
     rows: visible,
@@ -162,15 +160,10 @@ function ModelPools() {
       itemName={pool.name}
       actions={[
         {
-          icon: <Plug className="h-4 w-4" />,
-          label: "Connect",
-          onClick: () => setConnecting({ pool, ready: false }),
-        },
-        {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit",
           permissions: { llmModel: ["update"] },
-          onClick: () => setEditingId(pool.id),
+          onClick: () => openPool(pool),
         },
       ]}
       dropdownActions={[
@@ -352,7 +345,7 @@ function ModelPools() {
                     icon={<PoolProviderIcons pool={pool} />}
                     title={<span className="font-mono">{pool.name}</span>}
                     description={<PoolProviders pool={pool} />}
-                    onNavigate={() => setEditingId(pool.id)}
+                    onNavigate={() => openPool(pool)}
                     actions={rowActions(pool)}
                     footer={<PoolHealth pool={pool} />}
                     {...cardSelection(pool)}
@@ -382,7 +375,7 @@ function ModelPools() {
                 onRowSelectionChange={setRowSelection}
                 rangeSelection={rangeSelection}
                 hideSelectedCount
-                onRowClick={(row) => setEditingId(row.id)}
+                onRowClick={(row) => openPool(row)}
                 isLoading={query.isLoading}
                 hasActiveFilters={hasActiveFilters}
                 onClearFilters={clearFilters}
@@ -408,28 +401,20 @@ function ModelPools() {
           onOpenChange={(open) => {
             if (!open) setCreating(false);
           }}
-          onCreated={(pool) => {
+          // Like a new virtual key, a new pool opens on how to call it.
+          onCreated={(created) => {
             setCreating(false);
-            setConnecting({ pool, ready: true });
+            openPool(created, "connect");
           }}
         />
       ) : null}
-      {editing ? (
+      {editing && editingPool ? (
         <PoolDialog
-          key={editing.id}
-          pool={editing}
+          key={editingPool.id}
+          pool={editingPool}
+          initialSection={editing.section}
           onOpenChange={(open) => {
-            if (!open) setEditingId(null);
-          }}
-        />
-      ) : null}
-      {connecting ? (
-        <ConnectPoolDialog
-          key={connecting.pool.id}
-          pool={connecting.pool}
-          ready={connecting.ready}
-          onOpenChange={(open) => {
-            if (!open) setConnecting(null);
+            if (!open) setEditing(null);
           }}
         />
       ) : null}

@@ -101722,6 +101722,7 @@ export type GetLlmOauthClientsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            modelPoolIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -101907,6 +101908,7 @@ export type CreateLlmOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -102152,6 +102154,7 @@ export type UpdateLlmOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -102279,6 +102282,7 @@ export type RotateLlmOauthClientSecretResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -113317,6 +113321,7 @@ export type GetOauthClientsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            modelPoolIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -113333,7 +113338,6 @@ export type GetOauthClientsResponses = {
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
-            modelPoolIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -113516,6 +113520,7 @@ export type CreateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -113532,7 +113537,6 @@ export type CreateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -113775,6 +113779,7 @@ export type UpdateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -113791,7 +113796,6 @@ export type UpdateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
     };
 };
 
@@ -113906,6 +113910,7 @@ export type RotateOauthClientSecretResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -113922,7 +113927,6 @@ export type RotateOauthClientSecretResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };

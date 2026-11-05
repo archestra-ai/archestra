@@ -74,12 +74,11 @@ Set these under **Timeouts and cooldown** when you create or edit a pool. They a
 
 ## Who Can Use a Pool
 
-On the LLM Proxy, a pool is open to any credential that can already reach one of its members. People who connected through [Connect](/docs/get-started/connect) use the pool without changing anything, when their key is one of its members.
+A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) uses a pool only after you add the pool under **Model pools** when you create or edit the key. The same goes for an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) that [calls as the app](/docs/llm-proxy/authentication#call-as-the-app). Which provider keys the key or client maps doesn't matter: the pool answers with its members' keys. Remove the pool, and the key or client can no longer use it.
 
-- A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) that maps a member's provider key.
-- An [OAuth client](/docs/llm-proxy/authentication#oauth-clients) whose provider keys include a member's key.
+Credentials that have no pools of their own, such as people who signed in through [Connect](/docs/get-started/connect) or an identity provider's token, use a pool when they can already reach one of its members.
 
-To let a virtual key or an OAuth client use a pool without mapping any of its members, add the pool under **Model pools** when you create or edit it. Only OAuth clients that [call as the app](/docs/llm-proxy/authentication#call-as-the-app) take pools. Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 A caller who can't use a pool is not refused. Their request for that name goes to their own key, as it would without a pool.
 

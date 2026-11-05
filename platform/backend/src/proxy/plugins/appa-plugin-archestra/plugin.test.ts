@@ -6507,7 +6507,7 @@ describe("rendering runtime text for this client", () => {
       makeOrganization,
     }) => {
       const organizationId = (await makeOrganization()).id;
-      const { run, restore } = await harness(organizationId, {
+      const { run, cancelCalls, restore } = await harness(organizationId, {
         breakTheGlassEnabled: false,
       });
       try {
@@ -6541,6 +6541,11 @@ describe("rendering runtime text for this client", () => {
         } finally {
           await db.execute(sql`DROP FUNCTION refuse_unattended_note() CASCADE`);
         }
+        expect(cancelCalls).toHaveBeenLastCalledWith(
+          expect.anything(),
+          ["read-2"],
+          expect.anything(),
+        );
         // The call it would have let through was never recorded as released.
         expect(
           (

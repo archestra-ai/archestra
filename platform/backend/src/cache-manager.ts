@@ -203,6 +203,10 @@ export const CacheKey = {
    * and redeemed by start_agent_run on whichever replica handles the request.
    */
   EphemeralCredentialGrant: "ephemeral-credential-grant-v1",
+  /**
+   * Distributed per-caller subagent load-balancer rotation state shared across backend pods.
+   */
+  SubagentLoadBalancer: "subagent-load-balancer-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

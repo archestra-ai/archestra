@@ -16,18 +16,12 @@ const {
   handleApiErrorMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      createConnectionPassthroughKey: createConnectionPassthroughKeyMock,
-      createConnectionSetup: createConnectionSetupMock,
-      createConnectionVirtualKey: createConnectionVirtualKeyMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  createConnectionPassthroughKey: createConnectionPassthroughKeyMock,
+  createConnectionSetup: createConnectionSetupMock,
+  createConnectionVirtualKey: createConnectionVirtualKeyMock,
+}));
 
 vi.mock("@/lib/utils/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/utils/api")>();

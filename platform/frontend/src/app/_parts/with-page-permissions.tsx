@@ -37,7 +37,11 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // almost everyone may use it, so it renders while the check runs and gives
   // way to the Forbidden page only if the answer is "no chat:read".
   if (
-    (isPending || (pathname === "/llm/limits" && limitsAccess.isPending)) &&
+    (isPending ||
+      (pathname === "/llm/limits" && limitsAccess.isPending) ||
+      (pathname === "/llm/costs" &&
+        !hasRequiredPermissions &&
+        limitsAccess.isTeamAdminPending)) &&
     requiredPermissions
   ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
@@ -65,7 +69,9 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   if (
     requiredPermissions &&
     !hasRequiredPermissions &&
-    !(pathname === "/llm/limits" && limitsAccess.canRead)
+    !(pathname === "/llm/limits" && limitsAccess.canRead) &&
+    // A team admin sees the Costs page scoped to their teams.
+    !(pathname === "/llm/costs" && limitsAccess.isTeamAdmin)
   ) {
     return <ForbiddenPage />;
   }

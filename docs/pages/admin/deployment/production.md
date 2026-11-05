@@ -2,7 +2,7 @@
 title: Production
 description: Prepare database recovery, public access, and cluster capacity before serving traffic
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-04
 ---
 
 Before sending production traffic through Archestra, make sure you can restore its database and keys, reach its public endpoints, and run its workloads safely.
@@ -25,39 +25,14 @@ Configure [Networking](/docs/admin/deployment/networking#public-urls-and-ingress
 
 ## Cluster Capacity
 
-For a team of about 100 users, use the [web HPA](/docs/admin/deployment/helm#scale-web-and-worker-pods) with the following minimum allocation for LLM Proxy and MCP Gateway traffic and light background processing. Validate it against simultaneous requests, payloads, and background work in staging before serving production traffic.
+Size the web pods, workers, and database for your organization with [Sizing and High Availability](/docs/admin/deployment/scaling), which also sets them up to survive a lost node or zone. Validate the size against realistic requests, payloads, and background work in staging before serving production traffic.
 
-| Component | Starting Replicas | CPU per Replica | Memory per Replica |
-| --- | ---: | ---: | --- |
-| Web | 2 minimum, with HPA | 2 vCPU request | 2 GiB request, 3 GiB limit |
-| Worker | 1, set manually | 2 vCPU request | 1 GiB request, 2 GiB limit |
-| External PostgreSQL | Managed separately | 2 vCPU | 8 GiB |
-
-At the minimum replica counts, application pods request **6 vCPU and 5 GiB** in total, excluding PostgreSQL, cluster services, and MCP or agent workloads. At five web replicas, steady-state requests reach 12 vCPU and 11 GiB; leave additional capacity for rollout overlap and node failures. The pod resource sizes above match chart defaults; configure the web HPA, worker replica count, and database budget explicitly:
-
-```yaml
-archestra:
-  horizontalPodAutoscaler:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 5
-  worker:
-    replicaCount: 1
-  database:
-    connectionBudget: 200
-```
-
-For this budget, configure PostgreSQL with at least 250 available connections, reserving 50 for migrations, monitoring, and other clients. [Connection Capacity](/docs/admin/deployment/database#connection-capacity) explains how rollout overlap and autoscaling change the budget.
-
-The [benchmarks](/docs/admin/performance-benchmarks#llm-proxy-results) measured 50 concurrent requests with mock providers on a different allocation: 4 CPUs and 8 GiB for each proxy. They are a throughput reference, not a measured capacity guarantee for this starting configuration.
-
-- Adjust HPA bounds as web traffic grows; increase workers when background jobs fall behind.
 - Reserve separate capacity for the [code sandbox](/docs/admin/deployment/networking#code-sandbox-requirements).
 - Verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
 
 ### MCP Servers
 
-Budget extra capacity for self-hosted MCP server pods, beyond the web and worker allocation above.
+Budget extra capacity for self-hosted MCP server pods, beyond the web and worker pods.
 
 - **Resources:** set resource defaults under `archestra.orchestrator.mcpServerResources`. For per-server changes, see [Self-Hosted Servers](/docs/mcp/servers/self-hosted#change-how-it-runs).
 - **Placement:** MCP server pods inherit the platform pod's node selector and tolerations; `archestra.nodeSelector` and `archestra.tolerations` set shared placement defaults. There is no separate MCP-only node-pool setting in Helm, and inherited selectors still apply to custom server YAML.
@@ -65,7 +40,7 @@ Budget extra capacity for self-hosted MCP server pods, beyond the web and worker
 
 ### Agent Runtime
 
-Size runtime capacity separately from the web and worker allocation above. Follow [Runtime Setup](/docs/agents/runtime/setup) for the Agent Sandbox controller, storage, and node placement.
+Size runtime capacity separately from the web and worker pods. Follow [Runtime Setup](/docs/agents/runtime/setup) for the Agent Sandbox controller, storage, and node placement.
 
 Use [node autoscaling](https://kubernetes.io/docs/concepts/cluster-administration/node-autoscaling/) on the runtime node pool so the cluster can add capacity as runs create pods. Account for each run's configured CPU, memory, and persistent volume, plus [warm-pool spares](/docs/agents/runtime/setup#warm-pools). The web HPA does not scale runtime pods or cluster nodes.
 

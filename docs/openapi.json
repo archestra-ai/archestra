@@ -63131,8 +63131,7 @@
                                         "enum": [
                                           "round_robin",
                                           "weighted",
-                                          "random",
-                                          "ordered"
+                                          "random"
                                         ]
                                       },
                                       "weights": {
@@ -63152,13 +63151,6 @@
                                       "fallbackEnabled": {
                                         "default": true,
                                         "type": "boolean"
-                                      },
-                                      "maxFallbacks": {
-                                        "default": null,
-                                        "nullable": true,
-                                        "type": "integer",
-                                        "minimum": 0,
-                                        "maximum": 100
                                       }
                                     },
                                     "required": [
@@ -64964,8 +64956,7 @@
                                 "enum": [
                                   "round_robin",
                                   "weighted",
-                                  "random",
-                                  "ordered"
+                                  "random"
                                 ]
                               },
                               "weights": {
@@ -64985,13 +64976,6 @@
                               "fallbackEnabled": {
                                 "default": true,
                                 "type": "boolean"
-                              },
-                              "maxFallbacks": {
-                                "default": null,
-                                "nullable": true,
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 100
                               }
                             },
                             "required": [
@@ -66092,8 +66076,7 @@
                         "enum": [
                           "round_robin",
                           "weighted",
-                          "random",
-                          "ordered"
+                          "random"
                         ]
                       },
                       "weights": {
@@ -66113,12 +66096,6 @@
                       "fallbackEnabled": {
                         "default": true,
                         "type": "boolean"
-                      },
-                      "maxFallbacks": {
-                        "nullable": true,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
                       }
                     }
                   },
@@ -67041,8 +67018,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -67062,13 +67038,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -72400,8 +72369,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -72421,13 +72389,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -73922,8 +73883,7 @@
                               "enum": [
                                 "round_robin",
                                 "weighted",
-                                "random",
-                                "ordered"
+                                "random"
                               ]
                             },
                             "weights": {
@@ -73943,13 +73903,6 @@
                             "fallbackEnabled": {
                               "default": true,
                               "type": "boolean"
-                            },
-                            "maxFallbacks": {
-                              "default": null,
-                              "nullable": true,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 100
                             }
                           },
                           "required": [
@@ -75117,8 +75070,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -75138,13 +75090,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -76223,8 +76168,7 @@
                         "enum": [
                           "round_robin",
                           "weighted",
-                          "random",
-                          "ordered"
+                          "random"
                         ]
                       },
                       "weights": {
@@ -76244,12 +76188,6 @@
                       "fallbackEnabled": {
                         "default": true,
                         "type": "boolean"
-                      },
-                      "maxFallbacks": {
-                        "nullable": true,
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
                       }
                     }
                   },
@@ -76861,8 +76799,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -76882,13 +76819,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -78721,8 +78651,7 @@
                               "enum": [
                                 "round_robin",
                                 "weighted",
-                                "random",
-                                "ordered"
+                                "random"
                               ]
                             },
                             "weights": {
@@ -78742,13 +78671,6 @@
                             "fallbackEnabled": {
                               "default": true,
                               "type": "boolean"
-                            },
-                            "maxFallbacks": {
-                              "default": null,
-                              "nullable": true,
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 100
                             }
                           },
                           "required": [
@@ -79746,8 +79668,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -79767,13 +79688,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -81058,8 +80972,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -81079,13 +80992,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -89181,8 +89087,7 @@
                           "enum": [
                             "round_robin",
                             "weighted",
-                            "random",
-                            "ordered"
+                            "random"
                           ]
                         },
                         "weights": {
@@ -89202,13 +89107,6 @@
                         "fallbackEnabled": {
                           "default": true,
                           "type": "boolean"
-                        },
-                        "maxFallbacks": {
-                          "default": null,
-                          "nullable": true,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 100
                         }
                       },
                       "required": [
@@ -161348,8 +161246,7 @@
                                   "enum": [
                                     "round_robin",
                                     "weighted",
-                                    "random",
-                                    "ordered"
+                                    "random"
                                   ]
                                 },
                                 "weights": {
@@ -161369,13 +161266,6 @@
                                 "fallbackEnabled": {
                                   "default": true,
                                   "type": "boolean"
-                                },
-                                "maxFallbacks": {
-                                  "default": null,
-                                  "nullable": true,
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 100
                                 }
                               },
                               "required": [
@@ -164667,8 +164557,7 @@
                                       "enum": [
                                         "round_robin",
                                         "weighted",
-                                        "random",
-                                        "ordered"
+                                        "random"
                                       ]
                                     },
                                     "weights": {
@@ -164688,13 +164577,6 @@
                                     "fallbackEnabled": {
                                       "default": true,
                                       "type": "boolean"
-                                    },
-                                    "maxFallbacks": {
-                                      "default": null,
-                                      "nullable": true,
-                                      "type": "integer",
-                                      "minimum": 0,
-                                      "maximum": 100
                                     }
                                   },
                                   "required": [
@@ -552562,7 +552444,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate team usage for the active organization.",
+        "description": "Get usage statistics for every team in the active organization. A caller without [`llmCost:read`](/docs/reference/permissions#llmCost:read) who administers a team gets only the teams they administer and their sub-teams; each request then counts for the teams whose spend limits it charges. Filtering by `teamId` does the same for one team.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`llmCost:read`](/docs/reference/permissions#llmCost:read) for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
         "parameters": [
           {
             "schema": {
@@ -552593,6 +552475,16 @@
             "in": "query",
             "name": "timeframe",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it."
           }
         ],
         "responses": {
@@ -552936,11 +552828,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "note": "Returns aggregate team usage for the active organization.",
-          "permissions": [
-            "llmCost:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+          "permissions": []
         }
       }
     },
@@ -556540,7 +556430,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned. A caller without [`llmCost:read`](/docs/reference/permissions#llmCost:read) who administers a team gets only the requests charged to the teams they administer and their sub-teams, with active users counted within them. Filtering by `teamId` does the same for one team.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires [`llmCost:read`](/docs/reference/permissions#llmCost:read) for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
         "parameters": [
           {
             "schema": {
@@ -556571,6 +556461,16 @@
             "in": "query",
             "name": "timeframe",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "description": "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it."
           }
         ],
         "responses": {
@@ -556980,10 +556880,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmCost:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+          "permissions": []
         }
       }
     },
@@ -557859,7 +557758,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped or filtered by credential, callers without [`member:read`](/docs/reference/permissions#member:read) see only their own usage, since a virtual key can be one person's own.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {

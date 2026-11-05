@@ -5,7 +5,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { isEqual } from "lodash-es";
+import isEqual from "lodash-es/isEqual";
 import {
   getCompactToolState,
   getHumanRulingDisplay,

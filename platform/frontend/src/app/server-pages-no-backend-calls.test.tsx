@@ -18,20 +18,19 @@ const { sdkCalls, getServerApiHeaders, requestHeaders } = vi.hoisted(() => ({
   requestHeaders: { current: new Headers() },
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: new Proxy(
-      {},
-      {
-        get: (_target, operation) => () => {
-          sdkCalls.push(String(operation));
-          return Promise.resolve({ data: undefined });
-        },
-      },
-    ),
-  };
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@archestra/shared/api-sdk")>();
+  // Every operation the module defines resolves empty and is recorded.
+  return new Proxy(actual, {
+    get: (target, operation) =>
+      typeof target[operation as keyof typeof target] === "function"
+        ? () => {
+            sdkCalls.push(String(operation));
+            return Promise.resolve({ data: undefined });
+          }
+        : target[operation as keyof typeof target],
+  });
 });
 vi.mock("@/lib/utils/server", () => ({ getServerApiHeaders }));
 // The registry renders its first rows on the server only for a document load

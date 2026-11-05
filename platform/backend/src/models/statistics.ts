@@ -18,6 +18,7 @@ import {
   lte,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -937,16 +938,22 @@ class StatisticsModel {
   }
 
   /**
-   * Get team statistics
+   * Get team statistics.
+   *
+   * With `teamIds`, report only those teams and count each request for the
+   * teams its spend limits charge (see {@link teamChargeScope}), so a team
+   * admin's figures match their team limits. Without it, every team is
+   * reported and a request counts for each team its agent is shared with.
    */
   static async getTeamStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
+    teamIds?: string[];
   }): Promise<TeamStatistics[]> {
-    const { timeframe, organizationId } = params;
+    const { timeframe, organizationId, teamIds } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const i = schema.interactionsTable;
-    const bucket = sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${i.createdAt})`;
+    const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${i.createdAt})`;
 
     // Collapse the window to one row per agent, billing team and bucket before
     // fanning out to teams: the team grants then multiply a few hundred rows
@@ -997,7 +1004,46 @@ class StatisticsModel {
         .where(isNull(usage.billingTeamId)),
     });
 
-    const rawTimeSeriesData = await db
+    // Use stored cost from interactions instead of recalculating with average prices
+    const fields = {
+      teamId: schema.teamsTable.id,
+      teamName: schema.teamsTable.name,
+      timeBucket: bucket,
+      requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+      inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+      outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+      cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+      cacheWriteTokens: tokenSum(schema.interactionsTable.cacheWriteTokens),
+      totalTokens: reportedTokens(),
+      // Billed spend: subscription-fulfilled traffic incurs no per-token
+      // charge, so its list-price `cost` is excluded from the reported total.
+      cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+    };
+
+    const charge = teamIds
+      ? await StatisticsModel.teamChargeScope({ organizationId, teamIds })
+      : null;
+    const rawTimeSeriesData = charge
+      ? await db
+          .select(fields)
+          .from(schema.interactionsTable)
+          .innerJoin(
+            schema.teamsTable,
+            and(
+              eq(schema.teamsTable.organizationId, organizationId),
+              inArray(schema.teamsTable.id, charge.teamIds),
+              charge.chargesTeam(schema.teamsTable.id),
+            ),
+          )
+          .where(
+            and(
+              ...StatisticsModel.timeframeConditions(timeframe),
+              interactionBelongsToOrganization(organizationId),
+            ),
+          )
+          .groupBy(schema.teamsTable.id, schema.teamsTable.name, bucket)
+          .orderBy(bucket)
+      : await db
       .with(usage)
       .select({
         teamId: schema.teamsTable.id,
@@ -1054,12 +1100,12 @@ class StatisticsModel {
 
     // Member and agent counts only for the teams that had usage, side by
     // side; a range with no team usage needs neither.
-    const teamIds = [...new Set(rawTimeSeriesData.map((row) => row.teamId))];
+    const resultTeamIds = [...new Set(rawTimeSeriesData.map((row) => row.teamId))];
     const countedAssignments = AgentTeamModel.readAssignments(organizationId, {
-      teamIds,
+      teamIds: resultTeamIds,
     });
     const [teamMemberCounts, teamAgentCounts] =
-      teamIds.length === 0
+      resultTeamIds.length === 0
         ? [[], []]
         : await Promise.all([
             db
@@ -1068,7 +1114,7 @@ class StatisticsModel {
                 memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.teamMembersTable.userId}) AS INTEGER)`,
               })
               .from(schema.teamMembersTable)
-              .where(inArray(schema.teamMembersTable.teamId, teamIds))
+              .where(inArray(schema.teamMembersTable.teamId, resultTeamIds))
               .groupBy(schema.teamMembersTable.teamId),
             db
               .select({
@@ -1076,7 +1122,7 @@ class StatisticsModel {
                 agentCount: sql<number>`CAST(COUNT(DISTINCT ${countedAssignments.agentId}) AS INTEGER)`,
               })
               .from(countedAssignments)
-              .where(inArray(countedAssignments.teamId, teamIds))
+              .where(inArray(countedAssignments.teamId, resultTeamIds))
               .groupBy(countedAssignments.teamId),
           ]);
 
@@ -2271,20 +2317,35 @@ class StatisticsModel {
   }
 
   /** Initial Costs view: one shared model/cost aggregation and a count, no roster. */
+  /**
+   * Costs overview and model chart. With `teamIds`, only requests those
+   * teams' spend limits charge are counted (see {@link teamChargeScope}),
+   * each once even when it charges several of the teams.
+   */
   static async getCostStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
     requestingUserId: string;
     canReadAllUsers: boolean;
+    teamIds?: string[];
   }): Promise<CostStatistics> {
-    const { timeframe, organizationId, requestingUserId, canReadAllUsers } =
-      params;
+    const {
+      timeframe,
+      organizationId,
+      requestingUserId,
+      canReadAllUsers,
+      teamIds,
+    } = params;
     const i = schema.interactionsTable;
     const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${StatisticsModel.getTimeBucket(timeframe)}'`)}, ${i.createdAt})`;
     const billing = billingModelFactsJoin(timeframe);
+    const charge = teamIds
+      ? await StatisticsModel.teamChargeScope({ organizationId, teamIds })
+      : null;
     const scope = and(
       ...StatisticsModel.timeframeConditions(timeframe),
       interactionBelongsToOrganization(organizationId),
+      charge?.chargesAny,
     );
     const activeUsers = db
       .select({ userId: i.userId })
@@ -2634,6 +2695,82 @@ class StatisticsModel {
         isNull(schema.interactionsTable.profileId),
       ) as SQL,
     ];
+  }
+
+  /**
+   * Which requests the spend limits of `teamIds` (and their sub-teams' billing
+   * credentials) charge, mirroring `InteractionModel.updateUsageAfterInteraction`:
+   * a credential billed to a team charges that team and each of its ancestors;
+   * any other request charges the agent's teams its caller belongs to,
+   * directly or through a sub-team. Grants and memberships are read as they
+   * are now, so a later change of either re-attributes past requests here,
+   * while a limit keeps what it already counted.
+   *
+   * Both predicates compare against uncorrelated sets, so PostgreSQL hashes
+   * each set once instead of re-reading grants for every request row.
+   */
+  private static async teamChargeScope(params: {
+    organizationId: string;
+    teamIds: string[];
+  }): Promise<{
+    teamIds: string[];
+    /** The request charges at least one of the teams. */
+    chargesAny: SQL;
+    /** The request charges the team in `teamId`. */
+    chargesTeam: (teamId: SQLWrapper) => SQL;
+  }> {
+    const { organizationId } = params;
+    const known = await db
+      .select({ id: schema.teamsTable.id })
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          sql`${schema.teamsTable.id} = ANY(string_to_array(${[...new Set(params.teamIds)].join(",")}, ','))`,
+        ),
+      );
+    const teamIds = known.map((team) => team.id);
+    if (teamIds.length === 0) {
+      return {
+        teamIds,
+        chargesAny: sql`FALSE`,
+        chargesTeam: () => sql`FALSE`,
+      };
+    }
+    const i = schema.interactionsTable;
+    const t = schema.teamsTable;
+    // Each scope team covers itself and every descendant: the billing teams
+    // whose spend reaches its limit, and the teams whose members it contains.
+    // Walked in SQL, with the scope teams bound as one parameter, so a deep
+    // hierarchy cannot outgrow the statement's parameter limit.
+    const covered = sql`(WITH RECURSIVE coverage(scope_team_id, team_id) AS (
+        SELECT ${t.id}, ${t.id} FROM ${t}
+        WHERE ${t.organizationId} = ${organizationId}
+          AND ${t.id} = ANY(string_to_array(${teamIds.join(",")}, ','))
+        UNION
+        SELECT coverage.scope_team_id, child.id
+        FROM ${t} AS child
+        INNER JOIN coverage ON child.parent_team_id = coverage.team_id
+        WHERE child.organization_id = ${organizationId}
+      ) SELECT scope_team_id, team_id FROM coverage) AS covered(scope_team_id, team_id)`;
+    const assignments = AgentTeamModel.readAssignments(organizationId);
+    // (scope team, agent, caller) for every agent shared with a scope team
+    // and every caller inside it.
+    const callers = sql`SELECT covered.scope_team_id, shared.agent_id, ${schema.teamMembersTable.userId}
+      FROM (SELECT * FROM ${assignments}) AS shared(agent_id, team_id)
+      INNER JOIN ${covered} ON covered.scope_team_id = shared.team_id
+      INNER JOIN ${schema.teamMembersTable} ON ${schema.teamMembersTable.teamId} = covered.team_id`;
+    return {
+      teamIds,
+      chargesAny: sql`CASE WHEN ${i.billingTeamId} IS NOT NULL
+        THEN ${i.billingTeamId} IN (SELECT DISTINCT covered.team_id FROM ${covered})
+        ELSE (${i.profileId}, ${i.userId}) IN (SELECT agent_id, user_id FROM (${callers}) AS callers(scope_team_id, agent_id, user_id))
+      END`,
+      chargesTeam: (teamId) => sql`CASE WHEN ${i.billingTeamId} IS NOT NULL
+        THEN (${teamId}, ${i.billingTeamId}) IN (SELECT covered.scope_team_id, covered.team_id FROM ${covered})
+        ELSE (${teamId}, ${i.profileId}, ${i.userId}) IN (${callers})
+      END`,
+    };
   }
 
   /**

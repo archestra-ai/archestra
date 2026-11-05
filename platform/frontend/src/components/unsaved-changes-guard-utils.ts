@@ -1,4 +1,4 @@
-import { isEqualWith } from "lodash-es";
+import isEqualWith from "lodash-es/isEqualWith";
 
 /**
  * What to do when a guarded dialog's open state is about to change.

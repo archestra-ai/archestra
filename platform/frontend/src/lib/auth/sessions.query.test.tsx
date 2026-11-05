@@ -5,8 +5,9 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useBulkRevokeSessions } from "./sessions.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: { bulkRevokeSessions: vi.fn() },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  bulkRevokeSessions: vi.fn(),
 }));
 
 describe("useBulkRevokeSessions", () => {

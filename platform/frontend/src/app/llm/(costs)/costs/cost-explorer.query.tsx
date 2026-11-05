@@ -259,16 +259,18 @@ async function collectPages<
 /** Shared by headline tiles and the default chart; TanStack deduplicates callers. */
 export function useCostStatistics({
   timeframe,
+  teamId,
   enabled,
 }: {
   timeframe: StatisticsTimeFrame;
+  teamId?: string;
   enabled: boolean;
 }) {
   return useQuery({
-    queryKey: ["statistics", "costs", timeframe],
+    queryKey: ["statistics", "costs", timeframe, teamId],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getCostStatistics({
-        query: { timeframe },
+        query: { timeframe, teamId },
       });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("No cost statistics response received");
@@ -281,12 +283,14 @@ export function useCostStatistics({
 
 export function useKpis({
   timeframe,
+  teamId,
   enabled,
 }: {
   timeframe: StatisticsTimeFrame;
+  teamId?: string;
   enabled: boolean;
 }) {
-  const statistics = useCostStatistics({ timeframe, enabled });
+  const statistics = useCostStatistics({ timeframe, teamId, enabled });
 
   return useMemo(() => {
     const ts = statistics.data?.costSavings.timeSeries ?? [];

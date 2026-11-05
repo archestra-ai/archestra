@@ -1454,9 +1454,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  // Handlers require llmCost:read, or scope a team admin to the teams they
+  // administer (see services/cost-access.ts).
+  [RouteId.GetTeamStatistics]: {},
   [RouteId.GetModelUsage]: { llmCost: ["read"] },
   [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
@@ -1495,9 +1495,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetCostStatistics]: {
-    llmCost: ["read"],
-  },
+  // Same team admin scoping as GetTeamStatistics.
+  [RouteId.GetCostStatistics]: {},
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1508,7 +1507,9 @@ export const requiredEndpointPermissionsMap: Partial<
     llmCost: ["read"],
   },
   // Same organization-wide totals as GetTeamStatistics and
-  // GetProxyCostStatistics, cut finer; it names no person.
+  // GetProxyCostStatistics, cut finer. Like GetProxyCostStatistics, a
+  // credential breakdown narrows to the caller's own usage without member:read,
+  // since a virtual key can be one person's own (see the handler).
   [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },

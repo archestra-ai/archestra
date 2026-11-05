@@ -8,13 +8,12 @@ import { llmModelsQueryKey } from "./llm-models-query-keys";
 import { availableLlmProviderApiKeysQueryKey } from "./llm-provider-api-keys-query-keys";
 import { PERSISTED_QUERY_META } from "./query-persistence";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getLlmModels: vi.fn(),
-    getModelsWithApiKeys: vi.fn(),
-    updateModel: vi.fn(),
-    syncLlmModels: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getLlmModels: vi.fn(),
+  getModelsWithApiKeys: vi.fn(),
+  updateModel: vi.fn(),
+  syncLlmModels: vi.fn(),
 }));
 
 vi.mock("sonner");

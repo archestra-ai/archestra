@@ -29,6 +29,7 @@ import {
   AutoRoutingLabelAction,
   AutoRoutingUnavailableHint,
 } from "@/components/auto-routing-model-control";
+import { ProviderGroupedModelSelect } from "@/components/provider-grouped-model-select";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   terminalActionClass,
@@ -45,9 +46,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -544,6 +543,8 @@ export function RequestExample({
     supportedEndpoints: string[] | null | undefined;
     isImage: boolean;
     pool?: string;
+    provider?: SupportedProvider;
+    modelId?: string;
   }> = candidates
     .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
@@ -564,6 +565,8 @@ export function RequestExample({
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
       isImage: model.isImage,
+      provider: model.provider as SupportedProvider,
+      modelId: model.id,
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
@@ -584,6 +587,7 @@ export function RequestExample({
       value: defaultModel,
       supportedEndpoints: null,
       isImage: false,
+      provider: target.kind === "provider" ? target.provider : undefined,
     });
   }
 
@@ -721,53 +725,24 @@ export function RequestExample({
             {isAuto ? (
               <AutoModelField id="virtual-key-example-model" />
             ) : (
-              <Select
+              <ProviderGroupedModelSelect
+                id="virtual-key-example-model"
                 value={model ?? ""}
                 onValueChange={(value) => {
                   setPickedModel(value);
                   onModelChange?.(value);
                 }}
+                models={modelOptions}
+                pools={pools.map((pool) => ({
+                  value: POOL_VALUE_PREFIX + pool.name,
+                  name: pool.name,
+                  description: pool.description,
+                }))}
                 disabled={isPending || allOptions.length === 0}
-              >
-                <SelectTrigger
-                  id="virtual-key-example-model"
-                  className="w-full"
-                >
-                  <SelectValue
-                    placeholder={
-                      isPending
-                        ? "Loading models…"
-                        : "No models found for this key"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {pools.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Model pools</SelectLabel>
-                      {pools.map((pool) => (
-                        <SelectItem
-                          key={pool.name}
-                          value={POOL_VALUE_PREFIX + pool.name}
-                          description={pool.description}
-                        >
-                          {pool.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  <SelectGroup>
-                    {pools.length > 0 && modelOptions.length > 0 && (
-                      <SelectLabel>Models</SelectLabel>
-                    )}
-                    {modelOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.value}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                placeholder={
+                  isPending ? "Loading models…" : "No models found for this key"
+                }
+              />
             )}
             {usesCatalog && !isAuto && (
               <p className="text-xs text-muted-foreground">

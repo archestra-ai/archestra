@@ -52,6 +52,9 @@ const COVERAGE = [
   "",
 ].join("\n");
 
+const DIGEST_WITHOUT_TOOL_DESCRIPTION =
+  "m124W6JR4oEFEopFDqkmWo68a9SA6eP57jJ8EDT7S3s";
+
 function longReview(offerId: string, command?: string) {
   const cmd = command ?? `echo ${"exact-payload ".repeat(400)}`;
   return {
@@ -261,12 +264,17 @@ describe("hitlReviewCard", () => {
     allowMultiple: false,
     remedy_offer_ids: ["offer"],
   };
-  const cardFor = (review: {
+  const cardFor = (params: {
     tool?: string;
     arguments?: string;
     text: string;
     summary?: string;
-  }) => hitlReviewCard({ base, review });
+    toolDescription?: string;
+    inspected?: boolean;
+  }) => {
+    const { inspected, ...review } = params;
+    return hitlReviewCard({ base, review, inspected });
+  };
   const previewOf = (card: HitlReviewCard, label: string) =>
     card.options.find((option) => option.label === label)?.preview ?? "";
 
@@ -429,26 +437,66 @@ describe("hitlReviewCard", () => {
     );
   });
 
-  test("shortens a long description before the command it describes", () => {
+  // The pane joined back into one line per value: continuation lines start
+  // four spaces in, after a break that took a space.
+  const unwrapped = (preview: string) => preview.replace(/\n {4}/g, " ");
+  const DELETE_WORKSPACE_DESCRIPTION =
+    "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available. Only the owner can delete it.";
+
+  test("keeps a long description in full and shortens the command it describes", () => {
     const description = `Push ${"the branch ".repeat(30)}now`;
     const command = `echo ${"payload ".repeat(180)}end`;
-    const { card, approve } = cardFor({
+    const review = {
       tool: "Bash",
       arguments: JSON.stringify({ command, description, cmd: command }),
       text: COVERAGE,
-    });
+    };
+    // The agent wrote the description: with the command a pointer, the card
+    // offers Allow only once the reviewer holds the complete review.
+    const { card: unread, approve: unreadApprove } = cardFor(review);
+    expect(unreadApprove).toBe(false);
+    expect(unread.options.map((option) => option.label)).not.toContain("Allow");
+    expect(
+      unwrapped(previewOf(unread, "Inspect")).startsWith(
+        `description: ${description}\ncommand: (`,
+      ),
+    ).toBe(true);
+    const { card, approve } = cardFor({ ...review, inspected: true });
     expect(approve).toBe(true);
     const preview = previewOf(card, "Allow");
     expect(fitsThePane(preview)).toBe(true);
-    expect(
-      preview.startsWith(
-        `description: (${description.length} characters, see\n    Inspect)\ncommand: echo payload`,
-      ),
-    ).toBe(true);
-    expect(preview).not.toContain("command: (");
+    expect(preview.startsWith("description: Push the branch")).toBe(true);
+    expect(unwrapped(preview)).toContain(
+      `description: ${description}\ncommand: (${command.length.toLocaleString("en-US")} characters, see Inspect)`,
+    );
+    expect(preview).not.toContain("description: (");
   });
 
-  test("shortens a description of a few lines before a long command", () => {
+  test("offers Allow only after Inspect for a described command too long for the pane", () => {
+    const command = `echo ${"payload ".repeat(260)}end`;
+    expect(command.length).toBeGreaterThan(2000);
+    const review = {
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command,
+        description: "List the files in the build folder",
+      }),
+      text: COVERAGE,
+    };
+    const { card: unread, approve: unreadApprove } = cardFor(review);
+    expect(unreadApprove).toBe(false);
+    expect(unread.options.map((option) => option.label)).toEqual([
+      "Inspect",
+      "Deny",
+    ]);
+    expect(unread.callPreview).toBe(
+      `description: List the files in the\n    build folder\ncommand: (${command.length.toLocaleString("en-US")} characters, see\n    Inspect)`,
+    );
+    const { approve } = cardFor({ ...review, inspected: true });
+    expect(approve).toBe(true);
+  });
+
+  test("keeps a description of a few lines in full and shortens a long command", () => {
     const description = "Rebuild and push the branch. ".repeat(6).trim();
     const command = `echo ${"payload ".repeat(195)}end`;
     const { card, approve } = cardFor({
@@ -456,18 +504,18 @@ describe("hitlReviewCard", () => {
       arguments: JSON.stringify({ command, description, cmd: command }),
       text: COVERAGE,
     });
-    expect(approve).toBe(true);
-    const preview = previewOf(card, "Allow");
-    expect(fitsThePane(preview)).toBe(true);
-    expect(
-      preview.startsWith(
-        `description: (${description.length} characters, see\n    Inspect)\ncommand: echo payload`,
-      ),
-    ).toBe(true);
-    expect(preview).not.toContain("command: (");
+    expect(approve).toBe(false);
+    for (const label of ["Inspect", "Deny"]) {
+      const preview = previewOf(card, label);
+      expect(fitsThePane(preview)).toBe(true);
+      expect(
+        unwrapped(preview).startsWith(`description: ${description}\n`),
+      ).toBe(true);
+      expect(preview).toContain("command: (");
+    }
   });
 
-  test("hides a description before the command and counts it where it was", () => {
+  test("keeps the description first when the other arguments are hidden", () => {
     const options = Object.fromEntries(
       Array.from({ length: 120 }, (_, index) => [
         `option_${index}`,
@@ -486,11 +534,196 @@ describe("hitlReviewCard", () => {
     expect(approve).toBe(false);
     const preview = card.callPreview ?? "";
     expect(fitsThePane(preview)).toBe(true);
-    expect(
-      preview.startsWith("(1 more argument, see Inspect)\ncommand: ls\n"),
-    ).toBe(true);
-    expect(preview).not.toContain("List files");
+    expect(preview.startsWith("description: List files\ncommand: ls\n")).toBe(
+      true,
+    );
     expect(preview).toMatch(/\(\d+ more arguments, see Inspect\)$/);
+  });
+
+  test("shortens a description only when it cannot fit the pane by itself", () => {
+    const description = `${"word ".repeat(395)}end`;
+    const { card } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({ command: "ls", description, cmd: "ls" }),
+      text: COVERAGE,
+    });
+    const preview = previewOf(card, "Allow");
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      unwrapped(preview).startsWith(
+        `description: (${description.length.toLocaleString("en-US")} characters, see Inspect)\ncommand: ls`,
+      ),
+    ).toBe(true);
+  });
+
+  test("describes a call without a description by its tool's own definition", () => {
+    const { card, approve } = cardFor({
+      tool: "archestra__delete_workspace",
+      arguments: JSON.stringify({
+        run_id: "0b6f3c1e-5a2d-4c8e-9f71-2d4e6a8b0c13",
+        confirm_delete: true,
+      }),
+      text: COVERAGE,
+      toolDescription: DELETE_WORKSPACE_DESCRIPTION,
+    });
+    expect(approve).toBe(true);
+    expect(card.shortQuestion).toBe("Run archestra__delete_workspace?");
+    for (const label of ["Inspect", "Allow", "Deny"]) {
+      const preview = previewOf(card, label);
+      expect(fitsThePane(preview)).toBe(true);
+      expect(
+        unwrapped(preview).startsWith(
+          "Tool description: Permanently delete a retained runtime workspace and all of its files.\nrun_id:",
+        ),
+      ).toBe(true);
+      expect(preview).not.toContain("Saved run transcripts");
+    }
+  });
+
+  test("keeps the tool description when the arguments give way", () => {
+    const content = `${"line\n".repeat(600)}`;
+    const { card } = cardFor({
+      tool: "mcp/files/upload",
+      arguments: JSON.stringify({ name: "notes.txt", content }),
+      text: COVERAGE,
+      toolDescription: "Upload a file to the shared drive.",
+    });
+    const preview = previewOf(card, "Allow");
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      preview.startsWith(
+        "Tool description: Upload a file to\n    the shared drive.\nname: notes.txt\ncontent: (",
+      ),
+    ).toBe(true);
+  });
+
+  test("shows the tool description above a description argument that is content", () => {
+    const { card } = cardFor({
+      tool: "mcp/github/create_issue",
+      arguments: JSON.stringify({
+        title: "Flaky test",
+        description: "It fails on retries.",
+      }),
+      text: COVERAGE,
+      toolDescription: "Create an issue in a repository.",
+    });
+    const preview = unwrapped(previewOf(card, "Allow"));
+    expect(
+      preview.startsWith(
+        "Tool description: Create an issue in a repository.\n",
+      ),
+    ).toBe(true);
+    expect(preview).toContain("description: It fails on retries.");
+  });
+
+  test("shows no tool description above a command's own description", () => {
+    const { card } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command: "ls -la",
+        description: "List the files",
+      }),
+      text: COVERAGE,
+      toolDescription: "Run a shell command.",
+    });
+    const preview = unwrapped(previewOf(card, "Allow"));
+    expect(preview).not.toContain("Tool description");
+    expect(
+      preview.startsWith("description: List the files\ncommand: ls -la"),
+    ).toBe(true);
+  });
+
+  test("ends the tool description at a title line or an argument list", () => {
+    const lead = (toolDescription: string) =>
+      unwrapped(
+        previewOf(
+          cardFor({
+            tool: "mcp/github/run",
+            arguments: JSON.stringify({ target: "main" }),
+            text: COVERAGE,
+            toolDescription,
+          }).card,
+          "Allow",
+        ),
+      ).split("\n")[0];
+    expect(
+      lead(
+        "Create a new issue\n\nArgs:\n  owner: Repository owner.\n  repo: Name.",
+      ),
+    ).toBe("Tool description: Create a new issue");
+    expect(lead("Delete a branch\nWARNING: this cannot be undone. More.")).toBe(
+      "Tool description: Delete a branch",
+    );
+    expect(
+      lead(
+        "Permanently delete a retained runtime workspace and all\nof its files. More.",
+      ),
+    ).toBe(
+      "Tool description: Permanently delete a retained runtime workspace and all of its files.",
+    );
+  });
+
+  test("notes a hidden tool description as such, not as an argument", () => {
+    // A tool label long enough to leave room for neither the description
+    // nor its pointer, only for a one-line note.
+    const shown = Array.from({ length: 120 }, (_, index) => 1600 + index)
+      .map(
+        (length) =>
+          cardFor({
+            tool: `mcp/${"s".repeat(length)}/run`,
+            arguments: JSON.stringify({ target: "main" }),
+            text: COVERAGE,
+            toolDescription: "Run the target on the default branch.",
+          }).card.callPreview ?? "",
+      )
+      .find((preview) => preview.includes("(tool description, see Inspect)"));
+    expect(shown).toBeDefined();
+    expect(shown?.match(/more argument/g) ?? []).toHaveLength(1);
+  });
+
+  test("does not end the tool description sentence at an abbreviation such as e.g.", () => {
+    const { card } = cardFor({
+      tool: "mcp/github/search_issues",
+      arguments: JSON.stringify({ query: "is:open" }),
+      text: COVERAGE,
+      toolDescription:
+        "Search issues, e.g. by label, i.e. one filter at a time. Returns 30 results.",
+    });
+    expect(
+      unwrapped(previewOf(card, "Allow")).startsWith(
+        "Tool description: Search issues, e.g. by label, i.e. one filter at a time.\nquery:",
+      ),
+    ).toBe(true);
+  });
+
+  test("points to Inspect for a long tool description sentence, never with an ellipsis", () => {
+    const sentence = `Run ${"a long clause, ".repeat(20)}and finish.`;
+    const { card } = cardFor({
+      tool: "mcp/tools/run",
+      arguments: JSON.stringify({ target: "all" }),
+      text: COVERAGE,
+      toolDescription: `${sentence} More text.`,
+    });
+    const preview = previewOf(card, "Allow");
+    expect(
+      unwrapped(preview).startsWith(
+        `Tool description: (${sentence.length} characters, see Inspect)\ntarget: all`,
+      ),
+    ).toBe(true);
+    expect(preview).not.toContain("\u2026");
+  });
+
+  test("keeps the tool description above the notice when the call does not fit", () => {
+    const { card, approve } = cardFor({
+      tool: `mcp/${"server".repeat(400)}/run`,
+      arguments: JSON.stringify({ target: "all" }),
+      text: COVERAGE,
+      toolDescription: "Run the target.",
+    });
+    expect(approve).toBe(false);
+    expect(card.callPreview).toBe(
+      "Tool description: Run the target.\n\nThis call does not fit this card.\nInspect shows it in full.",
+    );
   });
 
   test("keeps a value that looks like a markdown fence literal", () => {
@@ -609,6 +842,19 @@ describe("previousHitlCardAnswer", () => {
 });
 
 describe("renderHitlReviewText", () => {
+  test("shows the tool's full definition text under the tool, escaped", () => {
+    const text = renderHitlReviewText({
+      tool: "archestra__delete_workspace",
+      arguments: JSON.stringify({ run_id: "run", confirm_delete: true }),
+      text: COVERAGE,
+      toolDescription:
+        "Permanently delete a retained runtime workspace and all of its files. Only the *owner* can delete it.",
+    });
+    expect(text).toContain(
+      "### Tool\n\narchestra\\_\\_delete\\_workspace\n\nTool description, from the tool's definition:\n\nPermanently delete a retained runtime workspace and all of its files. Only the \\*owner\\* can delete it.\n\n### Policy review",
+    );
+  });
+
   test("renders the complete review: paragraphs, literal commands, formatted JSON", () => {
     const command = `echo ${"exact-payload ".repeat(800)}`;
     const text = renderHitlReviewText({
@@ -682,6 +928,21 @@ async function issuedDigest(
 }
 
 describe("inspection state", () => {
+  test("keeps the digest of a review without a tool description", () => {
+    const review = {
+      offerId: "offer-digest",
+      tool: "Bash",
+      arguments: JSON.stringify({ command: "ls", cmd: "ls" }),
+      text: COVERAGE,
+    };
+    // The digest such a review had before tool descriptions were shown: cards
+    // issued then still resolve after the deploy.
+    expect(hitlInspectionDigest(review)).toBe(DIGEST_WITHOUT_TOOL_DESCRIPTION);
+    expect(
+      hitlInspectionDigest({ ...review, toolDescription: "List files." }),
+    ).not.toBe(DIGEST_WITHOUT_TOOL_DESCRIPTION);
+  });
+
   test("the card emits no text until a signed Inspect answer", async () => {
     const offerId = "offer-inspect-quiet";
     const reviewSession = session("user:user|inspect-quiet");

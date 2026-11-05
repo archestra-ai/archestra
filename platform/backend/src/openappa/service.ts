@@ -25,6 +25,7 @@ import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   observeOpenappaDispatch,
@@ -68,7 +69,14 @@ import { ApiError, type CommonToolResult } from "@/types";
 import type { OpenAppaSession } from "@/types/openappa-session";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
+import {
+  isHardBlock,
+  softBlockReason,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "./soft-block";
 import { toolCallArgumentsText } from "./tool-call-arguments";
+import { isUnenforcedSession } from "./unenforced";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -206,7 +214,10 @@ type NativeOutputDecision = Extract<
 >;
 type ProcessedToolResult = {
   content: string;
+  diagnostic?: string;
   outputSource: OutputSource;
+  /** A native refusal, distinct from a successful authoritative replacement. */
+  refused?: true;
   reason?: RuntimeReason;
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
@@ -870,6 +881,10 @@ async function startSession(params: {
       typeof text === "string" &&
       text.trim().length > 0
     ) {
+      // Apply the operator's waiver before these instructions can make the
+      // child suppress its answer (for example, a void return contract).
+      if (await waiveSoftBlock(params.session, "child_return_contract", text))
+        return undefined;
       validateReturnContract(text);
       params.deliverReturnContract?.(text);
       return text;
@@ -901,6 +916,14 @@ export async function startRuntimeChild(params: {
   });
   if (decision.decision === "ack") return {};
   if (decision.decision === "context" && decision.text?.trim()) {
+    if (
+      await waiveSoftBlock(
+        params.session,
+        "child_return_contract",
+        decision.text,
+      )
+    )
+      return {};
     validateReturnContract(decision.text);
     return { contract: decision.text };
   }
@@ -919,7 +942,14 @@ export async function addressRuntimeChild(params: {
     spawned_id: params.childSessionId,
     output: "",
   });
-  if (decision.decision !== "ack") {
+  if (
+    decision.decision !== "ack" &&
+    !(await waiveSoftBlock(
+      params.session,
+      "child_address",
+      decisionMessage(decision),
+    ))
+  ) {
     throw new ApiError(409, decisionMessage(decision));
   }
 }
@@ -991,9 +1021,23 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  // Old native receipts for fabricated/unknown offers remain authoritative
+  // errors, not evidence of a soft policy refusal that can disable a session.
+  const unknownControl =
+    reason === "unknown_control_call" &&
+    (decision.decision === "mcp_result" ||
+      decision.decision === "replace_output");
   return {
     content,
     outputSource,
+    ...((!unknownControl || isHardBlock(content)) &&
+    (decision.decision === "deny_call" ||
+      decision.decision === "block" ||
+      decision.decision === "refuse" ||
+      decision.decision === "replace_output" ||
+      (decision.decision === "mcp_result" && decision.result?.isError === true))
+      ? { refused: true as const }
+      : {}),
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
     ...(decision.decision === "deny_call"
@@ -1142,70 +1186,118 @@ export async function processProxyResults(params: {
     lineage: params.lineage,
   });
   const updates: Record<string, ProcessedToolResult> = {};
+  if (
+    (await softBlocksAllowed()) &&
+    (await isUnenforcedSession(params.session))
+  ) {
+    return { toolResultUpdates: updates };
+  }
   for (const result of params.results) {
-    const reportingName = archestraMcpBranding.getToolShortName(
-      params.canonicalize(result.name, result.namespace),
-    );
-    const reportingResult = ["yell", "run_tool"].some(
-      (name) => name === reportingName,
-    )
-      ? await readYellResult(params.session, result.id)
-      : undefined;
-    if (reportingResult !== undefined) {
-      updates[result.id] = {
-        content: reportingResult,
-        outputSource: "runtime",
-      };
-      continue;
-    }
-    if (params.trustedChat && isSeededAppRenderToolResult(result.content))
-      continue;
-    // The runtime released no question call, so it would withhold the answer.
-    if (params.isUserQuestion?.(result) === true) continue;
-    const spawn = params.classifySpawnResult?.(result);
-    if (spawn === "pending") continue;
-    const error =
-      extractMcpToolError(result) ?? extractMcpToolError(result.content);
-    const outcome: ExecutionOutcome =
-      error?.type === "cancelled"
-        ? "unknown"
-        : spawn === "failed" || result.isError
-          ? "failure"
-          : "success";
-    const approved = await approveToolResult({
-      session: params.session,
-      toolCallId: result.id,
-      output: resultOutput(result),
-      outcome,
-      controlToolName: params.controlToolName,
-      policy,
-      principal,
-    });
-    // A client can read a crossed child return with a call it made itself:
-    // Copilot CLI reads a finished background agent with read_agent when it
-    // announces the agent is idle. The runtime released no such call, but
-    // the return was verified against the crossing the runtime retained, so
-    // that verified text goes through.
-    if (
-      approved.code === UNRELEASED_CALL_CODE &&
-      params.isVerifiedChildReturn?.(result) === true
-    ) {
-      updates[result.id] = {
-        content: resultOutput(result),
-        outputSource: "runtime",
-      };
-      continue;
-    }
-    const pendingReview =
-      approved.code === UNRELEASED_CALL_CODE
-        ? await params.pendingReviewResult?.(result)
+    try {
+      const reportingName = archestraMcpBranding.getToolShortName(
+        params.canonicalize(result.name, result.namespace),
+      );
+      if (
+        (await softBlocksAllowed()) &&
+        reportingName === "read_peer_message"
+      ) {
+        // A missing/invalid message must not become a waiver on the next turn
+        // when native result admission reports that no read was recorded.
+        // Never trust the client's claimed result as evidence of a held read.
+        let retained: Awaited<
+          ReturnType<typeof OpenAppaSessionModel.retainedPeerReadReceipt>
+        >;
+        try {
+          retained = await OpenAppaSessionModel.retainedPeerReadReceipt({
+            organizationId: params.session.organization_id,
+            sessionId: params.session.session_id,
+            callerId: params.session.caller_id,
+            toolCallId: result.id,
+          });
+        } catch {
+          retained = null;
+        }
+        if (!retained) {
+          updates[result.id] = {
+            content:
+              "[appa] Peer message unavailable: no authenticated retained read was found.",
+            outputSource: "runtime",
+          };
+          continue;
+        }
+      }
+      const reportingResult = ["yell", "run_tool"].some(
+        (name) => name === reportingName,
+      )
+        ? await readYellResult(params.session, result.id)
         : undefined;
-    updates[result.id] = pendingReview
-      ? { content: pendingReview, outputSource: "runtime" }
-      : approved.code === UNRELEASED_CALL_CODE &&
-          params.isControlResult?.(result) === true
-        ? unexecutedControlResult(result.content)
-        : approved;
+      if (reportingResult !== undefined) {
+        updates[result.id] = {
+          content: reportingResult,
+          outputSource: "runtime",
+        };
+        continue;
+      }
+      if (params.trustedChat && isSeededAppRenderToolResult(result.content))
+        continue;
+      // The runtime released no question call, so it would withhold the answer.
+      if (params.isUserQuestion?.(result) === true) continue;
+      const spawn = params.classifySpawnResult?.(result);
+      if (spawn === "pending") continue;
+      const error =
+        extractMcpToolError(result) ?? extractMcpToolError(result.content);
+      const outcome: ExecutionOutcome =
+        error?.type === "cancelled"
+          ? "unknown"
+          : spawn === "failed" || result.isError
+            ? "failure"
+            : "success";
+      const approved = await approveToolResult({
+        session: params.session,
+        toolCallId: result.id,
+        output: resultOutput(result),
+        outcome,
+        controlToolName: params.controlToolName,
+        policy,
+        principal,
+      });
+      // A client can read a crossed child return with a call it made itself:
+      // Copilot CLI reads a finished background agent with read_agent when it
+      // announces the agent is idle. The runtime released no such call, but
+      // the return was verified against the crossing the runtime retained, so
+      // that verified text goes through.
+      if (
+        approved.code === UNRELEASED_CALL_CODE &&
+        params.isVerifiedChildReturn?.(result) === true
+      ) {
+        updates[result.id] = {
+          content: resultOutput(result),
+          outputSource: "runtime",
+        };
+        continue;
+      }
+      const pendingReview =
+        approved.code === UNRELEASED_CALL_CODE
+          ? await params.pendingReviewResult?.(result)
+          : undefined;
+      updates[result.id] = pendingReview
+        ? { content: pendingReview, outputSource: "runtime" }
+        : approved.code === UNRELEASED_CALL_CODE &&
+            params.isControlResult?.(result) === true
+          ? unexecutedControlResult(result.content)
+          : approved;
+    } catch (error) {
+      // Preserve every sibling decision, including hard refusals and retained
+      // native results. The proxy decides whether this entire batch can waive.
+      if (!(await softBlocksAllowed()) || !canRetainBatchFailure(error))
+        throw error;
+      updates[result.id] = {
+        content: error.message,
+        diagnostic: softBlockReason(error),
+        outputSource: "runtime",
+        refused: true,
+      };
+    }
   }
   return {
     toolResultUpdates: updates,
@@ -1214,6 +1306,14 @@ export async function processProxyResults(params: {
 }
 // SPDX-SnippetEnd
 
+/** Authentication failures remain fatal; only policy/helper failures can waive. */
+function canRetainBatchFailure(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    !(error instanceof ApiError && error.statusCode === 401)
+  );
+}
+
 /** Decision for a proposed tool call. */
 type AppaCallDecision =
   | { kind: "allow" }
@@ -1221,6 +1321,7 @@ type AppaCallDecision =
   | {
       kind: "deny";
       feedback: string;
+      diagnostic?: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
       /**
@@ -1473,6 +1574,27 @@ export async function evaluateToolCalls(
   const firstFailure = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
+  if (
+    firstFailure &&
+    (await softBlocksAllowed()) &&
+    results.every(
+      (result) =>
+        result.status === "fulfilled" || canRetainBatchFailure(result.reason),
+    )
+  ) {
+    // Do not discard a sibling hard denial when one native helper fails. Keep
+    // successful admissions open; the proxy handles the complete batch.
+    return results.map((result) =>
+      result.status === "fulfilled"
+        ? result.value
+        : {
+            kind: "deny",
+            feedback: (result.reason as Error).message,
+            diagnostic: softBlockReason(result.reason as Error),
+            unanswered: true,
+          },
+    );
+  }
   if (firstFailure) {
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
@@ -1516,7 +1638,7 @@ function isJson(text: string): boolean {
 
 type AppaHostedCallDecision =
   | { kind: "release" }
-  | { kind: "hold"; feedback: string };
+  | { kind: "hold"; feedback: string; diagnostic?: string };
 
 /**
  * Rules on calls the provider ran inside the inference call. Nothing can stop
@@ -1556,27 +1678,41 @@ export async function evaluateHostedToolCalls(
     );
     return decisions.map((decision) =>
       decision.kind === "deny"
-        ? { kind: "hold", feedback: decision.feedback }
+        ? {
+            kind: "hold",
+            feedback: decision.feedback,
+            ...(decision.diagnostic ? { diagnostic: decision.diagnostic } : {}),
+          }
         : { kind: "release" },
     );
   }
   const principal = await sessionPrincipal(session);
   const verdicts: AppaHostedCallDecision[] = [];
   for (const call of calls) {
-    const approved = await approveToolResult({
-      session,
-      toolCallId: call.id,
-      output: call.output,
-      outcome: "success",
-      controlToolName: options.control?.name,
-      policy: await policy(),
-      principal,
-    });
-    verdicts.push(
-      approved.outputSource === "tool" && approved.content === call.output
-        ? { kind: "release" }
-        : { kind: "hold", feedback: approved.content },
-    );
+    try {
+      const approved = await approveToolResult({
+        session,
+        toolCallId: call.id,
+        output: call.output,
+        outcome: "success",
+        controlToolName: options.control?.name,
+        policy: await policy(),
+        principal,
+      });
+      verdicts.push(
+        approved.outputSource === "tool" && approved.content === call.output
+          ? { kind: "release" }
+          : { kind: "hold", feedback: approved.content },
+      );
+    } catch (error) {
+      if (!(await softBlocksAllowed()) || !canRetainBatchFailure(error))
+        throw error;
+      verdicts.push({
+        kind: "hold",
+        feedback: error.message,
+        diagnostic: softBlockReason(error),
+      });
+    }
   }
   return verdicts;
 }
@@ -2243,6 +2379,47 @@ export async function readPeerMessage(params: {
   toolCallId: string;
   args: { message_id: string };
 }): Promise<CallToolResult> {
+  let result: CallToolResult;
+  let reason: string;
+  try {
+    result = await governedReadPeerMessage(params);
+    if (!result.isError) return result;
+    reason = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+  } catch (error) {
+    if (!(await softBlocksAllowed())) throw error;
+    reason = error instanceof Error ? error.message : String(error);
+    result = {
+      isError: true,
+      content: [{ type: "text", text: "Peer message unavailable" }],
+    };
+  }
+  if (!(await softBlocksAllowed()) || !params.session.caller_id) return result;
+  // Establish recipient ownership and expiry before a refusal can disable the
+  // session. Invalid/nonexistent IDs are not evidence of a held peer crossing.
+  const body = await OpenAppaSessionModel.waivedPeerBody({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id,
+    sessionId: params.session.session_id,
+    parentId: params.session.parent_id,
+    messageId: params.args.message_id,
+  });
+  if (
+    body !== null &&
+    (await waiveSoftBlock(params.session, "peer_read", reason))
+  ) {
+    return { content: [{ type: "text", text: body }] };
+  }
+  return result;
+}
+
+async function governedReadPeerMessage(params: {
+  session: OpenAppaSession;
+  toolCallId: string;
+  args: { message_id: string };
+}): Promise<CallToolResult> {
   const decision = await withRuntime(
     params.session.organization_id,
     (module, policy) =>
@@ -2282,6 +2459,37 @@ export async function readPeerMessage(params: {
     isError: true,
     content: [{ type: "text", text: decisionMessage(decision) }],
   };
+}
+
+/**
+ * Opens an authenticated session's retained offer refusal, including encrypted
+ * and plaintext-escaped receipts, without executing or consuming the offer.
+ */
+export async function loadRetainedOfferRefusal(
+  params: Parameters<typeof OpenAppaSessionModel.recordedOfferDecisions>[0],
+): Promise<string | null> {
+  const records = await OpenAppaSessionModel.recordedOfferDecisions(params);
+  if (records.length === 0) return null;
+  // This pure decoder needs no runtime initialization or database connection:
+  // the model has already verified the receipt's authenticated session scope.
+  const module = await import("@archestra/openappa-rs");
+  return withOpenappaContentEncryption(
+    params.organizationId,
+    params.sessionId,
+    async (encryption) =>
+      module.retainedOfferRefusal(
+        JSON.stringify({
+          organization_id: params.organizationId,
+          session_id: params.sessionId,
+          offer_id: params.offerId,
+          records: records.map((row) => ({
+            operation_id: row.operationId,
+            decision: row.decision,
+          })),
+        }),
+        encryption,
+      ),
+  );
 }
 
 /**
@@ -2342,7 +2550,30 @@ function validateReturnContract(text: string): void {
   }
 }
 
-async function crossChildValue(params: {
+async function crossChildValue(
+  params: Parameters<typeof governedCrossChildValue>[0],
+): Promise<ChildEndOutcome> {
+  try {
+    if (await isUnenforcedSession(params.session))
+      return { decision: "release", crossed: true };
+    const result = await governedCrossChildValue(params);
+    if (
+      !result.crossed &&
+      (await waiveSoftBlock(params.session, params.event, result.content))
+    )
+      return { decision: "release", crossed: true };
+    return result;
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !(await waiveSoftBlock(params.session, params.event, error.message))
+    )
+      throw error;
+    return { decision: "release", crossed: true };
+  }
+}
+
+async function governedCrossChildValue(params: {
   session: OpenAppaSession;
   operationId: string;
   output: string;

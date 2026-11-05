@@ -8,6 +8,7 @@ import {
 } from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
 import { ensureNativeAddons } from "./src/test/native-addons";
+import { ProjectGroupedSequencer } from "./src/test/project-grouped-sequencer";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
@@ -174,7 +175,8 @@ export default defineConfig({
     unstubGlobals: true,
     unstubEnvs: true,
 
-    maxWorkers: MAX_WORKERS,
+    // Projects copy this value and would ignore `--maxWorkers` on the CLI.
+    ...(cliSetsMaxWorkers() ? {} : { maxWorkers: MAX_WORKERS }),
 
     // Pin each fork's V8 old-space ceiling. CI divides most runner memory over
     // its workers; local runs cap each heap at 3 GB and their aggregate budget
@@ -194,10 +196,12 @@ export default defineConfig({
     // workflow caches, and avoids the experimental cache path entirely.
     experimental: { fsModuleCache: !isCI },
 
-    // Sequence settings
     sequence: {
-      // Shuffle test files to balance load across workers
+      // Shuffle files and tests, to balance load and surface order
+      // dependence, but keep each project's files together so shared
+      // workers survive from one file to the next.
       shuffle: true,
+      sequencer: ProjectGroupedSequencer,
     },
 
     // Increase test timeout for database operations
@@ -215,6 +219,7 @@ export default defineConfig({
           name: "unit",
           include: testFiles.unit,
           isolate: false,
+          setupFiles: ["./src/test/worker-globals.ts"],
           // An accidental runtime config/database import must fail even on CI,
           // where a database URL is available to the database-backed projects.
           env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
@@ -239,7 +244,7 @@ export default defineConfig({
           // Vitest's current test-file context. Both variants share workers.
           // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/worker-globals.ts", "./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
           // shared mutable state (the config object) between tests. The
           // isolated project skips that — its per-file registries can't leak,
@@ -260,6 +265,10 @@ export default defineConfig({
     ],
   },
 });
+
+function cliSetsMaxWorkers(): boolean {
+  return process.argv.some((arg) => /^--max-?workers(=|$)/i.test(arg));
+}
 
 function rawPythonPlugin() {
   return {

@@ -12,6 +12,8 @@ import {
   MAX_SUGGESTED_PROMPTS,
   ResourcePermissionGrantSchema,
   StoredGitHubActionsAccessSchema,
+  StoredSubagentLoadBalancingConfigSchema,
+  SubagentLoadBalancingConfigSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -202,6 +204,12 @@ const selectExtendedFields = {
    * without the entry rules, so a row saved under other rules still loads.
    */
   githubActionsAccess: StoredGitHubActionsAccessSchema.nullable().optional(),
+  /**
+   * MCP gateways' subagent load-balancing and fallback setting. Optional so
+   * agent objects built in code without it still fit.
+   */
+  subagentLoadBalancing:
+    StoredSubagentLoadBalancingConfigSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
   /**
    * Per-agent egress override for its Agent Runtime and Code Sandbox. Null
@@ -228,6 +236,8 @@ const insertExtendedFields = {
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
   githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
+  subagentLoadBalancing:
+    SubagentLoadBalancingConfigSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
@@ -410,6 +420,13 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   modelId: true,
   llmApiKeyId: true,
   modelPoolId: true,
+}).extend({
+  /**
+   * Another user's agent whose own policy grants the caller read by name. A
+   * personal agent the caller reads only through admin oversight is false, so
+   * the chat picker can tell a share from a reference it should not offer.
+   */
+  sharedByName: z.boolean(),
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 

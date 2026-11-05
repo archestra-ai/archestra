@@ -12,6 +12,7 @@ import {
   hitlInspectionDigest,
   hitlReviewCard,
   renderHitlReviewText,
+  toolDescriptionLine,
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
@@ -164,6 +165,11 @@ type PendingHitlReview = {
   remedyArguments?: Record<string, unknown>;
   /** Generated reading aid, never part of the approved tool arguments. */
   summary?: string;
+  /**
+   * The reviewed tool's own definition text, resolved when the review is
+   * staged. Cards show it when the call carries no description of its own.
+   */
+  toolDescription?: string;
 };
 
 type HitlAskUserArguments = HitlReviewCard;
@@ -309,7 +315,8 @@ export async function stageHitlReview(params: {
       // Another request may have staged this offer while we generated the
       // reading aid. An already-issued presentation of the same call wins,
       // even without a summary. The remedy plan is not part of the
-      // presentation: a repeated remedy call keeps the stage it finds.
+      // presentation: a repeated remedy call keeps the stage it finds. Nor is
+      // the tool description: the stage keeps the one it was issued with.
       const issued = await cache.get<PendingHitlReview>(
         stagePresenceKey(params.session, params.review.offerId),
       );
@@ -537,7 +544,13 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
   }
   const args = withoutProxyCopies(review.tool, parsed ?? {});
   const accepted = acceptedCoverage(review.text);
-  const preview = callPreview(review.tool, args);
+  const called = callPreview(review.tool, args);
+  // A call that says nothing about itself shows its tool's description.
+  const described =
+    called.summary === undefined && review.toolDescription
+      ? toolDescriptionLine(review.toolDescription)
+      : undefined;
+  const preview = described ? { ...called, summary: described } : called;
   return {
     question:
       approvalQuestion({

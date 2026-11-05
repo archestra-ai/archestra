@@ -22,7 +22,8 @@ import {
 } from "@/lib/organization.query";
 import LlmProxyPage from "./page";
 
-const API_ORIGIN = "http://localhost:9000";
+// Keep a missing MSW handler away from the developer's running backend.
+const API_ORIGIN = "http://127.0.0.1:1";
 
 // The credential picker is a Radix Select, which needs pointer capture and
 // scrollIntoView that jsdom lacks.
@@ -113,15 +114,19 @@ describe("LlmProxyPage provider dropdown", () => {
 
     await user.click(mistralOption);
 
-    // Selecting from the search dropdown promotes the provider to its own
-    // active tab and repoints the endpoint at it, same as the tab bar does
-    // for the built-in primary providers.
+    // Selecting from the dropdown repoints the endpoint and shows the choice in
+    // the dropdown itself; the tabs stay as they were.
     expect(
       await screen.findByText("http://localhost:3000/v1/mistral"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Mistral AI" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Mistral AI" }),
+    ).not.toBeInTheDocument();
+    expect(moreTrigger).toHaveTextContent("Mistral AI");
+
+    // Picking a tab resets the dropdown to its placeholder.
+    await user.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(moreTrigger).toHaveTextContent(/More providers \(\d+\)/);
   });
 });
 
@@ -571,8 +576,11 @@ describe("LlmProxyPage connect steps", () => {
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
       ),
-      http.get(`${API_ORIGIN}/api/llm-oauth-clients`, () =>
-        HttpResponse.json(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get("capability")).toBe(
+          "llm:proxy",
+        );
+        return HttpResponse.json(
           page([
             {
               id: "oc-batch",
@@ -581,10 +589,13 @@ describe("LlmProxyPage connect steps", () => {
               grantType: "client_credentials",
               authorId: "someone-else",
               providerApiKeys: JUDGE_KEY.providerApiKeys,
+              includeFutureProviders: false,
+              scopes: ["llm:proxy"],
+              modelPoolIds: [],
             },
           ]),
-        ),
-      ),
+        );
+      }),
     );
     const user = userEvent.setup();
     renderPage();

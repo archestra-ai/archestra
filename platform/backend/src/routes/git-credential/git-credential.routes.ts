@@ -29,7 +29,7 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ListGitCredentials,
         description:
           "List the organization's GitHub Apps and GitLab access tokens. Token values are never returned.",
-        tags: ["Git credentials"],
+        tags: ["Git Credentials"],
         response: constructResponseSchema(z.array(GitCredentialSchema)),
       },
     },
@@ -44,7 +44,7 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateGitlabToken,
         description:
           "Save a GitLab access token after GitLab confirms it can read the API. The token is stored as a secret and never returned.",
-        tags: ["Git credentials"],
+        tags: ["Git Credentials"],
         body: CreateGitlabTokenRequestSchema,
         response: constructResponseSchema(GitCredentialSchema),
       },
@@ -66,7 +66,7 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ListGitCredentialRepositories,
         description:
           "Repositories a Git credential can reach: the GitHub App's installed repositories, or the GitLab projects the token is a member of.",
-        tags: ["Git credentials"],
+        tags: ["Git Credentials"],
         params: z.object({ id: UuidIdSchema }),
         querystring: z.object({
           search: z.string().trim().max(200).optional(),
@@ -98,7 +98,7 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ListGitCredentialNamespaces,
         description:
           "Where a Git credential can create repositories: the GitHub App's account, or the GitLab groups the token can create projects in. An empty string is the GitLab token owner's own namespace.",
-        tags: ["Git credentials"],
+        tags: ["Git Credentials"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(z.array(z.string())),
       },

@@ -52,17 +52,11 @@ vi.mock("@/lib/auth/auth.query", () => ({
   }),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getMcpServers: getMcpServersMock,
-      getMcpRegistryIssueIndex: getMcpRegistryIssueIndexMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMcpServers: getMcpServersMock,
+  getMcpRegistryIssueIndex: getMcpRegistryIssueIndexMock,
+}));
 
 const SUBSCRIBE_MESSAGE = {
   type: "subscribe_mcp_deployment_statuses",

@@ -1,5 +1,5 @@
 import { TimeInMs } from "@archestra/shared";
-import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -182,21 +182,58 @@ class ModelPoolModel {
     forgetOrganization(params.organizationId);
   }
 
+  /** Whether any pool was added to this virtual key. */
+  static async hasVirtualApiKeyGrant(
+    virtualApiKeyId: string,
+  ): Promise<boolean> {
+    const [grant] = await db
+      .select({ poolId: schema.modelPoolVirtualApiKeysTable.poolId })
+      .from(schema.modelPoolVirtualApiKeysTable)
+      .where(
+        eq(
+          schema.modelPoolVirtualApiKeysTable.virtualApiKeyId,
+          virtualApiKeyId,
+        ),
+      )
+      .limit(1);
+    return grant !== undefined;
+  }
+
+  /**
+   * Deletes the pool. Virtual key grants cascade with it; OAuth client grants
+   * live in the client's metadata, so the pool's id is removed from them here.
+   */
   static async delete(params: {
     organizationId: string;
     id: string;
   }): Promise<boolean> {
-    const deleted = await db
-      .delete(schema.modelPoolsTable)
-      .where(
-        and(
-          eq(schema.modelPoolsTable.id, params.id),
-          eq(schema.modelPoolsTable.organizationId, params.organizationId),
-        ),
-      )
-      .returning({ id: schema.modelPoolsTable.id });
+    const deleted = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(schema.modelPoolsTable)
+        .where(
+          and(
+            eq(schema.modelPoolsTable.id, params.id),
+            eq(schema.modelPoolsTable.organizationId, params.organizationId),
+          ),
+        )
+        .returning({ id: schema.modelPoolsTable.id });
+      if (rows.length === 0) return false;
+      const metadata = schema.oauthClientsTable.metadata;
+      await tx
+        .update(schema.oauthClientsTable)
+        .set({
+          metadata: sql`jsonb_set(${metadata}, '{modelPoolIds}', COALESCE((SELECT jsonb_agg(pool_id) FROM jsonb_array_elements(${metadata}->'modelPoolIds') AS pool_id WHERE pool_id <> to_jsonb(${params.id}::text)), '[]'::jsonb))`,
+        })
+        .where(
+          and(
+            sql`${metadata}->>'organizationId' = ${params.organizationId}`,
+            sql`${metadata}->'modelPoolIds' @> ${JSON.stringify([params.id])}::jsonb`,
+          ),
+        );
+      return true;
+    });
     forgetOrganization(params.organizationId);
-    return deleted.length > 0;
+    return deleted;
   }
 
   private static async withMembers(

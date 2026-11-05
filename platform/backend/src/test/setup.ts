@@ -14,6 +14,11 @@
  * - https://dev.to/benjamindaniel/how-to-test-your-nodejs-postgres-app-using-drizzle-pglite-4fb3
  */
 
+// Dependency-free; restores the globals an earlier file in this worker left
+// replaced before any other module captures them.
+import { pristineFetch } from "./worker-globals";
+// Filters Better Auth noise once per worker; see why it must not be per file.
+import "./quiet-console";
 // Binds the ports of the layers below before any other module loads.
 import "@/server/composition";
 import fs from "node:fs";
@@ -124,25 +129,6 @@ const lazyTestDb = new Proxy({} as TestDatabase, {
 }) as unknown as Parameters<
   typeof import("../database/index.js").__setTestDb
 >[0];
-const originalConsoleWarn = console.warn;
-
-console.warn = (...args: unknown[]) => {
-  const message = args.map(String).join(" ");
-
-  if (
-    message.includes(
-      "[Better Auth]: Please ensure '/.well-known/oauth-authorization-server' exists",
-    ) ||
-    message.includes(
-      "[Better Auth]: Please ensure '/.well-known/openid-configuration' exists",
-    )
-  ) {
-    return;
-  }
-
-  originalConsoleWarn(...args);
-};
-
 /**
  * Install this file's database, created lazily on first access.
  *
@@ -242,21 +228,7 @@ beforeEach(async ({ task }) => {
     databaseTouched &&
     (!rollbackMode || completedRollbackTests === 0)
   ) {
-    // Get all user tables from the database (excluding system tables)
-    const tablesResult = await pgliteClient.query<{ tablename: string }>(`
-      SELECT tablename FROM pg_tables
-      WHERE schemaname = 'public'
-      AND tablename NOT LIKE 'drizzle_%'
-    `);
-
-    const tables = tablesResult.rows.map((row) => row.tablename);
-
-    if (tables.length > 0) {
-      // CASCADE also clears dependent tables, and RESTART IDENTITY resets
-      // sequences used by fixtures.
-      const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
-      await pgliteClient.exec(truncateSql);
-    }
+    await resetDatabase(pgliteClient);
   }
   databaseTouched = false;
 
@@ -316,8 +288,9 @@ beforeEach(async ({ task }) => {
  * undoes vi.useFakeTimers, and in a shared worker a leaked frozen clock
  * stalls every later setTimeout and makes DB timestamps collide across
  * unrelated files. useRealTimers is a no-op when timers are already real.
+ * The fetch restored here is the worker's original (see worker-globals.ts),
+ * not whatever this file inherited.
  */
-const realFetch = globalThis.fetch;
 afterEach(({ task }) => {
   const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (rollbackMode) {
@@ -367,7 +340,7 @@ async function finishTestTransaction(): Promise<void> {
 }
 
 function restoreTestGlobals(): void {
-  globalThis.fetch = realFetch;
+  globalThis.fetch = pristineFetch;
   vi.clearAllMocks();
   vi.useRealTimers();
 
@@ -394,8 +367,6 @@ function restoreTestGlobals(): void {
  * "Database not initialized", which those import-time paths already handle.
  */
 afterAll(async () => {
-  console.warn = originalConsoleWarn;
-
   // Drain fire-and-forget async work (e.g. interaction usage tracking) BEFORE
   // swapping out this file's database. In shared workers the getDb() proxy
   // always routes to the CURRENT file's PGlite, so a background promise that
@@ -409,8 +380,9 @@ afterAll(async () => {
   dbModule.__setTestDb(null);
 
   if (pgliteClient) {
-    await pgliteClient.close();
+    const client = pgliteClient;
     pgliteClient = null;
+    if (!(await keepDatabaseForNextFile(client))) await client.close();
   }
   testDb = null;
   pendingSnapshotPath = null;
@@ -428,10 +400,181 @@ function getTestDatabase(): TestDatabase {
   if (!pendingSnapshotPath) {
     throw new Error("Database not initialized. Did beforeAll run?");
   }
+  const kept = takeKeptDatabase(pendingSnapshotPath);
+  if (kept) return installDatabase(kept);
   const snapshot = new Blob([fs.readFileSync(pendingSnapshotPath)]);
-  return installDatabase(
-    new PGlite({ loadDataDir: snapshot, extensions: { vector } }),
+  const client = new PGlite({ loadDataDir: snapshot, extensions: { vector } });
+  if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
+    // Queued ahead of the test's first query, so it reads the snapshot's
+    // schema and session state before the test can change them.
+    loadedStates.set(client, databaseState(client));
+  }
+  return installDatabase(client);
+}
+
+/**
+ * In a shared worker, hand this file's database to the next file instead of
+ * closing it: loading the migrated snapshot cost about 0.8 s per file. It is
+ * kept only when it is back in the state a fresh load gives: tables and
+ * sequences reset, and the schema and session state (settings, temporary
+ * tables, listeners, advisory locks, prepared statements) unchanged since it
+ * was loaded. A file that changes either makes the next file load the
+ * snapshot again.
+ */
+async function keepDatabaseForNextFile(client: PGlite): Promise<boolean> {
+  const store = globalThis as { [KEPT_DATABASE]?: KeptDatabase };
+  delete store[KEPT_DATABASE];
+  const loadedState = loadedStates.get(client);
+  if (!loadedState || !pendingSnapshotPath || client.closed) return false;
+  try {
+    const loaded = await loadedState;
+    // now() is the transaction's start, so it differs from the statement's
+    // only inside a transaction a test left open.
+    const open = await client.query<{ open: boolean }>(
+      "SELECT now() <> statement_timestamp() AS open",
+    );
+    if (open.rows[0]?.open !== false) return false;
+    // Session state is compared rather than discarded: DISCARD ALL would
+    // drop the temporary tables the snapshot's migrations left in its
+    // session, which PGlite cannot recover from ("cannot open relation").
+    await resetDatabase(client);
+    // PGlite keeps its write-ahead log in memory and checkpoints on its own
+    // only at max_wal_size (1 GB), so a database kept across files would
+    // hold up to that much log. A checkpoint after each file (~5 ms) keeps it
+    // at about 100 MB.
+    await client.exec("CHECKPOINT");
+    if ((await databaseState(client)) !== loaded) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  store[KEPT_DATABASE] = { client, snapshotPath: pendingSnapshotPath };
+  return true;
+}
+
+function takeKeptDatabase(snapshotPath: string): PGlite | null {
+  const store = globalThis as { [KEPT_DATABASE]?: KeptDatabase };
+  const kept = store[KEPT_DATABASE];
+  delete store[KEPT_DATABASE];
+  if (!kept) return null;
+  if (kept.snapshotPath !== snapshotPath || kept.client.closed) {
+    void kept.client.close().catch(() => {});
+    return null;
+  }
+  return kept.client;
+}
+
+/**
+ * A fingerprint of the public schema (tables, columns, constraints, indexes,
+ * routines, triggers, enums, extensions) and of the session's state, to tell
+ * whether a file changed either.
+ */
+async function databaseState(client: PGlite): Promise<string> {
+  const session = await client.query<{ state: string }>(`
+    SELECT concat_ws('|',
+      (SELECT string_agg(name || '=' || setting, ';' ORDER BY name)
+        FROM pg_settings WHERE source = 'session'),
+      (SELECT string_agg(relname, ';' ORDER BY relname)
+        FROM pg_class WHERE relpersistence = 't'),
+      (SELECT string_agg(channel, ';' ORDER BY channel)
+        FROM pg_listening_channels() AS channel),
+      (SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'),
+      (SELECT count(*) FROM pg_prepared_statements),
+      (SELECT count(*) FROM pg_cursors)
+    ) AS state
+  `);
+  const result = await client.query<{ fingerprint: string }>(`
+    SELECT md5(concat_ws('|',
+      (SELECT string_agg(concat_ws(',', c.relname, c.relkind, a.attname,
+          a.atttypid, a.atttypmod, a.attnotnull, a.attnum,
+          pg_get_expr(d.adbin, d.adrelid)), ';'
+          ORDER BY c.relname, a.attnum)
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        LEFT JOIN pg_attribute a
+          ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+        LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+        WHERE n.nspname = 'public'),
+      (SELECT string_agg(pg_get_constraintdef(oid) || conname, ';' ORDER BY conname, oid::regclass::text)
+        FROM pg_constraint
+        WHERE connamespace = 'public'::regnamespace),
+      (SELECT string_agg(indexdef, ';' ORDER BY indexname)
+        FROM pg_indexes WHERE schemaname = 'public'),
+      (SELECT string_agg(p.proname || pg_get_function_identity_arguments(p.oid) || md5(p.prosrc), ';' ORDER BY p.proname, p.oid)
+        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace),
+      (SELECT string_agg(tgname || tgrelid::regclass::text, ';' ORDER BY tgname, tgrelid::regclass::text)
+        FROM pg_trigger WHERE NOT tgisinternal),
+      (SELECT string_agg(enumtypid::regtype::text || enumlabel, ';' ORDER BY enumtypid::regtype::text, enumsortorder)
+        FROM pg_enum),
+      (SELECT string_agg(extname || extversion, ';' ORDER BY extname)
+        FROM pg_extension)
+    )) AS fingerprint
+  `);
+  return `${result.rows[0]?.fingerprint ?? ""}:${session.rows[0]?.state ?? ""}`;
+}
+
+/**
+ * Put the database back to the empty, freshly migrated state: every table
+ * empty and every table-owned sequence at its start, as truncating every
+ * table with RESTART IDENTITY did. That TRUNCATE of 260-odd tables cost
+ * 130-200 ms before every test that touched the database; a test leaves rows
+ * in a handful of them, so only those are truncated (CASCADE takes the
+ * tables that reference them too), then the sequences a test used without
+ * leaving rows, such as by a failed insert, are restarted.
+ */
+async function resetDatabase(client: PGlite): Promise<void> {
+  const tables = await client.query<{ tablename: string }>(`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+    AND tablename NOT LIKE 'drizzle_%'
+  `);
+  if (tables.rows.length === 0) return;
+  const withRows = await client.query<{ tablename: string }>(
+    tables.rows
+      .map(
+        ({ tablename }) =>
+          `SELECT ${quoteLiteral(tablename)} AS tablename WHERE EXISTS (SELECT 1 FROM ${quoteIdentifier(tablename)})`,
+      )
+      .join(" UNION ALL "),
   );
+  if (withRows.rows.length > 0) {
+    await client.exec(
+      `TRUNCATE TABLE ${withRows.rows.map(({ tablename }) => quoteIdentifier(tablename)).join(", ")} RESTART IDENTITY CASCADE`,
+    );
+  }
+  const usedSequences = await client.query<{ sequence: string }>(`
+    SELECT DISTINCT dependency.objid::regclass::text AS sequence
+    FROM pg_depend dependency
+    JOIN pg_class sequence_class
+      ON sequence_class.oid = dependency.objid AND sequence_class.relkind = 'S'
+    JOIN pg_class owner ON owner.oid = dependency.refobjid
+    JOIN pg_namespace namespace ON namespace.oid = owner.relnamespace
+    WHERE dependency.classid = 'pg_class'::regclass
+      AND dependency.deptype IN ('a', 'i')
+      AND namespace.nspname = 'public'
+      AND owner.relname NOT LIKE 'drizzle_%'
+      -- CASE, not AND: the planner may test this before the joins filter
+      -- out non-sequences, and it fails on any other relation.
+      AND CASE WHEN sequence_class.relkind = 'S'
+        THEN pg_sequence_last_value(sequence_class.oid) IS NOT NULL
+        ELSE false END
+  `);
+  if (usedSequences.rows.length > 0) {
+    await client.exec(
+      usedSequences.rows
+        .map(({ sequence }) => `ALTER SEQUENCE ${sequence} RESTART;`)
+        .join("\n"),
+    );
+  }
+}
+
+function quoteIdentifier(name: string): string {
+  return `"${name.replaceAll('"', '""')}"`;
+}
+
+function quoteLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 function installDatabase(client: PGlite): TestDatabase {
@@ -479,6 +622,21 @@ function trackDatabaseAccess(client: PGlite): void {
 const databaseAccessTrackersKey = Symbol.for(
   "archestra.test.pgliteAccessTrackers",
 );
+// The database a shared worker keeps between files (keepDatabaseForNextFile).
+// Setup runs again for every file, so it lives on the global object.
+const KEPT_DATABASE = Symbol.for("archestra.test.keptPglite");
+const LOADED_STATES = Symbol.for("archestra.test.loadedPgliteStates");
+interface KeptDatabase {
+  client: PGlite;
+  snapshotPath: string;
+}
+// The state each database had when its snapshot loaded, kept on the global
+// object with the database itself.
+const loadedStatesStore = globalThis as {
+  [LOADED_STATES]?: WeakMap<PGlite, Promise<string>>;
+};
+loadedStatesStore[LOADED_STATES] ??= new WeakMap();
+const loadedStates = loadedStatesStore[LOADED_STATES];
 
 /**
  * Overwrite `live`'s contents with `snapshot`'s, in place (the config module

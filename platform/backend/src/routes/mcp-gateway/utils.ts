@@ -110,7 +110,10 @@ import {
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
-import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
+import {
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
+  isAgentRunGatewayToken,
+} from "@/services/agent-runtime/runtime-contract";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -331,7 +334,14 @@ export async function buildAgentMcpToolList(params: {
     "userId" | "organizationId" | "isSessionAuth" | "serviceAccountId"
   > &
     Partial<
-      Pick<TokenAuthContext, "teamId" | "isOrganizationToken" | "isExternalIdp">
+      Pick<
+        TokenAuthContext,
+        | "tokenId"
+        | "teamId"
+        | "isOrganizationToken"
+        | "isExternalIdp"
+        | "oauthClientId"
+      >
     >;
   lookups?: RequestLookups;
 }): Promise<{
@@ -482,18 +492,21 @@ export async function buildAgentMcpToolList(params: {
     }
     return isYellToolShortName(shortName) && openappaYellEnabled();
   });
-  const implicitPolicyTools = openappaEnabled()
-    ? getArchestraMcpTools().filter(
-        (tool) =>
-          isImplicitOpenAppaReadToolShortName(
-            archestraMcpBranding.getToolShortName(tool.name),
-          ) &&
-          !isToolIdentityExcluded(
-            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: tool.name },
-            exclusionSets,
-          ),
-      )
-    : [];
+  const includeImplicitPolicyReads =
+    !isAgentRunGatewayToken(tokenAuth) || agent.accessAllTools;
+  const implicitPolicyTools =
+    openappaEnabled() && includeImplicitPolicyReads
+      ? getArchestraMcpTools().filter(
+          (tool) =>
+            isImplicitOpenAppaReadToolShortName(
+              archestraMcpBranding.getToolShortName(tool.name),
+            ) &&
+            !isToolIdentityExcluded(
+              { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: tool.name },
+              exclusionSets,
+            ),
+        )
+      : [];
   const implicitAskUserTools = getImplicitAskUserTools();
   const candidateTools = dedupeToolsByName(
     [

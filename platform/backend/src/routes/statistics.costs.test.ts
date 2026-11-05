@@ -243,3 +243,117 @@ for (const timeframe of ["5m", "7d", "30d", "90d", "all"] as const) {
     expect(result.activeUsers).toBe(0);
   });
 }
+
+test("without member:read, agent and credential breakdowns cover only the caller's usage", async ({
+  makeAgent,
+  makeInteraction,
+  makeUser,
+  makeCustomRole,
+  makeVirtualApiKey,
+}) => {
+  const someone = await makeUser();
+  const theirAgent = await makeAgent({
+    organizationId,
+    authorId: someone.id,
+    agentType: "llm_proxy",
+  });
+  const theirKey = await makeVirtualApiKey(organizationId, {
+    authorId: someone.id,
+  });
+  const sharedAgent = await makeAgent({
+    organizationId,
+    agentType: "llm_proxy",
+  });
+  await makeInteraction(theirAgent.id, {
+    userId: someone.id,
+    model: "example",
+    cost: "7",
+    authMethod: "virtual_key",
+    virtualKeyId: theirKey.id,
+  });
+  await makeInteraction(sharedAgent.id, {
+    userId: user.id,
+    model: "example",
+    cost: "2",
+  });
+  const breakdowns = async () => {
+    const [agents, proxy, overview, byKey, byAgent, byPerson] =
+      await Promise.all(
+        [
+          "/api/statistics/agents?timeframe=all",
+          "/api/statistics/llm-proxy?timeframe=all",
+          "/api/statistics/overview?timeframe=all",
+          "/api/statistics/model-usage?timeframe=all&model=example&groupBy=key",
+          "/api/statistics/model-usage?timeframe=all&model=example&groupBy=agent",
+          "/api/statistics/llm-usage?timeframe=all&groupBy=agentId,userId",
+        ].map(async (url) => {
+          const response = await app.inject({ url });
+          expect(response.statusCode).toBe(200);
+          return response.json();
+        }),
+      );
+    return {
+      agents: agents.map((row: { agentId: string }) => row.agentId),
+      proxyTotal: proxy.totals.billedCost,
+      proxyCredentials: proxy.credentials.map(
+        (row: { credentialId: string | null }) => row.credentialId,
+      ),
+      topAgent: overview.topAgent,
+      keys: byKey.data.map((row: { id: string }) => row.id),
+      agentRows: byAgent.data.map((row: { id: string }) => row.id),
+      people: byPerson.data.map((row: { userId: string | null }) => row.userId),
+      peopleSpend: byPerson.totals.billedCost,
+    };
+  };
+
+  // An admin, who holds member:read, sees the other person's key and agent.
+  expect(await breakdowns()).toMatchObject({
+    agents: expect.arrayContaining([theirAgent.id, sharedAgent.id]),
+    proxyTotal: 9,
+    proxyCredentials: expect.arrayContaining([theirKey.id]),
+    topAgent: theirAgent.name,
+    keys: expect.arrayContaining([`virtual_key:${theirKey.id}`]),
+    agentRows: expect.arrayContaining([theirAgent.id]),
+    people: expect.arrayContaining([someone.id, user.id]),
+    peopleSpend: 9,
+  });
+
+  const role = await makeCustomRole(organizationId, {
+    permission: { llmCost: ["read"] },
+  });
+  await MemberModel.updateRole(user.id, organizationId, role.role);
+  expect(await breakdowns()).toEqual({
+    agents: [sharedAgent.id],
+    proxyTotal: 2,
+    proxyCredentials: [null],
+    topAgent: sharedAgent.name,
+    keys: ["unknown:unattributed"],
+    agentRows: [sharedAgent.id],
+    people: [user.id],
+    peopleSpend: 2,
+  });
+  // A credential filter cannot reach someone else's key either.
+  const filtered = await app.inject({
+    url: `/api/statistics/llm-proxy?timeframe=all&credentialId=${theirKey.id}`,
+  });
+  expect(filtered.json().totals.billedCost).toBe(0);
+  // Nor can the grouped usage endpoint, by credential or by credential filter.
+  const usage = async (query: string) => {
+    const response = await app.inject({
+      url: `/api/statistics/llm-usage?timeframe=all&${query}`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json();
+  };
+  const [byCredential, credentialFiltered] = await Promise.all([
+    usage("groupBy=credentialId"),
+    usage(`groupBy=model&credentialId=${theirKey.id}`),
+  ]);
+  expect(
+    byCredential.data.map(
+      (row: { credentialId: string | null }) => row.credentialId,
+    ),
+  ).not.toContain(theirKey.id);
+  expect(byCredential.totals.billedCost).toBe(2);
+  expect(credentialFiltered.data).toEqual([]);
+});

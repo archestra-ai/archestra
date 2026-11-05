@@ -781,6 +781,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
+  [RouteId.GetLlmProxyLogs]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSummaries]: { log: ["read"] },
+  [RouteId.GetLlmProxyLog]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogAutoRouting]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogExternalAgentIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},
@@ -1446,9 +1454,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  // Handlers require llmCost:read, or scope a team admin to the teams they
+  // administer (see services/cost-access.ts).
+  [RouteId.GetTeamStatistics]: {},
   [RouteId.GetModelUsage]: { llmCost: ["read"] },
   [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
@@ -1487,9 +1495,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetCostStatistics]: {
-    llmCost: ["read"],
-  },
+  // Same team admin scoping as GetTeamStatistics.
+  [RouteId.GetCostStatistics]: {},
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1497,6 +1504,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // require member:read before returning anyone else's usage, and app/skill
   // usage narrow to the apps and skills the caller can see.
   [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer. Like GetProxyCostStatistics, a
+  // credential breakdown narrows to the caller's own usage without member:read,
+  // since a virtual key can be one person's own (see the handler).
+  [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },
   [RouteId.GetAppUsage]: {
@@ -2192,6 +2206,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
+  "/settings/roles/new": { ac: ["create"] },
+  "/settings/roles/[id]": { ac: ["read"] },
+  "/settings/roles/[id]/edit": { ac: ["update"] },
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },

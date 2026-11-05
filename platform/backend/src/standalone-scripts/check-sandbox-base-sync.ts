@@ -75,15 +75,26 @@ if (baseImage && !dockerfile.includes(`FROM ${baseImage}`)) {
   );
 }
 
-// 2. apt toolbelt
-for (const pkg of arrayConst("DEFAULT_APT_PACKAGES")) {
-  if (!new RegExp(`(^|\\s)${pkg}(\\s|$|\\\\)`, "m").test(dockerfile)) {
+// 2. apt toolbelt: compare the package lists in both directions.
+const runtimeApt = [...arrayConst("DEFAULT_APT_PACKAGES")].sort();
+const install = dockerfile.match(
+  /apt-get install -y --no-install-recommends\s*\\\n([\s\S]*?)\n\s*&&/,
+);
+if (!install) {
+  errors.push("could not parse apt install list from sandbox Dockerfile");
+} else {
+  const bakedApt = install[1].replace(/\\/g, " ").trim().split(/\s+/).sort();
+  if (JSON.stringify(runtimeApt) !== JSON.stringify(bakedApt)) {
     errors.push(
-      `apt package "${pkg}" (DEFAULT_APT_PACKAGES) missing from Dockerfile`,
+      `apt packages differ — dagger.rs DEFAULT_APT_PACKAGES=[${runtimeApt}] vs Dockerfile=[${bakedApt}]`,
     );
   }
 }
 
+const aptFloor = strConst("APT_SECURITY_FLOOR");
+if (aptFloor && !dockerfile.includes(`ge ${aptFloor}`)) {
+  errors.push(`apt security floor ${aptFloor} missing from Dockerfile`);
+}
 // 3. python deps: the Dockerfile's pyproject must list exactly the runtime set
 const runtimePy = [...arrayConst("DEFAULT_PYTHON_REQUIREMENTS")].sort();
 const bakedPy = [...tomlDependencies()].sort();

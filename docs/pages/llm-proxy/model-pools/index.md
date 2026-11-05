@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-05
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -30,7 +30,7 @@ Before you start, add a shared key for each provider on [Model Providers](/docs/
 4. Click **Add member** inside the same order to share its traffic. Click **Add order** to add a fallback.
 5. Click **Create pool**.
 
-The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-5-5` and `x-archestra-attempts: 1` headers.
+The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-5-5` and `x-archestra-attempts: 1` headers. The pool name in `x-archestra-pool` is percent-encoded so custom names with spaces or Unicode are safe in HTTP headers.
 
 - A pool named after a model ID takes over that model on the LLM Proxy: every request for `claude-sonnet-5-5` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key. In chat and agents, a pool answers only when you [pick it](#use-a-pool-in-chat-and-agents).
 - Switch a member off to stop sending it traffic and keep it in the pool.
@@ -74,12 +74,11 @@ Set these under **Timeouts and cooldown** when you create or edit a pool. They a
 
 ## Who Can Use a Pool
 
-On the LLM Proxy, a pool is open to any credential that can already reach one of its members. People who connected through [Connect](/docs/get-started/connect) use the pool without changing anything, when their key is one of its members.
+A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) uses a pool only after you add the pool under **Model pools** when you create or edit the key. The same goes for an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) that [calls as the app](/docs/llm-proxy/authentication#call-as-the-app). Which provider keys the key or client maps doesn't matter: the pool answers with its members' keys. Remove the pool, and the key or client can no longer use it.
 
-- A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) that maps a member's provider key.
-- An [OAuth client](/docs/llm-proxy/authentication#oauth-clients) whose provider keys include a member's key.
+Credentials that have no pools of their own, such as people who signed in through [Connect](/docs/get-started/connect) or an identity provider's token, use a pool when they can already reach one of its members.
 
-To let a virtual key or an OAuth client use a pool without mapping any of its members, add the pool under **Model pools** when you create or edit it. Only OAuth clients that [call as the app](/docs/llm-proxy/authentication#call-as-the-app) take pools. Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 A caller who can't use a pool is not refused. Their request for that name goes to their own key, as it would without a pool.
 
@@ -120,5 +119,6 @@ Each attempt is priced as the member that made it, with that member's provider a
 ## Limits
 
 - Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Unified Model API.
-- Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Bedrock Converse clients can't reach Gemini members.
+- Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
+- Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
 - Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

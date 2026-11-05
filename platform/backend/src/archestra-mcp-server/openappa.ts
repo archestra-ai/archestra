@@ -7,6 +7,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
   YELL_RESULT_GUARDRAILS_OFF,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -63,6 +64,7 @@ import {
 import {
   displayedReview,
   reviewedCallArguments,
+  reviewedToolLabel,
 } from "@/openappa/review-display";
 import {
   chatOpenAppaSession,
@@ -70,9 +72,15 @@ import {
   executeYell,
   listPeerMessages,
   loadOfferReview,
+  loadRetainedOfferRefusal,
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import {
+  isHardBlock,
+  softBlocksAllowed,
+  waiveSoftBlock,
+} from "@/openappa/soft-block";
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
@@ -145,6 +153,7 @@ import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
 } from "@/types/openappa-validation-change";
+import { archestraMcpBranding } from "./branding";
 import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
@@ -152,6 +161,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredSuccessResult,
   successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
@@ -226,7 +236,7 @@ const registry = defineArchestraTools([
     }),
     publicSchema: z.looseObject({}),
     async handler({ args, context }) {
-      const { session, toolCallId } = peerExecution({
+      const { session, toolCallId } = await peerExecution({
         context,
         proof: args.peer_proof,
         action: TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
@@ -255,7 +265,7 @@ const registry = defineArchestraTools([
     }),
     publicSchema: z.looseObject(PeerReadArguments.shape),
     async handler({ args, context }) {
-      const { session, toolCallId } = peerExecution({
+      const { session, toolCallId } = await peerExecution({
         context,
         proof: args.peer_proof,
         action: TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -1191,6 +1201,40 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
+      if (remedy.offer_id && (await softBlocksAllowed())) {
+        // A waiver runs before native offer validation, so authorize its target
+        // independently. Caller-supplied trajectories are not ownership proof.
+        const currentSession =
+          context.openappaSubagent?.session ?? context.openappaSession;
+        if (reviewSession.caller_id !== spender) {
+          if (
+            reviewSession.caller_id ||
+            currentSession?.organization_id !== context.organizationId ||
+            currentSession.session_id !== stamp.session_id ||
+            currentSession.caller_id !== spender
+          ) {
+            return unknownOfferResult();
+          }
+          reviewSession.caller_id = spender;
+        }
+        // Ownership alone does not establish a soft refusal. Unknown offers
+        // must not turn a hard-denied session into an unenforced one.
+        const refusal = await loadRetainedOfferRefusal({
+          organizationId: context.organizationId,
+          sessionId: stamp.session_id,
+          callerId: spender,
+          parentId: stamp.parent_id,
+          offerId: remedy.offer_id,
+        });
+        if (!refusal || isHardBlock(refusal)) return unknownOfferResult();
+        if (await waiveSoftBlock(reviewSession, "remedy_review", refusal)) {
+          return structuredSuccessResult({
+            outcome: "guardrails_disabled",
+            message:
+              "The deployment's soft-block override turned Guardrails off for this session. Retry the original operation. No human approval is claimed and no remedy plan was executed.",
+          });
+        }
+      }
       const callId = execution?.call_id ?? context.currentToolCallId;
       if (remedy.offer_id === undefined) {
         // A return declared ahead of its spawn: no offer, so no review. The
@@ -1287,11 +1331,16 @@ const registry = defineArchestraTools([
             if (waivedReview) {
               ruling = "approve";
             } else if (context.mrtr || context.elicitation) {
+              const toolDescription = await reviewedToolDescription({
+                review,
+                context,
+              });
               const stagedReview = {
                 offerId: remedy.offer_id,
                 text: review.text,
                 ...(review.tool ? { tool: review.tool } : {}),
                 ...(review.arguments ? { arguments: review.arguments } : {}),
+                ...(toolDescription ? { toolDescription } : {}),
               };
               const staged = await stageHitlReview({
                 session: reviewSession,
@@ -1985,6 +2034,47 @@ async function precheckReviewedCall(params: {
   });
 }
 
+/**
+ * The reviewed tool's own description: a built-in's from the registry, an
+ * assigned gateway tool's from its stored definition. Client-native tools and
+ * the run_tool wrapper have none here. Cards show it only for a call that
+ * carries no description of its own. A failed lookup never holds up the
+ * review; the card then shows the call without it.
+ */
+async function reviewedToolDescription(params: {
+  review: { tool?: string; arguments?: string };
+  context: ArchestraContext;
+}): Promise<string | undefined> {
+  const { review, context } = params;
+  if (!review.tool) return undefined;
+  const name = reviewedToolLabel(review.tool);
+  try {
+    const shortName = archestraMcpBranding.getToolShortName(name);
+    // run_tool's own description would describe the wrapper, not the call.
+    if (shortName === TOOL_RUN_TOOL_SHORT_NAME) return undefined;
+    if (shortName) {
+      // Dynamic import avoids the circular import between this file and
+      // ./index (index.ts imports every tool group, including this one).
+      const { getArchestraMcpTools } = await import("./index");
+      const tool = getArchestraMcpTools().find(
+        (candidate) =>
+          archestraMcpBranding.getToolShortName(candidate.name) === shortName,
+      );
+      return tool?.description?.trim() || undefined;
+    }
+    // Gateway tools are named `<server>__<tool>`; a client's own tool is not.
+    if (!name.includes("__")) return undefined;
+    const tool = await ToolModel.findByNameForAgent(name, context.agent.id);
+    return tool?.description?.trim() || undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error, tool: review.tool },
+      "OpenAPPA review tool description unavailable; staging the review without it",
+    );
+    return undefined;
+  }
+}
+
 function precheckRefusalText(params: { tool: string; detail: string }) {
   const head = `[appa] Not submitted for approval: this call to ${params.tool} could not run even if approved.\n`;
   const tail = `\nFix the arguments and call ${params.tool} again; the corrected call gets its own approval.`;
@@ -2067,17 +2157,32 @@ async function inspectableToolIds(
   return new Set(byName.values());
 }
 
-function peerExecution(params: {
+async function peerExecution(params: {
   context: ArchestraContext;
   action: PeerProofAction;
   messageId?: string;
   proof?: PeerProofJws;
-}): { session: OpenAppaSession; toolCallId: string } {
+}): Promise<{ session: OpenAppaSession; toolCallId: string }> {
   const { context } = params;
   if (!context.organizationId) {
     throw new ApiError(401, "Organization context is required");
   }
   if (params.proof === undefined) {
+    const session =
+      context.openappaSubagent?.session ?? context.openappaSession;
+    const callerId = authenticatedRuntimeSpender({
+      userId: context.userId,
+      callerId: context.openappaSession?.caller_id,
+    });
+    if (
+      (await softBlocksAllowed()) &&
+      session &&
+      callerId &&
+      session.organization_id === context.organizationId &&
+      session.caller_id === callerId
+    ) {
+      return { session, toolCallId: context.currentToolCallId ?? randomUUID() };
+    }
     throw new ApiError(
       400,
       "Peer messages require a signed execution proof from the protected proxy",

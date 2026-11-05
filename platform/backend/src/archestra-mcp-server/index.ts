@@ -40,6 +40,7 @@ import {
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
 import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
 import {
   agentToolExclusionsService,
@@ -642,6 +643,7 @@ async function resolveToolAssignment(params: {
   );
   if (
     openappaEnabled() &&
+    !isAgentRunGatewayToken(context.tokenAuth) &&
     isImplicitOpenAppaReadToolShortName(shortName) &&
     !isToolIdentityExcluded(
       {

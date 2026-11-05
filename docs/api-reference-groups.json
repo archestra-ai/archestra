@@ -1,0 +1,14 @@
+{
+  "agents": ["Agents", "Agent Tools", "Skills", "Plugins", "Hooks", "Schedule Triggers", "Agent Delegations", "OpenAPPA", "Browser Storage States"],
+  "a2a": ["A2A", "Outbound A2A Agents"],
+  "mcp-gateway": ["MCP Gateway", "MCP App Runtime", "MCP Tool Call"],
+  "mcp": ["MCP Server", "MCP Catalog", "MCP OAuth Clients", "Tools"],
+  "llm-proxy": ["LLM Proxy", "LLM Models", "LLM Provider API Keys", "Virtual API Keys", "LLM OAuth Clients", "Model Pools", "Limits", "Guardrails", "GitHub Copilot Auth", "Microsoft 365 Copilot Auth", "OpenAI Codex Auth", "xAI Subscription Auth"],
+  "llm-proxy/logs": ["LLM Proxy Logs"],
+  "llm-proxy/auto-routing": ["Auto Routing"],
+  "organization": ["Organization", "Teams", "Members", "Member", "User", "Roles", "Permissions", "Service Accounts", "API Keys", "Auth", "OAuth", "OAuth Clients", "Identity Providers", "User Tokens", "Config", "Site Notification", "Invitation", "Secrets", "Ownership"],
+  "apps": ["Apps", "Connectors", "Connection Setups", "Credentials", "Git Credentials", "GitHub App Configs", "GitHub PATs"],
+  "projects-chat": ["Projects", "Chat", "ChatOps", "ChatOps Webhooks", "Incoming Email", "Sessions", "Webhooks"],
+  "knowledge": ["Knowledge Bases", "Knowledge Files"],
+  "operations": ["Audit Log", "Statistics", "RUM", "Dev Feedback", "Onboarding", "Health", "GitHub Actions"]
+}

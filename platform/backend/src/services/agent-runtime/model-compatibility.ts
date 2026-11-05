@@ -137,7 +137,13 @@ export function getClaudeCodeCloudProvider(params: {
   runtime: Partial<Pick<ResolvedAgentRuntime, "command" | "claudeCode">>;
   provider: SupportedProvider;
 }): "bedrock" | "vertex" | null {
-  if (params.runtime.command?.[0] !== "archestra-claude-code") return null;
+  const command = params.runtime.command?.[0];
+  if (
+    command !== "archestra-claude-code" &&
+    command !== "archestra-claude-code-runtime"
+  ) {
+    return null;
+  }
   if (params.runtime.claudeCode?.authentication === "subscription") return null;
   if (params.provider === "bedrock") return "bedrock";
   if (

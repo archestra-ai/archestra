@@ -8,9 +8,10 @@ import { useBulkDeleteMembers, useMemberSearch } from "@/lib/member.query";
 
 vi.mock("sonner");
 
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: { bulkDeleteMembers: vi.fn(), getMembers: vi.fn() },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  bulkDeleteMembers: vi.fn(),
+  getMembers: vi.fn(),
 }));
 
 const bulkDeleteMembers = vi.mocked(archestraApiSdk.bulkDeleteMembers);

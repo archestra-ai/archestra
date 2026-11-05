@@ -18,6 +18,7 @@ import {
   RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+  SubagentLoadBalancingConfigSchema,
   type SupportedProvider,
   TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -865,6 +866,9 @@ class AgentModel {
         networkPolicy: agent.networkPolicy
           ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
           : agent.networkPolicy,
+        subagentLoadBalancing: agent.subagentLoadBalancing
+          ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
+          : agent.subagentLoadBalancing,
         organizationId,
         ...(slug && { slug }),
         ...(authorId && { authorId }),
@@ -1041,7 +1045,7 @@ class AgentModel {
     options: AgentRosterOptions;
   }): Promise<ChatAgentRoster[]> {
     const where = await AgentModel.buildRosterWhere(params);
-    return AgentModel.findChatRosterRows(where);
+    return AgentModel.findChatRosterRows({ where, userId: params.userId });
   }
 
   /** Bounded fallback identities; explicit URL references use findChatRoster IDs. */
@@ -1090,9 +1094,10 @@ class AgentModel {
       ),
     ]);
     const ids = [...new Set([...fallback, ...system].map((row) => row.id))];
-    const rows = await AgentModel.findChatRosterRows(
-      and(where, idArrayCondition(table.id, ids)),
-    );
+    const rows = await AgentModel.findChatRosterRows({
+      where: and(where, idArrayCondition(table.id, ids)),
+      userId: params.userId,
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     return ids.flatMap((id) => {
       const row = byId.get(id);
@@ -1141,6 +1146,7 @@ class AgentModel {
       or(
         eq(table.authorId, params.userId),
         nonPersonalAudience,
+        namedChatReader(params.userId),
         eq(table.builtIn, true),
       ),
       pattern
@@ -1167,7 +1173,11 @@ class AgentModel {
       sortBy,
       pagination: params.pagination,
     });
-    const rows = await AgentModel.findChatRosterRows(where, page);
+    const rows = await AgentModel.findChatRosterRows({
+      where,
+      page,
+      userId: params.userId,
+    });
     return createCursorPaginatedResult(rows, params.pagination, page.position);
   }
 
@@ -3627,6 +3637,61 @@ class AgentModel {
   }
 
   /**
+   * IDs of live runtime-backed subagents explicitly assigned to this agent
+   * (`agent_tools` -> `tools.delegate_to_agent_id`), in assignment order.
+   */
+  static async findAssignedRuntimeSubagentIds(
+    agentId: string,
+    environmentId: string | null = null,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({
+        targetAgentId: schema.agentsTable.id,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.delegateToAgentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+          isNotNull(schema.agentsTable.runtime),
+          environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, environmentId),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(schema.agentExcludedSubagentsTable.agentId, agentId),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    schema.agentsTable.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.toolsTable),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(
+        asc(schema.agentToolsTable.createdAt),
+        asc(schema.agentToolsTable.id),
+      );
+
+    return [...new Set(rows.map((row) => row.targetAgentId))];
+  }
+
+  /**
    * Batch fetch minimal agent data needed for permission checks.
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
@@ -5694,6 +5759,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,
@@ -6009,9 +6075,15 @@ class AgentModel {
           ),
         ),
     );
+    // A personal agent shared with the caller by name ranks with the caller's
+    // own: its audience is still personal.
     const ranks = [
       and(
-        or(eq(table.authorId, params.userId), eq(table.builtIn, true)),
+        or(
+          eq(table.authorId, params.userId),
+          eq(table.builtIn, true),
+          namedChatReader(params.userId),
+        ),
         sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared)))`,
       ),
       sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE NOT organization_shared))`,
@@ -6060,7 +6132,10 @@ class AgentModel {
         asc(merged.id),
       )
       .limit(limit);
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -6073,16 +6148,20 @@ class AgentModel {
   // SPDX-SnippetEnd
 
   /** Chat roster rows and their object policies in one statement. */
-  private static async findChatRosterRows(
-    where: SQL | undefined,
-    page?: RosterPage,
-  ): Promise<ChatAgentRoster[]> {
+  private static async findChatRosterRows(params: {
+    where: SQL | undefined;
+    page?: RosterPage;
+    userId: string;
+  }): Promise<ChatAgentRoster[]> {
     const rows = await AgentModel.selectRosterRows({
       columns: { ...CHAT_ROSTER_COLUMNS, policies: objectPoliciesColumn() },
-      where,
-      page,
+      where: params.where,
+      page: params.page,
     });
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -6907,6 +6986,60 @@ function organizationLlmProxyCondition(userId: string): SQL {
     eq(table.isDefault, true),
     sql`EXISTS (SELECT 1 FROM member proxy_member WHERE proxy_member.organization_id = ${table.organizationId} AND proxy_member.user_id = ${userId})`,
   ) as SQL;
+}
+
+/**
+ * The agent's own policy grants read to this user by name. Every personal
+ * agent's policy names its author, so this matches only shares with the
+ * caller; it never widens what the roster's base query lets the caller read.
+ */
+function namedChatReader(userId: string): SQL {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grant = JSON.stringify([
+    { subject: { type: "user", id: userId }, actions: ["read"] },
+  ]);
+  return sql`(${table.organizationId}, ${table.id}::text) IN (
+    SELECT named_policy.organization_id, named_policy.scope
+    FROM resource_permission_policies named_policy
+    WHERE named_policy.resource = 'agent' AND named_policy.scope <> '*'
+      AND named_policy.grants @> ${grant}::jsonb
+  )`;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * Whether another user's agent grants this user read by name on its own
+ * policy: the share {@link namedChatReader} admits to the chat roster. An
+ * agent read only through admin oversight is not shared by name.
+ */
+function isSharedByName(params: {
+  agent: Pick<Agent, "id" | "organizationId" | "agentType" | "authorId">;
+  policies: ObjectPolicy[];
+  userId: string;
+}): boolean {
+  const { agent, policies, userId } = params;
+  if (agent.authorId === userId || agent.agentType === "llm_proxy")
+    return false;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const resource = agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+  return policies.some(
+    (policy) =>
+      policy.organizationId === agent.organizationId &&
+      policy.resource === resource &&
+      policy.scope === agent.id &&
+      policy.grants.some(
+        (grant) =>
+          grant.subject.type === "user" &&
+          grant.subject.id === userId &&
+          grant.actions.includes("read"),
+      ),
+  );
+  // SPDX-SnippetEnd
 }
 
 /**

@@ -5,7 +5,8 @@ import {
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns/format";
+import { subDays } from "date-fns/subDays";
 import {
   afterEach,
   beforeAll,
@@ -116,17 +117,11 @@ let mockAppsLoading = false;
 let mockRuns: Array<Record<string, unknown>> = [];
 
 let useRealRunsQuery = false;
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getMyAgentRuns: vi.fn(),
-      getMyAgentRun: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getMyAgentRuns: vi.fn(),
+  getMyAgentRun: vi.fn(),
+}));
 vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/agent-runtime.query")>();

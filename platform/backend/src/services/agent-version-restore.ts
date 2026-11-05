@@ -502,6 +502,14 @@ async function planScalars(params: {
     scalars.networkPolicy = snapshotNetworkPolicy;
   }
 
+  const snapshotSubagentLoadBalancing = snapshot.subagentLoadBalancing ?? null;
+  if (
+    JSON.stringify(snapshotSubagentLoadBalancing) !==
+    JSON.stringify(current.subagentLoadBalancing ?? null)
+  ) {
+    scalars.subagentLoadBalancing = snapshotSubagentLoadBalancing;
+  }
+
   // A model and its API key are a pair: written whole or not at all, the
   // invariant the update route enforces. The existence check is stricter than
   // that route, which validates neither — but writing a dangling FK would 500

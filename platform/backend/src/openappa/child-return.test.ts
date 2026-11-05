@@ -148,8 +148,8 @@ describe("OpenAPPA child-return markers", () => {
       extra: { type: "encrypted_content", encrypted_content: "unverified" },
     },
     {
-      name: "unrecognized message",
-      text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+      name: "unrecognized kind",
+      text: "Message Type: CHANNEL_POST\nTask name: /root\nSender: /root/worker\nPayload:\n391",
     },
   ])("refuses malformed or unsupported native mailbox returns: $name", ({
     author,
@@ -191,7 +191,7 @@ describe("OpenAPPA child-return markers", () => {
     expect(body).toEqual(sent);
   });
 
-  test("still collects a mailbox return next to messages it cannot read", () => {
+  test("still collects a mailbox return next to messages it does not read", () => {
     const header =
       "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
     const mail = (text: string, id?: string, payload?: string) => ({
@@ -208,6 +208,7 @@ describe("OpenAPPA child-return markers", () => {
     });
     // The kinds a Codex agent sends besides a task and its final answer. Codex
     // 0.162 sends the text of a message between agents as an encrypted part.
+    // A message is not a return: the reader leaves it for relay admission.
     const message = mail(
       "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
       undefined,
@@ -231,7 +232,6 @@ describe("OpenAPPA child-return markers", () => {
     });
 
     expect(refusals).toEqual([
-      "OpenAPPA withheld an unsupported Codex mailbox message",
       "OpenAPPA withheld an unsupported Codex mailbox message",
     ]);
     expect(collected.completions).toEqual([

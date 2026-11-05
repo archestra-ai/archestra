@@ -70,6 +70,8 @@ import { linkedIdentityProviderPlugin } from "./linked-idp";
 import { hashOauthClientSecret } from "./oauth-client-secret";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoSubjectBinding } from "./sso-subject-binding.ee";
 
 // SPDX-SnippetEnd
 
@@ -635,7 +637,12 @@ export const auth = betterAuth({
           return session?.user.id;
         },
       });
-      const internalAdapter = withSsoEmailReconciliation(ctx);
+      const emailReconciliation = withSsoEmailReconciliation(ctx);
+      const internalAdapter =
+        withSsoSubjectBinding(
+          ctx,
+          emailReconciliation ?? ctx.context.internalAdapter,
+        ) ?? emailReconciliation;
       if (adapter || internalAdapter)
         return {
           context: {

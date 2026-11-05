@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
@@ -119,6 +120,10 @@ class SkillSandboxRuntimeService {
         params.caller,
       );
       const cwd = params.cwd ?? sandbox.defaultCwd;
+      // the row id is chosen before the run: it keys the engine's cache, so
+      // this sandbox's later replays reuse this result, while the same command
+      // in any other sandbox runs for real.
+      const commandId = randomUUID();
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -127,6 +132,7 @@ class SkillSandboxRuntimeService {
       try {
         executed = await sandboxRuntimeService.runCommand({
           command: params.command,
+          commandId,
           cwd,
           timeoutSeconds,
           replayEntries,
@@ -150,6 +156,7 @@ class SkillSandboxRuntimeService {
         });
         if (shouldRecordOnFailure(error)) {
           await this.appendSyntheticRow({
+            id: commandId,
             sandboxId: params.sandboxId,
             organizationId: sandbox.organizationId,
             command: params.command,
@@ -170,6 +177,7 @@ class SkillSandboxRuntimeService {
       >;
       try {
         row = await SkillSandboxReplayEventModel.appendCommand({
+          id: commandId,
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
           command: params.command,
@@ -536,6 +544,7 @@ class SkillSandboxRuntimeService {
    * what the caller cares about.
    */
   private async appendSyntheticRow(args: {
+    id: string;
     sandboxId: SandboxId;
     organizationId: string;
     command: string;
@@ -544,6 +553,7 @@ class SkillSandboxRuntimeService {
   }): Promise<void> {
     try {
       await SkillSandboxReplayEventModel.appendCommand({
+        id: args.id,
         sandboxId: args.sandboxId,
         organizationId: args.organizationId,
         command: args.command,
@@ -704,6 +714,7 @@ class SkillSandboxRuntimeService {
             return {
               kind: "command",
               command: {
+                id: entry.command.id,
                 command: entry.command.command,
                 // pin replays to defaultCwd when the original entry has no
                 // stored cwd, so the Rust fallback doesn't pick up the live

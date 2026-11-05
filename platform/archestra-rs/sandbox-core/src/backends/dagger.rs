@@ -31,8 +31,9 @@ use crate::supervisor::{
     ARCHESTRA_RUN_PY, SUPERVISOR_PATH, parse_supervisor_output, supervised_argv,
 };
 use crate::validation::{
-    SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, format_artifact_error, shell_quote,
-    skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
+    COMMAND_ID_ENV, SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER,
+    format_artifact_error, shell_quote, skill_root_path, validate_artifact_path, validate_cwd,
+    validate_snapshot_file_path,
 };
 use crate::{
     ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
@@ -169,6 +170,9 @@ impl SandboxBackend for DaggerBackend {
         for var in &req.secret_env {
             container = with_secret_env(&self.client, container, var).await?;
         }
+        // same workdir -> id -> exec order as a replayed command, so the next
+        // call's replay of this command reuses this run's layer.
+        container = container.with_env_variable(COMMAND_ID_ENV, &req.command_id);
         let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
         let executed = container.with_exec_opts(argv, exec_opts(req.stdin.as_deref()));
 
@@ -209,6 +213,7 @@ impl SandboxBackend for DaggerBackend {
         // sequence point, so module imports resolve identically to the live run.
         let run = RunRequest {
             replay_steps: req.replay_steps,
+            command_id: String::new(),
             limits: req.limits.clone(),
             command: String::new(),
             cwd: req.default_cwd,
@@ -758,8 +763,9 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
 /// across checkpoints.
 const CHECKPOINT_CHAIN_LINKS: usize = 64;
 
-/// chained calls appended per replayed command: `with_workdir` + `with_exec`.
-const COMMAND_CHAIN_LINKS: usize = 2;
+/// chained calls appended per replayed command: `with_workdir` +
+/// `with_env_variable` (the command id) + `with_exec`.
+const COMMAND_CHAIN_LINKS: usize = 3;
 /// chained calls appended per replayed upload in [`apply_upload_file`]:
 /// `with_user` + `with_new_file` + `with_exec` + `with_user`.
 const UPLOAD_CHAIN_LINKS: usize = 4;
@@ -891,6 +897,9 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
     // content-addressed layer cache to keep the wall-clock cost near-zero when
     // the prefix is unchanged. mounts are append-only, so activating a skill
     // mid-conversation never changes a prior layer's parent — the cache holds.
+    // each command exec carries its own id (`COMMAND_ID_ENV`): a replay hits
+    // the layer its live run produced, but equal command text in another
+    // sandbox is a different computation and runs for real.
     //
     // replay steps are historical data, validated when first accepted; trusting
     // them here keeps the log replayable. Live `req.cwd` is validated at the
@@ -906,6 +915,7 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                 let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
                 container = container
                     .with_workdir(cwd)
+                    .with_env_variable(COMMAND_ID_ENV, &entry.id)
                     .with_exec_opts(argv, exec_opts(None));
                 if budget.charge(COMMAND_CHAIN_LINKS) {
                     container = checkpoint(client, container).await?;
@@ -1840,8 +1850,8 @@ mod tests {
 
     #[test]
     fn chain_budget_bounds_query_depth_for_hook_heavy_replay() {
-        // a hook fire appends a payload upload (4 links) + a command (2 links).
-        // model a real failing replay log (33 uploads + 18 commands ≈ 168
+        // a hook fire appends a payload upload (4 links) + a command (3 links).
+        // model a real failing replay log (33 uploads + 18 commands ≈ 186
         // links): no single query between checkpoints may approach serde_json's
         // 128-level recursion limit, however long the history grows.
         let mut budget = ChainBudget::new();
@@ -1884,6 +1894,7 @@ mod tests {
 
     fn command_step() -> ReplayStep {
         ReplayStep::Command(ReplayCommand {
+            id: "cmd-1".to_string(),
             command: "echo hi".to_string(),
             cwd: None,
             timeout_seconds: 1,

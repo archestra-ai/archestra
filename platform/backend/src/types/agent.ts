@@ -379,6 +379,13 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   runtime: true,
   modelId: true,
   llmApiKeyId: true,
+}).extend({
+  /**
+   * Another user's agent whose own policy grants the caller read by name. A
+   * personal agent the caller reads only through admin oversight is false, so
+   * the chat picker can tell a share from a reference it should not offer.
+   */
+  sharedByName: z.boolean(),
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 

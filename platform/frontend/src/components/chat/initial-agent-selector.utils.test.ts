@@ -19,6 +19,7 @@ function makeAgent(
     description: string | null;
     icon: string | null;
     systemPrompt: string | null;
+    sharedByName: boolean;
   }> = {},
 ) {
   return {
@@ -32,6 +33,7 @@ function makeAgent(
     runtime: null,
     builtIn: overrides.builtIn ?? false,
     builtInAgentConfig: overrides.builtInAgentConfig ?? null,
+    sharedByName: overrides.sharedByName ?? false,
   };
 }
 
@@ -73,21 +75,30 @@ describe("filterAndSortInitialAgents", () => {
       }),
     ).toEqual([agents[0]]);
   });
-  it("shows only the current user's personal agents", () => {
+  it("keeps another user's personal agent shared by name, after the user's own", () => {
     const agents = [
+      makeAgent({ id: "org", name: "Org Agent", scope: "org" }),
+      makeAgent({
+        id: "shared-with-me",
+        name: "Alpha Shared With Me",
+        scope: "personal",
+        authorId: "user-2",
+        sharedByName: true,
+      }),
+      // An admin reads this one only through oversight, e.g. a saved
+      // reference whose share was revoked.
+      makeAgent({
+        id: "oversight-only",
+        name: "Beta Oversight Only",
+        scope: "personal",
+        authorId: "user-3",
+      }),
       makeAgent({
         id: "mine",
-        name: "My Personal Agent",
+        name: "Zulu My Personal Agent",
         scope: "personal",
         authorId: userId,
       }),
-      makeAgent({
-        id: "other",
-        name: "Other Personal Agent",
-        scope: "personal",
-        authorId: "user-2",
-      }),
-      makeAgent({ id: "shared", name: "Shared Agent", scope: "org" }),
     ];
 
     const result = filterAndSortInitialAgents({
@@ -97,7 +108,20 @@ describe("filterAndSortInitialAgents", () => {
       userId,
     });
 
-    expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
+    expect(result.map((agent) => agent.id)).toEqual([
+      "mine",
+      "shared-with-me",
+      "org",
+    ]);
+    expect(
+      groupInitialAgents({ agents: result, userId }).map((group) => ({
+        label: group.label,
+        ids: group.agents.map((agent) => agent.id),
+      })),
+    ).toEqual([
+      { label: "Yours", ids: ["mine"] },
+      { label: "Shared with you", ids: ["shared-with-me", "org"] },
+    ]);
   });
 
   it("keeps an authorized personal-scoped system assistant without an author", () => {

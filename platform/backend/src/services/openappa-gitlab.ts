@@ -256,6 +256,8 @@ class OpenAppaGitlab {
     summary: string;
     upsert: { path: string; content: string }[];
     delete: string[];
+    /** The new branch; a fresh `archestra/openappa-<uuid>` when omitted. */
+    head?: string;
   }): Promise<{ iid: number; webUrl: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -272,7 +274,7 @@ class OpenAppaGitlab {
             `${path} is not a regular file in the repository`,
           );
       }
-      const head = `archestra/openappa-${randomUUID()}`;
+      const head = params.head ?? `archestra/openappa-${randomUUID()}`;
       await client.commitGitlabFiles({
         repo: params.repo,
         branch: head,

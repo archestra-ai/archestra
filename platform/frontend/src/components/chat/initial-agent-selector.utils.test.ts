@@ -19,6 +19,7 @@ function makeAgent(
     description: string | null;
     icon: string | null;
     systemPrompt: string | null;
+    sharedByName: boolean;
   }> = {},
 ) {
   return {
@@ -32,6 +33,7 @@ function makeAgent(
     runtime: null,
     builtIn: overrides.builtIn ?? false,
     builtInAgentConfig: overrides.builtInAgentConfig ?? null,
+    sharedByName: overrides.sharedByName ?? false,
   };
 }
 
@@ -88,7 +90,7 @@ describe("filterAndSortInitialAgents", () => {
       }),
     ).toEqual([agents[0]]);
   });
-  it("keeps another user's personal agent the roster returned, after the user's own", () => {
+  it("keeps another user's personal agent shared by name, after the user's own", () => {
     const agents = [
       makeAgent({ id: "org", name: "Org Agent", scope: "org" }),
       makeAgent({
@@ -96,6 +98,15 @@ describe("filterAndSortInitialAgents", () => {
         name: "Alpha Shared With Me",
         scope: "personal",
         authorId: "user-2",
+        sharedByName: true,
+      }),
+      // An admin reads this one only through oversight, e.g. a saved
+      // reference whose share was revoked.
+      makeAgent({
+        id: "oversight-only",
+        name: "Beta Oversight Only",
+        scope: "personal",
+        authorId: "user-3",
       }),
       makeAgent({
         id: "mine",

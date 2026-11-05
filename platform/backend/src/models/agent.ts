@@ -1045,7 +1045,7 @@ class AgentModel {
     options: AgentRosterOptions;
   }): Promise<ChatAgentRoster[]> {
     const where = await AgentModel.buildRosterWhere(params);
-    return AgentModel.findChatRosterRows(where);
+    return AgentModel.findChatRosterRows({ where, userId: params.userId });
   }
 
   /** Bounded fallback identities; explicit URL references use findChatRoster IDs. */
@@ -1094,9 +1094,10 @@ class AgentModel {
       ),
     ]);
     const ids = [...new Set([...fallback, ...system].map((row) => row.id))];
-    const rows = await AgentModel.findChatRosterRows(
-      and(where, idArrayCondition(table.id, ids)),
-    );
+    const rows = await AgentModel.findChatRosterRows({
+      where: and(where, idArrayCondition(table.id, ids)),
+      userId: params.userId,
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     return ids.flatMap((id) => {
       const row = byId.get(id);
@@ -1172,7 +1173,11 @@ class AgentModel {
       sortBy,
       pagination: params.pagination,
     });
-    const rows = await AgentModel.findChatRosterRows(where, page);
+    const rows = await AgentModel.findChatRosterRows({
+      where,
+      page,
+      userId: params.userId,
+    });
     return createCursorPaginatedResult(rows, params.pagination, page.position);
   }
 
@@ -6127,7 +6132,10 @@ class AgentModel {
         asc(merged.id),
       )
       .limit(limit);
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -6140,16 +6148,20 @@ class AgentModel {
   // SPDX-SnippetEnd
 
   /** Chat roster rows and their object policies in one statement. */
-  private static async findChatRosterRows(
-    where: SQL | undefined,
-    page?: RosterPage,
-  ): Promise<ChatAgentRoster[]> {
+  private static async findChatRosterRows(params: {
+    where: SQL | undefined;
+    page?: RosterPage;
+    userId: string;
+  }): Promise<ChatAgentRoster[]> {
     const rows = await AgentModel.selectRosterRows({
       columns: { ...CHAT_ROSTER_COLUMNS, policies: objectPoliciesColumn() },
-      where,
-      page,
+      where: params.where,
+      page: params.page,
     });
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -6977,11 +6989,6 @@ function organizationLlmProxyCondition(userId: string): SQL {
 }
 
 /**
- * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind. The
- * organization's LLM proxy has no grant namespace and serves the whole
- * organization, so it always reads as `org`.
- */
-/**
  * The agent's own policy grants read to this user by name. Every personal
  * agent's policy names its author, so this matches only shares with the
  * caller; it never widens what the roster's base query lets the caller read.
@@ -7003,6 +7010,43 @@ function namedChatReader(userId: string): SQL {
   // SPDX-SnippetEnd
 }
 
+/**
+ * Whether another user's agent grants this user read by name on its own
+ * policy: the share {@link namedChatReader} admits to the chat roster. An
+ * agent read only through admin oversight is not shared by name.
+ */
+function isSharedByName(params: {
+  agent: Pick<Agent, "id" | "organizationId" | "agentType" | "authorId">;
+  policies: ObjectPolicy[];
+  userId: string;
+}): boolean {
+  const { agent, policies, userId } = params;
+  if (agent.authorId === userId || agent.agentType === "llm_proxy")
+    return false;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const resource = agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+  return policies.some(
+    (policy) =>
+      policy.organizationId === agent.organizationId &&
+      policy.resource === resource &&
+      policy.scope === agent.id &&
+      policy.grants.some(
+        (grant) =>
+          grant.subject.type === "user" &&
+          grant.subject.id === userId &&
+          grant.actions.includes("read"),
+      ),
+  );
+  // SPDX-SnippetEnd
+}
+
+/**
+ * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind. The
+ * organization's LLM proxy has no grant namespace and serves the whole
+ * organization, so it always reads as `org`.
+ */
 function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   const table = schema.agentsTable;
   const byResource = (resource: "agent" | "mcpGateway") =>

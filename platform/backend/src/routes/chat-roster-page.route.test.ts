@@ -566,6 +566,47 @@ describe("bounded chat roster", () => {
           .data,
       ),
     ).toEqual([sharedWithMe.id]);
+
+    // An explicit reference (a pin, the saved agent) marks only the named
+    // share as one; the user's own and the team agent are not shares by name.
+    const referenced = async () =>
+      Object.fromEntries(
+        (
+          (await get(
+            `/api/agents/chat-roster?ids=${[own.id, sharedWithMe.id, unshared.id, teamAgent.id].join(",")}`,
+          )) as { id: string; sharedByName: boolean }[]
+        ).map((row) => [row.id, row.sharedByName]),
+      );
+    expect(await referenced()).toEqual({
+      [own.id]: false,
+      [sharedWithMe.id]: true,
+      [teamAgent.id]: false,
+      // An admin still reads the unshared agent through oversight.
+      ...(role === "admin" ? { [unshared.id]: false } : {}),
+    });
+
+    // Once the owner revokes the share, an admin's saved reference still
+    // resolves, but no longer as a share; a member loses it.
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: ctx.organizationId,
+      resource: "agent",
+      scope: sharedWithMe.id,
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: ctx.organizationId,
+      resource: "agent",
+      scope: sharedWithMe.id,
+      revision: policy?.revision ?? 0,
+      grants: (policy?.grants ?? []).filter(
+        (grant) => grant.subject.id !== ctx.user.id,
+      ),
+    });
+    expect((await referenced())[sharedWithMe.id]).toBe(
+      role === "admin" ? false : undefined,
+    );
+    expect(
+      ids((await get("/api/agents/chat-roster/page?limit=100")).data),
+    ).not.toContain(sharedWithMe.id);
   });
   test("resumes the chat order from a rank and name cursor", async ({
     makeMember,

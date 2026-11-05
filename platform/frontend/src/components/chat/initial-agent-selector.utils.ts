@@ -14,6 +14,7 @@ type InitialAgentListItem = Pick<
   | "runtime"
   | "builtIn"
   | "builtInAgentConfig"
+  | "sharedByName"
 >;
 
 export function filterAndSortInitialAgents<
@@ -26,15 +27,21 @@ export function filterAndSortInitialAgents<
 }): T[] {
   const { allAgents, currentAgentId, search, userId } = params;
 
-  // The chat roster already leaves out other users' personal agents unless
-  // they are shared with this user by name, so a personal agent by someone
-  // else is one shared with them.
-  let result = allAgents.filter(
-    (agent) =>
-      !agent.builtIn ||
-      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
-      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-  );
+  let result = allAgents.filter((agent) => {
+    if (agent.builtIn)
+      return (
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+      );
+    // Another user's personal agent is offered only when it is shared with
+    // this user by name. Admin oversight can read any personal agent, and a
+    // saved reference can outlive a revoked share; neither is a share.
+    return (
+      agent.scope !== "personal" ||
+      agent.authorId === userId ||
+      agent.sharedByName
+    );
+  });
 
   if (search) {
     const lower = search.toLowerCase();

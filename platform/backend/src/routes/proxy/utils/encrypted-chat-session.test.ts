@@ -34,10 +34,10 @@ import {
   resolveEncryptedChatAuditContext,
 } from "./encrypted-chat-session";
 
-// Map-backed fake with real cache semantics (auto-reset between tests), so
-// the positive-result caching contract is exercised for real.
+// The real cache on this file's test database (cleared by the per-test
+// reset), so the positive-result caching contract is exercised for real.
 setupTestCacheManager();
-// Mocked to assert on the fail-closed warning log.
+// Spied on to assert the fail-closed warning log.
 spyOnLogger();
 
 const ESCROW: EncryptedChatEscrowBlob = {

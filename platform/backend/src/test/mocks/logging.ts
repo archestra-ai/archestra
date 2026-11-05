@@ -18,9 +18,9 @@ import type { MockFunction } from "./mock-function";
  * "silent", and dropping the last `vi.mock` moves the file into the
  * non-isolated (fast) vitest project.
  *
- * A module mock is required for assertions because the real export is a
- * Proxy whose `get` returns methods bound to a private pino instance —
- * `vi.spyOn(logger, "error")` cannot intercept it.
+ * Tests that only assert on logger calls should prefer `spyOnLogger()` from
+ * `@/test/logging`, which spies on the real logger and keeps the file in the
+ * fast project. This mock remains for files that already need module mocks.
  */
 export function loggingModuleMock() {
   const logger = {

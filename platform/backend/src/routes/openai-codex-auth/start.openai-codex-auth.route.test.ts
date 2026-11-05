@@ -6,8 +6,8 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// PGlite tests don't have; back it with the canonical Map-backed fake.
+// The rate limiter uses cacheManager: start the real cache on this file's
+// test database, whose per-test reset clears its entries.
 setupTestCacheManager();
 
 // Pin the codex OAuth config so a developer's local .env can't leak into the

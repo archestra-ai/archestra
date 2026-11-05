@@ -7,9 +7,8 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
+// The rate limiter uses cacheManager: start the real cache on this file's
+// test database, whose per-test reset clears its entries.
 setupTestCacheManager();
 
 overrideConfig({

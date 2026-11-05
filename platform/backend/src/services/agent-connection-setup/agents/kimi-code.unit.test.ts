@@ -158,11 +158,14 @@ if (process.argv[2] === "-p") {
     writeFileSync(path.join(kimiHome, "config.toml"), options.config);
   const opener = path.join(home, "opener");
   mkdirSync(opener);
-  writeFileSync(
-    path.join(opener, "xdg-open"),
-    `#!/bin/sh\nprintf '%s\\n' "$1" >> ${JSON.stringify(path.join(home, "opened.txt"))}\n`,
-  );
-  chmodSync(path.join(opener, "xdg-open"), 0o755);
+  // xdg-open on Linux, open on macOS: whichever the host's opener is.
+  for (const name of ["xdg-open", "open"]) {
+    writeFileSync(
+      path.join(opener, name),
+      `#!/bin/sh\nprintf '%s\\n' "$1" >> ${JSON.stringify(path.join(home, "opened.txt"))}\n`,
+    );
+    chmodSync(path.join(opener, name), 0o755);
+  }
   // The person's own keys stay out; tests set the one they need.
   const {
     KIMI_API_KEY: _kimi,

@@ -1,7 +1,11 @@
+import { vi } from "vitest";
+
 // Content capture is read once at import, so it is switched on here.
-overrideConfig({
-  observability: { otel: { captureContent: true } },
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    observability: { otel: { captureContent: true } },
+  }),
+);
 
 import { type TracerProvider, trace } from "@opentelemetry/api";
 import {
@@ -11,7 +15,6 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import config from "@/config";
 import { afterAll, afterEach, beforeAll, expect, test } from "@/test";
-import { overrideConfig } from "@/test/config";
 import {
   EVENT_GENAI_CONTENT_INPUT,
   EVENT_GENAI_CONTENT_OUTPUT,

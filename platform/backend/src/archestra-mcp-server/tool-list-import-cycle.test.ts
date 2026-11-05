@@ -1,12 +1,11 @@
 import { getArchestraToolFullName } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
-import { spyOnLogger } from "@/test/logging";
 
 // Puts this file in the isolated vitest project (see vitest.config.ts: files
 // touching the mock registry get `isolate: true`). `resetModules` below would
 // otherwise clear the module registry the clean project's worker shares with
 // every other file, failing whichever siblings happen to be mid-run.
-spyOnLogger();
+vi.mock("@/logging");
 
 /**
  * `./index` is part of an import cycle: `./sandbox` imports `@/models`, which

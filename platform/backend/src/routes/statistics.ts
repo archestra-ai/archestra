@@ -29,6 +29,8 @@ import {
   CostStatisticsSchema,
   constructResponseSchema,
   createSortingQuerySchema,
+  LLM_USAGE_DIMENSIONS,
+  LlmUsageResponseSchema,
   MCP_TOOL_CALL_USAGE_DIMENSIONS,
   McpToolCallUsageResponseSchema,
   ModelStatisticsSchema,
@@ -500,6 +502,57 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...filters,
           pagination: { limit, offset },
           ...(await usageScope(request)),
+          organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/llm-usage",
+    {
+      schema: {
+        operationId: RouteId.GetLlmUsage,
+        description:
+          "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema.merge(PaginationQuerySchema).extend({
+          groupBy: groupByQuerySchema(LLM_USAGE_DIMENSIONS, [
+            "teamId",
+            "provider",
+            "model",
+          ]),
+          teamId: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this team's usage."),
+          credentialId: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              "Only this virtual key, passthrough key or OAuth client.",
+            ),
+          provider: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this provider, e.g. anthropic."),
+          model: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this billed model."),
+        }),
+        response: constructResponseSchema(LlmUsageResponseSchema),
+      },
+    },
+    async ({ query: { limit, offset, ...filters }, organizationId }, reply) => {
+      return reply.send(
+        await UsageStatisticsModel.getLlmUsage({
+          ...filters,
+          pagination: { limit, offset },
           organizationId,
         }),
       );

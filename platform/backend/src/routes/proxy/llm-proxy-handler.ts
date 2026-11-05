@@ -181,8 +181,8 @@ import {
   withoutResponsesModelOutput,
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "./common";
 import {
-  ANTHROPIC_SUBSCRIPTION_UPSTREAM,
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,

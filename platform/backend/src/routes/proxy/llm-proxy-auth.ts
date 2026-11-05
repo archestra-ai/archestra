@@ -58,6 +58,7 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "./common";
 import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
 import type { PassthroughIdentity } from "./passthrough-log";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
@@ -1722,7 +1723,6 @@ function trimTrailingSlash(url: string | undefined): string | undefined {
   return url?.replace(/\/+$/, "");
 }
 
-export const ANTHROPIC_SUBSCRIPTION_UPSTREAM = "https://api.anthropic.com";
 const passthroughUpstreamOverrides = new WeakMap<object, string>();
 
 export function getPassthroughUpstream(

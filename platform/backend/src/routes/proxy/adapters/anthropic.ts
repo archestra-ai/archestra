@@ -42,6 +42,7 @@ import {
 } from "@/utils/billable-usage";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "../common";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
@@ -1589,7 +1590,7 @@ export const anthropicAdapterFactory: LLMProvider<
       // A personal OAuth token must never be forwarded to a deployment's
       // configured custom Anthropic upstream.
       baseURL: isClaudeSubscriptionToken
-        ? "https://api.anthropic.com"
+        ? ANTHROPIC_SUBSCRIPTION_UPSTREAM
         : options.baseUrl,
       fetch: customFetch,
       timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,

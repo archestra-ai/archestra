@@ -1971,7 +1971,9 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         authorization: req.headers.authorization,
         xApiKey: req.headers["x-api-key"],
       });
-      return { input_tokens: 799 };
+      return {
+        input_tokens: customUpstreamRequests.length === 1 ? 799 : 850,
+      };
     });
     await customUpstream.listen({ port: 0, host: "127.0.0.1" });
     const customAddress = customUpstream.server.address();
@@ -2199,6 +2201,31 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
         await getObservedClaudeCodeToolTokenCount(observedToolSurface),
       ).toEqual({
         total: 299,
+        model: "claude-opus-4-20250514",
+        observedAt: expect.any(String),
+      });
+
+      const countTokensWithoutAgentUuid = await app.inject({
+        method: "POST",
+        url: "/v1/anthropic/v1/messages/count_tokens",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${nonRunCountTokensKey}`,
+          "x-archestra-virtual-key": nonRunCountTokensKey,
+          "x-archestra-agent-id": CLAUDE_CODE_CLIENT_ID,
+          "x-api-key": "sk-ant-api03-custom",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: countTokensPayload,
+      });
+      await drainBackgroundWork();
+      expect(countTokensWithoutAgentUuid.statusCode).toBe(200);
+      expect(countTokensWithoutAgentUuid.json()).toEqual({ input_tokens: 850 });
+      expect(customUpstreamRequests).toHaveLength(2);
+      expect(
+        await getObservedClaudeCodeToolTokenCount(observedToolSurface),
+      ).toEqual({
+        total: 350,
         model: "claude-opus-4-20250514",
         observedAt: expect.any(String),
       });

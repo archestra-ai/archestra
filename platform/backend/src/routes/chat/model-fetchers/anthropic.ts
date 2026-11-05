@@ -10,6 +10,7 @@ import {
 } from "@/clients/azure-url";
 import config from "@/config";
 import logger from "@/logging";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "@/routes/proxy/common";
 import type { Anthropic } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { type ModelInfo, modelFetchError } from "./types";
@@ -26,7 +27,7 @@ export async function fetchAnthropicModels(
   const isClaudeSubscriptionToken =
     apiKey.startsWith("sk-ant-oat") || apiKey.startsWith("Bearer:sk-ant-oat");
   const baseUrl = isClaudeSubscriptionToken
-    ? "https://api.anthropic.com"
+    ? ANTHROPIC_SUBSCRIPTION_UPSTREAM
     : baseUrlOverride || config.llm.anthropic.baseUrl;
   if (isAzureAiFoundryBaseUrl(baseUrl)) {
     return fetchAnthropicFoundryDeployments({ apiKey, baseUrl, extraHeaders });

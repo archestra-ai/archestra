@@ -83,11 +83,7 @@ const install = dockerfile.match(
 if (!install) {
   errors.push("could not parse apt install list from sandbox Dockerfile");
 } else {
-  const bakedApt = install[1]
-    .replace(/\\/g, " ")
-    .trim()
-    .split(/\s+/)
-    .sort();
+  const bakedApt = install[1].replace(/\\/g, " ").trim().split(/\s+/).sort();
   if (JSON.stringify(runtimeApt) !== JSON.stringify(bakedApt)) {
     errors.push(
       `apt packages differ — dagger.rs DEFAULT_APT_PACKAGES=[${runtimeApt}] vs Dockerfile=[${bakedApt}]`,

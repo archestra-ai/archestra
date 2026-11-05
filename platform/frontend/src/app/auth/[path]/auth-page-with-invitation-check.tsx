@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
 import { BackendConnectivityStatus } from "@/app/auth/_components/backend-connectivity-status";
+import { SsoSetupNote } from "@/app/auth/_components/sso-setup-note";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
@@ -97,8 +98,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const showExistingUserMessage =
     path === "sign-in" && invitationId && invitationData;
 
-  // Only show default credentials warning when basic auth is enabled
-  const showDefaultCredentialsWarning =
+  // The default credentials warning and the SSO setup note only concern
+  // password sign-in. With it disabled, the card already says how to sign in.
+  const showSignInNotes =
     path === "sign-in" &&
     !invitationId &&
     !isLoadingPublicConfig &&
@@ -127,8 +129,9 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
           arrives and nothing above it moves.
         */}
         <div className="relative w-full max-w-md">
-          {showDefaultCredentialsWarning && (
-            <div className="absolute inset-x-0 top-full pt-4">
+          {showSignInNotes && (
+            <div className="absolute inset-x-0 top-full space-y-4 pt-4">
+              <SsoSetupNote />
               <DefaultCredentialsWarning alwaysShow />
             </div>
           )}

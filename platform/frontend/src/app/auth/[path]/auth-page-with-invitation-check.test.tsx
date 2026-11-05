@@ -36,6 +36,10 @@ vi.mock("@/app/auth/_components/auth-view-with-error-handling", () => ({
   ),
 }));
 
+vi.mock("@/app/auth/_components/sso-setup-note", () => ({
+  SsoSetupNote: vi.fn(() => <div data-testid="sso-setup-note" />),
+}));
+
 // Mock AppLogo
 vi.mock("@/components/app-logo", () => ({
   AppLogo: vi.fn(() => <div data-testid="app-logo">App Logo</div>),
@@ -102,7 +106,7 @@ describe("AuthPageWithInvitationCheck", () => {
       expect(screen.getByTestId("auth-path")).toHaveTextContent("sign-in");
     });
 
-    it("should show default credentials warning on sign-in page without invitation", () => {
+    it("should show default credentials warning and SSO note on sign-in page without invitation", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -116,6 +120,7 @@ describe("AuthPageWithInvitationCheck", () => {
       expect(
         screen.getByTestId("default-credentials-warning"),
       ).toBeInTheDocument();
+      expect(screen.getByTestId("sso-setup-note")).toBeInTheDocument();
     });
 
     it("should not show default credentials warning when invitationId is present", () => {
@@ -134,7 +139,7 @@ describe("AuthPageWithInvitationCheck", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("should not show default credentials warning when basic auth is disabled", () => {
+    it("should not show default credentials warning or SSO note when basic auth is disabled", () => {
       vi.mocked(usePublicConfig).mockReturnValue({
         data: {
           disableBasicAuth: true,
@@ -155,6 +160,7 @@ describe("AuthPageWithInvitationCheck", () => {
       expect(
         screen.queryByTestId("default-credentials-warning"),
       ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("sso-setup-note")).not.toBeInTheDocument();
     });
 
     it("should show welcome back message for existing users with invitation", () => {

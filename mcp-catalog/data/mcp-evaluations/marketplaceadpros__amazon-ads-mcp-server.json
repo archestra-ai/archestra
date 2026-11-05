@@ -1,52 +1,69 @@
 {
   "name": "marketplaceadpros__amazon-ads-mcp-server",
-  "display_name": "amazon-ads-mcp-server",
-  "description": "MCP Server to interact with Amazon Ads",
+  "display_name": "Marketplace Ad Pros (Amazon Ads & Seller Central)",
+  "description": "Hosted MCP server for Amazon Ads (Sponsored Products, Sponsored Brands, Sponsored Display, DSP), Seller Central and Vendor Central (Selling Partner API), and Amazon Marketing Cloud. Read-only by default; write actions are opt-in and each one is confirmed. One connection covers all Amazon regions.",
   "author": {
-    "name": "MarketplaceAdPros"
+    "name": "Marketplace Ad Pros",
+    "url": "https://marketplaceadpros.com/"
+  },
+  "homepage": "https://marketplaceadpros.com/",
+  "oauth_config": {
+    "name": "Marketplace Ad Pros MCP",
+    "server_url": "https://app.marketplaceadpros.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "openid",
+      "read",
+      "write-amazon-ads",
+      "read-selling-partner",
+      "write-selling-partner",
+      "read-tiktok-ads",
+      "write-tiktok-ads",
+      "read-keepa",
+      "read-junglescout",
+      "read-awd",
+      "read-search-results",
+      "write-scraping-configuration",
+      "write-amc-audiences"
+    ],
+    "default_scopes": [
+      "openid",
+      "read",
+      "read-selling-partner",
+      "read-tiktok-ads",
+      "read-keepa",
+      "read-junglescout",
+      "read-awd",
+      "read-search-results"
+    ],
+    "description": "Marketplace Ad Pros MCP Server (dynamic registration)",
+    "supports_resource_metadata": true
   },
   "server": {
-    "command": "npx",
-    "args": ["-y", "@marketplaceadpros/amazon-ads-mcp-server"],
-    "env": {
-      "BEARER_TOKEN": "${user_config.bearer_token}"
-    },
-    "type": "local"
+    "type": "remote",
+    "url": "https://app.marketplaceadpros.com/mcp",
+    "docs_url": "https://github.com/MarketplaceAdPros/amazon-ads-mcp-server"
   },
   "tools": [],
   "prompts": [],
-  "keywords": [],
-  "user_config": {
-    "bearer_token": {
-      "type": "string",
-      "title": "MarketplaceAdPros Bearer Token",
-      "description": "The Bearer token you got from MarketplaceAdPros.com",
-      "sensitive": true,
-      "required": true
-    }
-  },
-  "readme": "# amazon-ads-mcp-server\n\nConnect to your Amazon Advertising Data by integrating your account with [MarketplaceAdPros](https://marketplaceadpros.com).\n\nProvides access to:\n\n- Advertising Resources in Sponsored Products, Sponsored Brands and Sponsored Display, like Campaigns, Ad Groups, Keywords, Product Ads, Targeting\n- Reports and ability to query them with plain english.\n- Marketplace Ad Pros Recommendations, Experiments and more with purchased subscription plan\n\nAlso available as a Streamable HTTP MCP Server by connecting to `https://app.marketplaceadpros.com/mcp`\n\n## Installation\n\nTo add the amazon-ads-mcp-server to your MCP client of choice, add the following to the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n### Env Vars\n\n- `BEARER_TOKEN`: The Bearer token you got from MarketplaceAdPros.com\n\n\n### Configuration\n\nYou can use it via `npx` in your Claude Desktop configuration like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@marketplaceadpros/amazon-ads-mcp-server\"\n      ],\n      \"env\": {\n        \"BEARER_TOKEN\": \"abcdefghijklmnop\"\n      }\n    }\n  }\n}\n```\n\n\nOr, if you clone the repo, you can build and use in your Claude Desktop configuration like this:\n\n\n```json\n\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/amazon-ads-mcp-server/build/index.js\"\n      ],\n      \"env\": {\n        \"BEARER_TOKEN\": \"abcdefghijklmnop\"\n      }\n    }\n  }\n}\n```\n\n\nOr, if your client supports the Streamable HTTP MCP Servers, you can just point to the MCP endpoint at `https://app.marketplaceadpros.com/mcp`. \n\n\n```json\n\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"type\": \"streamable-http\",\n      \"url\": \"https://app.marketplaceadpros.com/mcp\"\n    }\n  }\n}\n```\n\n\nOr, configure in [LibreChat](https://www.librechat.ai/) like:\n```yaml\n  MAP:\n    type: streamable-http\n    url: https://app.marketplaceadpros.com/mcp\n    headers:\n      Authorization: \"Bearer abcdefghijklmnop\"\n````\n\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\n![amazon-ads-mcp-server live in inspector](img/inspector.png)\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n### Acknowledgements\n\n- Obviously the modelcontextprotocol and Anthropic teams for the MCP Specification. [https://modelcontextprotocol.io/introduction](https://modelcontextprotocol.io/introduction)\n- [MarketplaceAdPros](https://marketplaceadpros.com?ref=github-amazon-ads-mcp-server) for enabling and sponsoring this project.\n",
+  "keywords": [
+    "amazon",
+    "amazon-ads",
+    "seller-central",
+    "vendor-central",
+    "selling-partner-api",
+    "amazon-marketing-cloud",
+    "ppc"
+  ],
+  "user_config": {},
+  "readme": null,
   "category": "Marketing",
   "archestra_config": {
-    "client_config_permutations": {
-      "marketplaceadpros-amazon-ads-mcp-server": {
-        "command": "npx",
-        "args": ["@marketplaceadpros/amazon-ads-mcp-server"],
-        "env": {
-          "BEARER_TOKEN": "abcdefghijklmnop"
-        }
-      },
-      "marketplaceadpros-amazon-ads-mcp-server-node-path": {
-        "command": "node",
-        "args": ["/path/to/amazon-ads-mcp-server/build/index.js"],
-        "env": {
-          "BEARER_TOKEN": "abcdefghijklmnop"
-        }
-      }
-    },
+    "client_config_permutations": null,
     "oauth": {
       "provider": null,
-      "required": false
+      "required": true
     },
     "works_in_archestra": false
   },
@@ -56,12 +73,12 @@
     "url": "https://github.com/MarketplaceAdPros/amazon-ads-mcp-server",
     "name": "amazon-ads-mcp-server",
     "path": null,
-    "stars": 8,
+    "stars": 29,
     "contributors": 1,
-    "issues": 0,
+    "issues": 2,
     "releases": false,
     "ci_cd": false,
-    "latest_commit_hash": "87915ee9d94a2a0a0f340a3cb5a69c8880422474"
+    "latest_commit_hash": "09b770a6fa3737c626d0787ddb091153dd9d0088"
   },
-  "programming_language": "JavaScript"
+  "programming_language": null
 }

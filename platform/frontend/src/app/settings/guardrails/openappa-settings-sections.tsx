@@ -163,9 +163,10 @@ export function OpenAppaBreakTheGlassSettings() {
         title="Other blocked calls"
         description={
           <>
-            How to handle denials that can't be approved. Calls explicitly set
-            to <code className="font-mono text-xs">blocked</code> in the policy
-            will never waive.
+            How to handle denials that can't be approved. An explicit
+            <code className="font-mono text-xs"> blocked </code> refusal cannot
+            trigger a waiver. After a soft refusal turns Guardrails off,
+            subsequent operations bypass all policy checks.
           </>
         }
         value={data?.unapprovableBlockMode}
@@ -181,7 +182,7 @@ export function OpenAppaBreakTheGlassSettings() {
             value: "allow",
             label: "Waive the block",
             description:
-              "Continue and turn Guardrails off for the session. Explicit policy blocks never waive.",
+              "Continue and turn Guardrails off for the session. Subsequent operations bypass all policy checks, including explicit blocked marks.",
           },
         ]}
         onChange={(unapprovableBlockMode) =>

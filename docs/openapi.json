@@ -551537,6 +551537,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeGroupTimeSeries",
+            "required": false,
+            "description": "Also return a time series on every returned group: each method, credential, provider key, model pool and label value on the current page."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -551696,6 +551705,58 @@
                             "type": "number",
                             "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
                           },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                },
+                                "failedOverAttempts": {
+                                  "type": "number",
+                                  "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                                },
+                                "timestamp": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "requests",
+                                "inputTokens",
+                                "outputTokens",
+                                "cacheReadTokens",
+                                "cacheWriteTokens",
+                                "totalTokens",
+                                "billedCost",
+                                "subscriptionCost",
+                                "failedOverAttempts",
+                                "timestamp"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "authMethod": {
                             "type": "string",
                             "enum": [
@@ -551758,6 +551819,58 @@
                           "failedOverAttempts": {
                             "type": "number",
                             "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                },
+                                "failedOverAttempts": {
+                                  "type": "number",
+                                  "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                                },
+                                "timestamp": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "requests",
+                                "inputTokens",
+                                "outputTokens",
+                                "cacheReadTokens",
+                                "cacheWriteTokens",
+                                "totalTokens",
+                                "billedCost",
+                                "subscriptionCost",
+                                "failedOverAttempts",
+                                "timestamp"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "authMethod": {
                             "type": "string",
@@ -551852,6 +551965,58 @@
                             "type": "number",
                             "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
                           },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                },
+                                "failedOverAttempts": {
+                                  "type": "number",
+                                  "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                                },
+                                "timestamp": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "requests",
+                                "inputTokens",
+                                "outputTokens",
+                                "cacheReadTokens",
+                                "cacheWriteTokens",
+                                "totalTokens",
+                                "billedCost",
+                                "subscriptionCost",
+                                "failedOverAttempts",
+                                "timestamp"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "providerApiKeyId": {
                             "nullable": true,
                             "type": "string"
@@ -551914,6 +552079,58 @@
                           "failedOverAttempts": {
                             "type": "number",
                             "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                },
+                                "failedOverAttempts": {
+                                  "type": "number",
+                                  "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                                },
+                                "timestamp": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "requests",
+                                "inputTokens",
+                                "outputTokens",
+                                "cacheReadTokens",
+                                "cacheWriteTokens",
+                                "totalTokens",
+                                "billedCost",
+                                "subscriptionCost",
+                                "failedOverAttempts",
+                                "timestamp"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "modelPoolId": {
                             "nullable": true,
@@ -551984,6 +552201,58 @@
                               "failedOverAttempts": {
                                 "type": "number",
                                 "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                              },
+                              "timeSeries": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "requests": {
+                                      "type": "number"
+                                    },
+                                    "inputTokens": {
+                                      "type": "number"
+                                    },
+                                    "outputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheWriteTokens": {
+                                      "type": "number"
+                                    },
+                                    "totalTokens": {
+                                      "type": "number"
+                                    },
+                                    "billedCost": {
+                                      "type": "number"
+                                    },
+                                    "subscriptionCost": {
+                                      "type": "number"
+                                    },
+                                    "failedOverAttempts": {
+                                      "type": "number",
+                                      "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                                    },
+                                    "timestamp": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "requests",
+                                    "inputTokens",
+                                    "outputTokens",
+                                    "cacheReadTokens",
+                                    "cacheWriteTokens",
+                                    "totalTokens",
+                                    "billedCost",
+                                    "subscriptionCost",
+                                    "failedOverAttempts",
+                                    "timestamp"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               },
                               "value": {
                                 "nullable": true,

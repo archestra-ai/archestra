@@ -465,8 +465,15 @@ class UsageStatisticsModel {
     const byCredential =
       groupBy.includes("credentialId") || params.credentialId !== undefined;
 
-    const billed = billedModelJoins();
-    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+    const billed = billedModelJoins(params.timeframe);
+    // Expand team grants only for agents with traffic in the window, not for
+    // every agent in the organization.
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId, {
+      agentIds: db
+        .selectDistinct({ id: i.profileId })
+        .from(i)
+        .where(and(...StatisticsModel.timeframeConditions(params.timeframe))),
+    });
     const method = sql<string>`COALESCE(${i.authMethod}, 'unknown')`;
     const credential = sql<string | null>`CASE
       WHEN ${method} = 'virtual_key' THEN ${i.virtualKeyId}::text
@@ -516,10 +523,7 @@ class UsageStatisticsModel {
     // the team grants each multiply rows, and each is wasted work otherwise.
     const scoped = <Q extends PgSelect>(query: Q) => {
       let q: PgSelect = query;
-      if (byModel)
-        q = q
-          .leftJoin(billed.receipt, billed.receiptOn)
-          .leftJoin(billed.facts, sql`true`);
+      if (byModel) q = q.leftJoin(billed.facts, billed.on);
       if (byTeam || byCredential)
         q = q.innerJoin(agents, eq(agents.id, i.profileId));
       if (byTeam)

@@ -11,14 +11,7 @@ type LabelGroups = NonNullable<Response["labels"]>["groups"];
 export function useProxyLabelCosts({
   enabled,
   ...query
-}: Pick<
-  Query,
-  | "timeframe"
-  | "labelKey"
-  | "labelValue"
-  | "labelUnassigned"
-  | "includeGroupTimeSeries"
-> & {
+}: Pick<Query, "timeframe" | "labelKey" | "labelValue" | "labelUnassigned"> & {
   enabled: boolean;
 }) {
   return useQuery({

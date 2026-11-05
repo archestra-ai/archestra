@@ -467,19 +467,6 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
         billedCost: 7,
         failedOverAttempts: 1,
       };
-      // Each group's trend comes back with the page when asked for.
-      const trend = (requests: number) =>
-        query.get("includeGroupTimeSeries") === "true"
-          ? [
-              {
-                ...usage,
-                timestamp: "2026-01-01T00:00:00.000Z",
-                requests,
-                billedCost: 0,
-                failedOverAttempts: 0,
-              },
-            ]
-          : undefined;
       return HttpResponse.json({
         totals,
         timeSeries: [],
@@ -496,7 +483,6 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
                 requests: 3,
                 billedCost: 5,
                 failedOverAttempts: 1,
-                timeSeries: trend(3),
               },
               {
                 ...usage,
@@ -506,7 +492,6 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
                 requests: 1,
                 billedCost: 2,
                 failedOverAttempts: 0,
-                timeSeries: trend(1),
               },
             ]
           : undefined,
@@ -553,16 +538,16 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
   expect(byKey.result.current.extraCols.map((col) => col.label)).toEqual([
     "Failed over",
   ]);
-  // Every row, the keyless one included, is trended from the one page
-  // request rather than a request per row.
-  expect(
-    byKey.result.current.rows.map((row) => [row.label, row.series]),
-  ).toEqual([
-    ["Dedicated", [3]],
-    ["No provider key", [1]],
-  ]);
-  expect(queries).toHaveLength(1);
-  expect(queries[0].get("includeGroupTimeSeries")).toBe("true");
+  // The keyed row is trended through its own filter; the null row can't be.
+  await waitFor(() =>
+    expect(
+      queries.some(
+        (query) =>
+          query.get("providerApiKeyId") ===
+          "11111111-1111-4111-8111-111111111111",
+      ),
+    ).toBe(true),
+  );
 
   const byPool = renderHook(
     () =>

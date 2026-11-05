@@ -43,8 +43,5 @@ export default pgTable(
       table.userId,
       table.createdAt,
     ),
-    // Cost statistics read every receipt in a time window. Receipts outlive
-    // log retention, so without this each read scans the whole table.
-    index("interaction_billing_created_at_idx").on(table.createdAt),
   ],
 );

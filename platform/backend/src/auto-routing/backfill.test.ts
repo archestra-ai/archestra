@@ -5,6 +5,11 @@ import {
 } from "@archestra/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { vi } from "vitest";
+import logger from "@/logging";
+
+vi.mock("@/logging");
+
 import config from "@/config";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
@@ -274,6 +279,105 @@ describe("auto routing backfill", () => {
       apiShape: "messages",
       client: "claude-code",
       sessions: 1,
+    });
+  });
+
+  test("scores independent auxiliary sessions when there is no main turn", async () => {
+    await turn("short", "hello", {
+      sessionSource: "claude_code_header",
+      type: "anthropic:messages",
+    });
+    await turn("subagent", "Inspect the API types", {
+      sessionSource: "kilo_session",
+      source: "kilo:subagent",
+    });
+    await turn("no-task", "Review the patch", {
+      sessionSource: "kilo_session",
+      source: "model_router",
+    });
+    await turn(
+      "title-only",
+      "Please write a 5-10 word title for this conversation",
+      { sessionSource: "claude_code_header", type: "anthropic:messages" },
+    );
+    await scanAndScore({});
+    expect(prompts.sort()).toEqual(
+      [
+        "hello",
+        "Inspect the API types",
+        "Review the patch",
+        "Please write a 5-10 word title for this conversation",
+      ].sort(),
+    );
+    expect(await readings()).toEqual({
+      short: "scored",
+      subagent: "scored",
+      "no-task": "scored",
+      "title-only": "scored",
+    });
+  });
+
+  test("keeps looking for a main turn beyond the first page before using the fallback", async () => {
+    for (let i = 0; i < 21; i++) {
+      await turn("paged", "Summarize the changes", {
+        sessionSource: "kilo_session",
+        source: "kilo:subagent",
+        createdAt: new Date(Date.now() - 4 * DAY_MS + i * 1000),
+      });
+    }
+    await turn("paged", "Implement pagination", {
+      sessionSource: "kilo_session",
+      source: "kilo:main",
+    });
+    await scanAndScore({});
+    expect(prompts).toEqual(["Implement pagination"]);
+  });
+
+  test("logs why unreadable or empty sessions were skipped without calling the scorer", async () => {
+    await turn("metadata", "", {
+      request: logContentNotStored() as unknown as InteractionRequest,
+    });
+    await turn("empty", "   ");
+    await turn("sealed", "Unavailable", {
+      encryptedChatConversationId: randomUUID(),
+    });
+    await scanAndScore({});
+    expect(prompts).toEqual([]);
+    expect(
+      (await describeBackfill(organizationId)).backfill?.progress,
+    ).toMatchObject({ noText: 3 });
+    const reasons = vi
+      .mocked(logger.info)
+      .mock.calls.flatMap(([fields, message]) =>
+        message === "[AutoRouting] Backfill session skipped"
+          ? [(fields as { reason: string }).reason]
+          : [],
+      );
+    expect(reasons.sort()).toEqual([
+      "content_unavailable",
+      "content_unavailable",
+      "empty_user_text",
+    ]);
+  });
+
+  test("persists scorer tokens in features and calculates cost from usage", async () => {
+    server.use(
+      http.post(JEV_ENDPOINT, () =>
+        HttpResponse.json({
+          ...ANSWERS,
+          usage: { input_tokens: 1_000_000, output_tokens: 20 },
+        }),
+      ),
+    );
+    await turn("priced", "Implement input validation");
+    await scanAndScore({});
+    const [score] = await db.select().from(schema.routingHistoryScoresTable);
+    expect(score).toMatchObject({
+      features: { scorerUsage: { inputTokens: 1_000_000, outputTokens: 20 } },
+    });
+    expect(Number(score.scorerCost)).toBeCloseTo(0.042);
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      spentCostUsd: 0.042,
     });
   });
 

@@ -9,6 +9,7 @@ import config from "@/config";
 import * as database from "@/database";
 import db, { schema } from "@/database";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaActor } from "@/openappa/actor";
@@ -12723,6 +12724,100 @@ describe("soft-block emergency override", () => {
       }
     });
   }
+
+  test.for([
+    {
+      content: "requires attention: blocked",
+      diagnostic: "Additional helper detail",
+    },
+    {
+      content: "OpenAPPA helper unavailable",
+      diagnostic: "requires attention: blocked",
+    },
+  ])("retains a hard result when subsequent remedy metadata fails ($content)", async (refusal, {
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          hard: { ...refusal, outputSource: "runtime", refused: true },
+        },
+      });
+    const lookupFailure = new Error("remedy metadata unavailable");
+    const metadata = vi
+      .spyOn(OpenAppaSessionModel, "recordedToolCallDecisions")
+      .mockRejectedValue(lookupFailure);
+    try {
+      await expect(
+        plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "hard",
+              name: "read_file",
+              content: "RAW HARD-BLOCKED BYTES",
+              isError: false,
+            },
+          ],
+        }),
+      ).rejects.toBe(lookupFailure);
+      expect(metadata).toHaveBeenCalled();
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+      metadata.mockRestore();
+    }
+  });
+
+  test("does not directly waive a result with a hard diagnostic and generic presentation", async ({
+    makeOrganization,
+  }) => {
+    const { context, trusted, plugin } = await setup(
+      (await makeOrganization()).id,
+    );
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          hard: {
+            content: "OpenAPPA helper unavailable",
+            diagnostic: "requires attention: blocked",
+            outputSource: "runtime",
+            refused: true,
+          },
+          soft: {
+            content: "soft result withheld",
+            outputSource: "runtime",
+            refused: true,
+          },
+        },
+      });
+    try {
+      expect(
+        await plugin.onToolResults({
+          ...context,
+          toolResults: ["hard", "soft"].map((id) => ({
+            id,
+            name: "read_file",
+            content: `RAW ${id}`,
+            isError: false,
+          })),
+        }),
+      ).toEqual({
+        toolResultUpdates: {
+          hard: "OpenAPPA helper unavailable",
+          soft: "soft result withheld",
+        },
+      });
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      process.mockRestore();
+    }
+  });
 
   test("releases a runtime's first final answer under a void return", async ({
     makeOrganization,

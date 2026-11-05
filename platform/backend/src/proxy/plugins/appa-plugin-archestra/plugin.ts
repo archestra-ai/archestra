@@ -657,6 +657,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    // Keep the native hard ruling before any metadata/cache lookup can fail.
+    // A later generic exception must not release the original client bytes.
+    binding.hardBlockSeen ||= Object.values(result.toolResultUpdates).some(
+      (value) =>
+        (value.refused || value.denied) &&
+        (isHardBlock(value.content) || isHardBlock(value.diagnostic ?? "")),
+    );
     for (const [index, answer] of context.toolResults.entries()) {
       if (result.toolResultUpdates[answer.id]?.code !== "unreleased_call")
         continue;
@@ -673,12 +680,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         "OpenAPPA has no record of releasing the call this tool result answers",
       );
     }
-    for (const [id, notice] of unansweredNotices)
+    for (const [id, notice] of unansweredNotices) {
       result.toolResultUpdates[id] = {
         content: notice,
         outputSource: "runtime",
         denied: true,
       };
+      binding.hardBlockSeen ||= isHardBlock(notice);
+    }
     for (const answer of toolResults) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -697,6 +706,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
       const approved = result.toolResultUpdates[answer.id];
       if (approved?.denied) {
+        binding.hardBlockSeen ||=
+          isHardBlock(approved.content) ||
+          isHardBlock(approved.diagnostic ?? "");
         const clarification = await cacheManager.get<string>(
           deniedCallClarificationKey({
             session: this.governedSession(binding),
@@ -721,9 +733,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const refusedResults = Object.entries(result.toolResultUpdates).filter(
       ([, value]) => value.refused || value.denied,
     );
+    binding.hardBlockSeen ||= refusedResults.some(
+      ([, value]) =>
+        isHardBlock(value.content) || isHardBlock(value.diagnostic ?? ""),
+    );
     if (
       refusedResults.length > 0 &&
-      !refusedResults.some(([, value]) => isHardBlock(value.content)) &&
+      !binding.hardBlockSeen &&
       (await waiveSoftBlock(
         binding.session,
         "onToolResults",

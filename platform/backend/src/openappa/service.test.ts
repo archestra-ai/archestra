@@ -24,7 +24,7 @@ import { ApiError } from "@/types/api";
 import { openappaActor } from "./actor";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRootOnlyError } from "./failure";
-import { toolEntries } from "./policy-text";
+import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -3518,8 +3518,8 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "first",
     expectedRevision: 0,
   });
-  // The served text is the saved one as composed: the platform adds its rule
-  // for yell, so the dispatch is read by the rules it carries.
+  // The served text is the saved one as composed: the platform adds its rules
+  // for yell and the peer read, so the dispatch is read by the rules it carries.
   const servedTools = () => {
     const served = vi.mocked(native.dispatchHook).mock.lastCall?.[1] as {
       content: string;
@@ -3533,7 +3533,10 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(servedTools()).toEqual(["mcp/appa/yell"]);
+  expect(servedTools()).toEqual([
+    "mcp/appa/yell",
+    "mcp/archestra/read_peer_message",
+  ]);
   const updated = `${content}\n[[policy.tool]]\nname = "probe"\ndelta = {}\n`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
@@ -3547,7 +3550,11 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(servedTools()).toEqual(["mcp/appa/yell", "probe"]);
+  expect(servedTools()).toEqual([
+    "mcp/appa/yell",
+    "mcp/archestra/read_peer_message",
+    "probe",
+  ]);
 });
 
 describe("a policy saved mid-conversation", () => {
@@ -4470,6 +4477,99 @@ describe("remedy by offer", () => {
         review: [],
       },
     });
+  });
+
+  test("peer messaging dispatches the stored composition, with its sanitizers and the empty peer read rule", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      updatedBy: user.id,
+      content: [
+        "[policy]",
+        "version = 2",
+        "",
+        "[[policy.sanitizer]]",
+        'name = "redact-secrets"',
+        'on = ["tool_output"]',
+        "",
+        "[externals.sanitizers.redact-secrets]",
+        'builtin = "redact-secrets"',
+      ].join("\n"),
+      contentHash: "sanitized-peer-read",
+      expectedRevision: 0,
+    });
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    native.sendPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({ kind: "released", message_id: "msg-1" }),
+    );
+    native.listPeerMessages.mockResolvedValueOnce(
+      JSON.stringify({ notices: [] }),
+    );
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] Blocked: the label narrows.",
+        offers: [{ offer_id: "offer-peer-read-1" }],
+      }),
+    );
+    const evaluate = (id: string, name: string) =>
+      evaluateToolCalls(session, [{ id, name, arguments: {} }], {
+        canonicalize: (tool) => tool,
+      });
+
+    await evaluate("before", "read_file");
+    await evaluate("send-tool", "SendMessage");
+    await sendPeerMessage({
+      session,
+      operationId: "peer_send:call-1",
+      recipientSessionId: "conversation:worker",
+      value: "hello",
+    });
+    await listPeerMessages({ session });
+    await readPeerMessage({
+      session,
+      toolCallId: "read-deny-sanitized",
+      args: { message_id: "msg-1" },
+    });
+    const args = { offer_id: "offer-peer-read-1", label: {} };
+    await executeRemedyByOffer({
+      organizationId,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      toolCallId: "remedy-peer-read-1",
+      originalArguments: JSON.stringify(args),
+      args,
+    });
+    await evaluate("after", "read_file");
+
+    const dispatched = [
+      ...native.dispatchHook.mock.calls,
+      ...native.sendPeerMessage.mock.calls,
+      ...native.listPeerMessages.mock.calls,
+      ...native.readPeerMessage.mock.calls,
+      ...native.executeRemedyByOffer.mock.calls,
+    ].map((call) => call[1]);
+    const [first] = dispatched;
+    expect(dispatched.length).toBeGreaterThanOrEqual(7);
+    for (const policy of dispatched) expect(policy).toEqual(first);
+    expect(toolEntries(first.content)).toContainEqual(
+      expect.objectContaining({
+        name: "mcp/archestra/read_peer_message",
+        delta: {},
+      }),
+    );
+    expect(asRecord(parsePolicyToml(first.content)?.policy)?.sanitizer).toEqual(
+      [
+        expect.objectContaining({
+          name: "redact-secrets",
+          on: ["tool_output"],
+        }),
+      ],
+    );
   });
 
   test("a peer read returns the retained native result and not a caller label", async () => {

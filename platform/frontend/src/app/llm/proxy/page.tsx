@@ -1,7 +1,13 @@
 "use client";
 
 import { Waypoints } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  type RefObject,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   getProxyEndpointProviders,
   type ProxyEndpointProvider,
@@ -107,6 +113,105 @@ const PRIMARY_PROVIDERS: ProxyEndpointProvider[] = [
   "groq",
 ];
 
+/**
+ * The first `count` candidates, except that a selected provider past the cut
+ * takes the last slot so the active tab is always visible.
+ */
+function pickVisibleTabs(
+  candidates: ProxyEndpointProvider[],
+  count: number,
+  selected: ProxyEndpointProvider | null,
+): ProxyEndpointProvider[] {
+  const visible = candidates.slice(0, count);
+  if (count === 0 || !selected || visible.includes(selected)) return visible;
+  if (!candidates.includes(selected)) return visible;
+  return [...visible.slice(0, count - 1), selected];
+}
+
+/**
+ * How many provider tabs fit on one line beside the Unified Model API tab,
+ * leaving room for "More providers" whenever any provider is left out. Widths
+ * come from the measure row: Unified tab, one tab per candidate, More trigger.
+ */
+function useTabsThatFit({
+  rowRef,
+  measureRef,
+  candidates: candidateList,
+  selected,
+  hasRest,
+}: {
+  rowRef: RefObject<HTMLDivElement | null>;
+  measureRef: RefObject<HTMLDivElement | null>;
+  candidates: ProxyEndpointProvider[];
+  selected: ProxyEndpointProvider | null;
+  hasRest: boolean;
+}): number {
+  const [count, setCount] = useState(candidateList.length);
+  // A stable copy: callers rebuild the array every render.
+  const key = candidateList.join(",");
+  const candidates = useMemo(
+    () => (key ? (key.split(",") as ProxyEndpointProvider[]) : []),
+    [key],
+  );
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+
+    const compute = () => {
+      // No layout yet (or none at all, as in jsdom): keep every tab.
+      if (row.clientWidth === 0) {
+        setCount(candidates.length);
+        return;
+      }
+      const widths = Array.from(
+        measure.children,
+        (el) => el.getBoundingClientRect().width,
+      );
+      const unified = widths[0] ?? 0;
+      const more = widths[widths.length - 1] ?? 0;
+      const tabWidth = new Map(
+        candidates.map((provider, i) => [provider, widths[i + 1] ?? 0]),
+      );
+      const style = getComputedStyle(row);
+      const gap = Number.parseFloat(style.columnGap) || 0;
+      const moreMargin =
+        Number.parseFloat(
+          getComputedStyle(measure.children[widths.length - 1]).marginLeft,
+        ) || 0;
+      const available =
+        row.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+
+      const fits = (n: number, withMore: boolean) => {
+        const tabs = pickVisibleTabs(candidates, n, selected);
+        const used =
+          unified +
+          tabs.reduce((sum, p) => sum + (tabWidth.get(p) ?? 0) + gap, 0) +
+          (withMore ? gap + moreMargin + more : 0);
+        // Sub-pixel slack so rounding never pushes the last item to a new line.
+        return used <= available - 1;
+      };
+
+      let n = candidates.length;
+      if (hasRest || !fits(n, false)) {
+        while (n > 0 && !fits(n, true)) n--;
+      }
+      setCount(n);
+    };
+
+    compute();
+    const observer = new ResizeObserver(compute);
+    observer.observe(row);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [candidates, selected, hasRest, rowRef, measureRef]);
+
+  return Math.min(count, candidates.length);
+}
+
 /** Tab button in the endpoint terminal card. */
 function endpointTabClass(active: boolean) {
   return cn(
@@ -150,10 +255,44 @@ function ProxyEndpointCard({
   const rest = providers.filter((p) => !primary.includes(p));
   const selectedFromRest =
     selected !== "model-router" && rest.includes(selected) ? selected : null;
-  const tabProviders = selectedFromRest
+  const candidates = selectedFromRest
     ? [...primary, selectedFromRest]
     : primary;
-  const moreCount = rest.length - (selectedFromRest ? 1 : 0);
+  const selectedProvider = selected === "model-router" ? null : selected;
+
+  // The tabs stay on one line: those that don't fit go behind "More providers".
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const fitCount = useTabsThatFit({
+    rowRef,
+    measureRef,
+    candidates,
+    selected: selectedProvider,
+    hasRest: rest.length > (selectedFromRest ? 1 : 0),
+  });
+  const tabProviders = pickVisibleTabs(candidates, fitCount, selectedProvider);
+  const moreProviders = providers.filter((p) => !tabProviders.includes(p));
+
+  // The measure row draws its labels as CSS content, so they take up the same
+  // width without adding a second copy of each label to the page's text.
+  const tabLabel = (text: string, measure = false) =>
+    measure ? (
+      <span data-label={text} className="before:content-[attr(data-label)]" />
+    ) : (
+      text
+    );
+  const providerTab = (provider: ProxyEndpointProvider, measure = false) => (
+    <>
+      <img
+        src={PROVIDER_CONFIG[provider].icon}
+        alt=""
+        className="size-3.5 rounded-sm dark:invert"
+      />
+      {tabLabel(providerCatalog.label(provider), measure)}
+    </>
+  );
+  const moreClassName =
+    "ml-1 h-auto w-auto min-w-0 shrink-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis";
 
   const url = endpointUrl(baseUrl, selected);
 
@@ -180,7 +319,34 @@ function ProxyEndpointCard({
     <TerminalBlock
       rows={rows}
       header={
-        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5">
+        <div
+          ref={rowRef}
+          className="relative flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5"
+        >
+          {/* Off-screen copy of every candidate tab, measured to decide which fit. */}
+          <div
+            ref={measureRef}
+            aria-hidden
+            inert
+            className="pointer-events-none invisible absolute top-0 left-0 flex h-0 w-max items-center overflow-hidden"
+          >
+            <span className={endpointTabClass(true)}>
+              <Waypoints className="size-3.5" />
+              {tabLabel("Unified Model API", true)}
+            </span>
+            {candidates.map((provider) => (
+              <span key={provider} className={endpointTabClass(true)}>
+                {providerTab(provider, true)}
+              </span>
+            ))}
+            <SearchableSelect
+              value=""
+              onValueChange={() => {}}
+              placeholder={`More providers (${providers.length})`}
+              items={[]}
+              className={moreClassName}
+            />
+          </div>
           <UnstyledButton
             type="button"
             onClick={() => onSelect("model-router")}
@@ -196,25 +362,20 @@ function ProxyEndpointCard({
               onClick={() => onSelect(provider)}
               className={endpointTabClass(selected === provider)}
             >
-              <img
-                src={PROVIDER_CONFIG[provider].icon}
-                alt=""
-                className="size-3.5 rounded-sm dark:invert"
-              />
-              {providerCatalog.label(provider)}
+              {providerTab(provider)}
             </UnstyledButton>
           ))}
-          {moreCount > 0 && (
+          {moreProviders.length > 0 && (
             <SearchableSelect
               value=""
               onValueChange={(value) =>
                 onSelect(value as ProxyEndpointProvider)
               }
-              placeholder={`More providers (${moreCount})`}
+              placeholder={`More providers (${moreProviders.length})`}
               ariaLabel="More providers"
               searchPlaceholder="Search providers..."
               emptyMessage="No providers found."
-              items={rest.map((provider) => {
+              items={moreProviders.map((provider) => {
                 const label = providerCatalog.label(provider);
                 return {
                   value: provider,
@@ -227,7 +388,7 @@ function ProxyEndpointCard({
                   ),
                 };
               })}
-              className="ml-1 h-auto w-auto min-w-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis"
+              className={moreClassName}
               contentClassName="w-64"
             />
           )}

@@ -96,10 +96,7 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
     const errorToast = page.locator('[role="alert"]').first();
     if (await errorToast.isVisible()) {
       const errorText = await errorToast.textContent().catch(() => null);
-      if (
-        errorText &&
-        !errorText.includes("Default Admin Credentials Enabled")
-      ) {
+      if (errorText) {
         console.log(`UI Login failed with error: ${errorText}`);
       }
     }

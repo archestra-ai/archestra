@@ -61,13 +61,17 @@ import AgentTeamModel from "./agent-team";
 import { interactionBelongsToOrganization } from "./log-organization";
 
 /**
- * The receipt join that splits each request in a timeframe into the models it
- * billed, and the billed-model expression it produces. Left-join `facts` on
- * `on`, then group by `model`. Built for the whole timeframe at once, so it
- * suits aggregations over the timeframe's traffic, not a few interactions.
+ * The receipt joins that split each request into the models it billed, and the
+ * billed-model expression they produce. Join `receipt` with `receiptOn`, then
+ * `facts` on `true`, before grouping by `model`.
  */
-export function billedModelJoins(timeframe: StatisticsTimeFrame) {
-  return { ...billingModelFactsJoin(timeframe), model: billedModel };
+export function billedModelJoins() {
+  return {
+    receipt: schema.interactionBillingTable,
+    receiptOn: billingReceiptJoin,
+    facts: billingModelFacts,
+    model: billedModel,
+  };
 }
 
 /**
@@ -1387,7 +1391,6 @@ class StatisticsModel {
   }): Promise<ModelStatistics[]> {
     const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-    const billing = billingModelFactsJoin(timeframe);
 
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -1405,7 +1408,8 @@ class StatisticsModel {
         cost: modelBilledCost,
       })
       .from(schema.interactionsTable)
-      .leftJoin(billing.facts, billing.on)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+      .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
@@ -2344,7 +2348,6 @@ class StatisticsModel {
     } = params;
     const i = schema.interactionsTable;
     const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${StatisticsModel.getTimeBucket(timeframe)}'`)}, ${i.createdAt})`;
-    const billing = billingModelFactsJoin(timeframe);
     const charge = teamIds
       ? await StatisticsModel.teamChargeScope({ organizationId, teamIds })
       : null;
@@ -2383,7 +2386,8 @@ class StatisticsModel {
           subscriptionCost: modelSubscriptionCost,
         })
         .from(i)
-        .leftJoin(billing.facts, billing.on)
+        .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+        .leftJoin(billingModelFacts, sql`true`)
         .where(scope)
         .groupBy(billedModel, bucket)
         .orderBy(bucket),
@@ -3573,9 +3577,8 @@ const billingReceiptJoin = and(
   eq(schema.interactionBillingTable.interactionId, schema.interactionsTable.id),
   sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
 );
-// One receipt's facts per billed model, from `component` (one element of its
-// usage.components). Shared by the per-interaction and the per-window forms.
-const billingModelFactColumns = sql`component->>'model' AS model,
+const billingModelFacts = sql`LATERAL (
+  SELECT component->>'model' AS model,
     bool_or(component->>'model' = COALESCE(
       jsonb_path_query_first(${schema.interactionBillingTable.usage}, '$.components[*] ? (@.kind == "message")')->>'model',
       ${schema.interactionBillingTable.usage}->'components'->0->>'model'
@@ -3594,42 +3597,10 @@ const billingModelFactColumns = sql`component->>'model' AS model,
           - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * (component->'prices'->>'cacheWrite')::numeric
           - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
         END
-    ) / 1000000, 10)) AS cache_savings`;
-// Per interaction: cheapest when few interactions match (a model drill-down,
-// one page of users). Join after `billingReceiptJoin`, on `true`.
-const billingModelFacts = sql`LATERAL (
-  SELECT ${billingModelFactColumns}
+    ) / 1000000, 10)) AS cache_savings
   FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
   GROUP BY component->>'model'
 ) AS billing_model`;
-/**
- * {@link billingModelFacts} for every enforced receipt in a timeframe, built
- * once and hash-joined on the interaction id. Wide aggregations use this: the
- * per-interaction form hashes the whole receipt table and re-expands each row
- * behind a cache keyed on the full receipt, which on a week of traffic is most
- * of the query's time.
- *
- * Bounded below only. A receipt is claimed in the transaction that writes its
- * interaction, so it is never older than the interaction; an upper bound would
- * drop interactions written with an explicit, earlier created_at.
- */
-function billingModelFactsJoin(timeframe: StatisticsTimeFrame) {
-  const receipt = schema.interactionBillingTable;
-  const [since] = StatisticsModel.timeframeConditions(
-    timeframe,
-    receipt.createdAt,
-  );
-  return {
-    facts: sql`(
-  SELECT ${receipt.interactionId} AS interaction_id, ${billingModelFactColumns}
-  FROM ${receipt}
-  CROSS JOIN LATERAL jsonb_array_elements(${receipt.usage}->'components') AS component
-  WHERE ${receipt.usage}->>'mode' = 'enforce' AND ${since}
-  GROUP BY ${receipt.interactionId}, component->>'model'
-) AS billing_model`,
-    on: sql`billing_model.interaction_id = ${schema.interactionsTable.id}`,
-  };
-}
 const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;
 const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
 const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;

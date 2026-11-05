@@ -19,7 +19,7 @@ import {
   CLAUDE_METADATA_SESSION_SOURCE,
   resolveAgentRuntimeTiers,
 } from "@archestra/shared";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -58,6 +58,7 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { anthropicAdapterFactory } from "../adapters";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import anthropicProxyRoutes from "./anthropic";
 
 vi.mock("@/logging");
@@ -1953,24 +1954,8 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       },
     );
 
-    const capturedPassthroughHeaders: Array<{
-      authorization: string | undefined;
-      anthropicBeta: string | string[] | undefined;
-    }> = [];
     const previousAnthropicBaseUrl = config.llm.anthropic.baseUrl;
-    const upstream = Fastify();
-    upstream.post("/v1/messages/count_tokens", async (request) => {
-      capturedPassthroughHeaders.push({
-        authorization: request.headers.authorization,
-        anthropicBeta: request.headers["anthropic-beta"],
-      });
-      return { input_tokens: 42 };
-    });
-    await upstream.listen({ port: 0 });
-    const upstreamAddress = upstream.server.address();
-    const upstreamPort =
-      typeof upstreamAddress === "string" ? 0 : (upstreamAddress?.port ?? 0);
-    config.llm.anthropic.baseUrl = `http://localhost:${upstreamPort}`;
+    config.llm.anthropic.baseUrl = "https://api.anthropic.com";
 
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -2050,26 +2035,45 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       });
       expect(modelsWithoutAgent.statusCode).toBe(400);
 
-      // 5. Catch-all passthrough endpoint (/v1/messages/count_tokens) with the run's one-off virtual key
-      const countTokensResponse = await app.inject({
-        method: "POST",
-        url: `/v1/anthropic/${agent.id}/v1/messages/count_tokens`,
-        headers: {
-          "content-type": "application/json",
+      // 5. Catch-all passthrough authenticator forwards the subscription token only to https://api.anthropic.com
+      const authenticateAnthropicPassthrough =
+        createPassthroughAuthenticator("anthropic");
+      const makePassthroughRequest = (): FastifyRequest => {
+        const headers: Record<string, string | undefined> = {
           authorization: `Bearer ${podToken}`,
           "x-archestra-virtual-key": spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        payload: {
-          model: "claude-opus-4-20250514",
-          messages: [{ role: "user", content: "Count my tokens" }],
-        },
+        };
+        return {
+          headers,
+          raw: { headers: { ...headers } },
+          ip: "203.0.113.9",
+          body: {
+            model: "claude-opus-4-20250514",
+            messages: [{ role: "user", content: "Count my tokens" }],
+          },
+        } as unknown as FastifyRequest;
+      };
+
+      const anthropicUpstreamReq = makePassthroughRequest();
+      await authenticateAnthropicPassthrough({
+        request: anthropicUpstreamReq,
+        agentId: agent.id,
       });
-      expect(countTokensResponse.statusCode).toBe(200);
-      expect(capturedPassthroughHeaders.at(-1)).toEqual({
-        authorization: `Bearer ${subscriptionToken}`,
-        anthropicBeta: "oauth-2025-04-20",
+      expect(anthropicUpstreamReq.headers.authorization).toBe(
+        `Bearer ${subscriptionToken}`,
+      );
+      expect(anthropicUpstreamReq.headers["anthropic-beta"]).toBe(
+        "oauth-2025-04-20",
+      );
+
+      config.llm.anthropic.baseUrl = "http://localhost:4000";
+      const customUpstreamReq = makePassthroughRequest();
+      await authenticateAnthropicPassthrough({
+        request: customUpstreamReq,
+        agentId: agent.id,
       });
+      expect(customUpstreamReq.headers.authorization).toBeUndefined();
+      config.llm.anthropic.baseUrl = "https://api.anthropic.com";
 
       // 6. If the owner loses access to the agent, model listing is refused with 403
       const agentPolicy = await ResourcePermissionPolicyModel.find({
@@ -2221,7 +2225,6 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
     } finally {
       config.llm.anthropic.baseUrl = previousAnthropicBaseUrl;
       await app.close();
-      await upstream.close();
     }
   });
 });

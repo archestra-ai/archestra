@@ -193,10 +193,10 @@ class ClaudeCodeAccountManager {
   }
 
   /**
-   * Resolve the connected Claude subscription token for an active Agent Runtime
-   * run's one-off virtual key. Returns null when the key is not bound to an
-   * active run of the acting user/agent so non-run passthrough keys cannot
-   * resolve the server-stored account credential.
+   * Resolve the connected Claude subscription token for an Agent Runtime run's
+   * one-off virtual key. The key must belong to an open run, or to the current
+   * turn of a retained workspace, for the acting user and agent; otherwise
+   * returns null so non-run passthrough keys cannot resolve the stored token.
    */
   async resolveProxyToken(params: {
     virtualKeyId: string;

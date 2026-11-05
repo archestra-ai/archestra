@@ -1728,15 +1728,7 @@ function trimTrailingSlash(url: string | undefined): string | undefined {
 function isTrustedAnthropicPassthroughUpstream(
   url: string | undefined,
 ): boolean {
-  const trimmed = trimTrailingSlash(url);
-  if (trimmed === "https://api.anthropic.com") return true;
-  if (!trimmed) return false;
-  try {
-    const parsed = new URL(trimmed);
-    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  } catch {
-    return false;
-  }
+  return trimTrailingSlash(url) === "https://api.anthropic.com";
 }
 
 /**

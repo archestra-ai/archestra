@@ -26,24 +26,15 @@ export function filterAndSortInitialAgents<
 }): T[] {
   const { allAgents, currentAgentId, search, userId } = params;
 
-  let result = allAgents.filter((agent) => {
-    if (
-      agent.builtIn &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
-    )
-      return false;
-    if (agent.scope === "personal") {
-      return (
-        agent.authorId === userId ||
-        (agent.builtIn &&
-          (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
-            agent.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG))
-      );
-    }
-    return true;
-  });
+  // The chat roster already leaves out other users' personal agents unless
+  // they are shared with this user by name, so a personal agent by someone
+  // else is one shared with them.
+  let result = allAgents.filter(
+    (agent) =>
+      !agent.builtIn ||
+      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+      agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+  );
 
   if (search) {
     const lower = search.toLowerCase();

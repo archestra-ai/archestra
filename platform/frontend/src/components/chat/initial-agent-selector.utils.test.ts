@@ -88,21 +88,21 @@ describe("filterAndSortInitialAgents", () => {
       }),
     ).toEqual([agents[0]]);
   });
-  it("shows only the current user's personal agents", () => {
+  it("keeps another user's personal agent the roster returned, after the user's own", () => {
     const agents = [
+      makeAgent({ id: "org", name: "Org Agent", scope: "org" }),
       makeAgent({
-        id: "mine",
-        name: "My Personal Agent",
-        scope: "personal",
-        authorId: userId,
-      }),
-      makeAgent({
-        id: "other",
-        name: "Other Personal Agent",
+        id: "shared-with-me",
+        name: "Alpha Shared With Me",
         scope: "personal",
         authorId: "user-2",
       }),
-      makeAgent({ id: "shared", name: "Shared Agent", scope: "org" }),
+      makeAgent({
+        id: "mine",
+        name: "Zulu My Personal Agent",
+        scope: "personal",
+        authorId: userId,
+      }),
     ];
 
     const result = filterAndSortInitialAgents({
@@ -112,7 +112,20 @@ describe("filterAndSortInitialAgents", () => {
       userId,
     });
 
-    expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
+    expect(result.map((agent) => agent.id)).toEqual([
+      "mine",
+      "shared-with-me",
+      "org",
+    ]);
+    expect(
+      groupInitialAgents({ agents: result, userId }).map((group) => ({
+        label: group.label,
+        ids: group.agents.map((agent) => agent.id),
+      })),
+    ).toEqual([
+      { label: "Yours", ids: ["mine"] },
+      { label: "Shared with you", ids: ["shared-with-me", "org"] },
+    ]);
   });
 
   it("keeps an authorized personal-scoped system assistant without an author", () => {

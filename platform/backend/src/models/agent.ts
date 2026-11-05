@@ -1145,6 +1145,7 @@ class AgentModel {
       or(
         eq(table.authorId, params.userId),
         nonPersonalAudience,
+        namedChatReader(params.userId),
         eq(table.builtIn, true),
       ),
       pattern
@@ -6069,9 +6070,15 @@ class AgentModel {
           ),
         ),
     );
+    // A personal agent shared with the caller by name ranks with the caller's
+    // own: its audience is still personal.
     const ranks = [
       and(
-        or(eq(table.authorId, params.userId), eq(table.builtIn, true)),
+        or(
+          eq(table.authorId, params.userId),
+          eq(table.builtIn, true),
+          namedChatReader(params.userId),
+        ),
         sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared)))`,
       ),
       sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE NOT organization_shared))`,
@@ -6974,6 +6981,28 @@ function organizationLlmProxyCondition(userId: string): SQL {
  * organization's LLM proxy has no grant namespace and serves the whole
  * organization, so it always reads as `org`.
  */
+/**
+ * The agent's own policy grants read to this user by name. Every personal
+ * agent's policy names its author, so this matches only shares with the
+ * caller; it never widens what the roster's base query lets the caller read.
+ */
+function namedChatReader(userId: string): SQL {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grant = JSON.stringify([
+    { subject: { type: "user", id: userId }, actions: ["read"] },
+  ]);
+  return sql`(${table.organizationId}, ${table.id}::text) IN (
+    SELECT named_policy.organization_id, named_policy.scope
+    FROM resource_permission_policies named_policy
+    WHERE named_policy.resource = 'agent' AND named_policy.scope <> '*'
+      AND named_policy.grants @> ${grant}::jsonb
+  )`;
+  // SPDX-SnippetEnd
+}
+
 function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   const table = schema.agentsTable;
   const byResource = (resource: "agent" | "mcpGateway") =>

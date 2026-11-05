@@ -111,6 +111,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.run_id` | `string` | Yes | Stable handle for every follow-up: get_agent_run, steer_agent_run, cancel_agent_run and the workspace file tools. |
 | `run.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `run.agent_id` | `string \| null` | Yes | The agent doing the work. |
+| `run.agent_name` | `string \| null` | No | Display name of the agent doing the work, when known. |
 | `run.status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
 | `run.failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
 | `run.failure.code` | `string` | Yes |  |
@@ -144,6 +145,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.run_id` | `string` | Yes | Stable handle for every follow-up: get_agent_run, steer_agent_run, cancel_agent_run and the workspace file tools. |
 | `run.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `run.agent_id` | `string \| null` | Yes | The agent doing the work. |
+| `run.agent_name` | `string \| null` | No | Display name of the agent doing the work, when known. |
 | `run.status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
 | `run.failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
 | `run.failure.code` | `string` | Yes |  |
@@ -197,6 +199,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runs[].run_id` | `string` | Yes | Stable handle for every follow-up: get_agent_run, steer_agent_run, cancel_agent_run and the workspace file tools. |
 | `runs[].state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
 | `runs[].agent_id` | `string \| null` | No | The agent doing the work. |
+| `runs[].agent_name` | `string \| null` | No | Display name of the agent doing the work, when known. |
 | `runs[].status_reason` | `string \| null` | Yes | Why the run is in its state, when there is something to say. |
 | `runs[].failure` | `object \| null` | Yes | Machine-readable failure of a failed run: a stable code and whether a new run of the same Agent is likely to succeed unchanged. Null otherwise. |
 | `runs[].created_at` | `string` | No | ISO 8601. |

@@ -5,6 +5,10 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
+import {
+  buildAgentSystemPrompt,
+  SUBAGENT_LOAD_BALANCING_INSTRUCTION,
+} from "@/agents/agent-system-prompt";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
@@ -32,6 +36,7 @@ import {
   agentRunFailure,
   tagAgentRunFailure,
 } from "@/services/agent-runtime/run-failure";
+import { subagentLoadBalancer } from "@/services/agent-runtime/subagent-load-balancer";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -196,10 +201,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       accessAllSubagents: true,
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 0,
         fallbackEnabled: true,
-        maxFallbacks: null,
       },
     });
     const subagentA = await createRuntimeSubagent(
@@ -236,7 +240,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     });
   });
 
-  test("intersects exclude_agent_ids with assigned subagents so foreign IDs do not exhaust maxFallbacks", async ({
+  test("intersects exclude_agent_ids with assigned subagents so foreign IDs are ignored and fallbackEnabled=false refuses assigned exclusions", async ({
     makeAgent,
   }) => {
     const subagentA = await createRuntimeSubagent(makeAgent, "Subagent A");
@@ -244,16 +248,15 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 0,
-        fallbackEnabled: true,
-        maxFallbacks: 0,
+        fallbackEnabled: false,
       },
     });
 
     await mockDetachedTaskStart();
 
-    // Passing a foreign agent_id in exclude_agent_ids must not count against maxFallbacks=0.
+    // Passing a foreign agent_id in exclude_agent_ids must not trigger a fallback refusal.
     const withForeignExclusion = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       {
@@ -269,7 +272,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       },
     });
 
-    // Passing an actually assigned subagent ID when maxFallbacks=0 is refused.
+    // Passing an actually assigned subagent ID when fallbackEnabled=false is refused.
     const withAssignedExclusion = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       {
@@ -295,10 +298,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 1,
         fallbackEnabled: true,
-        maxFallbacks: 1,
       },
     });
 
@@ -385,10 +387,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 0,
         fallbackEnabled: false,
-        maxFallbacks: 0,
       },
     });
 
@@ -507,10 +508,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 1,
         fallbackEnabled: false,
-        maxFallbacks: 0,
       },
     });
 
@@ -602,7 +602,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       weights: { "00000000-0000-4000-8000-000000000001": 5 },
       retries: 2,
       fallbackEnabled: true,
-      maxFallbacks: 1,
     };
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: initialPolicy,
@@ -620,7 +619,6 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
         algorithm: "round_robin",
         retries: 0,
         fallbackEnabled: false,
-        maxFallbacks: null,
       },
     });
 
@@ -1061,10 +1059,9 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     await AgentModel.update(gateway.id, {
       subagentLoadBalancing: {
         enabled: true,
-        algorithm: "ordered",
+        algorithm: "round_robin",
         retries: 1,
         fallbackEnabled: true,
-        maxFallbacks: null,
       },
     });
 
@@ -1083,5 +1080,355 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect((result.content[0] as { text: string }).text).toContain("XL");
     expect(sendSpy).not.toHaveBeenCalled();
     expect(subagentA.id).toBeDefined();
+  });
+
+  test("persists round_robin rotation in PostgreSQL cache across any quantity of subagents and updates rotation on failover", async ({
+    makeAgent,
+  }) => {
+    await Promise.all([
+      createRuntimeSubagent(makeAgent, "Worker 1"),
+      createRuntimeSubagent(makeAgent, "Worker 2"),
+      createRuntimeSubagent(makeAgent, "Worker 3"),
+      createRuntimeSubagent(makeAgent, "Worker 4"),
+      createRuntimeSubagent(makeAgent, "Worker 5"),
+    ]);
+    const expectedOrder = await AgentModel.findAssignedRuntimeSubagentIds(
+      gateway.id,
+      gateway.environmentId,
+    );
+    expect(expectedOrder).toHaveLength(5);
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+
+    await mockDetachedTaskStart();
+
+    const selectedIds: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const res = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { message: `Review #${i + 1}` },
+        context,
+      );
+      expect(res.isError).toBeFalsy();
+      const run = (res.structuredContent as { run: { agent_id: string } }).run;
+      selectedIds.push(run.agent_id);
+    }
+
+    expect(selectedIds).toEqual([...expectedOrder, ...expectedOrder]);
+
+    // Verify state is persisted in PostgreSQL keyv_cache
+    const persisted = await subagentLoadBalancer.getState(gateway.id);
+    expect(persisted?.dispatchCount).toBe(10);
+    expect(persisted?.queue).toEqual(expectedOrder);
+
+    // Simulate Worker 1 failing post-launch and failing over to Worker 2:
+    // Worker 2 must be rotated to the back of the queue so the next request
+    // picks Worker 3 rather than re-picking Worker 2.
+    const nextRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Review that fails over from Worker 1 to Worker 2" },
+      context,
+    );
+    expect(
+      (nextRun.structuredContent as { run: { agent_id: string } }).run.agent_id,
+    ).toBe(expectedOrder[0]);
+
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: expectedOrder[1] ?? "",
+      assignedAgentIds: expectedOrder,
+    });
+
+    const afterFailover = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Review after failover" },
+      context,
+    );
+    expect(
+      (afterFailover.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    ).toBe(expectedOrder[2]);
+  });
+
+  test("programmatically load-balances agent__* delegation tool calls and injects load-balancing system prompt when enabled on an orchestrator agent", async ({
+    makeAgent,
+  }) => {
+    const orchestrator = await makeAgent({
+      name: "Lobster Env",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      systemPrompt: "Which runtime should take this: Claude Code or Codex?",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+    });
+
+    const workerA = await makeAgent({
+      name: "Lobster Claude Code",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerB = await makeAgent({
+      name: "Lobster Codex",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+    const workerC = await makeAgent({
+      name: "Lobster Grok",
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      modelId,
+      llmApiKeyId,
+      runtime: runtimeConfig({ maxTier: "M" }),
+    });
+
+    const toolA = await ToolModel.findOrCreateDelegationTool(workerA.id);
+    const toolB = await ToolModel.findOrCreateDelegationTool(workerB.id);
+    const toolC = await ToolModel.findOrCreateDelegationTool(workerC.id);
+    await AgentToolModel.create(orchestrator.id, toolA.id);
+    await AgentToolModel.create(orchestrator.id, toolB.id);
+    await AgentToolModel.create(orchestrator.id, toolC.id);
+
+    const assignedWorkerIds = await AgentModel.findAssignedRuntimeSubagentIds(
+      orchestrator.id,
+      orchestrator.environmentId,
+    );
+    const nameById = new Map([
+      [workerA.id, workerA.name],
+      [workerB.id, workerB.name],
+      [workerC.id, workerC.name],
+    ]);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent: orchestrator,
+      mcpTools: {},
+      organizationId,
+      userId: actorId,
+      agentId: orchestrator.id,
+    });
+    expect(prompt).toContain(SUBAGENT_LOAD_BALANCING_INSTRUCTION);
+
+    await mockDetachedTaskStart();
+    const orchestratorContext: ArchestraContext = {
+      agent: { id: orchestrator.id, name: orchestrator.name },
+      agentId: orchestrator.id,
+      userId: actorId,
+      organizationId,
+    };
+
+    // Even if the orchestrator model invokes the same agent__* tool three times,
+    // handleDelegation routes programmatically across all 3 assigned runtime workers.
+    const delegationToolName = toolA.name;
+    const r1 = await executeArchestraTool(
+      delegationToolName,
+      { message: "Task 1" },
+      orchestratorContext,
+    );
+    const r2 = await executeArchestraTool(
+      delegationToolName,
+      { message: "Task 2" },
+      orchestratorContext,
+    );
+    const r3 = await executeArchestraTool(
+      delegationToolName,
+      { message: "Task 3" },
+      orchestratorContext,
+    );
+
+    expect(r1.isError).toBeFalsy();
+    expect(r2.isError).toBeFalsy();
+    expect(r3.isError).toBeFalsy();
+    expect(r1.structuredContent).toMatchObject({
+      run: {
+        agent_id: assignedWorkerIds[0],
+        agent_name: nameById.get(assignedWorkerIds[0] ?? ""),
+      },
+    });
+    expect(r2.structuredContent).toMatchObject({
+      run: {
+        agent_id: assignedWorkerIds[1],
+        agent_name: nameById.get(assignedWorkerIds[1] ?? ""),
+      },
+    });
+    expect(r3.structuredContent).toMatchObject({
+      run: {
+        agent_id: assignedWorkerIds[2],
+        agent_name: nameById.get(assignedWorkerIds[2] ?? ""),
+      },
+    });
+  });
+
+  test("rotates fallback tails across full rounds, claims fallbacks atomically, normalizes legacy ordered configs, and fails over past misconfigured primaries without pinning them", async ({
+    makeAgent,
+  }) => {
+    const workerA = await createRuntimeSubagent(makeAgent, "Worker A");
+    const workerB = await createRuntimeSubagent(makeAgent, "Worker B");
+    const workerC = await createRuntimeSubagent(makeAgent, "Worker C");
+    const assigned = await AgentModel.findAssignedRuntimeSubagentIds(
+      gateway.id,
+      gateway.environmentId,
+    );
+    expect(assigned).toHaveLength(3);
+    const [a, b, c] = assigned as [string, string, string];
+
+    // 1. Legacy "ordered" config normalizes to distributed round_robin and rotates
+    //    both primaries and fallback tails across full rounds.
+    const legacyConfig = {
+      enabled: true,
+      algorithm: "ordered",
+      retries: 0,
+      fallbackEnabled: true,
+    } as unknown as NonNullable<Agent["subagentLoadBalancing"]>;
+
+    const plannedRounds: string[][] = [];
+    for (let i = 0; i < 6; i++) {
+      const planned = await subagentLoadBalancer.planCandidates({
+        callerAgentId: gateway.id,
+        assignedAgentIds: assigned,
+        config: legacyConfig,
+      });
+      plannedRounds.push(planned.candidateIds);
+    }
+    expect(plannedRounds).toEqual([
+      [a, b, c],
+      [b, c, a],
+      [c, a, b],
+      // Round 2 rotates the fallback tail so the first fallback alternates
+      [a, c, b],
+      [b, a, c],
+      [c, b, a],
+    ]);
+
+    // 2. Concurrent/interleaved fallback claims on the same remaining candidate list
+    //    atomically claim distinct workers instead of colliding on the first fallback.
+    const [claim1, claim2] = await Promise.all([
+      subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: gateway.id,
+        remainingCandidateIds: [a, b],
+        assignedAgentIds: assigned,
+        plannedDispatchCount: -1,
+      }),
+      subagentLoadBalancer.claimNextFallbackCandidate({
+        callerAgentId: gateway.id,
+        remainingCandidateIds: [a, b],
+        assignedAgentIds: assigned,
+        plannedDispatchCount: -1,
+      }),
+    ]);
+    expect(new Set([claim1.claimedAgentId, claim2.claimedAgentId])).toEqual(
+      new Set([a, b]),
+    );
+
+    // 3. A primary with misconfigured admin credentials fails over to a healthy
+    //    secondary when fallbackEnabled=true, and does not pin the broken primary
+    //    when fallbackEnabled=false.
+    await AgentModel.update(a, {
+      runtime: runtimeConfig({
+        credentials: [
+          {
+            key: "MISSING_ADMIN_SECRET",
+            label: "Missing Admin Secret",
+            scope: "shared",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    await mockDetachedTaskStart();
+
+    // Ensure `a` is at the front of the queue by claiming `b` and `c` first
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: b,
+      assignedAgentIds: assigned,
+    });
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: c,
+      assignedAgentIds: assigned,
+    });
+
+    // With fallbackEnabled=true, start_agent_run walks past misconfigured `a`
+    // to the round-rotated first fallback (`c` on dispatchCount=11, round=3).
+    const failoverResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Should fail over past misconfigured primary a" },
+      context,
+    );
+    expect(failoverResult.isError).toBeFalsy();
+    expect(
+      (failoverResult.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    ).toBe(c);
+
+    // With fallbackEnabled=false, when `a` is at the front of the queue,
+    // the call fails on `a`, but leaves `a` at the back of the queue so
+    // the next call succeeds on a healthy worker rather than pinning `a`.
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: b,
+      assignedAgentIds: assigned,
+    });
+    await subagentLoadBalancer.recordCandidateClaimed({
+      callerAgentId: gateway.id,
+      claimedAgentId: c,
+      assignedAgentIds: assigned,
+    });
+    await AgentModel.update(gateway.id, {
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: false,
+      },
+    });
+
+    const failedOnA = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Hits misconfigured primary a with fallback disabled" },
+      context,
+    );
+    expect(failedOnA.isError).toBe(true);
+
+    const nextCallOnHealthy = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { message: "Advances past misconfigured primary a to healthy b" },
+      context,
+    );
+    expect(nextCallOnHealthy.isError).toBeFalsy();
+    expect(
+      (nextCallOnHealthy.structuredContent as { run: { agent_id: string } }).run
+        .agent_id,
+    ).toBe(b);
+    expect([workerA.id, workerB.id, workerC.id]).toContain(b);
   });
 });

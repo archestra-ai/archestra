@@ -307,7 +307,8 @@ export function geminiUsageViewToOpenai(
   }
   const promptTokens = usage.inputTokens + (usage.cacheReadTokens ?? 0);
   const reasoningTokens = usage.reasoningTokens ?? 0;
-  const completionTokens = usage.outputTokens + reasoningTokens;
+  // outputTokens already includes thinking (see the Gemini getUsageTokens).
+  const completionTokens = usage.outputTokens;
   return {
     prompt_tokens: promptTokens,
     ...((usage.cacheReadTokens ?? 0) > 0

@@ -704,16 +704,14 @@ class GeminiStreamAdapter
     // Handle usage metadata
     if (chunk.usageMetadata) {
       this.trafficType = chunk.usageMetadata.trafficType ?? this.trafficType;
-      const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
+      const { input, output, cacheRead, cacheWrite, reasoning } =
+        getUsageTokens(chunk.usageMetadata);
       this.state.usage = {
-        inputTokens: Math.max(
-          0,
-          (chunk.usageMetadata.promptTokenCount ?? 0) - cacheReadTokens,
-        ),
-        outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
-        cacheReadTokens,
-        cacheWriteTokens: 0,
-        reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+        reasoningTokens: reasoning,
       };
     }
 
@@ -987,7 +985,14 @@ class GeminiStreamAdapter
             promptTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0),
-            candidatesTokenCount: this.state.usage.outputTokens,
+            // `outputTokens` includes thinking (see getUsageTokens); split
+            // it back into Gemini's two fields.
+            candidatesTokenCount:
+              this.state.usage.outputTokens -
+              (this.state.usage.reasoningTokens ?? 0),
+            ...(this.state.usage.reasoningTokens
+              ? { thoughtsTokenCount: this.state.usage.reasoningTokens }
+              : {}),
             totalTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0) +
@@ -1020,12 +1025,16 @@ export function getUsageTokens(usage: {
   // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
   // so subtract it to get the uncached input and avoid double-counting.
   const cacheRead = usage.cachedContentTokenCount ?? 0;
+  // Thinking tokens are reported beside candidatesTokenCount, not inside it,
+  // and are billed as output. Fold them in so output includes reasoning, as
+  // it does for every other provider.
+  const reasoning = usage.thoughtsTokenCount ?? 0;
   return {
     input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
-    output: usage.candidatesTokenCount ?? 0,
+    output: (usage.candidatesTokenCount ?? 0) + reasoning,
     cacheRead,
     cacheWrite: 0,
-    reasoning: usage.thoughtsTokenCount ?? 0,
+    reasoning,
   };
 }
 

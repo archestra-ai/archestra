@@ -85,11 +85,11 @@ export function createOpenAiCompatibleAdapterFactory(
     },
 
     createResponseAdapter(response: Response): LLMResponseAdapter<Response> {
-      return new OpenAIResponseAdapter(response, provider);
+      return new OpenAIResponseAdapter(response, { provider });
     },
 
     createStreamAdapter(): LLMStreamAdapter<StreamChunk, Response> {
-      return new OpenAIStreamAdapter(provider);
+      return new OpenAIStreamAdapter({ provider });
     },
 
     extractApiKey(headers: Headers): string | undefined {

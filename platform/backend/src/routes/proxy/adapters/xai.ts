@@ -36,6 +36,7 @@ import {
   type Xai,
 } from "@/types";
 import {
+  getUsageTokens as getOpenAIUsageTokens,
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
@@ -111,7 +112,9 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
   private delegate: OpenAIResponseAdapter;
 
   constructor(response: XaiResponse) {
-    this.delegate = new OpenAIResponseAdapter(response);
+    this.delegate = new OpenAIResponseAdapter(response, {
+      reasoningOutsideCompletion: true,
+    });
   }
 
   getId() {
@@ -155,7 +158,9 @@ class XaiStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+    this.delegate = new OpenAIStreamAdapter({
+      reasoningOutsideCompletion: true,
+    });
   }
 
   get state() {
@@ -374,3 +379,14 @@ export const xaiAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * xAI speaks the OpenAI wire, but its `completion_tokens` leaves out
+ * `completion_tokens_details.reasoning_tokens`; reasoning is folded into
+ * output (see the OpenAI `getUsageTokens`).
+ */
+export function getUsageTokens(
+  usage: Parameters<typeof getOpenAIUsageTokens>[0],
+) {
+  return getOpenAIUsageTokens(usage, { reasoningOutsideCompletion: true });
+}

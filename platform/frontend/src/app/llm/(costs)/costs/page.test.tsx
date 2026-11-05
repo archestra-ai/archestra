@@ -886,6 +886,17 @@ describe("OrganizationCostsPage", () => {
           url.searchParams.get("timeframe") === "24h",
       ),
     ).toBe(true);
+    // The drill-down cannot split, so presets with a split are not offered.
+    fireEvent.keyDown(screen.getByRole("button", { name: /^View / }), {
+      key: "Enter",
+    });
+    expect(
+      await screen.findByRole("menuitem", { name: "Tokens by person" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Tokens by agent and person" }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Clear model filter" }));
     expect(
       await screen.findByRole("button", { name: "Explore example/model+a" }),

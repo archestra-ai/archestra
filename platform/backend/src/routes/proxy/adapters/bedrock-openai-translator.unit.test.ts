@@ -679,6 +679,7 @@ describe("converseResponseToOpenai — finish_reason mapping", () => {
     ["stop_sequence", "stop"],
     ["tool_use", "tool_calls"],
     ["max_tokens", "length"],
+    ["model_context_window_exceeded", "length"],
     ["guardrail_intervened", "content_filter"],
     ["content_filtered", "content_filter"],
   ] as const)("%s → %s", (stopReason, expected) => {

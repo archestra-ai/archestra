@@ -229,6 +229,17 @@ describe("sse encoder — terminal formatters", () => {
     expect(events[1]).toBe("[DONE]");
   });
 
+  test("formatEnd reports a full context window as finish=length", () => {
+    const enc = createConverseToOpenaiSseEncoder(ctx);
+    enc.encodeBedrockEvent(
+      chunk({ messageStop: { stopReason: "model_context_window_exceeded" } }),
+    );
+    const events = parseSseChunks(enc.formatEnd());
+    expect(events[0]).toMatchObject({
+      choices: [{ finish_reason: "length" }],
+    });
+  });
+
   test("formatCompleteText emits role, content, finish=stop (discards pending)", () => {
     const enc = createConverseToOpenaiSseEncoder(ctx);
     // pending should not win

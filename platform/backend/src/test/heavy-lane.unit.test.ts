@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import {
   chmodSync,
   existsSync,
@@ -315,9 +316,10 @@ describe("heavy lane", () => {
         `echo second >> ${log}`,
       ]);
       await waitFor(() => second.stderr().includes("waits for"));
-      // Only the Node process: its waiting shell is left to notice. The
-      // shell still holds the stderr pipe, so `second` settles when it exits.
-      second.kill("SIGTERM");
+      // Confirm the Node caller has exited before releasing the lane: sending
+      // SIGTERM alone races with the shell's caller-liveness check. Wait for
+      // `exit`, not `close`: the waiting shell still holds the stderr pipe.
+      await second.kill("SIGTERM");
       writeFileSync(release, "");
       expect((await first).status).toBe(0);
       await second;
@@ -433,10 +435,10 @@ describe("heavy lane", () => {
     args: string[],
   ): Promise<{ status: number | null; stderr: string }> & {
     stderr: () => string;
-    kill: (signal: NodeJS.Signals) => void;
+    kill: (signal: NodeJS.Signals) => Promise<void>;
   } {
     let stderr = "";
-    let kill: (signal: NodeJS.Signals) => void = () => {};
+    let kill: (signal: NodeJS.Signals) => Promise<void> = async () => {};
     const done = new Promise<{ status: number | null; stderr: string }>(
       (resolve, reject) => {
         const child = spawn(process.execPath, [...NODE_FLAGS, LANE, ...args], {
@@ -446,7 +448,11 @@ describe("heavy lane", () => {
         child.stderr.on("data", (chunk) => {
           stderr += chunk;
         });
-        kill = (signal) => child.kill(signal);
+        kill = async (signal) => {
+          const exited = once(child, "exit");
+          child.kill(signal);
+          await exited;
+        };
         child.on("error", reject);
         child.on("close", (status) => resolve({ status, stderr }));
       },

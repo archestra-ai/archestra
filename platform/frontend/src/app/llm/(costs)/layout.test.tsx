@@ -38,13 +38,16 @@ vi.mock("@/components/external-docs-link", () => ({
 const setPermissions = ({
   canReadCosts,
   canReadLimits,
+  canReadModels = false,
 }: {
   canReadCosts: boolean;
   canReadLimits: boolean;
+  canReadModels?: boolean;
 }) => {
   vi.mocked(usePermissionMap).mockReturnValue({
     "/llm/costs": canReadCosts,
     "/llm/limits": canReadLimits,
+    "/llm/models": canReadModels,
   } as unknown as ReturnType<typeof usePermissionMap>);
 };
 
@@ -65,15 +68,42 @@ describe("CostsLayout", () => {
     expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("hides the redundant tab bar for delegated team admins", () => {
+  it("opens both tabs to a team admin and scopes the Costs description to their teams", () => {
     setPermissions({ canReadCosts: false, canReadLimits: false });
-    vi.mocked(usePathname).mockReturnValue("/llm/limits");
     vi.mocked(useTeamLimitAccess).mockReturnValue({
       canRead: true,
       isTeamAdmin: true,
     } as ReturnType<typeof useTeamLimitAccess>);
     render(<CostsLayout>content</CostsLayout>);
-    expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
+    const tabs = screen.getByTestId("tabs");
+    expect(tabs).toHaveTextContent("/llm/costs");
+    expect(tabs).toHaveTextContent("/llm/limits");
+    expect(screen.getByTestId("description")).toHaveTextContent(
+      /across the teams you administer/i,
+    );
+  });
+
+  it("offers a team admin Model Settings only when they can open it", () => {
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      canRead: true,
+      isTeamAdmin: true,
+    } as ReturnType<typeof useTeamLimitAccess>);
+    setPermissions({ canReadCosts: false, canReadLimits: false });
+    const { unmount } = render(<CostsLayout>content</CostsLayout>);
+    expect(
+      screen.queryByRole("link", { name: "Model Settings" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    setPermissions({
+      canReadCosts: false,
+      canReadLimits: false,
+      canReadModels: true,
+    });
+    render(<CostsLayout>content</CostsLayout>);
+    expect(
+      screen.getByRole("link", { name: "Model Settings" }),
+    ).toHaveAttribute("href", "/llm/models");
   });
 
   it("keeps every tab for a reader who may open them all", () => {

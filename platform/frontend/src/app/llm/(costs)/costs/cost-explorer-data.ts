@@ -416,6 +416,12 @@ export type Cube = {
   retry: () => void;
   total: number;
   /**
+   * Per-bucket totals that count each request once, set when rows overlap
+   * (a team admin's teams, where a sub-team's spend also counts toward its
+   * parent). The trend and pivot column totals use these over row sums.
+   */
+  bucketTotals?: number[];
+  /**
    * Every metric per group and split, for the CSV export. Set by sources
    * that return them all at once; others export the metric on screen.
    */
@@ -426,7 +432,14 @@ export function usePivotCube(
   q: PivotQuery,
   timeframe: StatisticsTimeFrame,
   enabled: boolean,
+  scope: {
+    /** Only this team's requests; answered for the team and time groupings. */
+    teamId?: string;
+    /** A team admin's view: team rows can overlap, so totals come from costs. */
+    teamScoped?: boolean;
+  } = {},
 ): Cube {
+  const { teamId, teamScoped = false } = scope;
   const src = resolveSource(q);
   const on = (kind: Source["kind"]) => enabled && src.kind === kind;
 
@@ -474,11 +487,13 @@ export function usePivotCube(
     groupBy: ["skillId"],
     enabled: on("skill") && q.group === "skill",
   });
-  const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
+  const teamQ = useTeamStatistics({ timeframe, teamId, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
+  const dedupeTeams = teamScoped && src.kind === "team";
   const modelQ = useCostStatistics({
     timeframe,
-    enabled: on("model") || on("time"),
+    teamId,
+    enabled: on("model") || on("time") || (on("team") && dedupeTeams),
   });
   const userQ = useUsersForPivot({
     timeframe,
@@ -580,14 +595,16 @@ export function usePivotCube(
       ...(src.kind === "skill" && q.group === "skill"
         ? [skillReachQ, skillCostQ]
         : []),
+      ...(dedupeTeams ? [modelQ] : []),
     ].find((query) => query.isError);
     const base = {
-      api: apiFor(src, tf, q),
+      api: apiFor(src, tf, q, teamId),
       isLoading: false,
       error: failed?.error,
       retry: () => {
         void primary.refetch();
         for (const query of itemQs) void query.refetch();
+        if (dedupeTeams) void modelQ.refetch();
         if (src.kind === "skill") {
           void skillReachQ.refetch();
           void skillCostQ.refetch();
@@ -846,7 +863,7 @@ export function usePivotCube(
             ? (teamQ.data ?? []).map((t) => ({
                 key: t.teamId,
                 label: t.teamName,
-                sub: `${t.members} members`,
+                sub: `${t.members} ${t.members === 1 ? "member" : "members"}`,
                 series: t.timeSeries,
                 totals: t,
               }))
@@ -895,14 +912,47 @@ export function usePivotCube(
         );
         const loading =
           src.kind === "team"
-            ? teamQ.isLoading
+            ? teamQ.isLoading || (dedupeTeams && modelQ.isLoading)
             : src.kind === "agent"
               ? agentQ.isLoading
               : modelQ.isLoading;
+        const cube = { ...assemble(facts, { totals, meta }), ...base };
+        if (!dedupeTeams) return { ...cube, isLoading: loading };
+        // Without the scope's costs, the overlapping rows have no honest
+        // total: keep loading, or show the error (the failed list has it).
+        if (!modelQ.data)
+          return { ...cube, total: 0, isLoading: !modelQ.isError };
+        // A sub-team's spend also counts toward its parent team, as it does
+        // for spend limits, so these rows overlap. The scope's per-model
+        // costs count each request once: the total, trend and column totals
+        // come from them.
+        const scoped = modelQ.data.models;
+        const byBucket = new Map<string, number>();
+        for (const m of scoped)
+          for (const p of m.timeSeries)
+            byBucket.set(
+              p.timestamp,
+              (byBucket.get(p.timestamp) ?? 0) + pointValue(metric, p),
+            );
         return {
-          ...assemble(facts, { totals, meta }),
-          ...base,
+          ...cube,
           isLoading: loading,
+          total: scoped.reduce(
+            (sum, m) =>
+              sum +
+              (metric === "billed"
+                ? m.cost
+                : metric === "subscription"
+                  ? m.timeSeries.reduce((t, p) => t + pointValue(metric, p), 0)
+                  : pointValue(metric, m)),
+            0,
+          ),
+          bucketTotals: cube.buckets.map((b) => byBucket.get(b) ?? 0),
+          notice:
+            cube.notice ??
+            (teamId
+              ? undefined
+              : "A sub-team's spend also counts toward its parent team, as it does for spend limits, so rows can add up to more than the total."),
         };
       }
       case "user": {
@@ -1038,6 +1088,8 @@ export function usePivotCube(
     proxyQ.isLoading,
     proxyItems,
     itemStamp,
+    teamId,
+    dedupeTeams,
     llmQ.data,
     llmQ.error,
     llmQ.isLoading,
@@ -1122,10 +1174,9 @@ function resolveSource(q: PivotQuery): Source {
   return { kind: "user", models: split === "model" };
 }
 
-function apiFor(src: Source, tf: string, q: PivotQuery) {
+function apiFor(src: Source, tf: string, q: PivotQuery, teamId?: string) {
+  const team = teamId ? `&teamId=${encodeURIComponent(teamId)}` : "";
   switch (src.kind) {
-    case "time":
-      return `GET /api/statistics/costs?timeframe=${tf}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
@@ -1135,11 +1186,12 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
     case "llm":
       return `GET /api/statistics/llm-usage?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "team":
-      return `GET /api/statistics/teams?timeframe=${tf}`;
+      return `GET /api/statistics/teams?timeframe=${tf}${team}`;
     case "agent":
       return `GET /api/statistics/agents?timeframe=${tf}`;
+    case "time":
     case "model":
-      return `GET /api/statistics/models?timeframe=${tf}`;
+      return `GET /api/statistics/costs?timeframe=${tf}${team}`;
     case "user":
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":

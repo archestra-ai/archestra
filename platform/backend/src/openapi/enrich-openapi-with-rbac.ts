@@ -336,6 +336,10 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
   [RouteId.GetLimit]:
     "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+  [RouteId.GetTeamStatistics]:
+    "Requires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+  [RouteId.GetCostStatistics]:
+    "Requires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
   [RouteId.CreateLimit]:
     "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
   [RouteId.UpdateLimit]:
@@ -416,8 +420,6 @@ const STATIC_ROUTE_PERMISSION_NOTES = {
     "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetMcpToolCall]:
     "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
-  [RouteId.GetTeamStatistics]:
-    "Returns aggregate team usage for the active organization.",
   [RouteId.GetAgentStatistics]:
     "Returns aggregate usage for every agent in the active organization.",
   [RouteId.GetModelStatistics]:

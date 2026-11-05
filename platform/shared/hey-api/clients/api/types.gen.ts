@@ -142635,6 +142635,10 @@ export type GetTeamStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/teams';
 };
@@ -143712,6 +143716,10 @@ export type GetCostStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/costs';
 };

@@ -934,6 +934,10 @@ describe("service account API authentication", () => {
     expect(
       byAgent.data.map((row: { billedCost: number }) => row.billedCost),
     ).toEqual([3]);
+    const byCredential = await get(
+      "/api/statistics/llm-usage?timeframe=24h&groupBy=credentialId",
+    );
+    expect(byCredential.totals.billedCost).toBe(3);
   });
 
   test("applies cost and log scopes to service account tokens", async ({

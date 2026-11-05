@@ -1500,7 +1500,9 @@ export const requiredEndpointPermissionsMap: Partial<
     llmCost: ["read"],
   },
   // Same organization-wide totals as GetTeamStatistics and
-  // GetProxyCostStatistics, cut finer; it names no person.
+  // GetProxyCostStatistics, cut finer. Like GetProxyCostStatistics, a
+  // credential breakdown narrows to the caller's own usage without member:read,
+  // since a virtual key can be one person's own (see the handler).
   [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },

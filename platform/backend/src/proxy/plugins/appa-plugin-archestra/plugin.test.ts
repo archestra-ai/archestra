@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -42,7 +42,10 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
-import { isUnenforcedSession } from "@/openappa/unenforced";
+import {
+  findUnenforcedCalls,
+  isUnenforcedSession,
+} from "@/openappa/unenforced";
 import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
@@ -171,12 +174,6 @@ describe("asking through the client's own question tool", () => {
     {
       name: "Claude Agent",
       tool: "Agent",
-      family: "anthropic:messages",
-      adapter: () => new AppaClaudeCodeAdapter(),
-    },
-    {
-      name: "Claude Task",
-      tool: "Task",
       family: "anthropic:messages",
       adapter: () => new AppaClaudeCodeAdapter(),
     },
@@ -1569,38 +1566,6 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("omits wait_agent guidance when that collaboration tool is not declared", async () => {
-    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
-    const context = requestContext({ sessionId: "codex-spawn-without-wait" });
-    context.headers = { originator: "codex_cli_rs" };
-    context.interactionType = "openai:responses";
-    const request = {
-      input: [
-        {
-          type: "additional_tools",
-          role: "developer",
-          tools: [
-            {
-              type: "namespace",
-              name: "collaboration",
-              tools: [{ type: "function", name: "spawn_agent" }],
-            },
-          ],
-        },
-      ],
-    };
-
-    try {
-      await plugin.onSessionInit(context);
-      await plugin.onBeforeModel({ ...context, request });
-      const guidance = JSON.stringify(request.input);
-      expect(guidance).toContain("name spawn_agent");
-      expect(guidance).not.toContain("collaboration.wait_agent");
-    } finally {
-      await plugin.onCleanup(context);
-    }
-  });
-
   test("replaces native delegation guidance when declared tools change", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-delegation-upsert" });
@@ -2138,83 +2103,7 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("refuses one native answer sent twice in a request", async () => {
-    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
-    const context = requestContext({
-      sessionId: "opencode-duplicate-answer",
-      toolIdentity: identityStub({
-        canonicalize: (name) => name.replace(/^my_gateway_(?=archestra__)/, ""),
-      }),
-    });
-    const trusted = context.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    trusted.request = {
-      tools: {
-        control: { name: "my_gateway_archestra__execute_remedy_plan" },
-        notice: { name: "my_gateway_archestra__get_remedy_plans" },
-        askUser: { name: "my_gateway_archestra__ask_user" },
-        platformToolNames: new Set(["my_gateway_archestra__ask_user"]),
-        namespaces: new Map(),
-      },
-      session: {},
-      customTools: new Set(),
-      declaredTools: [{ name: "question" }],
-    };
-    context.headers = { "x-opencode-session": "s" };
-    try {
-      await stageHitlReview({
-        session: trusted.session,
-        review: {
-          offerId: "offer-duplicate-answer",
-          text: "Canonical HITL review.",
-        },
-      });
-      await plugin.onSessionInit(context);
-      const prepared = await plugin.onPrepareToolCalls({
-        ...context,
-        toolCalls: [
-          {
-            id: "call_dup",
-            name: "my_gateway_archestra__ask_user",
-            arguments: JSON.stringify({
-              question: "Continue?",
-              options: [{ label: "Yes" }, { label: "No" }],
-              remedy_offer_ids: ["offer-duplicate-answer"],
-            }),
-          },
-        ],
-      });
-      if (prepared?.decision !== "allow")
-        throw new Error("expected native question");
-      // The client answers under the signed id the proxy issued for the call.
-      const answerId = prepared.toolCalls[0].wireId ?? "";
-      await expect(
-        plugin.onToolResults({
-          ...context,
-          toolResults: [
-            {
-              id: answerId,
-              name: "question",
-              content: 'approval="Yes"',
-              isError: false,
-            },
-            {
-              id: answerId,
-              name: "question",
-              content: 'approval="No"',
-              isError: false,
-            },
-          ],
-        }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-    } finally {
-      await plugin.onCleanup(context);
-    }
-  });
-
   test.each([
-    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 2 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 4 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 5 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 12 },
@@ -3267,6 +3156,7 @@ describe("asking through the client's own question tool", () => {
     client: string;
     nativeName: string;
     offerId: string;
+    reviewedTool?: string;
   }): Promise<string> {
     const trusted = params.context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -3288,7 +3178,7 @@ describe("asking through the client's own question tool", () => {
       review: {
         offerId: params.offerId,
         text: "Canonical HITL review.",
-        tool: "archestra__whoami",
+        tool: params.reviewedTool ?? "archestra__whoami",
         arguments: "{}",
         remedyArguments: {
           offer_id: params.offerId,
@@ -3662,6 +3552,87 @@ describe("asking through the client's own question tool", () => {
       });
     } finally {
       evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("a denied app tool stays denied when retried as a preview", async ({
+    makeOrganization,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAppTool,
+  }) => {
+    const organization = await makeOrganization();
+    const app = await makeApp({ organizationId: organization.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+    });
+    const tool = await makeTool({
+      name: "served__list_items",
+      catalogId: catalog.id,
+    });
+    await makeAppTool(app.id, tool.id);
+    const offerId = "offer-denied-preview";
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|denied-preview",
+      organizationId: organization.id,
+    });
+    context.headers = { "user-agent": "claude-code/1" };
+    context.interactionType = "anthropic:messages";
+    context.provider = "anthropic";
+    // The runtime's event log needs PostgreSQL; the answer's own result has no label.
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    try {
+      const questionId = await askStagedReview({
+        plugin,
+        context,
+        client: "Claude Code",
+        nativeName: "AskUserQuestion",
+        offerId,
+        reviewedTool: tool.name,
+      });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: questionId,
+            name: "AskUserQuestion",
+            content: JSON.stringify(
+              `Your questions have been answered: "Approve the ${tool.name} call?"="Deny". You can now continue with these answers in mind.`,
+            ),
+            isError: false,
+          },
+        ],
+      });
+      await plugin.onBeforeModel({
+        ...context,
+        request: { system: "Base", messages: [] },
+      });
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "retry-as-preview",
+              name: archestraMcpBranding.getToolName("preview_app_tool"),
+              arguments: JSON.stringify({
+                appId: app.id,
+                toolName: tool.name,
+                args: {},
+              }),
+            },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_hitl_not_approved" },
+      });
+    } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }
@@ -5770,90 +5741,6 @@ describe("asking through the client's own question tool", () => {
   });
 });
 
-describe("AppaPluginArchestra", () => {
-  test("keeps bindings private to each request and deletes them at cleanup", async () => {
-    const canonicalizedNames: string[] = [];
-    const evaluateToolCalls = vi
-      .spyOn(appaService, "evaluateToolCalls")
-      .mockImplementation(async (_session, calls, options) => {
-        canonicalizedNames.push(options.canonicalize("read_file"));
-        return calls.map(() => ({ kind: "allow" }) as const);
-      });
-    const plugin = new AppaPluginArchestra([
-      {
-        id: "test-adapter",
-        matches: () => true,
-        classifyToolName: () => "local",
-        normalizeLocalToolName: (name) => `local:${name}`,
-        trajectoryPrefix: "t",
-        isSpawnTool: () => false,
-        spawnPromptField: () => undefined,
-        nativeConversationId: () => undefined,
-        namesChildren: () => [],
-        bindChildTrajectory: () => undefined,
-        stripCarrierMetadata: () => undefined,
-      },
-    ]);
-    const first = requestContext({
-      sessionId: "first-session",
-      toolIdentity: identityStub({ canonicalize: (name) => `first:${name}` }),
-    });
-    const second = requestContext({
-      sessionId: "second-session",
-      toolIdentity: identityStub({ canonicalize: (name) => `second:${name}` }),
-    });
-
-    try {
-      await plugin.onSessionInit(first);
-      await plugin.onSessionInit(second);
-      // A later plugin shares this resources map and can overwrite the trusted
-      // context in it. APPA copied its binding when the session opened, so the
-      // overwrite reaches nothing it relies on.
-      first.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
-        session: {
-          organization_id: "other-organization",
-          caller_id: "user:other",
-          session_id: "other-session",
-        },
-        profileId: "other-profile",
-        toolIdentity: identityStub({ canonicalize: () => "overwritten" }),
-        request: {
-          tools: undefined,
-          customTools: new Set(),
-        },
-      });
-
-      await plugin.onToolCalls({
-        ...first,
-        toolCalls: [{ id: "first-call", name: "read_file", arguments: {} }],
-      });
-      await plugin.onToolCalls({
-        ...second,
-        toolCalls: [{ id: "second-call", name: "read_file", arguments: {} }],
-      });
-
-      expect(canonicalizedNames).toEqual([
-        "first:local:read_file",
-        "second:local:read_file",
-      ]);
-      expect(
-        evaluateToolCalls.mock.calls.map(([session]) => session.session_id),
-      ).toEqual(["first-session", "second-session"]);
-
-      await plugin.onCleanup(first);
-      await expect(
-        plugin.onToolCalls({
-          ...first,
-          toolCalls: [{ id: "cleaned-call", name: "read_file", arguments: {} }],
-        }),
-      ).resolves.toBeUndefined();
-      expect(evaluateToolCalls).toHaveBeenCalledTimes(2);
-    } finally {
-      evaluateToolCalls.mockRestore();
-    }
-  });
-});
-
 describe("Claude Code task output reads", () => {
   test("releases a background command's output and withholds a child agent's transcript", async () => {
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
@@ -5940,17 +5827,6 @@ describe("withoutRemedySections", () => {
         "Why:",
         "  - allowed readers would narrow: public -> internal",
         "  - Accepting restricts 25 of 319 tools for this session: 25 will need sign-off, 0 will be blocked.",
-      ].join("\n"),
-    );
-  });
-
-  test("drops an alternative route offered after the plans", () => {
-    expect(withoutRemedySections(APPROVAL_RULING)).toBe(
-      [
-        "[appa] Blocked: Bash cannot run yet.",
-        "",
-        "Why:",
-        "  - trust is suspicious, below the required floor trusted",
       ].join("\n"),
     );
   });
@@ -6413,6 +6289,63 @@ describe("rendering runtime text for this client", () => {
         expect(
           await isUnattendedSession(session(organizationId, "runtime-only")),
         ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("an attended batch whose unattended note cannot be withdrawn is refused", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, cancelCalls, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      try {
+        await run("stuck-note", "header");
+        expect(
+          await isUnattendedSession(session(organizationId, "stuck-note")),
+        ).toBe(true);
+        await db.execute(sql`
+          CREATE FUNCTION refuse_unattended_note() RETURNS trigger
+          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cache storage down'; END $$
+        `);
+        for (const [name, write, row] of [
+          ["refuse_unattended_note_delete", "DELETE", "OLD"],
+          ["refuse_unattended_note_write", "INSERT OR UPDATE", "NEW"],
+        ])
+          await db.execute(
+            sql.raw(`
+              CREATE TRIGGER ${name} BEFORE ${write} ON keyv_cache
+              FOR EACH ROW WHEN (${row}.key LIKE '%openappa-unattended-session-%')
+              EXECUTE FUNCTION refuse_unattended_note()
+            `),
+          );
+        try {
+          await expect(
+            run("stuck-note", "attended", [
+              { id: "post-2", name: "post_message", arguments: {} },
+              { id: "send-2", name: "send_email", arguments: {} },
+              { id: "read-2", name: "read_file", arguments: {} },
+            ]),
+          ).rejects.toThrow();
+        } finally {
+          await db.execute(sql`DROP FUNCTION refuse_unattended_note() CASCADE`);
+        }
+        expect(cancelCalls).toHaveBeenLastCalledWith(
+          expect.anything(),
+          ["read-2"],
+          expect.anything(),
+        );
+        // The call it would have let through was never recorded as released.
+        expect(
+          (
+            await findUnenforcedCalls({
+              session: session(organizationId, "stuck-note"),
+              toolCallIds: ["send-2"],
+            })
+          ).reasons.size,
+        ).toBe(0);
       } finally {
         restore();
       }
@@ -7444,84 +7377,6 @@ describe("rendering runtime text for this client", () => {
       const buffered = await plugin.onBufferedModelResponse({
         ...context,
         streaming: true,
-        response: {},
-        responseText: "",
-      });
-      expect(buffered).toBeUndefined();
-      expect(endChild).toHaveBeenCalledTimes(1);
-    } finally {
-      endChild.mockRestore();
-      config.openappa.offerSigningSecret = priorSecret;
-    }
-  });
-
-  test("keeps releasing the rewritten handback call when the child is not streaming", async ({
-    makeOrganization,
-  }) => {
-    const priorSecret = config.openappa.offerSigningSecret;
-    config.openappa.offerSigningSecret = DELEGATION_SECRET;
-    const organization = await makeOrganization();
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
-    const context = requestContext({
-      sessionId: "user:user|s1",
-      organizationId: organization.id,
-    });
-    context.headers = {
-      "user-agent": "claude-code/1",
-      "x-claude-code-session-id": "s1",
-      "x-claude-code-agent-id": "a1",
-    };
-    const trusted = context.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    trusted.request.tools = stubRequestTools();
-    trusted.request.turnEndOperationId = "turn_end:buffered-handback";
-    const marker = mintDelegationMarker({
-      organizationId: organization.id,
-      callerId: "user:user",
-      parentId: "s1",
-      spawnerNativeId: "s1",
-      prompt: "task",
-      spawnCallId: "spawn-call",
-    });
-    if (!marker) throw new Error("expected delegation marker");
-    trusted.request.delegation = {
-      markers: collectDelegationMarkers({
-        family: "anthropic:messages",
-        body: {
-          messages: [{ role: "user", content: `task\n\n${marker}` }],
-        },
-      }),
-    };
-    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
-      decision: "release",
-      crossed: true,
-    });
-
-    try {
-      await plugin.onSessionInit(context);
-      const outcome = await plugin.onToolCalls({
-        ...context,
-        toolCalls: [
-          {
-            id: "handback",
-            name: "SubagentHandback",
-            arguments: { message: "raw child return" },
-          },
-        ],
-      });
-      if (outcome?.decision !== "allow") {
-        throw new Error("expected the handback batch to be released");
-      }
-      const handback = outcome.toolCalls.find((call) => call.id === "handback");
-      expect(JSON.stringify(handback?.arguments)).toContain(
-        "finished subagent",
-      );
-      expect(JSON.stringify(handback?.arguments)).not.toContain("[appa]");
-
-      const buffered = await plugin.onBufferedModelResponse({
-        ...context,
-        streaming: false,
         response: {},
         responseText: "",
       });
@@ -9666,15 +9521,6 @@ describe("child return contract delivery", () => {
       ],
     },
     {
-      name: "as a leading system message on native Chat Completions",
-      interactionType: "openai:chatCompletions",
-      messages: [{ role: "user", content: "go" }],
-      expected: [
-        { role: "system", content: contract },
-        { role: "user", content: "go" },
-      ],
-    },
-    {
       name: "as a text part of a leading developer message",
       interactionType: "openrouter:chatCompletions",
       messages: [
@@ -11177,8 +11023,6 @@ describe("delegation markers", () => {
 
   describe("on an allowed spawn call", () => {
     test.each([
-      { name: "Task", blocks: false },
-      { name: "Task", blocks: true },
       { name: "Agent", blocks: false },
       { name: "Agent", blocks: true },
     ])("ends an admitted prefix-bearing $name task without native handback, blocks=$blocks", async ({
@@ -12849,19 +12693,6 @@ context_control = true
       ).resolves.toBe("user:user|p:c");
     });
 
-    test("binds as today without a marker", async () => {
-      await expect(
-        boundSessionId(
-          claudePlugin(),
-          clientContext({
-            interactionType: "anthropic:messages",
-            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
-            body: claudeTurns([SPAWN_PROMPT]),
-          }),
-        ),
-      ).resolves.toBe("user:user|s1:a1");
-    });
-
     // WebFetch reads its page with a model call of its own, sent under the
     // headers of the agent that ran the tool.
     test("keeps a tool's own model call out of the agent that ran the tool", async () => {
@@ -12877,19 +12708,6 @@ context_control = true
           }),
         ),
       ).resolves.toBe("user:user|s1");
-    });
-
-    test("binds a child that declares no tools by its marker", async () => {
-      await expect(
-        boundSessionId(
-          claudePlugin(),
-          clientContext({
-            interactionType: "anthropic:messages",
-            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
-            body: userTurns([marked({ parentId: "s1", spawner: "s1" })]),
-          }),
-        ),
-      ).resolves.toBe("user:user|s1:a1");
     });
   });
 

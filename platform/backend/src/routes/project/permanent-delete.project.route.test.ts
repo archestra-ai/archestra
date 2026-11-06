@@ -18,6 +18,7 @@ import { projectService } from "@/services/project";
 import { FilesystemObjectStore } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import { ApiError } from "@/types";
@@ -25,7 +26,7 @@ import { ApiError } from "@/types";
 // Asserting on the orphan warning below needs the mock: the real `@/logging`
 // export is a Proxy over a private pino instance, which `vi.spyOn` cannot
 // intercept (see test/mocks/logging.ts).
-vi.mock("@/logging");
+spyOnLogger();
 
 /**
  * `projectService.purge` — permanent deletion of a project already in the

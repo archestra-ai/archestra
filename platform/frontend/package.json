@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.5.0-rc.22",
+  "version": "1.5.0-rc.24",
   "private": true,
   "type": "module",
   "scripts": {
@@ -78,6 +78,7 @@
     "elkjs": "^0.11.1",
     "embla-carousel-react": "^8.6.0",
     "handlebars": "^4.7.10",
+    "hyparquet-writer": "0.18.0",
     "import-in-the-middle": "3.0.0",
     "jszip": "^3.10.1",
     "lodash-es": "^4.18.1",

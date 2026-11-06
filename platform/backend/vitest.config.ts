@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import {
@@ -12,6 +13,11 @@ import { ProjectGroupedSequencer } from "./src/test/project-grouped-sequencer";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
+
+// On macOS the temp directory is under /var, a symlink to /private/var, and
+// child processes report the resolved path. Workers inherit the resolved one,
+// so a test's temp paths compare equal to what the code under test reports.
+process.env.TMPDIR = realpathSync(tmpdir());
 
 /**
  * Fork workers each load the backend graph and a PGlite database. CI keeps the

@@ -16,6 +16,7 @@ import {
   Bot,
   Building2,
   Info,
+  KeyRound,
   Loader2,
   type LucideIcon,
   Shield,
@@ -994,6 +995,7 @@ const subjectIcons: Record<PermissionSubject["type"], LucideIcon> = {
   user: UserRound,
   team: Users,
   serviceAccount: Bot,
+  oauthClient: KeyRound,
   role: Shield,
   organization: Building2,
 };
@@ -1101,6 +1103,7 @@ export const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",
   team: "Team",
   serviceAccount: "Service account",
+  oauthClient: "OAuth client",
   role: "Role",
   organization: "Organization",
 };

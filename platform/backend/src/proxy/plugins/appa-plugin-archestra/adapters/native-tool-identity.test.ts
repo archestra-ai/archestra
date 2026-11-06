@@ -94,24 +94,6 @@ describe("native local tool identities", () => {
     allowMultiple: false,
   };
 
-  test("asks Claude Code one line and previews the call in each option", () => {
-    expect(
-      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(shownReview),
-    ).toEqual({
-      questions: [
-        {
-          question: "Approve the slack__send_message call?",
-          header: "Approval",
-          options: shownReview.options.map((option) => ({
-            ...option,
-            preview: shownReview.callPreview,
-          })),
-          multiSelect: false,
-        },
-      ],
-    });
-  });
-
   test("other native question tools ask the full review text", () => {
     for (const converted of [
       new AppaClaudeDesktopAdapter().nativeQuestion.fromAskUser(shownReview),

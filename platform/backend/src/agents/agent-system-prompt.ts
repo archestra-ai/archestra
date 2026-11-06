@@ -172,6 +172,7 @@ export async function buildAgentSystemPrompt(params: {
   mcpTools: Record<string, Tool>;
   organizationId: string;
   userId: string;
+  oauthClientId?: string;
   agentId: string;
   /**
    * Pre-resolved invoking user. The chat path has it in hand; the A2A path
@@ -212,6 +213,7 @@ export async function buildAgentSystemPrompt(params: {
     mcpTools,
     organizationId,
     userId,
+    oauthClientId,
     agentId,
     user,
     hookSessionContext,
@@ -264,6 +266,7 @@ export async function buildAgentSystemPrompt(params: {
   const knowledgeSearchInstruction = await buildKnowledgeSearchInstruction({
     agentId,
     userId,
+    oauthClientId,
     organizationId,
     toolNames: Object.keys(mcpTools),
   });

@@ -75,7 +75,7 @@ import {
   openrouterAdapterFactory,
   perplexityAdapterFactory,
   vllmAdapterFactory,
-  xaiAdapterFactory,
+  xaiOpenAiUsageAdapterFactory,
   zhipuaiAdapterFactory,
 } from "../adapters";
 import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai";
@@ -243,7 +243,9 @@ const openAiWireProviders = {
   openrouter: openrouterAdapterFactory,
   perplexity: perplexityAdapterFactory,
   vllm: vllmAdapterFactory,
-  xai: xaiAdapterFactory,
+  // The router answers in OpenAI's usage dialect: reasoning inside
+  // completion_tokens, not beside it as xAI reports it.
+  xai: xaiOpenAiUsageAdapterFactory,
   zhipuai: zhipuaiAdapterFactory,
 } satisfies Partial<Record<SupportedProvider, unknown>> as Partial<
   Record<SupportedProvider, OpenAiWireProvider>

@@ -39,7 +39,7 @@ export function snapshotCachePath(): string {
   }
   return path.join(
     SNAPSHOT_CACHE_DIR,
-    `${hash.digest("hex").slice(0, 24)}.tar.gz`,
+    `${hash.digest("hex").slice(0, 24)}.tar`,
   );
 }
 
@@ -173,7 +173,8 @@ type CacheEntry = {
 };
 
 function cacheEntryKind(name: string): CacheEntry["kind"] | null {
-  if (name.endsWith(".tar.gz")) return "snapshot";
+  // Gzipped snapshots are from before snapshots were stored uncompressed.
+  if (name.endsWith(".tar") || name.endsWith(".tar.gz")) return "snapshot";
   if (name.endsWith(".partial")) return "partial";
   if (name.endsWith(".inuse")) return "run";
   return null;

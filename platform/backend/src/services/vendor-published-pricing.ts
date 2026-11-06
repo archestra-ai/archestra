@@ -20,7 +20,7 @@ export interface VendorPublishedPrices {
  * default estimate instead — $50/M against a published $1.25/M for the Codex
  * models, and against $0.15/M for Gemma, a 333× overstatement.
  *
- * Refreshing means re-reading the two pages cited below. Every id is stated
+ * Refreshing means re-reading the vendor pages cited below. Every id is stated
  * outright rather than derived from a base model by stripping a suffix: that
  * predicts the price for `gpt-5.1-codex` and then breaks on
  * `gpt-5.1-codex-mini`, which bills a fifth of what `gpt-5.1` does.

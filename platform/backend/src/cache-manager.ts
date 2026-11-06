@@ -4,6 +4,7 @@ import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";
 
@@ -720,8 +721,17 @@ export const cacheManager = new CacheManager();
 // === Internal helpers
 
 function createPostgresStore(): KeyvStoreAdapter {
+  const pgPoolOptions = buildPgConnectionConfig(
+    config.database.url,
+    { max: 10 },
+    {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    },
+  );
   return new KeyvPostgres({
-    uri: config.database.url,
+    ...pgPoolOptions,
+    uri: config.database.iamAuthEnabled ? undefined : config.database.url,
     table: "keyv_cache",
     max: 10,
     /**

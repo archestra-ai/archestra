@@ -247,7 +247,7 @@ class OpenrouterStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: OpenrouterRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {

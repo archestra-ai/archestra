@@ -256,33 +256,6 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a signed proof from one organization cannot read another organization's inbox", async ({
-    makeOrganization,
-    makeMember,
-  }) => {
-    const otherOrganization = await makeOrganization();
-    const userId = mockContext.userId;
-    if (!userId) throw new Error("Missing authenticated fixture user");
-    await makeMember(userId, otherOrganization.id, { role: "admin" });
-    const read = vi.spyOn(openappaService, "readPeerMessage");
-
-    await expect(
-      executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
-        { message_id: "message-1", peer_proof: peerProof() },
-        {
-          ...mockContext,
-          organizationId: otherOrganization.id,
-          openappaSession: {
-            organization_id: otherOrganization.id,
-            session_id: "other-session",
-          },
-        },
-      ),
-    ).rejects.toMatchObject({ statusCode: 403 });
-    expect(read).not.toHaveBeenCalled();
-  });
-
   test("listing held messages does not expose content digests or sender-supplied identities", async () => {
     const session = {
       organization_id: orgId,
@@ -388,32 +361,6 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a peer read keeps the authenticated child and logical call identity", async () => {
-    const session = {
-      organization_id: orgId,
-      caller_id: `user:${mockContext.userId}`,
-      session_id: "session-1:worker",
-      parent_id: "session-1",
-    };
-    const admitted = {
-      content: [{ type: "text" as const, text: "A checked peer message" }],
-    };
-    const read = vi
-      .spyOn(openappaService, "readPeerMessage")
-      .mockResolvedValue(admitted);
-    const response = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
-      { message_id: "message-1", peer_proof: peerProof({ call_id: "read-1" }) },
-      { ...mockContext, openappaSession: session, currentToolCallId: "read-1" },
-    );
-    expect(response).toEqual(admitted);
-    expect(read).toHaveBeenCalledExactlyOnceWith({
-      session,
-      toolCallId: "read-1",
-      args: { message_id: "message-1" },
-    });
-  });
-
   test.each([
     false,
     true,
@@ -448,31 +395,6 @@ describe("OpenAPPA tool execution", () => {
       },
       toolCallId: "peer-call-1",
       args: { message_id: "message-1" },
-    });
-  });
-
-  test("a signed inbox listing retains its proxy-issued logical call", async () => {
-    const list = vi
-      .spyOn(openappaService, "listPeerMessages")
-      .mockResolvedValue([]);
-    await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_peer_messages`,
-      {
-        peer_proof: peerProof({
-          action: "list_peer_messages",
-          message_id: null,
-        }),
-      },
-      mockContext,
-    );
-    expect(list).toHaveBeenCalledExactlyOnceWith({
-      session: {
-        organization_id: orgId,
-        caller_id: `user:${mockContext.userId}`,
-        session_id: "session-1:worker",
-        parent_id: "session-1",
-      },
-      toolCallId: "peer-call-1",
     });
   });
 

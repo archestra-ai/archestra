@@ -69,9 +69,9 @@ export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =
 export const ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS =
   "archestra.usage.cache_creation.1h_input_tokens";
 // Output tokens spent on reasoning / extended thinking. Per the GenAI semconv this
-// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI
-// (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for providers that
-// do not break reasoning tokens out separately.
+// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI-wire
+// providers (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for
+// providers that do not break reasoning tokens out separately.
 export const ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS =
   "gen_ai.usage.reasoning.output_tokens";
 

@@ -701,6 +701,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           policy: {
             ingestibleMimeTypes: getModelReadableMimeTypes(
               attachmentModelRow?.inputModalities ?? null,
+              attachmentModelRow?.provider,
             ),
             sandboxAvailable: await isSkillSandboxAvailableForAgent({
               userId: user.id,

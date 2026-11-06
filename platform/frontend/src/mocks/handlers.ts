@@ -630,6 +630,11 @@ export const handlers: HttpHandler[] = [
     modelId: null,
     chatApiKeyId: null,
   }),
+  // The agent settings page checks which runtime agents run on the default.
+  ...getJson("/api/organization/agent-settings/default-model-dependents", {
+    agents: [],
+    hiddenBlockingCount: 0,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

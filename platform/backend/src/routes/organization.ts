@@ -4,7 +4,6 @@ import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
-  getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
   isModelSelectionComplete,
   providerHasEndpointLocalModels,
@@ -49,7 +48,6 @@ import {
   McpServerModel,
   McpToolCallModel,
   MemberModel,
-  ModelModel,
   OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
@@ -57,6 +55,11 @@ import {
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import {
+  assertRuntimeAgentsSupportOrganizationDefault,
+  countHiddenAgentsBlockingDefault,
+  listRuntimeAgentsInheritingOrganizationDefault,
+} from "@/services/agent-runtime/model-compatibility";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
@@ -293,6 +296,55 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/organization/agent-settings/default-model-dependents",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultModelRuntimeDependents,
+        description:
+          "Agent Runtime agents the caller can read that run on the organization's default model (no usable model of their own), with the runtime each one uses and whether the caller may give it a model",
+        tags: ["Organization"],
+        querystring: z.object({
+          /** A candidate default (models.id) to count hidden blockers for. */
+          modelId: z.string().uuid().optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            agents: z.array(
+              RuntimeDependentSchema.extend({
+                id: z.string(),
+                name: z.string(),
+                /** Whether the caller may give this agent a model of its own. */
+                canUpdate: z.boolean(),
+              }),
+            ),
+            /**
+             * How many agents the caller can't read couldn't run `modelId`
+             * (0 without one): the only thing it learns about them.
+             */
+            hiddenBlockingCount: z.number().int(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, user, query }, reply) => {
+      const [{ agents }, hiddenBlockingCount] = await Promise.all([
+        listRuntimeAgentsInheritingOrganizationDefault({
+          organizationId,
+          userId: user.id,
+        }),
+        query.modelId
+          ? countHiddenAgentsBlockingDefault({
+              organizationId,
+              userId: user.id,
+              modelId: query.modelId,
+            })
+          : 0,
+      ]);
+      return reply.send({ agents, hiddenBlockingCount });
+    },
+  );
+
   fastify.patch(
     "/api/organization/agent-settings",
     {
@@ -305,7 +357,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
       // The default model and its API key are a pair: persist both or neither.
       // Validate the merged result only when this update touches either field.
       if (
@@ -339,6 +391,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
+          userId: user.id,
           modelId: mergedModelId,
         });
       }
@@ -1422,41 +1475,17 @@ async function assertOrganizationDefaultModelSelection(params: {
   }
 }
 
-async function assertRuntimeAgentsSupportOrganizationDefault(params: {
-  organizationId: string;
-  modelId: string | null;
-}): Promise<void> {
-  if (!params.modelId) return;
-  const [model, agents] = await Promise.all([
-    ModelModel.findById(params.modelId),
-    AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
-      params.organizationId,
-    ),
-  ]);
-  if (!model) {
-    throw new ApiError(404, "Default model not found");
-  }
-  const incompatible = agents.find((agent) => {
-    if (!agent.runtime) return false;
-    return !getAgentRuntimeModelCompatibility({
-      inferenceProtocol: agent.runtime.inferenceProtocol,
-      runtimeCommand: agent.runtime.command,
-      provider: model.provider,
-      modelId: model.modelId,
-      supportedEndpoints: model.supportedEndpoints,
-    }).compatible;
-  });
-  if (incompatible) {
-    throw new ApiError(
-      409,
-      `The proposed default model is incompatible with Agent Runtime Agent "${incompatible.name}". Update that Agent's runtime or choose a compatible default model.`,
-    );
-  }
-}
-
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/** An inheriting Agent Runtime agent's runtime, as far as a default model goes. */
+const RuntimeDependentSchema = z.object({
+  runtimeCommand: z.array(z.string()).nullable(),
+  inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
+  /** Absent when Claude Code picks the authentication automatically. */
+  claudeCodeAuthentication: z.enum(["provider", "subscription"]).optional(),
+});
 
 /**
  * Every mapped key must belong to the organization, match its provider, and

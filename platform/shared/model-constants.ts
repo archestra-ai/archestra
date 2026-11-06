@@ -626,6 +626,35 @@ export function getAgentRuntimeModelCompatibility(params: {
   return { compatible: true };
 }
 
+/** Whether a runtime command invokes the maintained Claude Code runtime. */
+export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
+  return command === "archestra-claude-code";
+}
+
+/**
+ * Whether an Agent Runtime agent that follows the organization's default model
+ * can run `provider`/`modelId` as that default. A Claude Code runtime not set
+ * to provider authentication runs a default it can't use from a provider on
+ * the person's own Claude subscription instead, except a Bedrock model, which
+ * it runs with provider billing (so that one must be a Claude model).
+ */
+export function getAgentRuntimeDefaultModelCompatibility(
+  params: Parameters<typeof getAgentRuntimeModelCompatibility>[0] & {
+    claudeCodeAuthentication?: "provider" | "subscription" | null;
+  },
+): { compatible: true } | { compatible: false; message: string } {
+  const { claudeCodeAuthentication, ...model } = params;
+  if (
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
+    (claudeCodeAuthentication === "subscription" ||
+      (claudeCodeAuthentication !== "provider" &&
+        params.provider !== "bedrock"))
+  ) {
+    return { compatible: true };
+  }
+  return getAgentRuntimeModelCompatibility(model);
+}
+
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
   anthropicKeylessAuthEnabled?: boolean;

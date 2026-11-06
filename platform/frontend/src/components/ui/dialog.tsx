@@ -6,6 +6,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils/tailwind";
 
+/**
+ * True inside modal dialog content (`DialogContent`, `SheetContent`), so
+ * portaled popovers know to keep their wheel and touch scrolling from reaching
+ * the dialog's document-level scroll lock.
+ */
 const DialogContentContext = React.createContext(false);
 
 /**

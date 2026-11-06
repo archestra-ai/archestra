@@ -48,6 +48,10 @@ function PopoverContent({
         className,
       )}
       {...props}
+      // The popover portals to <body>, outside the dialog's subtree. A modal
+      // dialog locks scrolling by preventDefaulting, at the document, every
+      // wheel and touch move that starts outside its subtree; stopping them
+      // here keeps the popover's own lists scrollable.
       onWheel={(event) => {
         onWheel?.(event);
         if (withinDialog) event.stopPropagation();

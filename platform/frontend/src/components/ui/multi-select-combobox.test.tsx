@@ -14,6 +14,8 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
+// Guards the dialog scroll fix against switching dialog popovers to Radix
+// modal mode, which hid and blocked the anchored input.
 it("keeps an anchored input accessible and editable while its dialog popover is open", async () => {
   const user = userEvent.setup();
   render(<PickerDialog />);

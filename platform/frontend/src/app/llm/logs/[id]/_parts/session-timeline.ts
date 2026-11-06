@@ -372,6 +372,7 @@ const AUXILIARY_SOURCES = new Set<InteractionSource>([
   "a2a:tool_call_repair",
   "skill:description_generation",
   "guardrail:annotator",
+  "guardrail:sanitizer",
   "knowledge:embedding",
   "knowledge:reranker",
   "knowledge:query-expansion",

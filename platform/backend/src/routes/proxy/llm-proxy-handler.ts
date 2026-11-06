@@ -1318,7 +1318,7 @@ async function handleObservedLLMProxy<
   // deployment whose Log Content mode is Metadata only.
   const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
-    isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
+    isEncryptedChatSession || resolveLogContentMode(source) === "metadata_only";
   // Only internal calls may override the provider URL; accepting this header
   // from external clients would allow SSRF.
   const providerBaseUrlHeader =

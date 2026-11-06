@@ -24,6 +24,27 @@ export function useAppaGithubSync() {
     refetchInterval: 10000,
   });
 }
+/**
+ * How the policy repository protects server rules files: the branch ruleset
+ * and the code owners Archestra keeps. The server reads it at most once a
+ * minute, so polling more often only reads its cache.
+ */
+export function useAppaRepositoryProtection(enabled: boolean) {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: [...appaGithubSyncQueryKey, "protection"],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getAppaRepositoryProtection();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+}
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({

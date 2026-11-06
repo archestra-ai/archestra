@@ -90,6 +90,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  // A server's own rules take no Guardrails permission: the handlers allow
+  // whoever may open the server in the MCP registry to read them, and whoever
+  // may edit it there to propose a change.
+  get_guardrails_server_rules: null,
+  preview_guardrails_server_rules_change: null,
+  propose_guardrails_server_rules_change: null,
+  get_guardrails_server_rules_change_status: null,
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },

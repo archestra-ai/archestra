@@ -43,6 +43,12 @@ const UNNAMED: ArchestraToolShortName[] = [
   "app_data_list",
   "app_data_delete",
   "llm_complete",
+  // A server's own rules, until the archestra battery names them: the
+  // default policy's catch-all annotator judges each call meanwhile.
+  "get_guardrails_server_rules",
+  "preview_guardrails_server_rules_change",
+  "propose_guardrails_server_rules_change",
+  "get_guardrails_server_rules_change_status",
 ];
 
 const ORGANIZATION_GRANT = {

@@ -26,6 +26,7 @@ import {
 } from "./appa-github-sync-panel";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name", () => ({ useAppName: () => "Acme AI" }));
 vi.mock("sonner");
 const navigation = vi.hoisted(() => ({
   search: new URLSearchParams(),
@@ -125,6 +126,47 @@ test("syncs on demand and shows the server's failure while retaining the source"
   );
   expect(screen.getByRole("link", { name: /example\/policies/ })).toBeVisible();
   expect(toast.success).not.toHaveBeenCalled();
+});
+
+test("shows the repository protection kept for server rules files, with bypass entries and editors who have no GitHub owner", async () => {
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        branchRules: {
+          state: "incomplete",
+          url: "https://github.com/example/policies/rules/5",
+          bypassActors: 2,
+        },
+        codeOwners: {
+          state: "pull_request",
+          url: "https://github.com/example/policies/pull/2",
+          unowned: [{ server: "Payments API", editors: ["team Payments"] }],
+          mapErrors: [],
+        },
+      }),
+    ),
+  );
+  show();
+  expect(await screen.findByText("Repository protection")).toBeVisible();
+  // In the deployment's own name.
+  expect(
+    screen.getByText("Acme AI restores the missing rules at the next sync"),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      "2 bypass entries on GitHub can merge without these rules.",
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole("link", { name: "View ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/2");
+  expect(
+    screen.getByText(/One server's editors have no GitHub owner/),
+  ).toHaveTextContent("Payments API (team Payments)");
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

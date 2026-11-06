@@ -34,6 +34,10 @@ lastUpdated: 2026-11-06
 | [`get_guardrails_policy_change_status`](#get_guardrails_policy_change_status) | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) |
 | [`get_remedy_plans`](#get_remedy_plans) | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None |
 | [`execute_remedy_plan`](#execute_remedy_plan) | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None |
+| [`get_guardrails_server_rules`](#get_guardrails_server_rules) | Read one MCP server's own Guardrails rules: its file in the Git sync policy repository (`path`, e.g. | None |
+| [`preview_guardrails_server_rules_change`](#preview_guardrails_server_rules_change) | Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include server files yet and gains `mcp/*.toml`, once for every server. | None |
+| [`propose_guardrails_server_rules_change`](#propose_guardrails_server_rules_change) | Open a pull request (a merge request on GitLab) on the policy repository that changes this one MCP server's rules file, and adds `mcp/*.toml` to appa.toml's include list when no server file is incl... | None |
+| [`get_guardrails_server_rules_change_status`](#get_guardrails_server_rules_change_status) | Check a pull request propose_guardrails_server_rules_change opened for this server: `state` (open, merged or closed) and `applied`, whether Git sync has pulled the merge, so new calls follow it. | None |
 | [`list_runtime_credentials`](#list_runtime_credentials) | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | [`credential:read`](/docs/reference/permissions#credential:read) |
 | [`get_runtime_credential`](#get_runtime_credential) | Read one reusable credential definition and its usage. | [`credential:read`](/docs/reference/permissions#credential:read) |
 | [`create_runtime_credential`](#create_runtime_credential) | Create credential metadata. | [`credential:create`](/docs/reference/permissions#credential:create) |
@@ -352,6 +356,56 @@ Required RBAC permission: None
 | `label.trust` | `string` | No |  |
 | `label.audience` | `string[]` | No |  |
 | `return_schema` | `object` | No |  |
+
+
+### get_guardrails_server_rules
+
+Required RBAC permission: None
+
+#### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+
+
+### preview_guardrails_server_rules_change
+
+Required RBAC permission: None
+
+#### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+| `content` | `string` | Yes | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for this server's tools only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `expectedCommit` | `string` | Yes | `expectedCommit` from get_guardrails_server_rules. |
+
+
+### propose_guardrails_server_rules_change
+
+Required RBAC permission: None
+
+#### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+| `content` | `string` | Yes | The complete file: `[policy]` with `version = 2`, then [[policy.tool]] rules for this server's tools only and any [[policy.annotator]] they use, named <tool prefix>.<name>. |
+| `expectedCommit` | `string` | Yes | `expectedCommit` from get_guardrails_server_rules. |
+| `summary` | `string` | Yes | What the change does and why, in plain words, for the reviewers. |
+
+
+### get_guardrails_server_rules_change_status
+
+Required RBAC permission: None
+
+#### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mcpServerId` | `string` | Yes | The MCP server's catalog ID, as the MCP registry shows it. |
+| `number` | `integer` | Yes |  |
 
 
 ### list_runtime_credentials

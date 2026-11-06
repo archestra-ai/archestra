@@ -164,6 +164,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import * as serverRules from "./openappa-server-rules";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
@@ -1571,11 +1572,15 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolEntries = registry.toolEntries;
-export const tools = registry.tools;
+// A server's own rules are OpenAPPA tools too, defined beside their service.
+export const toolEntries = {
+  ...registry.toolEntries,
+  ...serverRules.toolEntries,
+};
+export const tools = [...registry.tools, ...serverRules.tools];
 
 const OPENAPPA_TOOL_SHORT_NAMES: ReadonlySet<string | null | undefined> =
-  new Set(registry.toolShortNames);
+  new Set([...registry.toolShortNames, ...serverRules.toolShortNames]);
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return OPENAPPA_TOOL_SHORT_NAMES.has(shortName);

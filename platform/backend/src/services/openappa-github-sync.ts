@@ -1,17 +1,53 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getGithubWebOrigin, gitHostFromUrl } from "@archestra/shared";
+import {
+  getGithubWebOrigin,
+  gitHostFromUrl,
+  isBuiltInCatalogId,
+  type ResourcePermissionGrant,
+  slugifyMcpServerName,
+  TimeInMs,
+} from "@archestra/shared";
+import { inArray } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
+import { gitClient } from "@/git-hosts/git-access";
+import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaBatteriesService } from "@/openappa/batteries";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import TeamModel from "@/models/team";
+import {
+  catalogToolPrefixes,
+  openappaBatteriesService,
+} from "@/openappa/batteries";
 import {
   addedGrants,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import {
+  asRecord,
+  isServerRulesFile,
+  parsePolicyToml,
+  repositoryIncludePaths,
+  SERVER_RULES_INCLUDE,
+  serverRulesPath,
+  withoutRepositoryIncludes,
+} from "@/openappa/policy-text";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -25,12 +61,17 @@ import {
   withGithubMessage,
 } from "@/services/openappa-github";
 import {
+  MissingGithubPermission,
+  openappaRepositoryIncludes,
+  type RepositorySource,
+  repositoryPath,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type { AppaGithubSource } from "@/types/openappa-github-sync";
+import { mapWithConcurrency } from "@/utils/concurrency";
 
 export async function getAppaGithubSync(organizationId: string) {
   const [row, suite] = await Promise.all([
@@ -162,6 +203,7 @@ export async function createAppaGithubRepository(params: {
   if (!params.githubAppConfigId)
     throw new ApiError(400, "Choose a GitHub App or a GitLab token");
   const githubAppConfigId = params.githubAppConfigId;
+  // The installation-wide token: the repository does not exist yet.
   const { token: appToken, api } = await resolveOpenAppaGithubAccess({
     organizationId: params.organizationId,
     githubPatId: null,
@@ -552,48 +594,12 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     }
     const { content } = read;
     const commit = { sha: read.commitSha };
-    const local = await guardrailsPolicyService.get(organizationId);
-    // Named on its own: the generic refusal below would hide what to change.
-    const credentialErrors =
-      await openappaDeclarations.credentialErrors(content);
-    if (credentialErrors.length > 0)
-      throw new ApiError(400, credentialErrors.join("\n"));
-    const resolved = await resolvePair({
+    const { local } = await checkCommitPolicy({
       organizationId,
-      local: local.content,
-      pulled: content,
+      source: { ...row, repo },
+      commitSha: commit.sha,
+      content,
     });
-    const validation = await guardrailsPolicyService
-      .validate(content, {
-        organizationId,
-        previous: local.content,
-        resolved: { submitted: resolved.pulled, previous: resolved.local },
-      })
-      .catch((error) => {
-        logger.warn(
-          { organizationId, error },
-          "OpenAPPA could not check a pulled policy",
-        );
-        return { valid: false, errors: [] };
-      });
-    if (!validation.valid)
-      throw new ApiError(
-        400,
-        "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
-      );
-    const granted = uploadedGrants(resolved);
-    if (granted.length > 0)
-      throw new ApiError(
-        400,
-        `The repository's policy would hand ${granted
-          .map(
-            (grant) =>
-              `${grant.variable} to the uploaded ${grant.battery} battery`,
-          )
-          .join(
-            ", and ",
-          )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
-      );
     const contentHash = createHash("sha256").update(content).digest("hex");
     const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
@@ -626,7 +632,104 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       },
     });
   }
+  // Every sync also keeps the repository's protection for server rules files
+  // in line: their code owners and the branch ruleset. A failure there shows
+  // in the protection status and never fails the pull.
+  try {
+    await maintainRepositoryProtection(organizationId);
+  } catch (error) {
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not bring the policy repository's protection in line",
+    );
+  }
 }
+/**
+ * Every check a pull makes before it accepts a commit's policy, storing
+ * nothing: the repository files folded in at that commit, the credential
+ * declarations, the bindings a pull may not hand to new code, and APPA's own
+ * validation. Throws an ApiError naming why the commit would be refused.
+ */
+async function checkCommitPolicy(params: {
+  organizationId: string;
+  source: RepositorySource;
+  commitSha: string;
+  content: string;
+}): Promise<{
+  local: Awaited<ReturnType<typeof guardrailsPolicyService.get>>;
+}> {
+  const { organizationId, content } = params;
+  const local = await guardrailsPolicyService.get(organizationId);
+  // The repository files the pulled policy includes are read at the same
+  // commit and checked folded in; the policy text is stored as written.
+  const pulled = await openappaRepositoryIncludes.foldAt({
+    organizationId,
+    content,
+    files: await openappaRepositoryIncludes.read({
+      source: params.source,
+      commit: params.commitSha,
+      paths: repositoryIncludePaths(content),
+    }),
+  });
+  if (pulled.errors.length > 0)
+    throw new ApiError(400, pulled.errors.join("\n"));
+  const kept = await openappaRepositoryIncludes.expand({
+    organizationId,
+    content: local.content,
+  });
+  const previous =
+    kept.errors.length > 0
+      ? withoutRepositoryIncludes(local.content)
+      : kept.content;
+  // Named on its own: the generic refusal below would hide what to change.
+  const credentialErrors = await openappaDeclarations.credentialErrors(
+    pulled.content,
+  );
+  if (credentialErrors.length > 0)
+    throw new ApiError(400, credentialErrors.join("\n"));
+  const resolved = await resolvePair({
+    organizationId,
+    local: previous,
+    pulled: pulled.content,
+  });
+  const validation = await guardrailsPolicyService
+    .validate(pulled.content, {
+      organizationId,
+      previous,
+      resolved: { submitted: resolved.pulled, previous: resolved.local },
+    })
+    .catch((error) => {
+      logger.warn(
+        { organizationId, error },
+        "OpenAPPA could not check a pulled policy",
+      );
+      // An outage, not a verdict on the policy: the caller tries again.
+      throw new ApiError(
+        503,
+        "APPA could not check this policy right now. Git sync tries again at its next check.",
+      );
+    });
+  if (!validation.valid)
+    throw new ApiError(
+      400,
+      "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
+    );
+  const granted = uploadedGrants(resolved);
+  if (granted.length > 0)
+    throw new ApiError(
+      400,
+      `The repository's policy would hand ${granted
+        .map(
+          (grant) =>
+            `${grant.variable} to the uploaded ${grant.battery} battery`,
+        )
+        .join(
+          ", and ",
+        )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
+    );
+  return { local };
+}
+
 async function queuePolicyValidation(
   organizationId: string,
   policyHash: string,
@@ -647,6 +750,422 @@ export async function checkDueAppaGithubSyncs() {
   if (!enterpriseTier.isOpenappaActive()) return;
   for (const row of await OpenAppaGithubSyncModel.findDue())
     await OpenAppaGithubSyncModel.enqueue(row.organizationId);
+  // Open pull requests get a pull's checks every minute, before they merge.
+  await mapWithConcurrency(
+    await OpenAppaGithubSyncModel.findConnected(),
+    4,
+    async (row) => {
+      try {
+        await checkAppaGithubPullRequests(row.organizationId);
+      } catch (error) {
+        logger.warn(
+          { organizationId: row.organizationId, error },
+          "OpenAPPA could not check the policy repository's pull requests",
+        );
+      }
+    },
+  );
+}
+
+// =============================================================================
+// Pull request checks: a pull's own checks on what a pull request would merge
+// =============================================================================
+
+/**
+ * The check every policy pull request carries. The branch ruleset requires it
+ * by this name, so the name stays the same whatever the deployment is called.
+ */
+const POLICY_CHECK_NAME = "Guardrails policy";
+
+/** The most open pull requests checked in one repository each minute. */
+const MAX_CHECKED_PULLS = 50;
+
+/** How long a check stands for one pull request result and deployment. */
+const CHECKED_TTL = TimeInMs.Day;
+
+/**
+ * How often a refused result is checked again while nothing it is keyed by
+ * moves: a refusal can rest on state outside that key, such as a credential's
+ * value, and a later repair should not wait for a new commit.
+ */
+const RECHECK_REFUSED = 15 * TimeInMs.Minute;
+
+/**
+ * How long a repository that refused a check is left alone: a credential
+ * without the permission is not asked again every minute.
+ */
+const REFUSED_TTL = 10 * TimeInMs.Minute;
+
+/** The host refused the credential: it may not list pull requests or post the check. */
+class CheckRefused extends ApiError {
+  constructor(status: number) {
+    super(403, `The policy check was refused (HTTP ${status})`);
+  }
+}
+
+/** The outcome posted for one pull request result, what it was checked against, and when. */
+type CheckedResult = {
+  deployment: string;
+  accepted: boolean;
+  reason: string | null;
+  checkedAt: number;
+};
+
+/**
+ * Check every open pull request (merge request on GitLab) into the synced
+ * branch as a pull would check its result, and post the outcome on its head
+ * commit as the "Archestra Guardrails policy" check. A branch rule that
+ * requires the check stops a merge Git sync would refuse; without one, the
+ * reviewers still see it.
+ *
+ * What was checked is kept in the shared cache, so another replica's pass
+ * neither checks a result again nor posts it twice. A result is checked again
+ * when a commit moves on either side, or when the deployment it was checked
+ * against changes (`deploymentState`), and a refusal every fifteen minutes
+ * besides. Only a changed outcome is posted.
+ */
+async function checkAppaGithubPullRequests(organizationId: string) {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.repo || !row.path || !row.interval || !row.sourceCommit) return;
+  const source = { ...row, repo: row.repo, path: row.path };
+  const refused = checkKey("refused", organizationId, source.repo);
+  if (await cacheManager.get(refused)) return;
+  let pulls: CheckedPull[];
+  try {
+    pulls = row.gitlabTokenId
+      ? await gitlabPullRequests(source)
+      : await githubPullRequests(source);
+  } catch (error) {
+    // A credential the host refuses is not asked again every minute.
+    if (
+      !(error instanceof MissingGithubPermission) &&
+      !(error instanceof CheckRefused)
+    )
+      throw error;
+    await refuseChecks({ key: refused, organizationId, reason: error.message });
+    return;
+  }
+  const deployment = await deploymentState(organizationId, row.sourceCommit);
+  const checking = pulls.slice(0, MAX_CHECKED_PULLS);
+  const keys = checking.map((pull) =>
+    checkKey("checked", organizationId, source.repo, pull.head, pull.result),
+  );
+  const checked = await cacheManager.getMany<CheckedResult>(keys);
+  for (const [index, pull] of checking.entries()) {
+    const key = keys[index] as AllowedCacheKey;
+    const previous = checked.get(key);
+    if (
+      previous?.deployment === deployment &&
+      (previous.accepted || Date.now() - previous.checkedAt < RECHECK_REFUSED)
+    )
+      continue;
+    const outcome = await outcomeAt({ source, commitSha: pull.result });
+    // A read or a check that failed for now is checked again next minute.
+    if (!outcome) continue;
+    const result: CheckedResult = {
+      deployment,
+      accepted: outcome.accepted,
+      reason: outcome.accepted ? null : outcome.reason,
+      checkedAt: Date.now(),
+    };
+    // A changed deployment that leaves the outcome as posted posts nothing.
+    if (
+      previous?.accepted !== result.accepted ||
+      previous.reason !== result.reason
+    )
+      try {
+        await pull.post(outcome);
+      } catch (error) {
+        if (error instanceof CheckRefused) {
+          await refuseChecks({
+            key: refused,
+            organizationId,
+            reason:
+              "a GitHub App needs the Checks permission (read and write), a token the commit statuses scope, and a GitLab token the api scope",
+          });
+          return;
+        }
+        logger.warn(
+          { organizationId, err: error },
+          "OpenAPPA could not post the policy check on a pull request; it tries again next minute",
+        );
+        continue;
+      }
+    await cacheManager
+      .set(key, result, CHECKED_TTL)
+      .catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not record a posted policy check; the next pass checks it again",
+        ),
+      );
+  }
+}
+
+/** A shared cache key for the policy check, from its parts. */
+function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+  return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
+    .update(JSON.stringify(parts))
+    .digest("hex")}` as const;
+}
+
+async function refuseChecks(params: {
+  key: AllowedCacheKey;
+  organizationId: string;
+  reason: string;
+}) {
+  logger.warn(
+    { organizationId: params.organizationId, reason: params.reason },
+    "OpenAPPA cannot check the policy repository's pull requests; it asks again in ten minutes",
+  );
+  await cacheManager
+    .set(params.key, true, REFUSED_TTL)
+    .catch((err) =>
+      logger.warn(
+        { organizationId: params.organizationId, err },
+        "OpenAPPA could not record a refused policy check",
+      ),
+    );
+}
+
+/**
+ * What a pull's checks depend on besides the commit checked: the accepted
+ * commit, whose files the current policy folds in; the composition the
+ * organization serves; and the battery packages and credential bindings it
+ * holds, which a pull request can use before the served policy does, such as
+ * a package uploaded after the pull request first named it.
+ */
+async function deploymentState(
+  organizationId: string,
+  sourceCommit: string,
+): Promise<string> {
+  const [served, packages, bindings] = await Promise.all([
+    OpenAppaEffectivePolicyModel.findState(organizationId),
+    OpenAppaBatteryPackageModel.list(organizationId),
+    OpenAppaCredentialBindingModel.list(organizationId),
+  ]);
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        sourceCommit,
+        served?.rootRevision ?? null,
+        served?.contentHash ?? null,
+        served?.installFingerprint ?? null,
+        packages.map((stored) => stored.contentHash).sort(),
+        bindings.map((binding) => [binding.variable, binding.credentialKey]),
+      ]),
+    )
+    .digest("hex");
+}
+
+type PullOutcome = { accepted: true } | { accepted: false; reason: string };
+
+type CheckedPull = {
+  head: string;
+  /** The commit checked: GitHub's merge result when it has one, else the head. */
+  result: string;
+  post: (outcome: PullOutcome) => Promise<void>;
+};
+
+type PolicySource = RepositorySource & {
+  path: string;
+  ref: string | null;
+};
+
+/** Whether a pull would accept the policy at `commitSha`; null for a passing failure. */
+async function outcomeAt(params: {
+  source: PolicySource;
+  commitSha: string;
+}): Promise<PullOutcome | null> {
+  const { source } = params;
+  // The policy file is read like an include entry beside it.
+  const name = source.path.slice(source.path.lastIndexOf("/") + 1);
+  try {
+    const content = (
+      await openappaRepositoryIncludes.read({
+        source,
+        commit: params.commitSha,
+        paths: [name],
+      })
+    ).get(name);
+    if (content === undefined)
+      return {
+        accepted: false,
+        reason: `${source.path} is not in this pull request's result`,
+      };
+    await checkCommitPolicy({
+      organizationId: source.organizationId,
+      source,
+      commitSha: params.commitSha,
+      content,
+    });
+    return { accepted: true };
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500)
+      return { accepted: false, reason: error.message };
+    logger.warn(
+      { organizationId: source.organizationId, error },
+      "OpenAPPA could not check a policy pull request",
+    );
+    return null;
+  }
+}
+
+function checkSummary(outcome: PullOutcome) {
+  return outcome.accepted
+    ? {
+        title: "Git sync would accept this policy",
+        summary: `${archestraMcpBranding.appName} checked the policy this pull request would merge, with every file it includes, as Git sync checks a commit before applying it.`,
+      }
+    : {
+        title: "Git sync would refuse this policy",
+        summary: outcome.reason,
+      };
+}
+
+async function githubPullRequests(
+  source: PolicySource,
+): Promise<CheckedPull[]> {
+  const { token, api } = await resolveOpenAppaGithubAccess(source, {
+    pull_requests: "read",
+    checks: "write",
+  });
+  if (!token) return [];
+  const base = `${api}/repos/${source.repo}`;
+  const branch =
+    source.ref ??
+    (
+      await githubJson<{ default_branch: string }>({
+        url: base,
+        token,
+        errors: githubSyncErrors,
+      })
+    ).default_branch;
+  const pulls = await githubJson<
+    Array<{ head?: { sha?: string }; merge_commit_sha?: string | null }>
+  >({
+    url: `${base}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
+    token,
+    errors: async ({ status }) =>
+      status === 401 || status === 403
+        ? new CheckRefused(status)
+        : new ApiError(502, `GitHub returned HTTP ${status}`),
+  });
+  return pulls.flatMap((pull) => {
+    const head = pull.head?.sha;
+    if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
+    const merged = pull.merge_commit_sha;
+    return [
+      {
+        head,
+        result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
+        post: (outcome) => postGithubCheck({ base, token, head, outcome }),
+      },
+    ];
+  });
+}
+
+/**
+ * A check run where the credential may create one, a GitHub App with the
+ * Checks permission; otherwise a commit status, which reads the same.
+ */
+async function postGithubCheck(params: {
+  base: string;
+  token: string;
+  head: string;
+  outcome: PullOutcome;
+}) {
+  const { base, token, head, outcome } = params;
+  const { title, summary } = checkSummary(outcome);
+  let refused = false;
+  try {
+    await githubJson({
+      url: `${base}/check-runs`,
+      token,
+      method: "POST",
+      body: {
+        name: POLICY_CHECK_NAME,
+        head_sha: head,
+        status: "completed",
+        conclusion: outcome.accepted ? "success" : "failure",
+        output: { title, summary: summary.slice(0, 60_000) },
+      },
+      errors: async ({ status }) => {
+        refused = status === 403 || status === 404;
+        return new ApiError(502, `GitHub returned HTTP ${status}`);
+      },
+    });
+    return;
+  } catch (error) {
+    if (!refused) throw error;
+  }
+  await githubJson({
+    url: `${base}/statuses/${head}`,
+    token,
+    method: "POST",
+    body: {
+      state: outcome.accepted ? "success" : "failure",
+      context: POLICY_CHECK_NAME,
+      description: (outcome.accepted ? title : summary).slice(0, 140),
+    },
+    errors: async ({ status }) =>
+      status === 403 || status === 404
+        ? new CheckRefused(status)
+        : new ApiError(502, `GitHub returned HTTP ${status}`),
+  });
+}
+
+async function gitlabPullRequests(
+  source: PolicySource & { gitlabTokenId: string | null },
+): Promise<CheckedPull[]> {
+  if (!source.gitlabTokenId) return [];
+  const client = gitClient(
+    await resolveOpenAppaGitlabAccess({
+      organizationId: source.organizationId,
+      gitlabTokenId: source.gitlabTokenId,
+    }),
+  );
+  const project = client.repoApi(source.repo);
+  const requests = await (async () => {
+    const branch = source.ref ?? (await client.defaultBranch(source.repo));
+    return client.json<Array<{ sha?: string }>>(
+      `${project}/merge_requests?state=opened&target_branch=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
+    );
+  })().catch((error) => {
+    if (error instanceof GitHostError && [401, 403].includes(error.status))
+      throw new CheckRefused(error.status);
+    throw error;
+  });
+  return requests.flatMap((request) => {
+    const head = request.sha;
+    if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
+    return [
+      {
+        head,
+        result: head,
+        post: async (outcome) => {
+          const { title, summary } = checkSummary(outcome);
+          await client
+            .json(`${project}/statuses/${head}`, {
+              body: {
+                state: outcome.accepted ? "success" : "failed",
+                name: POLICY_CHECK_NAME,
+                description: (outcome.accepted ? title : summary).slice(0, 255),
+              },
+            })
+            .catch((error) => {
+              // A 404 can be a head pushed over since; only these refuse.
+              if (
+                error instanceof GitHostError &&
+                [401, 403].includes(error.status)
+              )
+                throw new CheckRefused(error.status);
+              throw error;
+            });
+        },
+      },
+    ];
+  });
 }
 
 /**
@@ -742,11 +1261,12 @@ async function saveSource(params: {
     await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
     return;
   }
-  // Resolve now to reject a missing or cross-organization credential before saving it.
-  const { token, api } = await resolveOpenAppaGithubAccess({
-    ...params.source,
-    organizationId: params.organizationId,
-  });
+  // Resolve now to reject a missing or cross-organization credential, or an
+  // App that cannot read the repository, before saving it.
+  const { token, api } = await resolveOpenAppaGithubAccess(
+    { ...params.source, organizationId: params.organizationId },
+    { contents: "read" },
+  );
   if (params.source.validationDirectory) {
     const response = await githubSourceFetch({
       url: `${api}/repos/${params.source.repo}/commits/${encodeURIComponent(params.source.ref ?? "HEAD")}`,
@@ -780,7 +1300,10 @@ async function readGithubPolicy(params: {
   | { pending: null; commitSha: string; content: string }
 > {
   const { row, repo, path } = params;
-  const { token, api } = await resolveOpenAppaGithubAccess(row);
+  const { token, api } = await resolveOpenAppaGithubAccess(
+    { ...row, repo },
+    { contents: "read", pull_requests: "read" },
+  );
   const base = `${api}/repos/${repo}`;
   if (row.setupPullRequestNumber) {
     const pull = await githubJson<{ merged?: boolean; state?: string }>({
@@ -1088,10 +1611,11 @@ export async function loadAppaGithubPolicyTests(params: {
       directory,
       allowEmpty: params.allowEmpty,
     });
-  const { token, api } = await resolveOpenAppaGithubAccess({
-    ...source,
-    organizationId: source.organizationId,
-  }).catch((err) => {
+  const { token, api } = await resolveOpenAppaGithubAccess(
+    { ...source, organizationId: source.organizationId },
+    { contents: "read" },
+  ).catch((err) => {
+    if (err instanceof MissingGithubPermission) throw err;
     logger.warn({ err }, "OpenAPPA could not resolve the GitHub credential");
     throw new ApiError(400, "The configured GitHub credential is unavailable");
   });
@@ -1191,4 +1715,1109 @@ export async function loadAppaGithubPolicyTests(params: {
     files.push({ path, content });
   }
   return files;
+}
+
+/** A tool prefix that is also a safe file name. */
+const SAFE_PREFIX = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
+
+/** Which servers carry which tool prefixes, as `catalogToolPrefixes` reads them. */
+type ToolPrefixes = Awaited<ReturnType<typeof catalogToolPrefixes>>;
+
+/**
+ * Whether a server has a rules file of its own: named by its own slug, and
+ * only when every one of its tools carries that prefix and no other server's
+ * tool does, so no server reaches another's file through its name.
+ */
+export function hasOwnFile(
+  catalog: { id: string; name: string },
+  prefixes: ToolPrefixes,
+): boolean {
+  const prefix = slugifyMcpServerName(catalog.name);
+  const carried = prefixes.byCatalog.get(catalog.id);
+  return (
+    SAFE_PREFIX.test(prefix) &&
+    !prefix.includes("__") &&
+    !prefixes.conflicting.has(catalog.id) &&
+    carried?.size === 1 &&
+    carried.has(prefix) &&
+    ![...(prefixes.byPrefix.get(prefix) ?? [])].some((id) => id !== catalog.id)
+  );
+}
+
+// =============================================================================
+// Repository protection: who reviews each server's file, and the branch rules
+// =============================================================================
+
+/**
+ * Where Archestra's lines sit in CODEOWNERS. Everything between the markers
+ * is rewritten from the registry; everything else is the repository's own.
+ * The markers find the block, so they stay the same whatever the deployment
+ * is called.
+ */
+const OWNERS_BEGIN = "# BEGIN Guardrails: MCP server rules owners";
+const OWNERS_END = "# END Guardrails: MCP server rules owners";
+
+/** The branch of the one code owners pull request Archestra keeps open. */
+const OWNERS_BRANCH = "archestra/openappa-code-owners";
+
+/** Where GitHub reads CODEOWNERS from, in its own order. */
+const CODEOWNERS_PATHS = [
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  "docs/CODEOWNERS",
+] as const;
+
+/**
+ * Beside appa.toml: the GitHub owner of each Archestra team and role, and of
+ * a person who has not connected GitHub. Reviewed like any other file.
+ */
+const OWNERS_MAP_FILE = "code-owners.toml";
+
+/** The ruleset Archestra keeps on the synced branch, found again by this name. */
+const RULESET_NAME = "Guardrails policy";
+
+/** A GitHub user (`@login`) or team (`@org/team`) as CODEOWNERS names one. */
+const GITHUB_OWNER =
+  /^@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
+
+export type RepositoryProtection = {
+  /** The ruleset on the synced branch. */
+  branchRules: {
+    state:
+      | "active"
+      | "incomplete"
+      | "missing"
+      | "disabled"
+      | "needs_permission"
+      | "unavailable"
+      | "unsupported"
+      | "error";
+    url?: string;
+    detail?: string;
+    /** Bypass entries an administrator added on GitHub: they skip these rules. */
+    bypassActors?: number;
+  };
+  /** The CODEOWNERS lines for server rules files. */
+  codeOwners: {
+    state:
+      | "up_to_date"
+      | "pull_request"
+      | "out_of_date"
+      | "not_used"
+      | "needs_permission"
+      | "unsupported"
+      | "error";
+    url?: string;
+    detail?: string;
+    /** Servers whose editors have no GitHub owner, with the editors unmapped. */
+    unowned: Array<{ server: string; editors: string[] }>;
+    /** Problems in the owners map. */
+    mapErrors: string[];
+  };
+};
+
+/**
+ * The policy repository's protection for server rules files, and with
+ * `apply` the changes that bring it in line: a CODEOWNERS block naming each
+ * server's editors, proposed as one pull request, and a branch ruleset that
+ * requires a pull request, code owner review and the policy check. Nothing
+ * merges here: the code owners change is reviewed like any other.
+ *
+ * Each part works with its own token, limited to the policy repository and to
+ * what it does: the ruleset with Administration, the code owners with
+ * Contents and Pull requests. A permission the App was not granted is
+ * reported, not raised.
+ */
+async function repositoryProtection(params: {
+  organizationId: string;
+  apply: boolean;
+}): Promise<RepositoryProtection | null> {
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (!row?.interval || !row.repo || !row.path || !row.sourceCommit)
+    return null;
+  if (row.gitlabTokenId)
+    return {
+      branchRules: {
+        state: "unsupported",
+        detail: `${archestraMcpBranding.appName} keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.`,
+      },
+      codeOwners: {
+        state: "unsupported",
+        detail: `${archestraMcpBranding.appName} writes code owners on GitHub repositories only; GitLab keeps its own CODEOWNERS.`,
+        unowned: [],
+        mapErrors: [],
+      },
+    };
+  const source = {
+    ...row,
+    repo: row.repo,
+    path: row.path,
+    sourceCommit: row.sourceCommit,
+  };
+  const [branchRules, codeOwners] = await Promise.all([
+    githubBranchRules(source, params.apply).catch((error) => ({
+      state: "error" as const,
+      detail: protectionError(error),
+    })),
+    githubCodeOwners(source, params.apply).catch((error) => ({
+      state: "error" as const,
+      detail: protectionError(error),
+      unowned: [],
+      mapErrors: [],
+    })),
+  ]);
+  return { branchRules, codeOwners };
+}
+
+/** The last protection read or applied, by organization, for a minute. */
+const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
+  maxSize: 1024,
+  defaultTtl: 60_000,
+});
+
+/**
+ * The repository's protection as the Git sync settings show it: read at most
+ * once a minute, and replaced by what each sync applies.
+ */
+export async function getRepositoryProtection(
+  organizationId: string,
+): Promise<RepositoryProtection | null> {
+  const cached = protectionStatus.get(organizationId);
+  if (cached !== undefined) return cached;
+  const read = await repositoryProtection({ organizationId, apply: false });
+  protectionStatus.set(organizationId, read);
+  return read;
+}
+
+/** Bring the repository's protection in line, as each sync does. */
+async function maintainRepositoryProtection(
+  organizationId: string,
+): Promise<RepositoryProtection | null> {
+  const applied = await repositoryProtection({ organizationId, apply: true });
+  protectionStatus.set(organizationId, applied);
+  return applied;
+}
+
+type ConnectedSource = NonNullable<
+  Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+> & { repo: string; path: string; sourceCommit: string };
+
+function protectionError(error: unknown): string {
+  return error instanceof ApiError
+    ? error.message
+    : "Could not reach the policy repository";
+}
+
+// === Branch rules ===
+
+type Rule = { type: string; parameters?: Record<string, unknown> };
+
+type Ruleset = {
+  name: string;
+  target: string;
+  enforcement: string;
+  conditions?: { ref_name?: { include?: string[]; exclude?: string[] } };
+  bypass_actors?: unknown[];
+  rules?: Rule[];
+};
+
+async function githubBranchRules(
+  source: ConnectedSource,
+  apply: boolean,
+): Promise<RepositoryProtection["branchRules"]> {
+  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
+  try {
+    access = await resolveOpenAppaGithubAccess(source, {
+      administration: "write",
+    });
+  } catch (error) {
+    if (error instanceof MissingGithubPermission)
+      return { state: "needs_permission", detail: error.message };
+    throw error;
+  }
+  const { token, api, web } = access;
+  if (!token)
+    return {
+      state: "needs_permission",
+      detail:
+        "The policy repository is read without a credential. Connect a GitHub App with the Administration permission.",
+    };
+  const base = `${api}/repos/${source.repo}`;
+  const branch = source.ref ?? (await defaultBranch({ token, base }));
+  const rulesets = await githubCall<
+    Array<{ id: number; name: string; source_type?: string }>
+  >({ token, url: `${base}/rulesets?includes_parents=false&per_page=100` });
+  if (!rulesets.ok) return unavailable(rulesets);
+  const ours = rulesets.body.find(
+    (ruleset) =>
+      ruleset.name === RULESET_NAME &&
+      (ruleset.source_type ?? "Repository") === "Repository",
+  );
+  const desired = desiredRuleset({
+    branch,
+    integrationId: await checkIntegrationId(source),
+  });
+  const page = (id: number) => `${web}/${source.repo}/rules/${id}`;
+  if (!ours) {
+    if (!apply) return { state: "missing" };
+    const created = await githubCall<{ id: number }>({
+      token,
+      url: `${base}/rulesets`,
+      method: "POST",
+      body: desired,
+    });
+    if (!created.ok) return unavailable(created);
+    return { state: "active", url: page(created.body.id) };
+  }
+  const existing = await githubCall<Ruleset>({
+    token,
+    url: `${base}/rulesets/${ours.id}`,
+  });
+  if (!existing.ok) return unavailable(existing);
+  // Disabled or in evaluate mode on GitHub: an administrator's choice to keep.
+  if (existing.body.enforcement !== "active")
+    return {
+      state: "disabled",
+      url: page(ours.id),
+      detail: `The ruleset is ${existing.body.enforcement} on GitHub, so ${archestraMcpBranding.appName} leaves it as it is.`,
+    };
+  const { include = [], exclude = [] } =
+    existing.body.conditions?.ref_name ?? {};
+  // Whether `~DEFAULT_BRANCH` names the synced branch, read only when used.
+  const isDefault =
+    source.ref === null ||
+    ([...include, ...exclude].includes("~DEFAULT_BRANCH") &&
+      (await defaultBranch({ token, base })) === branch);
+  const strengthened = strengthenedRuleset(existing.body, desired, {
+    ref: `refs/heads/${branch}`,
+    isDefault,
+  });
+  // Kept as an administrator added them, and shown, since they skip it all.
+  const bypassActors = existing.body.bypass_actors?.length ?? 0;
+  const found = {
+    url: page(ours.id),
+    ...(bypassActors > 0 ? { bypassActors } : {}),
+  };
+  if (!strengthened) return { state: "active", ...found };
+  if (!apply) return { state: "incomplete", ...found };
+  const updated = await githubCall({
+    token,
+    url: `${base}/rulesets/${ours.id}`,
+    method: "PUT",
+    body: strengthened,
+  });
+  if (!updated.ok) return unavailable(updated);
+  return { state: "active", ...found };
+}
+
+/**
+ * The ruleset Archestra keeps: a pull request with a code owner's approval
+ * of its latest push, the policy check on a branch that is up to date, and no
+ * force push or deletion. Archestra adds no one who may bypass it, itself
+ * included. Up to date, because the check stands for the merge result it saw:
+ * once the branch moves, a pull request merges only after it is updated and
+ * its new result checked.
+ */
+function desiredRuleset(params: {
+  branch: string;
+  integrationId?: number;
+}): Ruleset & { bypass_actors: unknown[]; rules: Rule[] } {
+  return {
+    name: RULESET_NAME,
+    target: "branch",
+    enforcement: "active",
+    conditions: {
+      ref_name: { include: [`refs/heads/${params.branch}`], exclude: [] },
+    },
+    bypass_actors: [],
+    rules: [
+      { type: "deletion" },
+      { type: "non_fast_forward" },
+      {
+        type: "pull_request",
+        parameters: {
+          required_approving_review_count: 1,
+          dismiss_stale_reviews_on_push: true,
+          require_code_owner_review: true,
+          require_last_push_approval: true,
+          required_review_thread_resolution: false,
+        },
+      },
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          required_status_checks: [
+            {
+              context: POLICY_CHECK_NAME,
+              // Only this App's check counts: no one posts a passing one
+              // with a token of their own.
+              ...(params.integrationId
+                ? { integration_id: params.integrationId }
+                : {}),
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * The existing ruleset with Archestra's rules added where missing or weaker,
+ * or null when it already has them. What an administrator made stricter, or
+ * added, stays, bypass entries included; an exclusion that leaves the synced
+ * branch out does not.
+ */
+function strengthenedRuleset(
+  existing: Ruleset,
+  desired: ReturnType<typeof desiredRuleset>,
+  branch: { ref: string; isDefault: boolean },
+): Ruleset | null {
+  let changed = false;
+  const rules = [...(existing.rules ?? [])].map((rule) => ({
+    type: rule.type,
+    ...(rule.parameters ? { parameters: rule.parameters } : {}),
+  }));
+  for (const wanted of desired.rules) {
+    const at = rules.findIndex((rule) => rule.type === wanted.type);
+    const have = rules[at];
+    if (!have) {
+      rules.push(wanted);
+      changed = true;
+      continue;
+    }
+    if (wanted.type === "pull_request") {
+      const parameters = have.parameters ?? {};
+      const count = Number(parameters.required_approving_review_count ?? 0);
+      const next = {
+        ...parameters,
+        required_approving_review_count: Math.max(count, 1),
+        dismiss_stale_reviews_on_push: true,
+        require_code_owner_review: true,
+        require_last_push_approval: true,
+        required_review_thread_resolution:
+          parameters.required_review_thread_resolution ?? false,
+      };
+      if (
+        count < 1 ||
+        parameters.dismiss_stale_reviews_on_push !== true ||
+        parameters.require_code_owner_review !== true ||
+        parameters.require_last_push_approval !== true ||
+        parameters.required_review_thread_resolution === undefined
+      ) {
+        rules[at] = { type: have.type, parameters: next };
+        changed = true;
+      }
+    }
+    if (wanted.type === "required_status_checks") {
+      const ours = (
+        wanted.parameters?.required_status_checks as Array<{
+          context: string;
+          integration_id?: number;
+        }>
+      )[0] as { context: string; integration_id?: number };
+      const checks = (have.parameters?.required_status_checks ?? []) as Array<{
+        context: string;
+        integration_id?: number;
+      }>;
+      const present = checks.some(
+        (check) =>
+          check.context === ours.context &&
+          (ours.integration_id === undefined ||
+            check.integration_id === ours.integration_id),
+      );
+      const strict =
+        have.parameters?.strict_required_status_checks_policy === true;
+      if (!present || !strict) {
+        rules[at] = {
+          type: have.type,
+          parameters: {
+            ...have.parameters,
+            strict_required_status_checks_policy: true,
+            required_status_checks: present
+              ? checks
+              : [
+                  ...checks.filter((check) => check.context !== ours.context),
+                  ours,
+                ],
+          },
+        };
+        changed = true;
+      }
+    }
+  }
+  // The synced branch is protected when an include names it and no
+  // exclusion takes it out again.
+  const include = existing.conditions?.ref_name?.include ?? [];
+  const exclude = existing.conditions?.ref_name?.exclude ?? [];
+  const names = (pattern: string) => refPatternMatches(pattern, branch);
+  const covers = include.some(names);
+  const kept = exclude.filter((pattern) => !names(pattern));
+  if (!covers || kept.length < exclude.length) changed = true;
+  if (!changed) return null;
+  return {
+    name: existing.name,
+    target: existing.target,
+    enforcement: existing.enforcement,
+    conditions: {
+      ref_name: {
+        include: covers ? include : [...include, branch.ref],
+        exclude: kept,
+      },
+    },
+    bypass_actors: existing.bypass_actors ?? [],
+    rules,
+  };
+}
+
+/**
+ * Whether a ruleset's ref pattern names the branch, as GitHub reads one:
+ * `~ALL`, `~DEFAULT_BRANCH`, or an fnmatch pattern over the full ref, where
+ * `*` and `?` stay within one path segment and `**` crosses segments.
+ */
+function refPatternMatches(
+  pattern: string,
+  branch: { ref: string; isDefault: boolean },
+): boolean {
+  if (pattern === "~ALL") return true;
+  if (pattern === "~DEFAULT_BRANCH") return branch.isDefault;
+  let source = "";
+  for (let at = 0; at < pattern.length; at++) {
+    const char = pattern[at] as string;
+    if (char === "*" && pattern[at + 1] === "*") {
+      source += ".*";
+      at++;
+    } else if (char === "*") source += "[^/]*";
+    else if (char === "?") source += "[^/]";
+    else if (char === "[" && pattern.indexOf("]", at + 2) > at) {
+      const close = pattern.indexOf("]", at + 2);
+      const set = pattern.slice(at + 1, close).replace(/[\\^]/g, "\\$&");
+      source += set.startsWith("!") ? `[^${set.slice(1)}]` : `[${set}]`;
+      at = close;
+    } else source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  try {
+    return new RegExp(`^${source}$`).test(branch.ref);
+  } catch {
+    return false;
+  }
+}
+
+/** The App whose check the ruleset requires, or none for a token. */
+async function checkIntegrationId(
+  source: ConnectedSource,
+): Promise<number | undefined> {
+  if (!source.githubAppConfigId) return undefined;
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: source.githubAppConfigId,
+    organizationId: source.organizationId,
+  });
+  const id = Number(definition?.appId);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+/** A refusal GitHub explains: a plan without rulesets, or a missing permission. */
+function unavailable(response: {
+  status: number;
+  message?: string;
+}): RepositoryProtection["branchRules"] {
+  return {
+    state:
+      response.status === 403 || response.status === 404
+        ? "unavailable"
+        : "error",
+    detail: response.message
+      ? `GitHub answered ${response.status}: ${response.message}`
+      : `GitHub answered ${response.status}`,
+  };
+}
+
+// === Code owners ===
+
+type OwnersMap = {
+  teams: Map<string, string[]>;
+  roles: Map<string, string[]>;
+  users: Map<string, string[]>;
+  errors: string[];
+};
+
+async function githubCodeOwners(
+  source: ConnectedSource,
+  apply: boolean,
+): Promise<RepositoryProtection["codeOwners"]> {
+  const root = await guardrailsPolicyService.get(source.organizationId);
+  const used = repositoryIncludePaths(root.content).some(
+    (entry) => entry === SERVER_RULES_INCLUDE || isServerRulesFile(entry),
+  );
+  if (!used) return { state: "not_used", unowned: [], mapErrors: [] };
+  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
+  try {
+    access = await resolveOpenAppaGithubAccess(source, {
+      contents: "write",
+      pull_requests: "write",
+    });
+  } catch (error) {
+    if (error instanceof MissingGithubPermission)
+      return {
+        state: "needs_permission",
+        detail: error.message,
+        unowned: [],
+        mapErrors: [],
+      };
+    throw error;
+  }
+  const { token, api } = access;
+  if (!token)
+    return {
+      state: "needs_permission",
+      detail:
+        "The policy repository is read without a credential. Connect a GitHub App in Git sync.",
+      unowned: [],
+      mapErrors: [],
+    };
+  const map = parseOwnersMap(
+    (
+      await openappaRepositoryIncludes.read({
+        source,
+        commit: source.sourceCommit,
+        paths: [OWNERS_MAP_FILE],
+      })
+    ).get(OWNERS_MAP_FILE),
+  );
+  const servers = await serverEditors(source.organizationId);
+  const connected = await connectedLogins({
+    organizationId: source.organizationId,
+    api,
+    token,
+    users: servers.flatMap((server) => server.users),
+  });
+  const lines: string[] = [];
+  const unowned: RepositoryProtection["codeOwners"]["unowned"] = [];
+  for (const server of servers) {
+    const owners = new Set<string>();
+    const unmapped: string[] = [];
+    const add = (found: string[] | undefined, name: string) => {
+      if (found?.length) for (const owner of found) owners.add(owner);
+      else unmapped.push(name);
+    };
+    for (const team of server.teams) add(map.teams.get(team), `team ${team}`);
+    for (const role of server.roles)
+      add(map.roles.get(role), role === "*" ? "everyone" : `role ${role}`);
+    for (const user of server.users) {
+      const login =
+        map.users.get(user.email.toLowerCase()) ??
+        (connected.get(user.id) ? [`@${connected.get(user.id)}`] : undefined);
+      add(login, user.email);
+    }
+    if (owners.size > 0)
+      lines.push(
+        `/${repositoryPath(source, server.path)} ${[...owners].sort().join(" ")}`,
+      );
+    if (unmapped.length > 0)
+      unowned.push({ server: server.name, editors: unmapped });
+  }
+  lines.sort();
+  const current = await currentCodeOwners(source);
+  const next = withOwnersBlock(current?.content ?? null, lines);
+  const base = `${api}/repos/${source.repo}`;
+  const open = await openOwnersPull({ token, base, repo: source.repo });
+  const result = { unowned, mapErrors: map.errors };
+  if (next === (current?.content ?? null)) {
+    // Nothing left to propose: a pull request still open has nothing to add.
+    if (open && apply)
+      await closeOwnersPull({ token, base, number: open.number });
+    return { state: "up_to_date", ...result };
+  }
+  const file = current?.path ?? CODEOWNERS_PATHS[0];
+  if (open) {
+    const proposed = (
+      await openappaRepositoryIncludes.read({
+        source: { ...source, path: null },
+        commit: open.head,
+        paths: [file],
+      })
+    ).get(file);
+    if (proposed === next || !apply)
+      return { state: "pull_request", url: open.url, ...result };
+  } else if (!apply) return { state: "out_of_date", ...result };
+  const pull = await proposeOwners({
+    source,
+    token,
+    base,
+    file,
+    content: next,
+    open,
+    lines,
+    unowned,
+    mapErrors: map.errors,
+  });
+  return { state: "pull_request", url: pull.url, ...result };
+}
+
+/** The owners map in `code-owners.toml`, or an empty one with what is wrong. */
+function parseOwnersMap(text: string | undefined): OwnersMap {
+  const map: OwnersMap = {
+    teams: new Map(),
+    roles: new Map(),
+    users: new Map(),
+    errors: [],
+  };
+  if (text === undefined) return map;
+  const document = parsePolicyToml(text);
+  if (!document) {
+    map.errors.push(`${OWNERS_MAP_FILE} is not valid TOML`);
+    return map;
+  }
+  for (const [section, target] of [
+    ["teams", map.teams],
+    ["roles", map.roles],
+    ["users", map.users],
+  ] as const) {
+    const table = asRecord(document[section]);
+    if (document[section] !== undefined && !table) {
+      map.errors.push(`${OWNERS_MAP_FILE}: [${section}] must be a table`);
+      continue;
+    }
+    for (const [name, value] of Object.entries(table ?? {})) {
+      const owners = (Array.isArray(value) ? value : [value]).filter(
+        (owner): owner is string => typeof owner === "string",
+      );
+      const invalid = owners.filter((owner) => !GITHUB_OWNER.test(owner));
+      if (owners.length === 0 || invalid.length > 0) {
+        map.errors.push(
+          `${OWNERS_MAP_FILE}: ${section}.${JSON.stringify(name)} must name GitHub users or teams as "@login" or "@org/team"`,
+        );
+        continue;
+      }
+      target.set(section === "users" ? name.toLowerCase() : name, owners);
+    }
+  }
+  for (const key of Object.keys(document))
+    if (!["teams", "roles", "users"].includes(key))
+      map.errors.push(
+        `${OWNERS_MAP_FILE} may hold only [teams], [roles] and [users]; it sets ${key}`,
+      );
+  return map;
+}
+
+/**
+ * Every server with a rules file of its own, and who may edit it: the teams
+ * (by name), roles, and people its own edit grants name. A grant to the whole
+ * organization reads as the role "*". Grants to every server in the registry
+ * are the administrators' and stay with the fallback owners.
+ */
+async function serverEditors(organizationId: string): Promise<
+  Array<{
+    name: string;
+    path: string;
+    teams: string[];
+    roles: string[];
+    users: Array<{ id: string; email: string }>;
+  }>
+> {
+  const prefixes = await catalogToolPrefixes(organizationId);
+  const ids = [...prefixes.byCatalog.keys()].filter(
+    (id) => !isBuiltInCatalogId(id),
+  );
+  if (ids.length === 0) return [];
+  const catalogs = (
+    await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(inArray(schema.internalMcpCatalogTable.id, ids))
+  ).filter((catalog) => hasOwnFile(catalog, prefixes));
+  const policies = (
+    await ResourcePermissionPolicyModel.findObjectPolicies({
+      resources: ["mcpRegistry"],
+      scopes: catalogs.map((catalog) => catalog.id),
+    })
+  ).filter((policy) => policy.organizationId === organizationId);
+  const grants = new Map(
+    policies.map((policy) => [
+      policy.scope,
+      (policy.grants as ResourcePermissionGrant[]).filter((grant) =>
+        grant.actions.includes("update"),
+      ),
+    ]),
+  );
+  const subjects = [...grants.values()].flat().map((grant) => grant.subject);
+  const teamIds = [
+    ...new Set(
+      subjects.flatMap((subject) =>
+        subject.type === "team" ? [subject.id] : [],
+      ),
+    ),
+  ];
+  const userIds = [
+    ...new Set(
+      subjects.flatMap((subject) =>
+        subject.type === "user" ? [subject.id] : [],
+      ),
+    ),
+  ];
+  const [teams, users] = await Promise.all([
+    teamIds.length > 0 ? TeamModel.findByIds(teamIds) : [],
+    userIds.length > 0
+      ? db
+          .select({ id: schema.usersTable.id, email: schema.usersTable.email })
+          .from(schema.usersTable)
+          .where(inArray(schema.usersTable.id, userIds))
+      : [],
+  ]);
+  const teamName = new Map(
+    teams
+      .filter((team) => team.organizationId === organizationId)
+      .map((team) => [team.id, team.name]),
+  );
+  const userEmail = new Map(users.map((user) => [user.id, user.email]));
+  return catalogs
+    .map((catalog) => {
+      const own = grants.get(catalog.id) ?? [];
+      const of = (type: string) =>
+        own.flatMap((grant) =>
+          grant.subject.type === type ? [grant.subject.id] : [],
+        );
+      return {
+        name: catalog.name,
+        path: serverRulesPath(slugifyMcpServerName(catalog.name)),
+        teams: of("team").flatMap((id) => {
+          const name = teamName.get(id);
+          return name ? [name] : [];
+        }),
+        roles: [...of("role"), ...of("organization")],
+        users: of("user").flatMap((id) => {
+          const email = userEmail.get(id);
+          return email ? [{ id, email }] : [];
+        }),
+      };
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** GitHub logins by GitHub user id, for a day: they rarely change. */
+const logins = new LRUCacheManager<string>({
+  maxSize: 4096,
+  defaultTtl: 24 * 60 * 60_000,
+});
+
+/**
+ * The GitHub login of each user who connected a github.com account in
+ * Archestra, by user id. Only github.com: the accounts Archestra holds are
+ * github.com's, so a repository on another host gets none.
+ */
+async function connectedLogins(params: {
+  organizationId: string;
+  api: string;
+  token: string;
+  users: Array<{ id: string; email: string }>;
+}): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (params.users.length === 0 || params.api !== "https://api.github.com")
+    return found;
+  // The roster names one person per GitHub account, by email.
+  const byEmail = new Map(
+    [
+      ...(await RuntimeCredentialConnectionModel.listGitHubRoster(
+        params.organizationId,
+      )),
+    ].map(([githubId, email]) => [email.toLowerCase(), String(githubId)]),
+  );
+  const users = [
+    ...new Map(params.users.map((user) => [user.id, user])).values(),
+  ];
+  await mapWithConcurrency(users, 4, async ({ id: userId, email }) => {
+    const githubId = byEmail.get(email.toLowerCase());
+    if (!githubId) return;
+    let login = logins.get(githubId);
+    if (login === undefined) {
+      const user = await githubCall<{ login?: string }>({
+        token: params.token,
+        url: `${params.api}/user/${encodeURIComponent(githubId)}`,
+      });
+      if (!user.ok || typeof user.body.login !== "string") return;
+      login = user.body.login;
+      logins.set(githubId, login);
+    }
+    found.set(userId, login);
+  });
+  return found;
+}
+
+/** The CODEOWNERS file GitHub reads at the accepted commit, if any. */
+async function currentCodeOwners(
+  source: ConnectedSource,
+): Promise<{ path: string; content: string } | null> {
+  const files = await openappaRepositoryIncludes.read({
+    // CODEOWNERS paths are the repository's own, not appa.toml's folder's.
+    source: { ...source, path: null },
+    commit: source.sourceCommit,
+    paths: CODEOWNERS_PATHS,
+  });
+  for (const path of CODEOWNERS_PATHS) {
+    const content = files.get(path);
+    if (content !== undefined) return { path, content };
+  }
+  return null;
+}
+
+/** CODEOWNERS with Archestra's block replaced, or appended once there are lines. */
+function withOwnersBlock(
+  current: string | null,
+  lines: string[],
+): string | null {
+  const block = [
+    OWNERS_BEGIN,
+    `# Written from who may edit each MCP server in ${archestraMcpBranding.appName} and ${OWNERS_MAP_FILE}.`,
+    `# Change those, not these lines: ${archestraMcpBranding.appName} rewrites them.`,
+    ...lines,
+    OWNERS_END,
+  ].join("\n");
+  const start = current?.indexOf(OWNERS_BEGIN) ?? -1;
+  const end = current && start >= 0 ? current.indexOf(OWNERS_END, start) : -1;
+  if (current !== null && start >= 0 && end > start)
+    return `${current.slice(0, start)}${block}${current.slice(end + OWNERS_END.length)}`;
+  if (lines.length === 0) return current;
+  return current === null || current.trim() === ""
+    ? `${block}\n`
+    : `${current.replace(/\n*$/, "\n\n")}${block}\n`;
+}
+
+async function openOwnersPull(params: {
+  token: string;
+  base: string;
+  repo: string;
+}): Promise<{ number: number; url: string; head: string } | null> {
+  const owner = params.repo.slice(0, params.repo.indexOf("/"));
+  const pulls = await githubCall<
+    Array<{ number?: number; html_url?: string; head?: { sha?: string } }>
+  >({
+    token: params.token,
+    url: `${params.base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${OWNERS_BRANCH}`)}`,
+  });
+  if (!pulls.ok) throw new ApiError(502, `GitHub answered ${pulls.status}`);
+  const pull = pulls.body[0];
+  return pull?.number && pull.html_url && pull.head?.sha
+    ? {
+        number: pull.number,
+        url: pull.html_url,
+        head: commitSha(pull.head.sha),
+      }
+    : null;
+}
+
+async function closeOwnersPull(params: {
+  token: string;
+  base: string;
+  number: number;
+}) {
+  await githubCall({
+    token: params.token,
+    url: `${params.base}/pulls/${params.number}`,
+    method: "PATCH",
+    body: { state: "closed" },
+  });
+  await githubCall({
+    token: params.token,
+    url: `${params.base}/git/refs/heads/${OWNERS_BRANCH}`,
+    method: "DELETE",
+  });
+}
+
+/**
+ * Commit the CODEOWNERS file on Archestra's branch, based on the accepted
+ * commit, and open or update its one pull request. GitHub's own reading of
+ * the file on that branch goes into the description, so its reviewers see an
+ * owner GitHub does not know before merging.
+ */
+async function proposeOwners(params: {
+  source: ConnectedSource;
+  token: string;
+  base: string;
+  file: string;
+  content: string | null;
+  open: { number: number; url: string } | null;
+  lines: string[];
+  unowned: RepositoryProtection["codeOwners"]["unowned"];
+  mapErrors: string[];
+}): Promise<{ url: string }> {
+  const { source, token, base } = params;
+  const commit = await githubJson<{ tree?: { sha?: string } }>({
+    token,
+    url: `${base}/git/commits/${source.sourceCommit}`,
+    errors: githubSyncErrors,
+  });
+  const tree = await githubJson<{ sha: string }>({
+    token,
+    url: `${base}/git/trees`,
+    method: "POST",
+    body: {
+      base_tree: commitSha(commit.tree?.sha),
+      tree: [
+        {
+          path: params.file,
+          mode: "100644",
+          type: "blob",
+          content: params.content ?? "",
+        },
+      ],
+    },
+    errors: githubSyncErrors,
+  });
+  const created = await githubJson<{ sha: string }>({
+    token,
+    url: `${base}/git/commits`,
+    method: "POST",
+    body: {
+      message: "Code owners for MCP server rules files",
+      tree: commitSha(tree.sha),
+      parents: [source.sourceCommit],
+    },
+    errors: githubSyncErrors,
+  });
+  const ref = await githubCall({
+    token,
+    url: `${base}/git/ref/heads/${OWNERS_BRANCH}`,
+  });
+  const moved = ref.ok
+    ? await githubCall({
+        token,
+        url: `${base}/git/refs/heads/${OWNERS_BRANCH}`,
+        method: "PATCH",
+        body: { sha: commitSha(created.sha), force: true },
+      })
+    : await githubCall({
+        token,
+        url: `${base}/git/refs`,
+        method: "POST",
+        body: {
+          ref: `refs/heads/${OWNERS_BRANCH}`,
+          sha: commitSha(created.sha),
+        },
+      });
+  if (!moved.ok)
+    throw new ApiError(
+      502,
+      `GitHub answered ${moved.status} for the code owners branch`,
+    );
+  const errors = await githubCall<{
+    errors?: Array<{ line?: number; kind?: string; message?: string }>;
+  }>({
+    token,
+    url: `${base}/codeowners/errors?ref=${encodeURIComponent(OWNERS_BRANCH)}`,
+  });
+  const body = ownersPullBody({
+    ...params,
+    githubErrors: errors.ok ? (errors.body.errors ?? []) : [],
+  });
+  const title = "Code owners for MCP server rules files";
+  if (params.open) {
+    await githubJson({
+      token,
+      url: `${base}/pulls/${params.open.number}`,
+      method: "PATCH",
+      body: { title, body },
+      errors: githubSyncErrors,
+    });
+    return { url: params.open.url };
+  }
+  const branch = source.ref ?? (await defaultBranch({ token, base }));
+  const pull = await githubJson<{ html_url: string }>({
+    token,
+    url: `${base}/pulls`,
+    method: "POST",
+    body: { title, body, head: OWNERS_BRANCH, base: branch },
+    errors: githubSyncErrors,
+  });
+  return { url: pull.html_url };
+}
+
+function ownersPullBody(params: {
+  file: string;
+  lines: string[];
+  unowned: RepositoryProtection["codeOwners"]["unowned"];
+  mapErrors: string[];
+  githubErrors: Array<{ line?: number; kind?: string; message?: string }>;
+}): string {
+  const sections = [
+    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in ${archestraMcpBranding.appName} or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
+    params.lines.length > 0
+      ? `### Owners\n\n${params.lines.map((line) => `- \`${line}\``).join("\n")}`
+      : "### Owners\n\nNo server's editors have a GitHub owner yet.",
+  ];
+  if (params.unowned.length > 0)
+    sections.push(
+      `### Editors without a GitHub owner\n\nAdd them to \`${OWNERS_MAP_FILE}\`, or ask them to connect GitHub in ${archestraMcpBranding.appName}:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
+    );
+  if (params.mapErrors.length > 0)
+    sections.push(
+      `### Problems in ${OWNERS_MAP_FILE}\n\n${params.mapErrors.map((error) => `- ${error}`).join("\n")}`,
+    );
+  if (params.githubErrors.length > 0)
+    sections.push(
+      `### GitHub's reading of this file\n\nGitHub ignores these lines until they are fixed, for example by giving the team write access to the repository:\n\n${params.githubErrors.map((error) => `- line ${error.line ?? "?"}: ${error.message ?? error.kind ?? "unknown problem"}`).join("\n")}`,
+    );
+  return sections.join("\n\n");
+}
+
+// === GitHub calls ===
+
+async function defaultBranch(params: { token: string; base: string }) {
+  return (
+    await githubJson<{ default_branch: string }>({
+      token: params.token,
+      url: params.base,
+      errors: githubSyncErrors,
+    })
+  ).default_branch;
+}
+
+/**
+ * One GitHub request whose refusal the caller reads: the status and GitHub's
+ * own message rather than an error.
+ */
+async function githubCall<T = unknown>(params: {
+  token: string;
+  url: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: object;
+}): Promise<
+  | { ok: true; status: number; body: T }
+  | { ok: false; status: number; message?: string }
+> {
+  let response: Response;
+  try {
+    response = await githubFetch({ ...params, apiVersion: true });
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not reach GitHub");
+    throw new ApiError(502, "Could not reach GitHub");
+  }
+  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
+  let parsed: unknown = null;
+  try {
+    parsed = bytes && bytes.length > 0 ? JSON.parse(bytes.toString()) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!response.ok) {
+    const message = asRecord(parsed)?.message;
+    return {
+      ok: false,
+      status: response.status,
+      ...(typeof message === "string"
+        ? { message: message.slice(0, 300) }
+        : {}),
+    };
+  }
+  return { ok: true, status: response.status, body: parsed as T };
+}
+
+/** A commit or tree id GitHub returned, checked before it is used. */
+function commitSha(sha: unknown): string {
+  if (typeof sha !== "string" || !/^[a-f0-9]{40}$/.test(sha))
+    throw new ApiError(502, "GitHub returned an invalid object");
+  return sha;
 }

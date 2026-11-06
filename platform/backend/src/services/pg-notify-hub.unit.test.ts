@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  createDefaultPgClient,
   createInMemoryNotifyHub,
   createPollingNotifyHub,
   type PgClient,
@@ -368,5 +369,33 @@ describe("in-memory notify hub", () => {
     await hub.channel("chat_active_run_events").notify("run-1");
     expect(otherWoken).toBe(false);
     await other;
+  });
+});
+
+describe("createDefaultPgClient", () => {
+  test("passes awsRegion and 10s connect timeout for custom database hostnames under RDS IAM auth", async () => {
+    const client = createDefaultPgClient(
+      "postgresql://archestra_iam@db.internal.example.com:5432/archestra",
+      {
+        iamAuthEnabled: true,
+        awsRegion: "eu-west-1",
+        credentials: {
+          accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+          secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          sessionToken: "AQoDYXdzEJr1234567890",
+        },
+        env: {},
+      },
+    ) as unknown as {
+      connectionParameters: { host: string; port: number; user: string };
+      password: () => Promise<string>;
+      _connectionTimeoutMillis?: number;
+    };
+
+    expect(typeof client.password).toBe("function");
+    const token = await client.password();
+    expect(token).toContain("db.internal.example.com:5432/?");
+    expect(token).toContain("DBUser=archestra_iam");
+    expect(token).toContain("%2Feu-west-1%2Frds-db%2Faws4_request");
   });
 });

@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import tls from "node:tls";
 import pg from "pg";
 import { afterEach, describe, expect, test, vi } from "vitest";
 // @ts-expect-error — plain ESM module used by docker-entrypoint.sh and drizzle.config.ts
@@ -275,7 +277,7 @@ describe.each(MODULES)("rds-iam (%s)", (_moduleName, rdsIam) => {
     }
   });
 
-  test("resolvePgSslConfig loads custom sslrootcert, respects sslmode=disable, and rejects sslmode=no-verify", () => {
+  test("resolvePgSslConfig loads custom sslrootcert and rejects sslmode=disable and sslmode=no-verify", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-ca-test-"));
     const caFile = path.join(tempDir, "custom-rds-ca.pem");
     const customPem =
@@ -294,18 +296,32 @@ describe.each(MODULES)("rds-iam (%s)", (_moduleName, rdsIam) => {
         ca: customPem,
       });
 
-      const disabledSsl = resolvePgSslConfig(
-        "postgresql://archestra_iam@localhost:5432/archestra?sslmode=disable",
-        { iamAuthEnabled: true, env: {} },
+      expect(() =>
+        resolvePgSslConfig(
+          "postgresql://archestra_iam@localhost:5432/archestra?sslmode=disable",
+          { iamAuthEnabled: true, env: {} },
+        ),
+      ).toThrow(
+        /TLS must stay enabled when RDS IAM database authentication is enabled/,
       );
-      expect(disabledSsl).toBe(false);
+
+      expect(() =>
+        resolvePgSslConfig(
+          "postgresql://archestra_iam@localhost:5432/archestra?ssl=false",
+          { iamAuthEnabled: true, env: {} },
+        ),
+      ).toThrow(
+        /TLS must stay enabled when RDS IAM database authentication is enabled/,
+      );
 
       expect(() =>
         resolvePgSslConfig(
           "postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=no-verify",
           { iamAuthEnabled: true, env: {} },
         ),
-      ).toThrow(/sslmode=no-verify is not permitted/);
+      ).toThrow(
+        /TLS must stay enabled when RDS IAM database authentication is enabled/,
+      );
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -490,7 +506,7 @@ describe("rds-iam native bridge & retry helpers", () => {
     await tsRdsIam.closeRdsIamNativeBridges();
   });
 
-  test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens per native connection and rejects invalid per-bridge secrets", async () => {
+  test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens over TLS per native connection and rejects invalid per-bridge secrets", async () => {
     const rawUrl = "postgresql://archestra_iam@127.0.0.1:5432/archestra";
     expect(
       await tsRdsIam.resolveNativeDatabaseConnectionString(rawUrl, {
@@ -499,32 +515,73 @@ describe("rds-iam native bridge & retry helpers", () => {
       }),
     ).toBe(rawUrl);
 
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-bridge-tls-"));
+    const keyFile = path.join(tempDir, "server.key");
+    const certFile = path.join(tempDir, "server.crt");
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        keyFile,
+        "-out",
+        certFile,
+        "-days",
+        "1",
+        "-subj",
+        "/CN=127.0.0.1",
+        "-addext",
+        "subjectAltName=IP:127.0.0.1,DNS:localhost",
+      ],
+      { stdio: "ignore" },
+    );
+    const serverKey = fs.readFileSync(keyFile, "utf8");
+    const serverCert = fs.readFileSync(certFile, "utf8");
+
     const receivedPasswords: string[] = [];
-    const mockPgServer = net.createServer((socket) => {
-      let startupDone = false;
-      socket.on("data", (data) => {
-        if (!startupDone) {
-          startupDone = true;
-          // Send AuthenticationCleartextPassword ('R', len=8, type=3)
-          const authReq = Buffer.alloc(9);
-          authReq[0] = 0x52;
-          authReq.writeInt32BE(8, 1);
-          authReq.writeInt32BE(3, 5);
-          socket.write(authReq);
-          return;
-        }
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-        if (buf[0] === 0x70) {
-          const msgLen = buf.readInt32BE(1);
-          const pwd = buf.subarray(5, 1 + msgLen - 1).toString("utf8");
-          receivedPasswords.push(pwd);
-          // Send AuthenticationOk ('R', len=8, type=0) + ReadyForQuery ('Z', len=5, 'I')
-          const okAndReady = Buffer.from([
-            0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a, 0x00,
-            0x00, 0x00, 0x05, 0x49,
-          ]);
-          socket.write(okAndReady);
-          socket.end();
+    const mockPgServer = net.createServer((rawSocket) => {
+      rawSocket.once("data", (sslReq) => {
+        // Expect 8-byte PostgreSQL SSLRequest (80877103) and reply 'S' (0x53)
+        if (sslReq.length === 8 && sslReq.readInt32BE(4) === 80877103) {
+          rawSocket.write(Buffer.from([0x53]));
+          const tlsSocket = new tls.TLSSocket(rawSocket, {
+            isServer: true,
+            key: serverKey,
+            cert: serverCert,
+          });
+          let startupDone = false;
+          tlsSocket.on("data", (data: Buffer) => {
+            if (!startupDone) {
+              startupDone = true;
+              // Send AuthenticationCleartextPassword ('R', len=8, type=3)
+              const authReq = Buffer.alloc(9);
+              authReq[0] = 0x52;
+              authReq.writeInt32BE(8, 1);
+              authReq.writeInt32BE(3, 5);
+              tlsSocket.write(authReq);
+              return;
+            }
+            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+            if (buf[0] === 0x70) {
+              const msgLen = buf.readInt32BE(1);
+              const pwd = buf.subarray(5, 1 + msgLen - 1).toString("utf8");
+              receivedPasswords.push(pwd);
+              // Send AuthenticationOk ('R', len=8, type=0) + ReadyForQuery ('Z', len=5, 'I')
+              const okAndReady = Buffer.from([
+                0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a,
+                0x00, 0x00, 0x00, 0x05, 0x49,
+              ]);
+              tlsSocket.write(okAndReady);
+              tlsSocket.end();
+            }
+          });
+          tlsSocket.on("error", () => rawSocket.destroy());
+        } else {
+          rawSocket.destroy();
         }
       });
     });
@@ -548,7 +605,7 @@ describe("rds-iam native bridge & retry helpers", () => {
       });
 
       const bridgeUrl = await tsRdsIam.resolveNativeDatabaseConnectionString(
-        `postgresql://archestra_iam@127.0.0.1:${upstreamPort}/archestra?sslmode=disable`,
+        `postgresql://archestra_iam@127.0.0.1:${upstreamPort}/archestra?sslmode=verify-full&sslrootcert=${encodeURIComponent(certFile)}`,
         {
           iamAuthEnabled: true,
           awsRegion: "eu-central-1",
@@ -562,7 +619,7 @@ describe("rds-iam native bridge & retry helpers", () => {
       expect(parsedBridgeUrl.password).toMatch(/^[0-9a-f]{64}$/);
       expect(parsedBridgeUrl.searchParams.get("sslmode")).toBe("disable");
 
-      // Valid connections presenting the per-bridge secret receive fresh IAM tokens
+      // Valid connections presenting the per-bridge secret receive fresh IAM tokens over upstream TLS
       for (let i = 0; i < 2; i++) {
         const client = new pg.Client({ connectionString: bridgeUrl });
         await client.connect();
@@ -588,6 +645,7 @@ describe("rds-iam native bridge & retry helpers", () => {
       expect(receivedPasswords).toHaveLength(2);
     } finally {
       await new Promise<void>((resolve) => mockPgServer.close(() => resolve()));
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 

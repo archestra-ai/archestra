@@ -3,6 +3,7 @@ import pg from "pg";
 import {
   buildPgConnectionConfig,
   isRdsIamAuthEnabled,
+  type RdsIamConnectionOptions,
 } from "@/database/rds-iam";
 import logger from "@/logging";
 
@@ -157,8 +158,14 @@ export function createInMemoryNotifyHub(): PgNotifyHub {
 
 export function createPostgresNotifyHub(
   connectionString: string,
-  clientFactory: PgClientFactory = createDefaultPgClient,
+  clientFactoryOrOptions:
+    | PgClientFactory
+    | RdsIamConnectionOptions = createDefaultPgClient,
 ): PgNotifyHub {
+  const clientFactory: PgClientFactory =
+    typeof clientFactoryOrOptions === "function"
+      ? clientFactoryOrOptions
+      : (url) => createDefaultPgClient(url, clientFactoryOrOptions);
   return new PostgresNotifyHub(connectionString, clientFactory);
 }
 
@@ -615,8 +622,17 @@ function parseFanoutMessage(
   }
 }
 
-function createDefaultPgClient(connectionString: string): PgClient {
-  const iamAuthEnabled = isRdsIamAuthEnabled();
+/** @public — exported for unit tests */
+export function createDefaultPgClient(
+  connectionString: string,
+  options: RdsIamConnectionOptions = {},
+): PgClient {
+  const env = options.env ?? process.env;
+  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+  const awsRegion =
+    options.awsRegion?.trim() ||
+    env.ARCHESTRA_DATABASE_AWS_REGION?.trim() ||
+    undefined;
   return new pg.Client(
     buildPgConnectionConfig(
       connectionString,
@@ -626,7 +642,10 @@ function createDefaultPgClient(connectionString: string): PgClient {
         keepAliveInitialDelayMillis: 10_000,
       },
       {
+        ...options,
         iamAuthEnabled,
+        awsRegion,
+        env,
       },
     ),
   );

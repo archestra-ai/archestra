@@ -374,14 +374,12 @@ export function resolvePgSslConfig(
   if (
     sslMode === "disable" ||
     sslParam === "false" ||
-    sslParam === "0"
+    sslParam === "0" ||
+    sslMode === "no-verify" ||
+    sslParam === "no-verify"
   ) {
-    return false;
-  }
-
-  if (sslMode === "no-verify" || sslParam === "no-verify") {
     throw new Error(
-      "sslmode=no-verify is not permitted when RDS IAM database authentication is enabled; use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+      "TLS must stay enabled when RDS IAM database authentication is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
     );
   }
 

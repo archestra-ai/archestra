@@ -44,7 +44,7 @@ interface CreateRdsIamPasswordCallbackOptions {
   now?: () => number;
 }
 
-interface RdsIamConnectionOptions {
+export interface RdsIamConnectionOptions {
   iamAuthEnabled?: boolean;
   awsRegion?: string;
   credentials?: AwsCredentialsInput;
@@ -424,13 +424,15 @@ export function resolvePgSslConfig(
   const sslMode = (params.get("sslmode") ?? env.PGSSLMODE ?? "").toLowerCase();
   const sslParam = (params.get("ssl") ?? "").toLowerCase();
 
-  if (sslMode === "disable" || sslParam === "false" || sslParam === "0") {
-    return false;
-  }
-
-  if (sslMode === "no-verify" || sslParam === "no-verify") {
+  if (
+    sslMode === "disable" ||
+    sslParam === "false" ||
+    sslParam === "0" ||
+    sslMode === "no-verify" ||
+    sslParam === "no-verify"
+  ) {
     throw new Error(
-      "sslmode=no-verify is not permitted when RDS IAM database authentication is enabled; use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+      "TLS must stay enabled when RDS IAM database authentication is enabled; sslmode=disable and sslmode=no-verify are not permitted. Use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
     );
   }
 
@@ -747,16 +749,6 @@ export async function resolveNativeDatabaseConnectionString(
       });
 
       upstreamTcp.once("connect", () => {
-        if (sslConfig === false) {
-          upstreamSocket = upstreamTcp;
-          upstreamReady = true;
-          upstreamTcp.on("data", (d) => clientSocket.write(d));
-          upstreamTcp.on("end", () => clientSocket.end());
-          upstreamTcp.on("close", () => clientSocket.destroy());
-          pumpClient();
-          return;
-        }
-
         upstreamTcp.write(PG_SSL_REQUEST_PACKET);
         upstreamTcp.once("data", (resp: Buffer) => {
           if (resp[0] !== 0x53) {
@@ -770,7 +762,7 @@ export async function resolveNativeDatabaseConnectionString(
           const tlsSock = tls.connect({
             socket: upstreamTcp,
             host: rdsHost,
-            servername: rdsHost,
+            ...(net.isIP(rdsHost) === 0 ? { servername: rdsHost } : {}),
             ...(typeof sslConfig === "object" ? sslConfig : {}),
           });
           tlsSock.unref();

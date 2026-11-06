@@ -121,6 +121,40 @@ describe("LlmUsageRollupModel", () => {
     );
   });
 
+  test("a bulk update marks each hour once, inside a savepoint too", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+  }) => {
+    const { id: organizationId } = await makeOrganization();
+    const agent = await makeAgent({ organizationId });
+    // Rows of two hours, interleaved.
+    const hour = new Date(hoursAgo(8).setUTCMinutes(0, 0, 0));
+    const rows = [];
+    for (const minutes of [10, 130, 20, 140, 30, 150]) {
+      rows.push(
+        await makeInteraction(agent.id, {
+          createdAt: new Date(hour.getTime() + minutes * 60_000),
+        }),
+      );
+    }
+    await drain();
+
+    await db.transaction(async (tx) => {
+      await tx.transaction(async (savepoint) => {
+        for (const [index, row] of rows.entries()) {
+          await savepoint
+            .update(schema.interactionsTable)
+            .set({ cost: String(index + 1) })
+            .where(eq(schema.interactionsTable.id, row.id));
+        }
+      });
+    });
+
+    const marks = await db.select().from(schema.llmUsageRollupDirtyTable);
+    expect(marks.map((mark) => mark.version)).toEqual([1, 1]);
+  });
+
   test("a change committed during a recompute keeps its hour marked", async ({
     makeAgent,
     makeInteraction,

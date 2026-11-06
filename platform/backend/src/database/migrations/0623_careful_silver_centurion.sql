@@ -102,29 +102,57 @@ CREATE TABLE "llm_usage_daily" (
 CREATE INDEX "llm_usage_daily_hour_idx" ON "llm_usage_daily" USING btree ("hour");
 
 --> statement-breakpoint
--- Mark hours for recompute. Bumps the version (never DO NOTHING): the rollup
+-- Mark an hour for recompute. Bumps the version (never DO NOTHING): the rollup
 -- clears a mark only while its version is unchanged, so a change that races a
--- recompute keeps its mark. A mark this transaction already wrote is left as
--- is: it commits with every change the transaction makes, so a bulk update
--- writes one mark per hour rather than one per row.
-CREATE FUNCTION llm_usage_rollup_mark(hours timestamp[]) RETURNS void LANGUAGE sql AS $$
-  INSERT INTO llm_usage_rollup_dirty AS dirty (hour)
-  SELECT DISTINCT hour FROM unnest(hours) AS hour WHERE hour IS NOT NULL
-  ORDER BY hour
+-- recompute keeps its mark. A mark this transaction already wrote commits with
+-- every change the transaction makes, so a bulk update needs one per hour, not
+-- one per row: the transaction remembers the hours it marked (in a setting that
+-- a rolled-back savepoint also rolls back), and the row version check covers
+-- hours it no longer remembers. Marking an hour again is only extra work.
+CREATE FUNCTION llm_usage_rollup_mark_hour(marked timestamp) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  remembered text := COALESCE(current_setting('archestra.llm_usage_rollup_marked', true), '');
+  key text := ' ' || extract(epoch FROM marked)::bigint || ' ';
+BEGIN
+  IF marked IS NULL OR strpos(remembered, key) > 0 THEN
+    RETURN;
+  END IF;
+  INSERT INTO llm_usage_rollup_dirty AS dirty (hour) VALUES (marked)
   ON CONFLICT (hour) DO UPDATE SET version = dirty.version + 1, settle_after = NULL
   WHERE dirty.xmin <> pg_current_xact_id()::xid;
+  -- At most a few hundred hours, so each lookup stays cheap.
+  IF length(remembered) > 4096 THEN
+    remembered := '';
+  END IF;
+  PERFORM set_config('archestra.llm_usage_rollup_marked', remembered || key, true);
+END;
+$$;
+--> statement-breakpoint
+-- Several hours, in order, so concurrent markers take the rows' locks in one
+-- order.
+CREATE FUNCTION llm_usage_rollup_mark(hours timestamp[]) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  marked timestamp;
+BEGIN
+  FOR marked IN SELECT DISTINCT hour FROM unnest(hours) AS hour ORDER BY hour LOOP
+    PERFORM llm_usage_rollup_mark_hour(marked);
+  END LOOP;
+END;
 $$;
 --> statement-breakpoint
 CREATE FUNCTION llm_usage_rollup_on_interaction_insert() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM llm_usage_rollup_mark(ARRAY[date_trunc('hour', NEW.created_at)]);
+  PERFORM llm_usage_rollup_mark_hour(date_trunc('hour', NEW.created_at));
   RETURN NULL;
 END;
 $$;
 --> statement-breakpoint
 CREATE FUNCTION llm_usage_rollup_on_interaction_update() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM llm_usage_rollup_mark(ARRAY[date_trunc('hour', OLD.created_at), date_trunc('hour', NEW.created_at)]);
+  PERFORM llm_usage_rollup_mark_hour(date_trunc('hour', OLD.created_at));
+  IF date_trunc('hour', NEW.created_at) <> date_trunc('hour', OLD.created_at) THEN
+    PERFORM llm_usage_rollup_mark_hour(date_trunc('hour', NEW.created_at));
+  END IF;
   RETURN NULL;
 END;
 $$;

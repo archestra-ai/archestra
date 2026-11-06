@@ -6,6 +6,8 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils/tailwind";
 
+const DialogContentContext = React.createContext(false);
+
 /**
  * Low-level dialog primitives.
  *
@@ -133,7 +135,9 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        <DialogContentContext.Provider value={true}>
+          {children}
+        </DialogContentContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
@@ -306,6 +310,7 @@ export {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogContentContext,
   DialogDescription,
   DialogFooter,
   DialogForm,

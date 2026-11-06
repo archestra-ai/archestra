@@ -1,14 +1,22 @@
 "use client";
 
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import type * as React from "react";
+import * as React from "react";
 
+import { DialogContentContext } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils/tailwind";
 
 function Popover({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
+  const withinDialog = React.useContext(DialogContentContext);
+  return (
+    <PopoverPrimitive.Root
+      data-slot="popover"
+      modal={withinDialog}
+      {...props}
+    />
+  );
 }
 
 function PopoverTrigger({

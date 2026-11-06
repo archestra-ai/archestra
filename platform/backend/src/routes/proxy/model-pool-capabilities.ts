@@ -6,7 +6,10 @@ import { getTokenizer } from "@/tokenizers";
 import { ApiError } from "@/types/api";
 import { asRecord } from "@/utils/as-record";
 import type { PlannedMember } from "./model-pool-failover";
-import type { PoolWire } from "./model-pool-transport";
+import {
+  type PoolWire,
+  requestedMaxOutputTokens,
+} from "./model-pool-transport";
 
 /** Filter the final outbound request, after prompt/tool transformations. */
 export async function compatiblePoolMembers(params: {
@@ -86,7 +89,7 @@ function requestRequirements(request: unknown, wire: PoolWire): Requirements {
   const result: Requirements = {
     modalities: new Set(),
     text: [],
-    outputTokens: 0,
+    outputTokens: requestedMaxOutputTokens(request) ?? 0,
   };
   const text = (value: unknown) => {
     if (typeof value === "string" && value.length) {
@@ -193,16 +196,5 @@ function requestRequirements(request: unknown, wire: PoolWire): Requirements {
     blocks(body.system);
     json(wire === "bedrock-converse" ? body.toolConfig : body.tools);
   }
-  const output =
-    wire === "gemini"
-      ? (asRecord(body.generationConfig ?? body.generation_config)
-          ?.maxOutputTokens ??
-        asRecord(body.generationConfig ?? body.generation_config)
-          ?.max_output_tokens)
-      : wire === "bedrock-converse"
-        ? asRecord(body.inferenceConfig)?.maxTokens
-        : (body.max_completion_tokens ?? body.max_tokens);
-  if (typeof output === "number" && Number.isFinite(output) && output > 0)
-    result.outputTokens = output;
   return result;
 }

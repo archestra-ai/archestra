@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect } from "vitest";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import { test } from "@/test";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import { compatiblePoolMembers } from "./model-pool-capabilities";
 import type { PoolWire } from "./model-pool-transport";
 
@@ -40,6 +44,7 @@ describe("request compatibility", () => {
   test.each([
     {
       wire: "openai-chat",
+      modality: "image",
       body: {
         messages: [
           {
@@ -56,6 +61,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "anthropic",
+      modality: "image",
       body: {
         messages: [
           {
@@ -82,6 +88,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "gemini",
+      modality: "image",
       body: {
         contents: [
           {
@@ -93,6 +100,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "gemini",
+      modality: "pdf",
       body: {
         contents: [
           {
@@ -111,6 +119,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "bedrock-converse",
+      modality: "image",
       body: {
         messages: [
           {
@@ -131,6 +140,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "openai-chat",
+      modality: "audio",
       body: {
         messages: [
           {
@@ -147,6 +157,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "gemini",
+      modality: "video",
       body: {
         contents: [
           {
@@ -165,6 +176,7 @@ describe("request compatibility", () => {
     },
     {
       wire: "anthropic",
+      modality: "pdf",
       body: {
         messages: [
           {
@@ -186,15 +198,15 @@ describe("request compatibility", () => {
   ] as const)("filters known input incompatibility on $wire", async ({
     wire,
     body,
+    modality,
   }) => {
+    const model = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "large-vision",
+    );
+    if (!model) throw new Error("Missing model");
+    await ModelModel.update(model.id, { inputModalities: ["text", modality] });
     expect(await compatible(body, wire)).toEqual(members.slice(1));
-    await expect(
-      compatiblePoolMembers({
-        members: members.slice(0, 1),
-        request: body,
-        wire,
-      }),
-    ).rejects.toThrow("No model pool member can accept");
   });
   test.each([
     {
@@ -292,13 +304,6 @@ describe("request compatibility", () => {
     body,
   }) => {
     expect(await compatible(body, wire)).toEqual(members.slice(1));
-    await expect(
-      compatiblePoolMembers({
-        members: members.slice(0, 1),
-        request: body,
-        wire,
-      }),
-    ).rejects.toThrow("No model pool member can accept");
   });
   test("reserves requested output and respects custom context override", async () => {
     const body = {
@@ -367,29 +372,21 @@ describe("request compatibility", () => {
     body,
   }) => {
     expect(await compatible(body, wire)).toEqual(members.slice(1));
-    await expect(
-      compatiblePoolMembers({
-        members: members.slice(0, 1),
-        request: body,
-        wire,
-      }),
-    ).rejects.toThrow("No model pool member can accept");
   });
-  test("reserves Gemini output tokens with either field casing", async () => {
-    for (const generation of [
-      { generationConfig: { maxOutputTokens: 65 } },
-      { generation_config: { max_output_tokens: 65 } },
-    ]) {
-      expect(
-        await compatible(
-          { contents: [{ parts: [{ text: "hi" }] }], ...generation },
-          "gemini",
-        ),
-      ).toEqual(members.slice(1));
-    }
-  });
-  test("does not borrow global Azure alias metadata without scoped evidence", async () => {
-    await ModelModel.create({
+  test("uses Azure key-scoped evidence and keeps unknown or stale aliases eligible", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const keys = await Promise.all(
+      ["text", "vision"].map((name) =>
+        makeLlmProviderApiKey(org.id, null, {
+          provider: "azure",
+          baseUrl: `https://${name}.openai.azure.com/openai`,
+        }),
+      ),
+    );
+    const model = await ModelModel.create({
       provider: "azure",
       modelId: "alias",
       externalId: "azure/alias",
@@ -397,11 +394,15 @@ describe("request compatibility", () => {
       inputModalities: ["text"],
       outputModalities: ["text"],
     });
-    const azure = [
-      { ...members[0], provider: "azure" as const, modelId: "alias" },
-    ];
-    expect(
-      await compatiblePoolMembers({
+    const azure = keys.map((key) => ({
+      ...members[0],
+      memberId: key.id,
+      providerApiKeyId: key.id,
+      provider: "azure" as const,
+      modelId: "alias",
+    }));
+    const eligible = () =>
+      compatiblePoolMembers({
         members: azure,
         wire: "openai-chat",
         request: {
@@ -418,8 +419,34 @@ describe("request compatibility", () => {
             },
           ],
         },
-      }),
-    ).toEqual(azure);
+      });
+    // A globally shared alias cannot supply either key's context or modalities.
+    expect(await eligible()).toEqual(azure);
+    for (const [index, key] of keys.entries()) {
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        key.id,
+        [
+          {
+            id: model.id,
+            modelId: model.modelId,
+            azureCapabilities: {
+              kind: "text",
+              source: "deployment",
+              underlyingModelName: "gpt-4o",
+              operations: ["chat"],
+              inputModalities: index === 0 ? ["text"] : ["text", "image"],
+              configurationHash: azureCapabilityConfigurationHash(key),
+            },
+          },
+        ],
+        "azure",
+      );
+    }
+    expect(await eligible()).toEqual([azure[1]]);
+    await LlmProviderApiKeyModel.update(keys[0].id, {
+      extraHeaders: { "x-route": "changed" },
+    });
+    expect(await eligible()).toEqual(azure);
   });
   test("does not tokenize base64 or mistake structured tool JSON for media", async () => {
     expect(

@@ -22,10 +22,10 @@ jobs:
     name: Release Freeze Check
     # Always run so it can be a required status check - passes immediately for
     # non-release-please PRs and merge queue runs.
+    # The failing check blocks the merge. Toggle Release Freeze also posts a
+    # change-request review on open release PRs when the freeze turns on.
     runs-on: ubuntu-latest
-    permissions:
-      contents: read # Required to inspect the repository context for release-please PRs.
-      pull-requests: write # Required to request changes on frozen release PRs.
+    permissions: {}
     steps:
       - name: Check if this requires freeze validation
         id: check-context
@@ -60,22 +60,6 @@ jobs:
             echo "frozen=false" >> "$GITHUB_OUTPUT"
             echo "✅ No release freeze active. Release-please PR can proceed."
           fi
-
-      - name: Checkout repository
-        if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Request changes on PR
-        if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: $/.github/actions/release-freeze-review
-        with:
-          action: freeze
-          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
-          pr-number: ${{ github.event.pull_request.number }}
 
       - name: Fail if frozen
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
@@ -229,12 +213,12 @@ jobs:
     # Turbo fans out six check tasks; @frontend:check:ci also runs
     # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
     runs-on: ubicloud-standard-16-ubuntu-2404
-    # Backstop: on a turbo remote-cache hit every check here finishes well
-    # under 10m, but leaked test-runner processes (vitest fork workers /
-    # esbuild) occasionally orphan and hold the step's log pipe open, leaving
-    # a *finished* job hanging until GitHub's 6h default. Fail fast instead.
-    # Queue entries and release-please PRs may pay a full cold build when
-    # caches are empty.
+    # Backstop: every check here finishes well under 20m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally
+    # orphan and hold the step's log pipe open, leaving a *finished* job
+    # hanging until GitHub's 6h default. Fail fast instead. Turbo restores
+    # check results that Warm Turbo Cache saved on main (on-commits-to-main.yml)
+    # and runs the rest from cold.
     timeout-minutes: 20
     permissions:
       contents: read # Release generation has a separate, single writer.
@@ -242,8 +226,7 @@ jobs:
       run:
         working-directory: ./platform
     env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      TURBO_CACHE_DIR: ${{ github.workspace }}/platform/.turbo/cache
     steps:
       - name: Check if this is a release-please PR
         id: check-release-please
@@ -278,6 +261,12 @@ jobs:
         uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      # Read-only: only Warm Turbo Cache on main saves entries under this name.
+      - name: Restore Turbo cache from main
+        uses: $/.github/actions/turbo-cache
+        with:
+          name: platform-lint
 
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
@@ -351,9 +340,8 @@ jobs:
       # download of the same components, which races and fails with
       # "could not rename downloaded file".
       # Reuse the warm release target restored by backend test shards. The
-      # native addons are intentionally uncached in Turbo because its remote
-      # cache is shared across architectures, but Cargo artifacts here are
-      # scoped to this CI runner and Rust toolchain.
+      # native addons are intentionally uncached in Turbo; Cargo artifacts
+      # here are scoped to this CI runner and Rust toolchain.
       - name: Restore Rust build cache
         uses: $/.github/actions/setup-rust-build
         with:
@@ -571,9 +559,6 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     services:
       # The ledger tables belong to Archestra's Drizzle migrations, so this is a
       # plain server that the migration step below populates — not a fixture.
@@ -775,9 +760,6 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     services:
       # One disposable database for the usage-limits suite, not one per shard.
       # Same digest-pinned pgvector image as the native ledger job: migrations
@@ -1000,9 +982,6 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

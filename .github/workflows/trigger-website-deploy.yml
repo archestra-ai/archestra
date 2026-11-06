@@ -4,13 +4,8 @@ name: Publish Docs to archestra.ai
 
 on:
   workflow_call:
-    secrets:
-      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
-        required: true
-        description: App ID for the Archestra Website Deploy GitHub App
-      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY:
-        required: true
-        description: Private key for the Archestra Website Deploy GitHub App
+    # The website deploy app credentials come from the website-deploy
+    # environment (main only), not from the caller.
   workflow_dispatch:
 
 permissions: {}
@@ -24,6 +19,7 @@ jobs:
     name: Refresh archestra.ai Docs
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: website-deploy
     permissions:
       contents: read
     steps:

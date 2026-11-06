@@ -42,9 +42,6 @@ jobs:
     secrets:
       DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   deploy-to-staging:
     name: Deploy to staging
@@ -117,9 +114,6 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -184,3 +178,73 @@ jobs:
           FROM scratch
           COPY backend-types.json /
           EOF
+
+  # The only writer of the Turbo cache that Platform Lint and Unit Tests
+  # (on-pull-requests.yml) restores. Pull-request and merge-group runs never
+  # save it, so a cache hit there replays a result main produced. It runs the
+  # same Turbo check tasks on the same runner image, so task hashes match for
+  # every package a merge group leaves unchanged. Production builds are left
+  # out: their .next and dist outputs would make each entry hundreds of MB.
+  warm-turbo-cache:
+    name: Warm Turbo Cache
+    runs-on: ubicloud-standard-16-ubuntu-2404
+    timeout-minutes: 20
+    concurrency:
+      group: on-commits-to-main-warm-turbo-cache
+      # Readers use the newest entry, so a newer commit supersedes this one.
+      cancel-in-progress: true
+    permissions:
+      contents: read # Check out sources and fetch the default branch.
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      # Nothing is restored, so each entry holds only this commit's results.
+      TURBO_CACHE_DIR: ${{ github.workspace }}/platform/.turbo/cache
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: $/.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # The backend check:commit migration linter diffs against
+      # origin/<default branch>; see the same step in Platform Lint and Unit Tests.
+      - name: Fetch base ref for migration checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git -c credential.helper= \
+              -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
+              fetch --depth=1 origin \
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+
+      - name: Restore Rust build cache
+        uses: $/.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      # --continue lets the other tasks finish and be cached when one fails.
+      - name: Run Platform Lint and Unit Tests Turbo checks
+        run: |
+          status=0
+          pnpm exec turbo check:commit --filter=@backend --continue || status=$?
+          pnpm exec turbo check:ci --filter=!@backend --continue || status=$?
+          exit "$status"
+
+      # Turbo stores only successful tasks, so a partial run is safe to save.
+      - name: Save Turbo cache
+        if: ${{ !cancelled() }}
+        uses: $/.github/actions/turbo-cache
+        with:
+          name: platform-lint
+          mode: save

@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -622,7 +623,9 @@ describe("OrganizationCostsPage", () => {
         ?.searchParams.get("groupBy"),
     ).toBe("day,teamId,model");
 
-    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "CSV" }));
     expect(files[0]?.name).toMatch(
       /^costs-by-team-and-model-last-hour-\d{4}-\d{2}-\d{2}\.csv$/,
     );
@@ -631,6 +634,26 @@ describe("OrganizationCostsPage", () => {
       "Research,model-large,4,400,40,0,0,440,8,0",
       "Platform,model-small,4,400,40,0,0,440,1,0",
       "Research,model-small,2,200,20,0,0,220,0.5000,0",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "JSON" }));
+    expect(files[1]?.name).toMatch(
+      /^costs-by-team-and-model-last-hour-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+    expect(JSON.parse((await files[1]?.blob.text()) ?? "")).toEqual([
+      expect.objectContaining({
+        Team: "Research",
+        Model: "model-large",
+        Requests: 4,
+        "Billed spend (USD)": 8,
+      }),
+      expect.objectContaining({ Team: "Platform", Model: "model-small" }),
+      expect.objectContaining({
+        Team: "Research",
+        Model: "model-small",
+        "Billed spend (USD)": 0.5,
+      }),
     ]);
   });
 

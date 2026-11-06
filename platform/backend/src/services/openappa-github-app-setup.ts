@@ -22,6 +22,10 @@ import {
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import { lookupAccount } from "@/services/github-app-manifest-setup";
+import {
+  githubFetch,
+  isEmptyGithubRepository,
+} from "@/services/openappa-github";
 import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
@@ -91,18 +95,12 @@ class OpenAppaGithubAppSetup {
         400,
         "GitHub App setup expired or was started elsewhere. Start again.",
       );
-    const response = await fetch(
-      `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(30_000),
-      },
-    );
+    const response = await githubFetch({
+      url: `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
+      method: "POST",
+      apiVersion: true,
+      signal: AbortSignal.timeout(30_000),
+    });
     const app = response.ok
       ? ConversionSchema.safeParse(await response.json())
       : null;
@@ -227,7 +225,9 @@ class OpenAppaGithubAppSetup {
       await deleteRuntimeCredentialDefinition({
         organizationId: params.organizationId,
         key: definition.key,
-      }).catch(() => undefined);
+      }).catch((err) =>
+        logger.warn({ err }, "OpenAPPA could not remove a keyless GitHub App"),
+      );
       throw error;
     }
     await VerificationModel.deleteByIdentifier(
@@ -253,7 +253,8 @@ class OpenAppaGithubAppSetup {
             path: `/app/installations/${encodeURIComponent(app.installationId)}`,
           });
           return { id: app.id, account: installation.account?.login ?? null };
-        } catch {
+        } catch (err) {
+          logger.warn({ err }, "OpenAPPA could not read a GitHub App account");
           return { id: app.id, account: null };
         }
       }),
@@ -279,7 +280,13 @@ class OpenAppaGithubAppSetup {
         appId: app.appId,
         privateKey: app.privateKey,
         path: `/app/installations/${encodeURIComponent(app.installationId)}`,
-      }).catch(() => null),
+      }).catch((err) => {
+        logger.warn(
+          { err },
+          "OpenAPPA could not read a GitHub App installation",
+        );
+        return null;
+      }),
     ]);
     // GitHub's page for changing which repositories the App can reach.
     return { repositories, manageUrl: installation?.html_url ?? null };
@@ -316,27 +323,23 @@ class OpenAppaGithubAppSetup {
     const token = await resolveInstallationToken({
       githubUrl: app.api,
       ...app,
-    }).catch(() => null);
+    }).catch((err) => {
+      logger.warn({ err }, "OpenAPPA could not sign in as a GitHub App");
+      return null;
+    });
     if (!token) return { status: "app_error", validations: null };
     const get = (url: string, method: "GET" | "HEAD" = "GET") =>
-      fetch(url, {
-        method,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      }).catch(() => null);
+      githubFetch({ url, method, token, apiVersion: true }).catch((err) => {
+        logger.warn({ err }, "OpenAPPA could not reach GitHub");
+        return null;
+      });
     const response = await get(`${app.api}/repos/${repo}`);
     if (!response?.ok) return { status: "unreachable", validations: null };
     const found = RepositorySchema.safeParse(await response.json());
     if (!found.success) return { status: "unreachable", validations: null };
-    // An empty repository gets the template's files written into it; GitHub
-    // answers 409 for the commits of a repository without any.
-    const commits = await get(`${app.api}/repos/${repo}/commits?per_page=1`);
-    if (commits?.status === 409) return { status: "empty", validations: null };
+    // An empty repository gets the template's files written into it.
+    if (await isEmptyGithubRepository({ api: app.api, repo, token }))
+      return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
     if (
       !ref &&
@@ -377,7 +380,10 @@ class OpenAppaGithubAppSetup {
               organizationId,
               credentialId: definition.key,
               scope: "organization",
-            }).catch(() => null);
+            }).catch((err) => {
+              logger.warn({ err }, "OpenAPPA could not read a GitHub App key");
+              return null;
+            });
           return privateKey
             ? {
                 id: definition.id,
@@ -622,17 +628,13 @@ async function listRepositories(params: {
     githubUrl: params.api,
     ...params,
   });
-  const headers = {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
   const repositories: InstallationRepository[] = [];
   for (let page = 1; page <= REPOSITORY_PAGES; page++) {
-    const response = await fetch(
-      `${params.api}/installation/repositories?per_page=100&page=${page}`,
-      { headers, redirect: "error", signal: AbortSignal.timeout(15_000) },
-    );
+    const response = await githubFetch({
+      url: `${params.api}/installation/repositories?per_page=100&page=${page}`,
+      token,
+      apiVersion: true,
+    });
     if (!response.ok)
       throw new ApiError(
         502,
@@ -651,14 +653,17 @@ async function listRepositories(params: {
           .filter((entry) => entry.private)
           .slice(0, 10)
           .map(async (entry) => {
-            const found = await fetch(
-              `${params.api}/repos/${entry.full_name}`,
-              {
-                headers,
-                redirect: "error",
-                signal: AbortSignal.timeout(15_000),
-              },
-            ).catch(() => null);
+            const found = await githubFetch({
+              url: `${params.api}/repos/${entry.full_name}`,
+              token,
+              apiVersion: true,
+            }).catch((err) => {
+              logger.warn(
+                { err },
+                "OpenAPPA could not read a GitHub repository",
+              );
+              return null;
+            });
             if (!found?.ok) return null;
             const detail = RepositorySchema.safeParse(await found.json());
             return detail.success &&

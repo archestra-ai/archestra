@@ -373,11 +373,3 @@ export interface TokenEnvReader {
  * Validation defers secret lookup and opens no store or network connection.
  */
 export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
-
-/**
- * Validates a root document that declares no battery: [`compose_openappa_policy`]
- * with nothing to resolve. A root whose `include` list names a battery does not
- * validate this way — the entry resolves to nothing — so a caller holding
- * declarations composes instead.
- */
-export declare function validateOpenappaPolicy(content: string): Promise<Array<string>>

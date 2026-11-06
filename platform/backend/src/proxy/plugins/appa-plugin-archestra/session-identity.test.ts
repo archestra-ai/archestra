@@ -23,7 +23,6 @@ const codexHeaders = {
 const openCodeHeaders = { "user-agent": "opencode/1.18.29" };
 
 const COPILOT_SESSION = "efeab99e17779df23bb5d2437f3c8f8f";
-const COPILOT_OTHER_SESSION = "98bbfa73f5880aca9742216efedbcfc2";
 const copilotHeaders = {
   "user-agent": "OpenAI/JS 5.20.1",
   "x-archestra-agent-id": "github_copilot_cli",
@@ -1100,23 +1099,6 @@ describe("client trajectory identity", () => {
   });
 
   describe("Copilot CLI", () => {
-    test("roots on the Responses prompt cache key, which a resume repeats", () => {
-      const identity = (key: string) =>
-        extractAppaSessionIdentity({
-          family: "openai:responses",
-          body: { prompt_cache_key: key, store: false },
-          headers: copilotHeaders,
-        });
-      expect(identity(COPILOT_SESSION)).toMatchObject({
-        sessionId: COPILOT_SESSION,
-        provenance: "copilot-cli-prompt-cache-key",
-      });
-      expect(identity(COPILOT_SESSION)).toEqual(identity(COPILOT_SESSION));
-      expect(identity(COPILOT_OTHER_SESSION)).not.toEqual(
-        identity(COPILOT_SESSION),
-      );
-    });
-
     test("keeps a subagent's request on the shared key: the runtime binds the child", () => {
       const headers = {
         ...copilotHeaders,

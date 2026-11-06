@@ -101,6 +101,32 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_URL
   value: postgresql://{{ .Values.postgresql.auth.username }}:$(PGPASSWORD)@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
 {{- end }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- $envOverrides := merge (dict) (.Values.archestra.env | default dict) (.migrationJobEnvOverride | default dict) }}
+{{- range .Values.archestra.envFromSecrets }}
+{{- $_ := set $envOverrides .name true }}
+{{- end }}
+{{- range .Values.archestra.envWithValueFrom }}
+{{- $_ := set $envOverrides .name true }}
+{{- end }}
+{{- if and $iamAuth.enabled (not (hasKey $envOverrides "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) }}
+- name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+  value: "true"
+{{- end }}
+{{- if and $iamAuth.awsRegion (not (hasKey $envOverrides "ARCHESTRA_DATABASE_AWS_REGION")) }}
+- name: ARCHESTRA_DATABASE_AWS_REGION
+  value: {{ $iamAuth.awsRegion | quote }}
+{{- end }}
+{{- if $iamAuth.injectWebIdentityTokenVolume }}
+{{- if and $iamAuth.roleArn (not (hasKey $envOverrides "AWS_ROLE_ARN")) }}
+- name: AWS_ROLE_ARN
+  value: {{ $iamAuth.roleArn | quote }}
+{{- end }}
+{{- if not (hasKey $envOverrides "AWS_WEB_IDENTITY_TOKEN_FILE") }}
+- name: AWS_WEB_IDENTITY_TOKEN_FILE
+  value: "/var/run/secrets/aws-iam-token/serviceaccount/token"
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -180,6 +206,8 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
   "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET"
+  "AWS_SECRET_ACCESS_KEY"
+  "AWS_SESSION_TOKEN"
 }}
 {{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
 {{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
@@ -471,10 +499,14 @@ An explicit archestra.env value overrides the injection.
 {{/* Only use secretKeyRef for sensitive vars with non-empty values; empty values are set as regular env vars */}}
 {{- if and $isSensitive $value }}
 {{/* Sensitive env vars with values are stored in the Secret and referenced via secretKeyRef */}}
+{{- $secretNameForKey := include "archestra-platform.authSecretName" $ }}
+{{- if and (has $key (list "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN")) $.migrationAwsSecretNameOverride }}
+{{- $secretNameForKey = $.migrationAwsSecretNameOverride }}
+{{- end }}
 - name: {{ $key }}
   valueFrom:
     secretKeyRef:
-      name: {{ include "archestra-platform.authSecretName" $ }}
+      name: {{ $secretNameForKey }}
       key: {{ $key | lower | replace "_" "-" }}
 {{- /*
 optional: the pre-upgrade migrate Job renders from the NEW templates but runs
@@ -998,8 +1030,9 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       fi
 
       # Parse host and port from ARCHESTRA_DATABASE_URL
-      # Format: postgresql://user:pass@host[:port]/database
+      # Format: postgresql://user:pass@host[:port]/database[?query]
       DB_URL="${ARCHESTRA_DATABASE_URL##*@}"  # Remove prefix up to last @ (handles passwords with @)
+      DB_URL="${DB_URL%%\?*}"                 # Remove ?query suffix
       HOST_PORT="${DB_URL%%/*}"               # Remove /database suffix
       HOST="${HOST_PORT%%:*}"                 # Extract host
       # Extract port, defaulting to 5432 if not specified
@@ -1067,7 +1100,8 @@ are covered by the pre-upgrade migration Job.
 Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumes }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1089,6 +1123,16 @@ volumes:
     persistentVolumeClaim:
       claimName: {{ include "archestra-platform.fileStorageClaimName" . }}
   {{- end }}
+  {{- if $iamAuth.injectWebIdentityTokenVolume }}
+  - name: aws-iam-token
+    projected:
+      defaultMode: 420
+      sources:
+        - serviceAccountToken:
+            audience: {{ $iamAuth.webIdentityTokenAudience | default "sts.amazonaws.com" | quote }}
+            expirationSeconds: {{ $iamAuth.webIdentityTokenExpirationSeconds | default 3600 }}
+            path: token
+  {{- end }}
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -1099,7 +1143,8 @@ volumes:
 Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumeMounts }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") $iamAuth.injectWebIdentityTokenVolume .Values.archestra.extraVolumeMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -1120,6 +1165,11 @@ volumeMounts:
   - name: file-storage
     mountPath: {{ .Values.archestra.fileStorage.filesystem.mountPath }}
     readOnly: false
+  {{- end }}
+  {{- if $iamAuth.injectWebIdentityTokenVolume }}
+  - name: aws-iam-token
+    mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+    readOnly: true
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}
   {{- toYaml . | nindent 2 }}

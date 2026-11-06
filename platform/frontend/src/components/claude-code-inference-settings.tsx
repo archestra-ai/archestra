@@ -1,6 +1,9 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  isClaudeCodeRuntimeCommand,
+  type SupportedProvider,
+} from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useId } from "react";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
@@ -39,14 +42,15 @@ export function ClaudeCodeInferenceSettings({
   showModelSelector?: boolean;
   /**
    * First element of `runtime.command`. Personal Claude subscriptions require
-   * the `archestra-claude-code` entrypoint; any other command disables the
-   * subscription option and explains how to re-enable it.
+   * the `archestra-claude-code` or `archestra-claude-code-runtime` entrypoint;
+   * any other command disables the subscription option and explains how to
+   * re-enable it.
    */
   runtimeCommand?: string | null;
 }) {
   const id = useId();
   const appName = useAppName();
-  const subscriptionSupported = runtimeCommand === "archestra-claude-code";
+  const subscriptionSupported = isClaudeCodeRuntimeCommand(runtimeCommand);
   const trimmedCommand = runtimeCommand?.trim() || null;
   const effectiveAuthentication = subscriptionSupported
     ? authentication

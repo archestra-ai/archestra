@@ -2785,6 +2785,8 @@ const config = {
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
+    iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
   // is a per-provider config map iterated as provider descriptors).

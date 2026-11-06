@@ -4,6 +4,7 @@ import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
 import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
+import { buildPgConnectionConfig } from "./rds-iam";
 import {
   installDbErrorSafetyNet,
   withTransactionRetry,
@@ -225,19 +226,27 @@ async function doInitializeDatabase(): Promise<void> {
  * "Connection terminated unexpectedly" error in cloud environments.
  */
 function createPool(connectionString: string): pg.Pool {
-  const newPool = new pg.Pool({
-    connectionString,
-    // Pool configuration
-    max: config.database.poolMax,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    // Per-connection statement timeout: kills runaway queries instead of
-    // letting them hang a connection indefinitely. 0 disables it.
-    statement_timeout: config.database.statementTimeoutMillis,
-    // Keepalive configuration to prevent "Connection terminated unexpectedly"
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10000,
-  });
+  const newPool = new pg.Pool(
+    buildPgConnectionConfig(
+      connectionString,
+      {
+        // Pool configuration
+        max: config.database.poolMax,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        // Per-connection statement timeout: kills runaway queries instead of
+        // letting them hang a connection indefinitely. 0 disables it.
+        statement_timeout: config.database.statementTimeoutMillis,
+        // Keepalive configuration to prevent "Connection terminated unexpectedly"
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+      },
+      {
+        iamAuthEnabled: config.database.iamAuthEnabled,
+        awsRegion: config.database.awsRegion || undefined,
+      },
+    ),
+  );
 
   /**
    * Handle errors on idle clients in the pool.

@@ -7,6 +7,7 @@ import {
 } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
 import { fetchAsGithubApp } from "@/integrations/github/app-auth";
+import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
@@ -25,6 +26,7 @@ import {
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { githubFetch } from "@/services/openappa-github";
 import {
   resolveGithubPatToken,
   resolveGithubSkillAppCredentials,
@@ -601,17 +603,15 @@ async function repositoryReader(
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     contents: "read",
   });
-  const get = async (url: string, accept: string, what: string) => {
+  const get = async (
+    url: string,
+    accept: "application/vnd.github+json" | "application/vnd.github.raw+json",
+    what: string,
+  ) => {
     try {
-      return await fetch(url, {
-        headers: {
-          Accept: accept,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(15000),
-      });
-    } catch {
+      return await githubFetch({ url, token: token || undefined, accept });
+    } catch (err) {
+      logger.warn({ err }, "OpenAPPA could not reach GitHub");
       throw new ApiError(502, `Could not reach GitHub to read ${what}`);
     }
   };
@@ -630,7 +630,21 @@ async function repositoryReader(
           502,
           `GitHub returned HTTP ${response.status} listing ${what}. Check repository access.`,
         );
-      const items = (await response.json()) as unknown;
+      const bytes = await readResponseBodyWithLimit(
+        response,
+        LISTING_MAX_BYTES,
+      );
+      if (!bytes)
+        throw new ApiError(502, `GitHub's listing of ${what} is too large`);
+      let items: unknown;
+      try {
+        items = JSON.parse(bytes.toString());
+      } catch {
+        throw new ApiError(
+          502,
+          `GitHub returned an invalid listing of ${what}`,
+        );
+      }
       // A file, not a folder: it holds no include.
       if (!Array.isArray(items)) return new Map();
       // GitHub lists at most 1,000 entries of a folder, so a full page may
@@ -671,6 +685,9 @@ async function repositoryReader(
 
 /** GitHub's most entries in one folder listing. */
 const GITHUB_LISTING_LIMIT = 1000;
+
+/** The most bytes one GitHub folder listing is read to, as other GitHub reads. */
+const LISTING_MAX_BYTES = 2 * 1024 * 1024;
 
 /** GitLab tree pages of 100 read for one folder. */
 const LISTING_PAGES = 10;

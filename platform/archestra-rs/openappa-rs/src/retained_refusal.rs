@@ -23,7 +23,7 @@ struct Record {
 }
 
 pub(crate) fn find(input: Lookup, cipher: &StorageCipher) -> Result<Option<String>, PostgresError> {
-    let mut budget = crate::ReceiptLookupBudget::default();
+    let mut budget = crate::child_returns::ReceiptLookupBudget::default();
     let mut found = None;
     for record in input.records {
         let decision = cipher.open_json(

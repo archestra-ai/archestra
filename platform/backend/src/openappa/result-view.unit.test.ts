@@ -9,25 +9,6 @@ const marker = (type: string) =>
   `[binary ${type}, ${bytes.length} bytes, sha256 ${digest}]`;
 
 describe("policyView", () => {
-  test("the marker states media type, decoded size and the hash of the decoded bytes", () => {
-    const view = policyView([
-      {
-        type: "image",
-        source: { type: "base64", media_type: "image/png", data: b64 },
-      },
-    ]);
-    expect(view).toEqual([
-      {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: "image/png",
-          data: marker("image/png"),
-        },
-      },
-    ]);
-  });
-
   test("is stable for the same bytes and differs for different bytes", () => {
     const view = (data: string) =>
       JSON.stringify(

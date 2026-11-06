@@ -42,6 +42,15 @@ import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
+  githubFetch,
+  githubJson,
+  githubSetupRead,
+  githubSourceFetch,
+  githubSyncErrors,
+  isEmptyGithubRepository,
+  withGithubMessage,
+} from "@/services/openappa-github";
+import {
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
@@ -272,15 +281,17 @@ export async function createAppaGithubRepository(params: {
           private: true,
           include_all_branches: false,
         },
-        onHttpError: (status) =>
-          new ApiError(
-            status === 422 ? 409 : 502,
-            status === 422
-              ? `GitHub rejected ${repo} (HTTP 422). If this is a new repository from an earlier attempt, retry setup after the App can access it. Otherwise choose a different name.`
-              : status === 404
-                ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
-                : `GitHub returned HTTP ${status} while creating ${repo}. Check the App installation and permissions.`,
-          ),
+        errors: withGithubMessage(
+          (status) =>
+            new ApiError(
+              status === 422 ? 409 : 502,
+              status === 422
+                ? `GitHub rejected ${repo} (HTTP 422). If this is a new repository from an earlier attempt, retry setup after the App can access it. Otherwise choose a different name.`
+                : status === 404
+                  ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
+                  : `GitHub returned HTTP ${status} while creating ${repo}. Check the App installation and permissions.`,
+            ),
+        ),
       });
     } catch (error) {
       if (!(error instanceof ApiError) || error.statusCode !== 409) throw error;
@@ -326,7 +337,7 @@ export async function createAppaGithubRepository(params: {
               sha: existing.sha,
               branch: created.default_branch,
             },
-            onHttpError: (status, message) => {
+            errors: withGithubMessage((status, message) => {
               if (
                 [403, 409, 422].includes(status) &&
                 REPOSITORY_RULES.test(message ?? "")
@@ -336,7 +347,7 @@ export async function createAppaGithubRepository(params: {
                 502,
                 `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
               );
-            },
+            }),
           });
         } catch (error) {
           if (!(error instanceof GithubRepositoryRulesError)) throw error;
@@ -359,6 +370,7 @@ export async function createAppaGithubRepository(params: {
             token,
             method: "POST",
             body: { ref: `refs/heads/${head}`, sha },
+            errors: githubSyncErrors,
           });
           await githubJson({
             url: `${base}/contents/appa.toml`,
@@ -370,11 +382,13 @@ export async function createAppaGithubRepository(params: {
               sha: existing.sha,
               branch: head,
             },
+            errors: githubSyncErrors,
           });
           const pull = await githubJson<{ number?: number }>({
             url: `${base}/pulls`,
             token,
             method: "POST",
+            errors: githubSyncErrors,
             body: {
               title: "Seed current OpenAPPA policy",
               body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
@@ -595,6 +609,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     if (local.revision === 0 || local.contentHash !== contentHash)
       await queuePolicyValidation(organizationId, contentHash);
   } catch (error) {
+    logger.warn({ err: error, organizationId }, "OpenAPPA GitHub sync failed");
     // Never persist raw transport/native diagnostics, which can contain credentials or policy bytes.
     await OpenAppaGithubSyncModel.finish({
       organizationId,
@@ -710,9 +725,9 @@ async function queuePolicyValidation(
       organizationId,
       policyHash,
     );
-  } catch {
+  } catch (error) {
     logger.warn(
-      { organizationId },
+      { err: error, organizationId },
       "OpenAPPA could not queue informational validation after a policy change",
     );
   }
@@ -892,13 +907,19 @@ async function githubPullRequests(
   const base = `${api}/repos/${source.repo}`;
   const branch =
     source.ref ??
-    (await githubJson<{ default_branch: string }>({ url: base, token }))
-      .default_branch;
+    (
+      await githubJson<{ default_branch: string }>({
+        url: base,
+        token,
+        errors: githubSyncErrors,
+      })
+    ).default_branch;
   const pulls = await githubJson<
     Array<{ head?: { sha?: string }; merge_commit_sha?: string | null }>
   >({
     url: `${base}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
     token,
+    errors: githubSyncErrors,
   });
   return pulls.flatMap((pull) => {
     const head = pull.head?.sha;
@@ -939,7 +960,7 @@ async function postGithubCheck(params: {
         conclusion: outcome.accepted ? "success" : "failure",
         output: { title, summary: summary.slice(0, 60_000) },
       },
-      onHttpError: (status) => {
+      errors: async ({ status }) => {
         refused = status === 403 || status === 404;
         return new ApiError(502, `GitHub returned HTTP ${status}`);
       },
@@ -957,6 +978,7 @@ async function postGithubCheck(params: {
       context: POLICY_CHECK_NAME,
       description: (outcome.accepted ? title : summary).slice(0, 140),
     },
+    errors: githubSyncErrors,
   });
 }
 
@@ -1097,13 +1119,10 @@ async function saveSource(params: {
     { contents: "read" },
   );
   if (params.source.validationDirectory) {
-    const response = await githubFetch(
-      `${api}/repos/${params.source.repo}/commits/${encodeURIComponent(params.source.ref ?? "HEAD")}`,
-      {
-        Accept: "application/vnd.github+json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    );
+    const response = await githubSourceFetch({
+      url: `${api}/repos/${params.source.repo}/commits/${encodeURIComponent(params.source.ref ?? "HEAD")}`,
+      token: token || undefined,
+    });
     const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
     if (!bytes) throw new ApiError(400, "GitHub commit response is too large");
     const commit = JSON.parse(bytes.toString()) as { sha?: string };
@@ -1136,15 +1155,12 @@ async function readGithubPolicy(params: {
     { ...row, repo },
     { contents: "read", pull_requests: "read" },
   );
-  const headers = {
-    Accept: "application/vnd.github+json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
   const base = `${api}/repos/${repo}`;
   if (row.setupPullRequestNumber) {
     const pull = await githubJson<{ merged?: boolean; state?: string }>({
       url: `${base}/pulls/${row.setupPullRequestNumber}`,
       token: token ?? "",
+      errors: githubSyncErrors,
     });
     if (pull.merged !== true) {
       if (pull.state !== "open" && pull.state !== "closed")
@@ -1155,9 +1171,11 @@ async function readGithubPolicy(params: {
       return { pending: pull.state };
     }
   }
-  const commitResponse = await githubFetch(
-    `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
-    headers,
+  const commitResponse = await githubSourceFetch(
+    {
+      url: `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
+      token: token || undefined,
+    },
     row.ref
       ? `Repository not found: ${repo}, or its ${row.ref} branch. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`
       : `Repository not found: ${repo}. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`,
@@ -1171,9 +1189,12 @@ async function readGithubPolicy(params: {
   const commit = JSON.parse(commitBytes.toString()) as { sha?: unknown };
   if (typeof commit.sha !== "string" || !/^[a-f0-9]{40}$/.test(commit.sha))
     throw new ApiError(400, "GitHub returned an invalid commit");
-  const response = await githubFetch(
-    `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${commit.sha}`,
-    { ...headers, Accept: "application/vnd.github.raw+json" },
+  const response = await githubSourceFetch(
+    {
+      url: `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${commit.sha}`,
+      token: token || undefined,
+      accept: "application/vnd.github.raw+json",
+    },
     `Policy file not found: ${path} in ${repo}. Check the policy file with Edit source.`,
   );
   const bytes = await readResponseBodyWithLimit(response, 1024 * 1024);
@@ -1216,102 +1237,9 @@ function assertEnabled() {
       "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
-async function githubFetch(
-  url: string,
-  headers: Record<string, string>,
-  notFound?: string,
-) {
-  const response = await fetch(url, {
-    headers,
-    redirect: "error",
-    signal: AbortSignal.timeout(15000),
-  });
-  if (response.status === 404 && notFound) throw new ApiError(400, notFound);
-  if (!response.ok)
-    throw new ApiError(
-      400,
-      `GitHub returned HTTP ${response.status}. Check repository access and the source path.`,
-    );
-  return response;
-}
-
-async function githubJson<T = unknown>(params: {
-  url: string;
-  token: string;
-  method?: "GET" | "POST" | "PUT" | "PATCH";
-  body?: object;
-  onHttpError?: (status: number, message?: string) => ApiError;
-}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(params.url, {
-      method: params.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-      redirect: "error",
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
-    throw new ApiError(502, "Could not reach GitHub");
-  }
-  if (!response.ok) {
-    const errorBody = await readResponseBodyWithLimit(response, 4096);
-    let message: string | undefined;
-    if (errorBody) {
-      try {
-        const parsed = JSON.parse(errorBody.toString()) as {
-          message?: unknown;
-        };
-        if (typeof parsed.message === "string")
-          message = parsed.message.slice(0, 200);
-      } catch {
-        // GitHub does not always return JSON for upstream failures.
-      }
-    }
-    throw (
-      params.onHttpError?.(response.status, message) ??
-      new ApiError(
-        response.status === 422 ? 409 : 502,
-        `GitHub returned HTTP ${response.status}. Check repository access and App permissions.`,
-      )
-    );
-  }
-  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
-  if (!bytes) throw new ApiError(502, "GitHub response is too large");
-  try {
-    return JSON.parse(bytes.toString()) as T;
-  } catch {
-    throw new ApiError(502, "GitHub returned an invalid response");
-  }
-}
-
 class GithubRepositoryRulesError extends ApiError {
   constructor() {
     super(409, "GitHub repository rules block the initial policy commit");
-  }
-}
-
-// Template generation can return before its files and branch are readable.
-async function githubSetupRead<T>(params: {
-  url: string;
-  token: string;
-}): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await githubJson<T>(params);
-    } catch (error) {
-      if (
-        !(error instanceof ApiError) ||
-        ![409, 502].includes(error.statusCode) ||
-        attempt === 3
-      )
-        throw error;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
   }
 }
 
@@ -1330,6 +1258,7 @@ async function recoverPristineTemplateRepository(params: {
     }>({
       url: `${params.api}/repos/${params.repo}`,
       token: params.token,
+      errors: githubSyncErrors,
     });
     if (
       !repository.private ||
@@ -1342,10 +1271,12 @@ async function recoverPristineTemplateRepository(params: {
       githubJson<{ sha?: string }>({
         url: `${params.api}/repos/${params.repo}/contents/appa.toml`,
         token: params.token,
+        errors: githubSyncErrors,
       }),
       githubJson<{ sha?: string }>({
         url: `${params.api}/repos/${TEMPLATE_REPO}/contents/appa.toml`,
         token: params.token,
+        errors: githubSyncErrors,
       }),
     ]);
     if (!existing.sha || existing.sha !== template.sha) throw params.error;
@@ -1358,26 +1289,6 @@ async function recoverPristineTemplateRepository(params: {
 const TEMPLATE_REPO = OPENAPPA_TEMPLATE.repo;
 const REPOSITORY_RULES =
   /repository rule violations|protected branch update failed|changes must be made through a pull request|required (?:status check|workflow)/i;
-
-/** GitHub answers 409 for the commits of a repository without any. */
-async function isEmptyGithubRepository(params: {
-  api: string;
-  repo: string;
-  token: string;
-}) {
-  const response = await fetch(
-    `${params.api}/repos/${params.repo}/commits?per_page=1`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-      },
-      redirect: "error",
-      signal: AbortSignal.timeout(15_000),
-    },
-  ).catch(() => null);
-  return response?.status === 409;
-}
 
 /**
  * Writes the bundled template, with the current policy as appa.toml, into an
@@ -1406,6 +1317,7 @@ async function seedEmptyRepository(params: {
       message: "Start the OpenAPPA policy repository",
       content: Buffer.from(first.content).toString("base64"),
     },
+    errors: githubSyncErrors,
   });
   const repository = await githubSetupRead<{ default_branch?: string }>({
     url: base,
@@ -1418,6 +1330,7 @@ async function seedEmptyRepository(params: {
   const parentCommit = await githubJson<{ tree?: { sha?: string } }>({
     url: `${base}/git/commits/${parent}`,
     token,
+    errors: githubSyncErrors,
   });
   const commitFiles = async (entries: typeof rest) => {
     const tree = await githubJson<{ sha: string }>({
@@ -1433,6 +1346,7 @@ async function seedEmptyRepository(params: {
           content: file.content,
         })),
       },
+      errors: githubSyncErrors,
     });
     return githubJson<{ sha: string }>({
       url: `${base}/git/commits`,
@@ -1443,6 +1357,7 @@ async function seedEmptyRepository(params: {
         tree: tree.sha,
         parents: [parent],
       },
+      errors: githubSyncErrors,
     });
   };
   let outcome: "rules" | "workflow" | null = null;
@@ -1453,7 +1368,7 @@ async function seedEmptyRepository(params: {
       token,
       method: "PATCH",
       body: { sha },
-      onHttpError: (status, message) => {
+      errors: withGithubMessage((status, message) => {
         if (
           /workflow/i.test(message ?? "") &&
           !REPOSITORY_RULES.test(message ?? "")
@@ -1468,7 +1383,7 @@ async function seedEmptyRepository(params: {
           502,
           `GitHub returned HTTP ${status} while writing the template. Check repository access and App permissions.`,
         );
-      },
+      }),
     });
   for (let attempt = 0; attempt < 2; attempt++) {
     outcome = null;
@@ -1489,11 +1404,13 @@ async function seedEmptyRepository(params: {
         token,
         method: "POST",
         body: { ref: `refs/heads/${head}`, sha: commit.sha },
+        errors: githubSyncErrors,
       });
       const pull = await githubJson<{ number?: number }>({
         url: `${base}/pulls`,
         token,
         method: "POST",
+        errors: githubSyncErrors,
         body: {
           title: "Add the OpenAPPA template and current policy",
           body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
@@ -1548,28 +1465,20 @@ export async function loadAppaGithubPolicyTests(params: {
   const { token, api } = await resolveOpenAppaGithubAccess(
     { ...source, organizationId: source.organizationId },
     { contents: "read" },
-  ).catch((error) => {
-    if (error instanceof MissingGithubPermission) throw error;
+  ).catch((err) => {
+    if (err instanceof MissingGithubPermission) throw err;
+    logger.warn({ err }, "OpenAPPA could not resolve the GitHub credential");
     throw new ApiError(400, "The configured GitHub credential is unavailable");
   });
   const signal = AbortSignal.timeout(20000);
   const base = `${api}/repos/${source.repo}/contents/`;
-  const headers = {
-    Accept: "application/vnd.github+json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
   const read = async (path: string, raw: boolean, limit: number) => {
-    const response = await fetch(
-      `${base}${path.split("/").map(encodeURIComponent).join("/")}?ref=${source.sourceCommit}`,
-      {
-        headers: {
-          ...headers,
-          ...(raw ? { Accept: "application/vnd.github.raw+json" } : {}),
-        },
-        redirect: "error",
-        signal,
-      },
-    );
+    const response = await githubFetch({
+      url: `${base}${path.split("/").map(encodeURIComponent).join("/")}?ref=${source.sourceCommit}`,
+      token: token || undefined,
+      accept: raw ? "application/vnd.github.raw+json" : undefined,
+      signal,
+    });
     if (response.status === 401 || response.status === 403)
       throw new ApiError(
         400,
@@ -2527,6 +2436,7 @@ async function proposeOwners(params: {
   const commit = await githubJson<{ tree?: { sha?: string } }>({
     token,
     url: `${base}/git/commits/${source.sourceCommit}`,
+    errors: githubSyncErrors,
   });
   const tree = await githubJson<{ sha: string }>({
     token,
@@ -2543,6 +2453,7 @@ async function proposeOwners(params: {
         },
       ],
     },
+    errors: githubSyncErrors,
   });
   const created = await githubJson<{ sha: string }>({
     token,
@@ -2553,6 +2464,7 @@ async function proposeOwners(params: {
       tree: commitSha(tree.sha),
       parents: [source.sourceCommit],
     },
+    errors: githubSyncErrors,
   });
   const ref = await githubCall({
     token,
@@ -2596,6 +2508,7 @@ async function proposeOwners(params: {
       url: `${base}/pulls/${params.open.number}`,
       method: "PATCH",
       body: { title, body },
+      errors: githubSyncErrors,
     });
     return { url: params.open.url };
   }
@@ -2605,6 +2518,7 @@ async function proposeOwners(params: {
     url: `${base}/pulls`,
     method: "POST",
     body: { title, body, head: OWNERS_BRANCH, base: branch },
+    errors: githubSyncErrors,
   });
   return { url: pull.html_url };
 }
@@ -2644,6 +2558,7 @@ async function defaultBranch(params: { token: string; base: string }) {
     await githubJson<{ default_branch: string }>({
       token: params.token,
       url: params.base,
+      errors: githubSyncErrors,
     })
   ).default_branch;
 }
@@ -2663,19 +2578,9 @@ async function githubCall<T = unknown>(params: {
 > {
   let response: Response;
   try {
-    response = await fetch(params.url, {
-      method: params.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-      redirect: "error",
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
+    response = await githubFetch({ ...params, apiVersion: true });
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not reach GitHub");
     throw new ApiError(502, "Could not reach GitHub");
   }
   const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);

@@ -14,9 +14,12 @@ import {
   SERVER_RULES_INCLUDE,
   serverRulesPath,
 } from "@/openappa/policy-text";
-import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { policyDiff } from "@/services/guardrails-policy-proposal";
+import {
+  githubJson,
+  githubPolicyChangeErrors,
+} from "@/services/openappa-github";
 import {
   openappaRepositoryIncludes,
   repositoryPath,
@@ -566,32 +569,5 @@ async function github<T = unknown>(params: {
   method?: "GET" | "POST" | "PATCH";
   body?: object;
 }): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(params.url, {
-      method: params.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${params.token}`,
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-      redirect: "error",
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
-    throw new ApiError(502, "Could not reach GitHub");
-  }
-  const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
-  if (!response.ok)
-    throw new ApiError(
-      response.status === 404 ? 404 : 502,
-      `GitHub returned HTTP ${response.status}. Check that the policy repository's App may write contents and pull requests.`,
-    );
-  if (!bytes) throw new ApiError(502, "GitHub response is too large");
-  try {
-    return JSON.parse(bytes.toString()) as T;
-  } catch {
-    throw new ApiError(502, "GitHub returned an invalid response");
-  }
+  return githubJson<T>({ ...params, errors: githubPolicyChangeErrors });
 }

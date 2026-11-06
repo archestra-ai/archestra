@@ -49,7 +49,7 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Let Each Server's Team Own Its Rules
 
-The people who can edit an MCP server can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
+The people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
 
 ```toml
 include = [
@@ -58,7 +58,9 @@ include = [
 ]
 ```
 
-1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. **Configure Guardrails with agent**, on the last step of editing the server, opens the same chat for anyone without a Guardrails permission.
+Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below. OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+
+1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
 4. A reviewer merges it, and Git sync applies it at the next sync.
@@ -66,7 +68,7 @@ include = [
 What to know:
 
 - A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
-- A server file starts with `[policy]` and `version = 2`, like `appa.toml`, and holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. `<tool prefix>__*`, such as `payments_api__*`, covers each of the server's tools the file has no rule for, including tools it gains later. Git sync refuses a commit whose server file reaches further, such as `*` or another server's tool, whoever approved it.
+- A server file starts with `[policy]` and `version = 2`, like `appa.toml`, and holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. `<tool prefix>__*`, such as `payments_api__*`, covers each of the server's tools the file has no rule for, including tools it gains later. Git sync refuses a commit whose server file reaches further, such as `*`, another server's tool, or an annotator name a battery uses, whoever approved it.
 - A server file uses the organization's authorities and sanitizers but declares none of its own. To have a person approve a call, require an attention mark an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
 
 ## Protect Each Server's File
@@ -75,7 +77,7 @@ Only a server's own editors approve changes to its rules file: Archestra keeps t
 
 - **Code owners:** a pull request that adds each server's editors to `CODEOWNERS` as owners of its file, updated when editors change.
 - **The policy check:** every pull request into the synced branch gets the **Archestra Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
-- **Branch rules:** a ruleset named **Archestra Guardrails policy** on the synced branch. A merge needs a pull request, a code owner's approval of its latest push, and the passing check. No one can force-push, delete the branch, or bypass it.
+- **Branch rules:** a ruleset named **Archestra Guardrails policy** on the synced branch. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. No one can force-push or delete the branch. Archestra adds no one who may bypass the ruleset; a bypass an administrator adds on GitHub stays, and Settings shows it.
 
 People map to GitHub through the account they connected in Archestra. Map teams, roles, and anyone else in `code-owners.toml`, beside `appa.toml`:
 
@@ -90,7 +92,7 @@ admin = "@example/guardrails-admins"
 "dana@example.com" = "@dana"
 ```
 
-**Settings → Guardrails** shows both under **Repository protection**, with any editor who has no GitHub owner yet.
+**Settings → Guardrails** shows the code owners and the branch rules under **Repository protection**, with any editor who has no GitHub owner yet.
 
 What to know:
 

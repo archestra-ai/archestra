@@ -1228,7 +1228,15 @@ export async function processProxyResults(params: {
             callerId: params.session.caller_id,
             toolCallId: result.id,
           });
-        } catch {
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              sessionId: params.session.session_id,
+              toolCallId: result.id,
+            },
+            "OpenAPPA could not read the retained peer message receipt",
+          );
           retained = null;
         }
         if (!retained) {

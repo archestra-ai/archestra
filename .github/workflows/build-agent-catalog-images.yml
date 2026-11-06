@@ -118,8 +118,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # Also covers the compare API that finds a pull request's merge base.
+      # Requesting more breaks the publish callers, which grant only
+      # contents, packages, and id-token to this reusable workflow.
       contents: read # Required to checkout the repository and fetch the diff base.
-      pull-requests: read # Required to find a pull request's merge base.
     outputs:
       images: ${{ steps.diff.outputs.images }}
     steps:

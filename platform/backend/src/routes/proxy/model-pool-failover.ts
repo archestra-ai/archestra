@@ -200,17 +200,9 @@ export async function planModelPool(params: {
   for (const [memberId, bench] of benches) {
     benchedUntil.set(memberId, bench.until);
   }
-  // Transient benches remain last-resort candidates. Exhausted credit does
-  // not recover by trying harder, even when every member is depleted.
-  const eligible = reachable.filter(
-    (member) => !benches.get(member.id)?.reason.startsWith("credit_exhausted"),
-  );
-  if (eligible.length === 0)
-    throw new ApiError(
-      503,
-      "All compatible model pool members are cooling down after credit exhaustion. Try again after their cooldown expires.",
-    );
-  const byId = new Map(eligible.map((member) => [member.id, member]));
+  // Keep credit-benched members for request compatibility checks. Dispatch
+  // excludes them, so a temporarily exhausted compatible member yields 503.
+  const byId = new Map(reachable.map((member) => [member.id, member]));
   return {
     poolId: pool.id,
     poolName: pool.name,
@@ -218,7 +210,7 @@ export async function planModelPool(params: {
     timeoutMs: toMs(pool.timeoutSeconds),
     cooldownMs: toMs(pool.cooldownSeconds),
     members: orderPoolMembers({
-      members: eligible,
+      members: reachable,
       benchedUntil,
       seed: params.sessionId ?? undefined,
     }).map((id) => {

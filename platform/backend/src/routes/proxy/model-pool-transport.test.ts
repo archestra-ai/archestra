@@ -34,6 +34,11 @@ describe("the output a request allows", () => {
     expect(
       requestedMaxOutputTokens({ generationConfig: { maxOutputTokens: 2048 } }),
     ).toBe(2048);
+    expect(
+      requestedMaxOutputTokens({
+        generation_config: { max_output_tokens: 2048 },
+      }),
+    ).toBe(2048);
   });
 
   test("is undefined when the request sets no limit", () => {

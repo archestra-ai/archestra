@@ -264,12 +264,33 @@ class WorkflowHandoffTests(unittest.TestCase):
                 self.assertIsNotNone(condition, name)
                 self.assertIn("!inputs.handoff-fixture", condition[1], name)
         token = next(block for block in blocks if block.startswith("      - name: Generate a token"))
-        self.assertIn("permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
-        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
+        self.assertIn("permission-actions: read", token)
+        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}", token)
+        # Release PRs are written only by the shared Release Please workflow.
+        for permission in ("permission-pull-requests", "permission-issues", "permission-workflows"):
+            self.assertNotIn(permission, token)
         consumer = source.split("  verify-handoff-fixture:\n", 1)[1]
         self.assertNotIn("secrets.", consumer)
         self.assertNotIn("steps.generate-token", consumer)
         self.assertNotIn("actions:", consumer)
+
+    def test_release_please_runs_only_through_the_shared_app_workflow_without_cloud_identity(self):
+        source = (ROOT / ".github/workflows/release-please.yml").read_text()
+        self.assertNotIn("googleapis/release-please-action", source)
+        jobs = dict(re.findall(r"^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)", source.split("\njobs:\n", 1)[1], re.M | re.S))
+        shared = re.compile(r"^    uses: archestra-ai/\.github/\.github/workflows/release-please\.yml@[0-9a-f]{40} ", re.M)
+        callers = {name: job for name, job in jobs.items() if shared.search(job)}
+        self.assertEqual(set(callers), {"create-releases", "release-pr"})
+        self.assertIn("skip-github-pull-request: true", callers["create-releases"])
+        self.assertIn("skip-github-release: true", callers["release-pr"])
+        for job in callers.values():
+            # A called job presents the shared file as job_workflow_ref, which the
+            # Workload Identity trust for this file does not accept.
+            self.assertIn("    permissions: {}", job)
+            self.assertNotIn("id-token", job)
+            self.assertIn("APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}", job)
+            self.assertIn("target-branch: ${{ github.ref_name }}", job)
+        self.assertIn("needs: [release-policy, release-please]", callers["release-pr"])
 
     def test_publishers_cannot_select_digest_or_image_artifacts_from_an_earlier_attempt(self):
         native = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()

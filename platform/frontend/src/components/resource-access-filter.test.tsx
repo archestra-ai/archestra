@@ -290,6 +290,24 @@ describe("access box", () => {
     );
   });
 
+  it("hides stale sharing and owner controls in a Built-in-only bookmark", async () => {
+    setQuery(
+      "scope=built_in&builtIn=true&access=mine&sharedWith=org&owner=user-a",
+    );
+    renderFilter({ offerBuiltIn: true });
+    expect(
+      screen.queryByRole("button", { name: "Filter by shared with" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Filter by owner" }),
+    ).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    await user.click(option(/^Admin access/));
+    expect(push).toHaveBeenCalledWith("/agents?builtIn=true&access=others");
+  });
+
   it("offers built-in agents to agent admins only", async () => {
     renderFilter({ offerBuiltIn: true });
     const user = userEvent.setup();

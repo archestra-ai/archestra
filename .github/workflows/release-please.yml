@@ -509,7 +509,6 @@ jobs:
       # Stable charts remain workflow artifacts until the publication job.
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-      environment: release-publish
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

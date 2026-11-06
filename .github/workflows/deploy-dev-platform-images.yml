@@ -12,6 +12,10 @@ on:
         required: false
       DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
+      # Supplied by the staging-build environment, which reads it only when
+      # every caller in the chain passes it by name.
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+        required: false
   workflow_dispatch:
 
 permissions: {}
@@ -123,6 +127,7 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER || vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
 
   publish-dev-mcp-server-base-image:
     name: Build MCP Server Base Dev Image

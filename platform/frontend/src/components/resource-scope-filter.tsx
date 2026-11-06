@@ -79,7 +79,7 @@ export function useScopeFilterParams(
 ): ScopeFilterParams<SharedScopeValue>;
 export function useScopeFilterParams(
   options?: ScopeFilterOptions & { includeBuiltIn?: boolean },
-): ScopeFilterParams<ScopeValue> {
+): ScopeFilterParams<ScopeValue> | ScopeFilterParams<SharedScopeValue> {
   const searchParams = useSearchParams();
   const activeSearchParams =
     options?.queryParamsAdapter?.searchParams ?? searchParams;

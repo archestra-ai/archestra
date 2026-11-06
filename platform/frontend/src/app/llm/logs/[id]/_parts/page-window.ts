@@ -32,6 +32,25 @@ export function pageWindow({
   };
 }
 
+/**
+ * A window as the logs APIs take it. They include both ends, so the end
+ * stops a millisecond (their precision) short of the shared boundary, which
+ * belongs to the next page.
+ */
+export function windowQuery(window: {
+  startsAt: number | null;
+  endsAt: number | null;
+}): { startDate?: string; endDate?: string } {
+  return {
+    ...(window.startsAt !== null
+      ? { startDate: new Date(window.startsAt).toISOString() }
+      : {}),
+    ...(window.endsAt !== null
+      ? { endDate: new Date(window.endsAt - 1).toISOString() }
+      : {}),
+  };
+}
+
 // ===
 
 function requestStart(row: InteractionSummary): number {

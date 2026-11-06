@@ -75141,6 +75141,10 @@ export type GetLlmProxyLogSessionHandoffsResponses = {
             startedAt: string;
         }>;
         /**
+         * This session started more runs than `handedTo` lists.
+         */
+        handedToTruncated: boolean;
+        /**
          * When this is a run's own session: that run, with the session that started it.
          */
         handedFrom: {

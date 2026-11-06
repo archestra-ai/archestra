@@ -161,13 +161,15 @@ class AgentRunModel {
   }
 
   /**
-   * Handoffs that touch an LLM session, oldest first: runs it handed work to
-   * (it is their origin) and the run whose own session it is (it was handed
-   * work). `actorUserId` limits them to that user's own runs.
+   * Handoffs that touch an LLM session, oldest first. `handedTo`: the runs it
+   * handed work to (it is their origin). `handedFrom`: the run whose own
+   * session it is (it was handed work). `actorUserId` limits them to that
+   * user's own runs.
    */
   static async findHandoffsForLlmSession(params: {
     organizationId: string;
     llmSessionId: string;
+    side: "handedTo" | "handedFrom";
     actorUserId?: string;
     limit: number;
   }): Promise<
@@ -196,10 +198,9 @@ class AgentRunModel {
         and(
           eq(runs.organizationId, params.organizationId),
           isNotNull(runs.originLlmSessionId),
-          or(
-            eq(runs.originLlmSessionId, params.llmSessionId),
-            eq(runs.workloadName, params.llmSessionId),
-          ),
+          params.side === "handedTo"
+            ? eq(runs.originLlmSessionId, params.llmSessionId)
+            : eq(runs.workloadName, params.llmSessionId),
           ...(params.actorUserId
             ? [eq(runs.actorUserId, params.actorUserId)]
             : []),

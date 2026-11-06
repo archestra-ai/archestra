@@ -33,21 +33,23 @@ describe("poolAttemptsOf", () => {
   const requests = [earlier, failed, other, retry, later];
 
   it("rebuilds the same chain from either attempt, skipping other sessions' rows", () => {
-    expect(poolAttemptsOf(failed, requests).map((r) => r.id)).toEqual([
+    expect(poolAttemptsOf(failed, requests).attempts.map((r) => r.id)).toEqual([
       "failed",
       "retry",
     ]);
-    expect(poolAttemptsOf(retry, requests).map((r) => r.id)).toEqual([
+    expect(poolAttemptsOf(retry, requests).attempts.map((r) => r.id)).toEqual([
       "failed",
       "retry",
     ]);
   });
 
   it("does not join an answered request to the next one", () => {
-    expect(poolAttemptsOf(earlier, requests).map((r) => r.id)).toEqual([
-      "earlier",
+    expect(poolAttemptsOf(earlier, requests).attempts.map((r) => r.id)).toEqual(
+      ["earlier"],
+    );
+    expect(poolAttemptsOf(later, requests).attempts.map((r) => r.id)).toEqual([
+      "later",
     ]);
-    expect(poolAttemptsOf(later, requests).map((r) => r.id)).toEqual(["later"]);
   });
 
   it("leaves overlapping requests to one pool unlinked", () => {
@@ -74,7 +76,7 @@ describe("poolAttemptsOf", () => {
       overlapping("a2", 14, 2, "answered"),
     ];
     for (const r of rows) {
-      expect(poolAttemptsOf(r, rows).map((x) => x.id)).toEqual([r.id]);
+      expect(poolAttemptsOf(r, rows).attempts.map((x) => x.id)).toEqual([r.id]);
     }
     expect(retriesRowAbove(rows[2], rows[1], rows)).toBe(false);
   });
@@ -85,8 +87,17 @@ describe("poolAttemptsOf", () => {
     expect(retriesRowAbove(retry, other, requests)).toBe(false);
   });
 
+  it("is complete only from the first attempt to the one that ended it", () => {
+    expect(poolAttemptsOf(retry, requests).complete).toBe(true);
+    expect(poolAttemptsOf(earlier, requests).complete).toBe(true);
+    // The failed attempt alone: its retry is not loaded.
+    expect(poolAttemptsOf(failed, [failed]).complete).toBe(false);
+    // The retry alone: its first attempt is not loaded.
+    expect(poolAttemptsOf(retry, [retry]).complete).toBe(false);
+  });
+
   it("returns the row alone when its retry is not loaded", () => {
-    expect(poolAttemptsOf(failed, [failed]).map((r) => r.id)).toEqual([
+    expect(poolAttemptsOf(failed, [failed]).attempts.map((r) => r.id)).toEqual([
       "failed",
     ]);
   });

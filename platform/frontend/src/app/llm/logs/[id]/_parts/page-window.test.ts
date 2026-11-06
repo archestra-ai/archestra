@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { pageWindow } from "./page-window";
+import { pageWindow, windowQuery } from "./page-window";
 import { at, row } from "./test-records";
 
 describe("pageWindow", () => {
@@ -31,5 +31,17 @@ describe("pageWindow", () => {
       (w.startsAt === null || madeAt >= w.startsAt) &&
       (w.endsAt === null || madeAt < w.endsAt);
     expect([onPage(pageOne), onPage(pageTwo)]).toEqual([false, true]);
+  });
+
+  it("asks the inclusive logs APIs for each boundary record once", () => {
+    // The APIs keep createdAt >= startDate and createdAt <= endDate.
+    const madeAt = pageOne.endsAt ?? 0;
+    const fetchedBy = (q: { startDate?: string; endDate?: string }) =>
+      (!q.startDate || madeAt >= Date.parse(q.startDate)) &&
+      (!q.endDate || madeAt <= Date.parse(q.endDate));
+    expect([
+      fetchedBy(windowQuery(pageOne)),
+      fetchedBy(windowQuery(pageTwo)),
+    ]).toEqual([false, true]);
   });
 });

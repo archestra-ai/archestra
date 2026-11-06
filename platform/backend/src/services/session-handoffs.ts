@@ -22,42 +22,72 @@ export async function getSessionHandoffs(params: {
   sessionId: string;
   ownUserId?: string;
 }): Promise<SessionHandoffs> {
-  const runs = await AgentRunModel.findHandoffsForLlmSession({
+  const lookup = {
     organizationId: params.organizationId,
     llmSessionId: params.sessionId,
     actorUserId: params.ownUserId,
-    limit: MAX_RUNS,
-  });
-  const handedTo = runs.filter(
-    (run) => run.originLlmSessionId === params.sessionId,
-  );
-  const handedFrom =
-    handedTo.length === 0
-      ? (runs.find((run) => run.llmSessionId === params.sessionId) ?? null)
-      : null;
-  const linked = handedFrom ? [handedFrom] : handedTo;
-  if (linked.length === 0) return { handedTo, handedFrom, moves: [] };
+  };
+  // Looked up apart, so a run that started many runs of its own still links
+  // back to the session that started it.
+  const [children, [handedFrom = null]] = await Promise.all([
+    AgentRunModel.findHandoffsForLlmSession({
+      ...lookup,
+      side: "handedTo",
+      limit: MAX_RUNS + 1,
+    }),
+    AgentRunModel.findHandoffsForLlmSession({
+      ...lookup,
+      side: "handedFrom",
+      limit: 1,
+    }),
+  ]);
+  const handedTo = children.slice(0, MAX_RUNS);
 
-  const calls = await McpToolCallModel.findArchestraCallsBySession({
-    organizationId: params.organizationId,
-    sessionId: linked[0].originLlmSessionId,
-    toolNames: Object.keys(MOVE_TOOLS),
-    userId: params.ownUserId,
-    limit: MAX_CALLS,
-  });
+  // Each side's moves are in the session that made them: this session's for
+  // the runs it started, the origin session's for the run it is.
+  const [toMoves, fromMoves] = await Promise.all([
+    movesOf({ ...params, originSessionId: params.sessionId, runs: handedTo }),
+    handedFrom
+      ? movesOf({
+          ...params,
+          originSessionId: handedFrom.originLlmSessionId,
+          runs: [handedFrom],
+        })
+      : [],
+  ]);
   return {
     handedTo,
+    handedToTruncated: children.length > MAX_RUNS,
     handedFrom,
-    moves: movesFromCalls({
-      calls,
-      runIds: new Set(linked.map((run) => run.runId)),
-    }),
+    moves: [...fromMoves, ...toMoves].sort(
+      (a, b) => a.at.getTime() - b.at.getTime(),
+    ),
   };
 }
 
 // ===
 
 const MAX_RUNS = 20;
+
+async function movesOf(params: {
+  organizationId: string;
+  ownUserId?: string;
+  originSessionId: string;
+  runs: { runId: string }[];
+}): Promise<SessionHandoffs["moves"]> {
+  if (params.runs.length === 0) return [];
+  const calls = await McpToolCallModel.findArchestraCallsBySession({
+    organizationId: params.organizationId,
+    sessionId: params.originSessionId,
+    toolNames: Object.keys(MOVE_TOOLS),
+    userId: params.ownUserId,
+    limit: MAX_CALLS,
+  });
+  return movesFromCalls({
+    calls,
+    runIds: new Set(params.runs.map((run) => run.runId)),
+  });
+}
 const MAX_CALLS = 500;
 
 type MoveKind = SessionHandoffs["moves"][number]["kind"];

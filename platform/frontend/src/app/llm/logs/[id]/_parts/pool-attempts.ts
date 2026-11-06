@@ -9,9 +9,68 @@ import type { InteractionSummary } from "./session-timeline";
  * session's rows for that pool, and only when it cannot be mistaken: the
  * attempts must be next to each other there, and no other request to the
  * same pool in the same session may overlap them in time. Two requests
- * failing over side by side stay unlinked. Returns just the row otherwise.
+ * failing over side by side stay unlinked: just the row comes back.
+ *
+ * `complete`: the chain runs from the first attempt to the one that ended
+ * it, so every other member was not needed.
  */
 export function poolAttemptsOf(
+  row: InteractionSummary,
+  requests: InteractionSummary[],
+): { attempts: InteractionSummary[]; complete: boolean } {
+  const chain = linkedAttempts(row, requests);
+  const last = chain[chain.length - 1];
+  return {
+    attempts: chain,
+    complete: chain[0].attempt === 1 && last.attemptOutcome !== "failed_over",
+  };
+}
+
+/**
+ * Whether a pooled row is a retry whose failed attempt is the request row
+ * right above it in the list, so the two can be drawn joined.
+ */
+export function retriesRowAbove(
+  row: InteractionSummary,
+  above: InteractionSummary | null,
+  requests: InteractionSummary[],
+): boolean {
+  if (!above || !row.attempt || row.attempt < 2) return false;
+  const chain = linkedAttempts(row, requests);
+  const at = chain.findIndex((attempt) => attempt.id === row.id);
+  return at > 0 && chain[at - 1].id === above.id;
+}
+
+/**
+ * A failed pool attempt's reason, as the proxy stores it (`rate_limited (429)`),
+ * read as a short label and the HTTP status it came with.
+ */
+export function poolFailureLabel(
+  failureReason: string | null | undefined,
+): { label: string; status: number | null } | null {
+  if (!failureReason) return null;
+  const match = /^([a-z_]+)(?:\s*\((\d{3})\))?$/.exec(failureReason.trim());
+  if (!match) return { label: failureReason, status: null };
+  const [, code, status] = match;
+  return {
+    label: FAILURE_LABELS[code] ?? code.replaceAll("_", " "),
+    status: status ? Number(status) : null,
+  };
+}
+
+/** `429 · rate limited`, or the label alone when no status came back. */
+export function poolFailureText(
+  failure: NonNullable<ReturnType<typeof poolFailureLabel>>,
+): string {
+  return failure.status
+    ? `${failure.status} · ${failure.label}`
+    : failure.label;
+}
+
+// ===
+
+// The linked chain itself; see `poolAttemptsOf`.
+function linkedAttempts(
   row: InteractionSummary,
   requests: InteractionSummary[],
 ): InteractionSummary[] {
@@ -45,49 +104,6 @@ export function poolAttemptsOf(
   );
   return overlapped ? [row] : chain;
 }
-
-/**
- * Whether a pooled row is a retry whose failed attempt is the request row
- * right above it in the list, so the two can be drawn joined.
- */
-export function retriesRowAbove(
-  row: InteractionSummary,
-  above: InteractionSummary | null,
-  requests: InteractionSummary[],
-): boolean {
-  if (!above || !row.attempt || row.attempt < 2) return false;
-  const chain = poolAttemptsOf(row, requests);
-  const at = chain.findIndex((attempt) => attempt.id === row.id);
-  return at > 0 && chain[at - 1].id === above.id;
-}
-
-/**
- * A failed pool attempt's reason, as the proxy stores it (`rate_limited (429)`),
- * read as a short label and the HTTP status it came with.
- */
-export function poolFailureLabel(
-  failureReason: string | null | undefined,
-): { label: string; status: number | null } | null {
-  if (!failureReason) return null;
-  const match = /^([a-z_]+)(?:\s*\((\d{3})\))?$/.exec(failureReason.trim());
-  if (!match) return { label: failureReason, status: null };
-  const [, code, status] = match;
-  return {
-    label: FAILURE_LABELS[code] ?? code.replaceAll("_", " "),
-    status: status ? Number(status) : null,
-  };
-}
-
-/** `429 · rate limited`, or the label alone when no status came back. */
-export function poolFailureText(
-  failure: NonNullable<ReturnType<typeof poolFailureLabel>>,
-): string {
-  return failure.status
-    ? `${failure.status} · ${failure.label}`
-    : failure.label;
-}
-
-// ===
 
 const FAILURE_LABELS: Record<string, string> = {
   rate_limited: "rate limited",

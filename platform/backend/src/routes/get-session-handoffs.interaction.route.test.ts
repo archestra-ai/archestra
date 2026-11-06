@@ -132,6 +132,7 @@ describe("GET /api/llm-proxy-logs/sessions/:sessionId/handoffs", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toEqual({
         handedTo: [],
+        handedToTruncated: false,
         handedFrom: null,
         moves: [],
       });
@@ -151,9 +152,85 @@ describe("GET /api/llm-proxy-logs/sessions/:sessionId/handoffs", () => {
     const response = await read("agent-run-unlinked");
     expect(response.json()).toEqual({
       handedTo: [],
+      handedToTruncated: false,
       handedFrom: null,
       moves: [],
     });
+  });
+
+  test("a run that starts its own run still links back to its client", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    const parent = await makeRun({
+      agentId: agent.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      workloadName: "agent-run-parent",
+    });
+    await AgentRunModel.setOriginLlmSessionId({
+      taskId: parent.taskId,
+      originLlmSessionId: LOCAL,
+    });
+    const child = await makeRun({
+      agentId: agent.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      workloadName: "agent-run-child",
+    });
+    await AgentRunModel.setOriginLlmSessionId({
+      taskId: child.taskId,
+      originLlmSessionId: "agent-run-parent",
+    });
+    const start = (sessionId: string, runId: string) =>
+      McpToolCallModel.create({
+        agentId: agent.id,
+        userId: ctx.user.id,
+        sessionId,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: {
+          id: crypto.randomUUID(),
+          name: "archestra__start_agent_run",
+          arguments: {},
+        },
+        toolResult: { isError: false, structuredContent: { run_id: runId } },
+      });
+    const toParent = await start(LOCAL, parent.taskId);
+    const toChild = await start("agent-run-parent", child.taskId);
+
+    const response = await read("agent-run-parent");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      handedTo: [{ runId: child.taskId }],
+      handedFrom: { runId: parent.taskId, originLlmSessionId: LOCAL },
+    });
+    expect(
+      response
+        .json()
+        .moves.map((m: { mcpToolCallId: string }) => m.mcpToolCallId),
+    ).toEqual([toParent.id, toChild.id]);
+  });
+
+  test("says when a session started more runs than it lists", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    for (let i = 0; i < 21; i++) {
+      const run = await makeRun({
+        agentId: agent.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+        workloadName: `agent-run-many-${i}`,
+      });
+      await AgentRunModel.setOriginLlmSessionId({
+        taskId: run.taskId,
+        originLlmSessionId: LOCAL,
+      });
+    }
+    const body = (await read(LOCAL)).json();
+    expect(body.handedTo).toHaveLength(20);
+    expect(body.handedToTruncated).toBe(true);
   });
 });
 

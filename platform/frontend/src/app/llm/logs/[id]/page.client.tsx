@@ -52,7 +52,7 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
-import { pageWindow } from "./_parts/page-window";
+import { pageWindow, windowQuery } from "./_parts/page-window";
 import { buildRanOn, type SessionHandoffs } from "./_parts/ran-on";
 import type { RanOnParties } from "./_parts/ran-on-strip";
 import { SessionFacts } from "./_parts/session-facts";
@@ -145,12 +145,13 @@ export default function SessionDetailPage({
     [interactionsResponse],
   );
   const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
-  const { startsAt: pageStartsAt, endsAt: pageEndsAt } = pageWindow({
+  const pageRange = pageWindow({
     offset,
     requests: interactions,
     nextRequest,
     hasNextPage,
   });
+  const pageEndsAt = pageRange.endsAt;
   const requestsReady =
     interactionsResponse !== undefined &&
     !interactionsLoading &&
@@ -238,13 +239,14 @@ export default function SessionDetailPage({
   // At most a few runs join the trace; the rest are listed, not drawn.
   const handoffs = useMemo(() => capHandoffs(allHandoffs), [allHandoffs]);
   const omittedRuns = allHandoffs?.handedTo.slice(MAX_MERGED_RUNS) ?? [];
+  const mergedRuns = handoffs?.handedTo ?? [];
   const handedOff = useHandedOffRecords({
-    sessionIds: (handoffs?.handedTo ?? []).map((run) => run.llmSessionId),
-    startDate:
-      pageStartsAt !== null ? new Date(pageStartsAt).toISOString() : undefined,
-    endDate:
-      pageEndsAt !== null ? new Date(pageEndsAt).toISOString() : undefined,
+    sessionIds: mergedRuns.map((run) => run.llmSessionId),
+    ...windowQuery(pageRange),
   });
+  const failedRuns = mergedRuns.filter((run) =>
+    handedOff.failedSessionIds.includes(run.llmSessionId),
+  );
   const linkedRequest = useLinkedRequest({
     sessionId,
     requests: interactions,
@@ -333,8 +335,13 @@ export default function SessionDetailPage({
               agentName: run.agentName,
               href: runHref(run.runId),
             })),
-            clientSessionHref: originSessionId
-              ? llmSessionHref(originSessionId)
+            origin: originSessionId
+              ? {
+                  label:
+                    originSession?.data[0]?.externalAgentIdLabels[0] ??
+                    "Client",
+                  href: llmSessionHref(originSessionId),
+                }
               : null,
           } satisfies RanOnParties,
         }
@@ -540,6 +547,9 @@ export default function SessionDetailPage({
                     truncated={sessionToolCalls.truncated}
                     handedOffTruncated={handedOff.truncated}
                     omittedRuns={omittedRuns}
+                    moreRunsOmitted={allHandoffs?.handedToTruncated ?? false}
+                    failedRuns={failedRuns}
+                    onRetryFailedRuns={handedOff.retry}
                     missingToolCallId={
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
@@ -618,6 +628,9 @@ function ToolCallsNotice({
   truncated,
   handedOffTruncated,
   omittedRuns,
+  moreRunsOmitted,
+  failedRuns,
+  onRetryFailedRuns,
   missingToolCallId,
   missingRequest,
   requestLookupFailed,
@@ -634,6 +647,11 @@ function ToolCallsNotice({
   handedOffTruncated: boolean;
   /** Runs this session started that the trace leaves out. */
   omittedRuns: { runId: string; agentName: string; title: string | null }[];
+  /** The session started even more runs than were listed. */
+  moreRunsOmitted: boolean;
+  /** Merged runs whose records did not load. */
+  failedRuns: { runId: string; agentName: string }[];
+  onRetryFailedRuns: () => void;
   missingToolCallId: string | null;
   missingRequest: boolean;
   /** Finding the linked request's page failed. */
@@ -651,6 +669,7 @@ function ToolCallsNotice({
     !truncated &&
     !handedOffTruncated &&
     omittedRuns.length === 0 &&
+    failedRuns.length === 0 &&
     !missingToolCallId &&
     !missingRequest &&
     !requestLookupFailed &&
@@ -765,8 +784,26 @@ function ToolCallsNotice({
                 </Link>
               </span>
             ))}
+            {moreRunsOmitted ? <span>, and more</span> : null}
           </span>
         </p>
+      ) : null}
+      {failedRuns.length > 0 ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <span className="font-medium">Agent Runtime records didn't load</span>
+          <InlineNoticeText>
+            {`${failedRuns.map((run) => run.agentName).join(", ")}: ${failedRuns.length === 1 ? "its" : "their"} requests and tool calls are missing from this trace.`}
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryFailedRuns}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
       ) : null}
       {missingToolCallId ? (
         <InlineNotice variant="neutral">
@@ -808,6 +845,7 @@ function capHandoffs(
   }
   const handedTo = handoffs.handedTo.slice(0, MAX_MERGED_RUNS);
   const kept = new Set(handedTo.map((run) => run.runId));
+  if (handoffs.handedFrom) kept.add(handoffs.handedFrom.runId);
   return {
     ...handoffs,
     handedTo,

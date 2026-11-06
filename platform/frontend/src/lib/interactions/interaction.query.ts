@@ -460,7 +460,7 @@ export function useHandedOffRecords({
   startDate?: string;
   endDate?: string;
 }) {
-  return useQueries({
+  const records = useQueries({
     queries: sessionIds.map((sessionId) => ({
       queryKey: [
         "interactions",
@@ -504,6 +504,11 @@ export function useHandedOffRecords({
     })),
     combine: combineHandedOffRecords,
   });
+  return {
+    ...records,
+    /** The runs' sessions whose records did not load. */
+    failedSessionIds: records.failed.map((index) => sessionIds[index]),
+  };
 }
 
 /** The saved auto-routing decision behind one request, or null. */
@@ -706,12 +711,20 @@ function combineHandedOffRecords(
       truncated: boolean;
     };
     isPending: boolean;
+    isError: boolean;
+    refetch: () => unknown;
   }[],
 ) {
+  const failed = results.flatMap((r, index) => (r.isError ? [index] : []));
   return {
     requests: results.flatMap((r) => r.data?.requests ?? []),
     toolCalls: results.flatMap((r) => r.data?.toolCalls ?? []),
     truncated: results.some((r) => r.data?.truncated === true),
     pending: results.some((r) => r.isPending),
+    failed,
+    /** Reads the failed runs' records again. */
+    retry: () => {
+      for (const index of failed) results[index].refetch();
+    },
   };
 }

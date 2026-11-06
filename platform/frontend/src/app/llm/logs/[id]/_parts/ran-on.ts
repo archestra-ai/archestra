@@ -16,8 +16,8 @@ type Holder = "client" | "runtime";
 export type RanOnSegment = {
   key: string;
   holder: Holder;
-  /** The run that held this stretch; null for the client's. */
-  runId: string | null;
+  /** The runs that held this stretch, oldest first; none for the client's. */
+  runIds: string[];
   /**
    * The client's stretch seen from the run's own session: its requests live
    * in the client's session, so the stretch is only a placeholder here.
@@ -129,15 +129,18 @@ function clientView({
 
   // A move sits where its tool call ends, when that call is on this page;
   // otherwise at the first record after it.
-  let cuts = handoffs.moves.map((move) => {
-    const at = Date.parse(move.at);
-    const call = spans.find(
-      (s) => s.key === toolCallSpanKey(move.mcpToolCallId),
-    );
-    if (call) return { move, x: call.x + call.w, t: call.end };
-    const next = spans.find((s) => s.start >= at);
-    return { move, x: next ? next.x : 1, t: at };
-  });
+  const ownRuns = new Set(sessionOfRun.keys());
+  let cuts = handoffs.moves
+    .filter((move) => ownRuns.has(move.runId))
+    .map((move) => {
+      const at = Date.parse(move.at);
+      const call = spans.find(
+        (s) => s.key === toolCallSpanKey(move.mcpToolCallId),
+      );
+      if (call) return { move, x: call.x + call.w, t: call.end };
+      const next = spans.find((s) => s.start >= at);
+      return { move, x: next ? next.x : 1, t: at };
+    });
   // Without readable moves, the work went to the run when its first request
   // began.
   if (cuts.length === 0 && runtimeRows.length > 0) {
@@ -159,28 +162,39 @@ function clientView({
     ];
   }
 
-  const edges: { x: number; t: number; runId: string | null }[] = [
-    { x: 0, t: timeline.origin, runId: null },
-    ...cuts.map((cut) => ({
-      x: cut.x,
-      t: cut.t,
-      runId: cut.move.kind === "pull" ? null : cut.move.runId,
-    })),
+  // Runs can hold work at the same time: each edge carries every run that
+  // holds it from there on.
+  const active: string[] = [];
+  const edges: { x: number; t: number; runIds: string[] }[] = [
+    { x: 0, t: timeline.origin, runIds: [] },
   ];
+  for (const cut of cuts) {
+    const at = active.indexOf(cut.move.runId);
+    if (cut.move.kind === "pull") {
+      if (at >= 0) active.splice(at, 1);
+    } else if (at < 0) {
+      active.push(cut.move.runId);
+    }
+    edges.push({ x: cut.x, t: cut.t, runIds: [...active] });
+  }
   const segments = edges.map((edge, i): RanOnSegment => {
     const next = edges[i + 1];
     const until = next ? next.t : Number.POSITIVE_INFINITY;
-    const runSession = edge.runId ? sessionOfRun.get(edge.runId) : undefined;
+    const sessions = new Set(
+      edge.runIds.flatMap((runId) => sessionOfRun.get(runId) ?? []),
+    );
     const rows = requests.filter(
       (s) =>
         s.start >= edge.t &&
         s.start < until &&
-        (runSession ? s.row.sessionId === runSession : !runtimeKeys.has(s.key)),
+        (sessions.size > 0
+          ? s.row.sessionId !== null && sessions.has(s.row.sessionId)
+          : !runtimeKeys.has(s.key)),
     );
     return {
       key: `segment-${i}`,
-      holder: edge.runId ? "runtime" : "client",
-      runId: edge.runId,
+      holder: edge.runIds.length > 0 ? "runtime" : "client",
+      runIds: edge.runIds,
       elsewhere: false,
       x0: edge.x,
       x1: next ? next.x : 1,
@@ -219,10 +233,9 @@ function runtimeView({
   const spans = timeline.spans;
   const requests = requestSpans(spans);
   const last = Math.max(...spans.map((s) => s.end));
-  const events = handoffs.moves.map((move) => ({
-    ...move,
-    t: Date.parse(move.at),
-  }));
+  const events = handoffs.moves
+    .filter((move) => move.runId === runId)
+    .map((move) => ({ ...move, t: Date.parse(move.at) }));
   type Event = (typeof events)[number];
   // One stretch per push or steer, each ending at the next pull. Without
   // readable moves, the run held the work throughout.
@@ -259,7 +272,7 @@ function runtimeView({
     segments.push({
       key: `runtime-${i}`,
       holder: "runtime",
-      runId,
+      runIds: [runId],
       elsewhere: false,
       x0: stretch.x0,
       x1: stretch.x1,
@@ -285,15 +298,18 @@ function runtimeView({
       at: stretch.to.t,
     });
     const next = stretches[i + 1];
+    // After a final pull the client's stretch lies past this trace's end:
+    // the pull's knob and the link back to the client stand for it.
+    if (!next) return;
     segments.push({
       key: `client-${i}`,
       holder: "client",
-      runId: null,
+      runIds: [],
       elsewhere: true,
       x0: stretch.x1,
-      x1: next ? next.x0 : 1,
+      x1: next.x0,
       start: stretch.to.t,
-      end: next?.from ? next.from.t : last,
+      end: next.from?.t ?? last,
       requests: 0,
       billed: 0,
       subscription: false,

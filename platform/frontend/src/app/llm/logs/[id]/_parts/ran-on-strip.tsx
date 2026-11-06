@@ -20,8 +20,11 @@ import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 export type RanOnParties = {
   /** The client the work started in, such as "Claude Code". */
   clientLabel: string;
-  /** The client's session trace, from the run's session. */
-  clientSessionHref: string | null;
+  /**
+   * The session that handed this one its work, when it is a run's own:
+   * named, with its trace's link.
+   */
+  origin: { label: string; href: string } | null;
   /** The runs on the strip, oldest first. */
   runs: RanOnRun[];
 };
@@ -174,7 +177,9 @@ function RanOnStrip({
             key={segment.key}
             segment={segment}
             parties={parties}
-            run={runOf(parties, segment.runId)}
+            runs={segment.runIds.flatMap(
+              (runId) => runOf(parties, runId) ?? [],
+            )}
           />
         ))}
         {view.moves.map((move) => (
@@ -208,12 +213,12 @@ function RanOnLine({
       <span className="ml-1.5 font-medium text-foreground/80">Ran on</span>
       <Counts view={view} parties={parties} />
       <span className="ml-auto inline-flex shrink-0 items-center gap-2">
-        {parties.clientSessionHref ? (
+        {parties.origin ? (
           <Link
-            href={parties.clientSessionHref}
+            href={parties.origin.href}
             className="inline-flex items-center gap-0.5 hover:text-foreground"
           >
-            <span>{parties.clientLabel}</span>
+            <span>{parties.origin.label}</span>
             <ArrowUpRight className="size-3" aria-hidden="true" />
           </Link>
         ) : null}
@@ -266,12 +271,32 @@ function Counts({ view, parties }: { view: RanOnView; parties: RanOnParties }) {
           <span className="truncate">
             {view.moves.length} {view.moves.length === 1 ? "move" : "moves"}
           </span>
+          {parties.origin ? (
+            <>
+              {dot}
+              <Link
+                href={parties.origin.href}
+                className="truncate underline-offset-2 hover:text-foreground hover:underline"
+              >
+                from {parties.origin.label}
+              </Link>
+            </>
+          ) : null}
         </>
       ) : (
         <>
           {runtimeCount}
           {dot}
-          <span className="truncate">from {parties.clientLabel}</span>
+          {parties.origin ? (
+            <Link
+              href={parties.origin.href}
+              className="truncate underline-offset-2 hover:text-foreground hover:underline"
+            >
+              from {parties.origin.label}
+            </Link>
+          ) : (
+            <span className="truncate">from {parties.clientLabel}</span>
+          )}
         </>
       )}
     </span>
@@ -281,20 +306,24 @@ function Counts({ view, parties }: { view: RanOnView; parties: RanOnParties }) {
 function SegmentBar({
   segment,
   parties,
-  run,
+  runs,
 }: {
   segment: RanOnSegment;
   parties: RanOnParties;
-  /** The run that held a runtime stretch. */
-  run: RanOnRun | null;
+  /** The runs that held a runtime stretch. */
+  runs: RanOnRun[];
 }) {
+  // One run links to its terminal; several share the stretch.
+  const run = runs.length === 1 ? runs[0] : null;
   const runtime = segment.holder === "runtime";
   const href = segment.elsewhere
-    ? parties.clientSessionHref
+    ? (parties.origin?.href ?? null)
     : runtime
       ? (run?.href ?? null)
       : null;
-  const agentName = run?.agentName ?? "Agent Runtime";
+  const agentName =
+    run?.agentName ??
+    (runs.length > 1 ? `${runs.length} runs` : "Agent Runtime");
   const Icon = runtime ? Container : Laptop;
   const title = segment.elsewhere
     ? `Back in ${parties.clientLabel}`

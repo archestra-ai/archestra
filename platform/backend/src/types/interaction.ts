@@ -1071,6 +1071,9 @@ export const SessionHandoffsSchema = z.object({
   handedTo: z
     .array(SessionHandoffRunSchema)
     .describe("Runs this session started, oldest first."),
+  handedToTruncated: z
+    .boolean()
+    .describe("This session started more runs than `handedTo` lists."),
   handedFrom: SessionHandoffRunSchema.nullable().describe(
     "When this is a run's own session: that run, with the session that started it.",
   ),

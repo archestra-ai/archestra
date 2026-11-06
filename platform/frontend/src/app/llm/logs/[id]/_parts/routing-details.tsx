@@ -82,10 +82,11 @@ function AutoRoutingSection({ row }: { row: InteractionSummary }) {
   const decidedHere =
     Date.parse(decision.createdAt) >=
     Date.parse(row.createdAt) - Math.max(0, row.durationMs ?? 0);
-  const cost = Number(row.cost ?? 0);
-  const baseline = Number(row.baselineCost ?? 0);
+  // Only with both prices known: an unpriced request is not a free one.
+  const cost = row.cost === null ? null : Number(row.cost);
+  const baseline = row.baselineCost === null ? null : Number(row.baselineCost);
   const cheaper =
-    baseline > 0 && cost < baseline
+    cost !== null && baseline !== null && baseline > 0 && cost < baseline
       ? Math.round(((baseline - cost) / baseline) * 100)
       : null;
 
@@ -230,7 +231,7 @@ function PoolSection({
     members.find((m) => m.providerApiKeyId === keyId)?.providerApiKeyName ??
     (poolsLoaded ? "Removed key" : "Pool member");
 
-  const attempts = poolAttemptsOf(row, requests);
+  const { attempts, complete } = poolAttemptsOf(row, requests);
   const tried = new Set(attempts.map((a) => a.providerApiKeyId));
   const rungs: Rung[] = [
     ...attempts.map((attempt): Rung => {
@@ -250,7 +251,8 @@ function PoolSection({
         current: attempt.id === row.id,
       };
     }),
-    ...members
+    // Only a whole chain shows which members were not needed.
+    ...(complete ? members : [])
       .filter((m) => m.enabled && !tried.has(m.providerApiKeyId))
       .sort((a, b) => a.priority - b.priority || b.weight - a.weight)
       .map(
@@ -302,6 +304,13 @@ function PoolSection({
           />
         ))}
       </ol>
+      {complete ? null : (
+        <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+          {(attempts[0].attempt ?? 1) > 1
+            ? "Its earlier attempts aren't on this page or can't be told apart from other requests."
+            : "Its later attempts aren't on this page or can't be told apart from other requests."}
+        </p>
+      )}
     </OverviewSection>
   );
 }

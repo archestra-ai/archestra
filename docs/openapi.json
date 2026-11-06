@@ -288952,6 +288952,10 @@
                       },
                       "description": "Runs this session started, oldest first."
                     },
+                    "handedToTruncated": {
+                      "type": "boolean",
+                      "description": "This session started more runs than `handedTo` lists."
+                    },
                     "handedFrom": {
                       "nullable": true,
                       "description": "When this is a run's own session: that run, with the session that started it.",
@@ -289034,6 +289038,7 @@
                   },
                   "required": [
                     "handedTo",
+                    "handedToTruncated",
                     "handedFrom",
                     "moves"
                   ],

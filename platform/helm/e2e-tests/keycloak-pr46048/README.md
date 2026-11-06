@@ -9,6 +9,7 @@ This directory documents the custom Keycloak image used by the e2e test chart fo
 - Fork branch: `Hitachi:ISSUE-43971-IDJAGReceiver`
 - Source commit: `5afbf425b19a3f4b4a1b5a37cba890fcfee977a4`
 - Published image: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/keycloak:pr46048-5afbf42`
+- CI pulls the same digest from `ghcr.io/archestra-ai/ci/keycloak:pr46048-5afbf42`, copied by `.github/workflows/bootstrap-ghcr.yml`. Add a rebuilt tag there too.
 - Platforms: `linux/amd64`, `linux/arm64`
 
 ## Why this image exists

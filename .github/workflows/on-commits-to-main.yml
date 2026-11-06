@@ -114,7 +114,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read # Check out sources for the exact-source declaration cache.
-      id-token: write # Publish declarations through Workload Identity Federation.
+      packages: write # Publish declarations to GHCR.
     defaults:
       run:
         working-directory: ./platform
@@ -163,16 +163,19 @@ jobs:
       - name: Pack portable backend declarations
         run: node scripts/backend-types-prebuilt.mjs --pack "$RUNNER_TEMP/backend-types-cache"
 
-      - name: Authenticate to Google Artifact Registry
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+      # Forks and the private mirror cannot write the public org's packages.
+      - name: Log in to GHCR
+        if: github.repository == 'archestra-ai/archestra'
+        uses: $/.github/actions/docker-login
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Publish portable backend declarations
+        if: github.repository == 'archestra-ai/archestra'
         env:
-          REPOSITORY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/backend-types-cache
+          REPOSITORY: ghcr.io/archestra-ai/ci/backend-types-cache
         run: |
           key="$(node scripts/backend-types-prebuilt.mjs --key)"
           docker buildx build --platform linux/amd64 --provenance=false --sbom=false \

@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, agent-copilot, bench-runner]
+        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, agent-copilot, bench-runner, frontend-dev-cache, napi-dev-cache, backend-types-cache]
     steps:
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -59,5 +59,55 @@ jobs:
           mkdir -p "$RUNNER_TEMP/anonymous-docker"
           if ! DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$IMAGE:$BOOTSTRAP_TAG" >/dev/null; then
             echo "::error::Make $IMAGE public in its GitHub package settings, then rerun this job. Do not switch anonymous consumers before this check passes."
+            exit 1
+          fi
+
+  # Pinned E2E fixtures were pushed once by hand to Artifact Registry. Copy
+  # them byte for byte (same digest) so CI pulls them from GHCR instead.
+  mirror-test-images:
+    name: Mirror ${{ matrix.image }}
+    if: ${{ github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'bootstrap-ghcr') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Create only the mirrored E2E fixture packages.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["mcp-example-oauth-server:0.0.1", "mcp-server-jwks-keycloak:0.0.3", "mcp-server-id-jag:0.0.4", "keycloak:pr46048-5afbf42"]
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Copy the image if missing
+        env:
+          SOURCE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image }}
+          TARGET: ghcr.io/archestra-ai/ci/${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          # Pinned tags never move: an existing target must hold the same bytes.
+          if ! skopeo inspect --raw "docker://$TARGET" >/dev/null 2>&1; then
+            skopeo copy --all --preserve-digests --retry-times 3 "docker://$SOURCE" "docker://$TARGET"
+          fi
+          source_digest=$(skopeo inspect --raw "docker://$SOURCE" | sha256sum | cut -d' ' -f1)
+          target_digest=$(skopeo inspect --raw "docker://$TARGET" | sha256sum | cut -d' ' -f1)
+          if [ "$source_digest" != "$target_digest" ]; then
+            echo "::error::$TARGET does not match $SOURCE (sha256:$target_digest vs sha256:$source_digest)"
+            exit 1
+          fi
+          echo "$TARGET is sha256:$target_digest"
+
+      - name: Verify anonymous registry access
+        env:
+          TARGET: ghcr.io/archestra-ai/ci/${{ matrix.image }}
+        run: |
+          # Fresh config must not inherit the writer's logged-in credentials.
+          mkdir -p "$RUNNER_TEMP/anonymous-docker"
+          if ! DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$TARGET" >/dev/null; then
+            echo "::error::Make ${TARGET%:*} public in its GitHub package settings, then rerun this job. Do not merge before this check passes."
             exit 1
           fi

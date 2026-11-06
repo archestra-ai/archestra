@@ -50,10 +50,9 @@ concurrency:
 
 env:
   # This published stable-release fallback is owned by release publication,
-  # not the CI SHA publishers. Keep it available until the release cutover;
-  # CI packages deliberately do not move a latest tag.
+  # not the CI SHA publishers; CI packages deliberately do not move a latest tag.
   # supply-chain-policy: allow-latest published stable MCP fallback
-  RELEASED_MCP_SERVER_BASE_IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest
+  RELEASED_MCP_SERVER_BASE_IMAGE: ghcr.io/archestra-ai/mcp-server-base:latest
   PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
   MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci

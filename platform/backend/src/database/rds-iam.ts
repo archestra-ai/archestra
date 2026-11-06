@@ -45,6 +45,74 @@ const RDS_HOSTNAME_REGION_PATTERN =
   /\.([a-z]{2}(?:-gov|-iso[a-z]?)?-[a-z]+-\d+)\.rds\.amazonaws\.com(?:\.cn)?\.?$/i;
 
 const RDS_IAM_TOKEN_EXPIRES_IN_SECONDS = 900;
+const CREDENTIAL_PROVIDER_MAX_AGE_MS = 60_000;
+
+function safeFileMtimeMs(filePath: string | undefined): number {
+  if (!filePath) {
+    return 0;
+  }
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function computeCredentialFingerprint(env: NodeJS.ProcessEnv): string {
+  const tokenFile = env.AWS_WEB_IDENTITY_TOKEN_FILE;
+  const sharedCredsFile = env.AWS_SHARED_CREDENTIALS_FILE;
+  return [
+    env.AWS_ACCESS_KEY_ID ?? "",
+    env.AWS_SECRET_ACCESS_KEY ?? "",
+    env.AWS_SESSION_TOKEN ?? "",
+    env.AWS_PROFILE ?? "",
+    env.AWS_ROLE_ARN ?? "",
+    tokenFile ?? "",
+    String(safeFileMtimeMs(tokenFile)),
+    sharedCredsFile ?? "",
+    String(safeFileMtimeMs(sharedCredsFile)),
+  ].join("|");
+}
+
+function createRefreshingCredentialProvider(
+  env: NodeJS.ProcessEnv = process.env,
+): ReturnType<typeof fromNodeProviderChain> {
+  let cachedProvider: ReturnType<typeof fromNodeProviderChain> | null = null;
+  let cachedFingerprint = "";
+  let cachedAt = 0;
+
+  return async (options) => {
+    if (
+      env !== process.env &&
+      env.AWS_ACCESS_KEY_ID &&
+      env.AWS_SECRET_ACCESS_KEY
+    ) {
+      return {
+        accessKeyId: env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+        sessionToken: env.AWS_SESSION_TOKEN,
+      };
+    }
+    const now = Date.now();
+    const fingerprint = computeCredentialFingerprint(env);
+    if (
+      !cachedProvider ||
+      fingerprint !== cachedFingerprint ||
+      now - cachedAt >= CREDENTIAL_PROVIDER_MAX_AGE_MS ||
+      options?.forceRefresh
+    ) {
+      cachedProvider = fromNodeProviderChain();
+      cachedFingerprint = fingerprint;
+      cachedAt = now;
+    }
+    try {
+      return await cachedProvider(options);
+    } catch (error) {
+      cachedProvider = null;
+      throw error;
+    }
+  };
+}
 
 const BUNDLED_CLOUD_CA_PATHS = [
   "/etc/ssl/certs/cloud-database-ca-bundle.pem",
@@ -228,7 +296,8 @@ export function createRdsIamPasswordCallback({
   env = process.env,
 }: CreateRdsIamPasswordCallbackOptions): () => Promise<string> {
   const region = resolveDatabaseAwsRegion({ hostname, awsRegion, env });
-  const resolvedCredentials = credentials ?? fromNodeProviderChain();
+  const resolvedCredentials =
+    credentials ?? createRefreshingCredentialProvider(env);
   return () =>
     generateRdsIamAuthToken({
       hostname,
@@ -369,6 +438,13 @@ export function resolvePgSslConfig(
   if (sslKeyPath) {
     sslConfig.key = fs.readFileSync(sslKeyPath, "utf8");
   }
+
+  Object.defineProperty(sslConfig, "toJSON", {
+    value: () => ({
+      rejectUnauthorized: sslConfig.rejectUnauthorized,
+    }),
+    enumerable: false,
+  });
 
   return sslConfig;
 }

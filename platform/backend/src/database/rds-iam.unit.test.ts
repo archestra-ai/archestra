@@ -265,6 +265,7 @@ describe("rds-iam", () => {
       expect(caList.some((cert) => cert.includes("BEGIN CERTIFICATE"))).toBe(
         true,
       );
+      expect(JSON.stringify(ssl)).toBe('{"rejectUnauthorized":true}');
     }
   });
 
@@ -353,20 +354,34 @@ describe("rds-iam", () => {
     }
   });
 
-  test("createRdsIamPasswordCallback signs fresh tokens on each call", async () => {
+  test("createRdsIamPasswordCallback signs fresh tokens on each call and picks up rotated env credentials", async () => {
+    const rotatingEnv: NodeJS.ProcessEnv = {
+      AWS_ACCESS_KEY_ID: "AKIA_INITIAL_KEY",
+      AWS_SECRET_ACCESS_KEY: "secret_initial",
+      AWS_SESSION_TOKEN: "session_initial",
+    };
     const callback = createRdsIamPasswordCallback({
       hostname: "mydb.123456789012.us-west-2.rds.amazonaws.com",
       port: 5432,
       username: "archestra_user",
-      credentials: TEST_CREDENTIALS,
-      env: {},
+      env: rotatingEnv,
     });
 
-    const token = await callback();
-    expect(token).toContain(
+    const token1 = await callback();
+    expect(token1).toContain(
       "mydb.123456789012.us-west-2.rds.amazonaws.com:5432/?",
     );
-    expect(token).toContain("DBUser=archestra_user");
+    expect(token1).toContain("DBUser=archestra_user");
+    expect(token1).toContain("AKIA_INITIAL_KEY");
+    expect(token1).toContain("session_initial");
+
+    rotatingEnv.AWS_ACCESS_KEY_ID = "AKIA_ROTATED_KEY";
+    rotatingEnv.AWS_SECRET_ACCESS_KEY = "secret_rotated";
+    rotatingEnv.AWS_SESSION_TOKEN = "session_rotated";
+
+    const token2 = await callback();
+    expect(token2).toContain("AKIA_ROTATED_KEY");
+    expect(token2).toContain("session_rotated");
   });
 
   test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens per native connection when enabled", async () => {

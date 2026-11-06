@@ -266,16 +266,18 @@ export async function getOpenappaStatus(params: {
     const status = await retryWhilePolicyMoved({
       run: async () => {
         const policy = await effectivePolicy(params.organizationId);
-        return withOpenappaContentEncryption(
-          params.organizationId,
-          params.sessionId,
-          (encryption) =>
-            module.getOpenappaStatus(
-              params.organizationId,
-              params.sessionId,
-              policy,
-              encryption,
-            ),
+        return withNativeStorageRetry(() =>
+          withOpenappaContentEncryption(
+            params.organizationId,
+            params.sessionId,
+            (encryption) =>
+              module.getOpenappaStatus(
+                params.organizationId,
+                params.sessionId,
+                policy,
+                encryption,
+              ),
+          ),
         );
       },
     });
@@ -672,6 +674,29 @@ export function callerUserId(
     : undefined;
 }
 
+const TRANSIENT_NATIVE_STORAGE_PATTERN =
+  /SQLSTATE (?:57P0[123]|0800[01346])|connection closed|broken pipe|connection reset|unexpected EOF/i;
+
+function isTransientNativeStorageDisconnect(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return TRANSIENT_NATIVE_STORAGE_PATTERN.test(error.message);
+}
+
+async function withNativeStorageRetry<T>(fn: () => Promise<T>): Promise<T> {
+  const maxRetries = Math.max(1, config.openappa.postgresMaxConnections);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isTransientNativeStorageDisconnect(error) || attempt >= maxRetries) {
+        throw error;
+      }
+    }
+  }
+}
+
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
   organizationId: string,
@@ -687,7 +712,7 @@ async function withRuntime(
     const rawResult = await retryWhilePolicyMoved({
       run: async (attempt) => {
         if (attempt > 0) policy = await effectivePolicy(organizationId);
-        return call(module, policy);
+        return withNativeStorageRetry(() => call(module, policy));
       },
     });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
@@ -2627,8 +2652,10 @@ async function peerResponse<T>(
   try {
     const module = await binding();
     const raw = await retryWhilePolicyMoved({
-      run: async () =>
-        call(module, await effectivePolicy(session.organization_id)),
+      run: async () => {
+        const policy = await effectivePolicy(session.organization_id);
+        return withNativeStorageRetry(() => call(module, policy));
+      },
     });
     return schema.parse(JSON.parse(raw));
   } catch (error) {

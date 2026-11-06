@@ -14,6 +14,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { packageContentHash } from "@/openappa/declarations";
 import { secretManager } from "@/secrets-manager";
 import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -754,6 +755,18 @@ test("a pull request check retries what failed for now, and checks again when th
     expect.objectContaining({ state: "success" }),
     expect.objectContaining({ state: "failure" }),
   ]);
+
+  // A credential GitHub refuses outright is left alone for ten minutes.
+  let refusedLists = 0;
+  server.use(
+    http.get(`${REPO}/pulls`, () => {
+      refusedLists++;
+      return HttpResponse.json({ message: "Bad credentials" }, { status: 401 });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(refusedLists).toBe(1);
 });
 
 test("a server's file cannot replace an annotator of a battery the policy includes", async ({
@@ -917,6 +930,97 @@ test("on GitLab, a pull reads every page of mcp/, merge requests get the policy 
   const queued = await queuedSyncs();
   expect(await status()).toMatchObject({ state: "merged", applied: true });
   expect(await queuedSyncs()).toBe(queued);
+});
+
+test("a refused pull request check is checked again once the battery it names is uploaded, and every fifteen minutes", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connect({ organizationId: org.id, writerUserId: admin.id });
+  // A battery with no helper and no credential: its rules alone.
+  const files = [
+    {
+      path: "appa-package.toml",
+      text: `schema = 1
+name = "acme"
+description = "Acme rules"
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+namespaces = ["acme"]
+`,
+    },
+    {
+      path: "appa.toml",
+      text: `[policy]
+version = 2
+
+[[policy.tool]]
+name = "mcp/acme/list"
+delta = {}
+`,
+    },
+  ];
+  const entry = `batteries/acme@sha256-${packageContentHash(files)}/appa.toml`;
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": RULES },
+      // The pull request names the package before anyone uploaded it.
+      [THIRD]: { "appa.toml": `include = ["${entry}"]\n${RULES}` },
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  const statuses: Array<{ state: string }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, () =>
+      HttpResponse.json([
+        { head: { sha: "9".repeat(40) }, merge_commit_sha: THIRD },
+      ]),
+    ),
+    http.post(`${REPO}/check-runs`, () =>
+      HttpResponse.json({}, { status: 403 }),
+    ),
+    http.post(`${REPO}/statuses/:sha`, async ({ request }) => {
+      statuses.push((await request.json()) as (typeof statuses)[number]);
+      return HttpResponse.json({ id: 2 }, { status: 201 });
+    }),
+  );
+  const validate = vi.spyOn(guardrailsPolicyService, "validate");
+
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([expect.objectContaining({ state: "failure" })]);
+  const checks = validate.mock.calls.length;
+  await checkDueAppaGithubSyncs();
+  expect(validate.mock.calls.length).toBe(checks);
+  // Fifteen minutes on, the refusal is checked again; still refused, it
+  // posts nothing new.
+  const now = Date.now();
+  const later = vi.spyOn(Date, "now").mockReturnValue(now + 16 * 60_000);
+  await checkDueAppaGithubSyncs();
+  later.mockRestore();
+  expect(validate.mock.calls.length).toBe(checks + 1);
+  expect(statuses).toHaveLength(1);
+
+  // Uploading the package changes neither commit nor the served policy,
+  // and the next pass passes the pull request.
+  await openappaBatteriesService.uploadPackage({
+    userId: admin.id,
+    organizationId: org.id,
+    name: "acme",
+    files,
+  });
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([
+    expect.objectContaining({ state: "failure" }),
+    expect.objectContaining({ state: "success" }),
+  ]);
 });
 
 test("a server's editors propose its rules as a pull request; readers and outsiders cannot", async ({

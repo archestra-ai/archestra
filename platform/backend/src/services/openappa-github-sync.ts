@@ -22,6 +22,8 @@ import { gitClient } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
@@ -782,23 +784,31 @@ const MAX_CHECKED_PULLS = 50;
 const CHECKED_TTL = TimeInMs.Day;
 
 /**
+ * How often a refused result is checked again while nothing it is keyed by
+ * moves: a refusal can rest on state outside that key, such as a credential's
+ * value, and a later repair should not wait for a new commit.
+ */
+const RECHECK_REFUSED = 15 * TimeInMs.Minute;
+
+/**
  * How long a repository that refused a check is left alone: a credential
  * without the permission is not asked again every minute.
  */
 const REFUSED_TTL = 10 * TimeInMs.Minute;
 
-/** The host refused the check: the credential may not post one. */
+/** The host refused the credential: it may not list pull requests or post the check. */
 class CheckRefused extends ApiError {
   constructor(status: number) {
     super(403, `The policy check was refused (HTTP ${status})`);
   }
 }
 
-/** The outcome posted for one pull request result, and what it was checked against. */
+/** The outcome posted for one pull request result, what it was checked against, and when. */
 type CheckedResult = {
   deployment: string;
   accepted: boolean;
   reason: string | null;
+  checkedAt: number;
 };
 
 /**
@@ -811,8 +821,8 @@ type CheckedResult = {
  * What was checked is kept in the shared cache, so another replica's pass
  * neither checks a result again nor posts it twice. A result is checked again
  * when a commit moves on either side, or when the deployment it was checked
- * against changes: the accepted commit, or the composition this organization
- * serves, which its bindings and batteries shape.
+ * against changes (`deploymentState`), and a refusal every fifteen minutes
+ * besides. Only a changed outcome is posted.
  */
 async function checkAppaGithubPullRequests(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
@@ -826,7 +836,12 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       ? await gitlabPullRequests(source)
       : await githubPullRequests(source);
   } catch (error) {
-    if (!(error instanceof MissingGithubPermission)) throw error;
+    // A credential the host refuses is not asked again every minute.
+    if (
+      !(error instanceof MissingGithubPermission) &&
+      !(error instanceof CheckRefused)
+    )
+      throw error;
     await refuseChecks({ key: refused, organizationId, reason: error.message });
     return;
   }
@@ -839,7 +854,11 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
     const previous = checked.get(key);
-    if (previous?.deployment === deployment) continue;
+    if (
+      previous?.deployment === deployment &&
+      (previous.accepted || Date.now() - previous.checkedAt < RECHECK_REFUSED)
+    )
+      continue;
     const outcome = await outcomeAt({ source, commitSha: pull.result });
     // A read or a check that failed for now is checked again next minute.
     if (!outcome) continue;
@@ -847,6 +866,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       deployment,
       accepted: outcome.accepted,
       reason: outcome.accepted ? null : outcome.reason,
+      checkedAt: Date.now(),
     };
     // A changed deployment that leaves the outcome as posted posts nothing.
     if (
@@ -910,20 +930,32 @@ async function refuseChecks(params: {
 
 /**
  * What a pull's checks depend on besides the commit checked: the accepted
- * commit, whose files the current policy folds in, and the composition the
- * organization serves, which changes with its policy, bindings and batteries.
+ * commit, whose files the current policy folds in; the composition the
+ * organization serves; and the battery packages and credential bindings it
+ * holds, which a pull request can use before the served policy does, such as
+ * a package uploaded after the pull request first named it.
  */
 async function deploymentState(
   organizationId: string,
   sourceCommit: string,
 ): Promise<string> {
-  const served = await OpenAppaEffectivePolicyModel.find(organizationId);
-  return JSON.stringify([
-    sourceCommit,
-    served?.rootRevision ?? null,
-    served?.contentHash ?? null,
-    served?.installFingerprint ?? null,
+  const [served, packages, bindings] = await Promise.all([
+    OpenAppaEffectivePolicyModel.findState(organizationId),
+    OpenAppaBatteryPackageModel.list(organizationId),
+    OpenAppaCredentialBindingModel.list(organizationId),
   ]);
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        sourceCommit,
+        served?.rootRevision ?? null,
+        served?.contentHash ?? null,
+        served?.installFingerprint ?? null,
+        packages.map((stored) => stored.contentHash).sort(),
+        bindings.map((binding) => [binding.variable, binding.credentialKey]),
+      ]),
+    )
+    .digest("hex");
 }
 
 type PullOutcome = { accepted: true } | { accepted: false; reason: string };
@@ -1014,7 +1046,10 @@ async function githubPullRequests(
   >({
     url: `${base}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
     token,
-    errors: githubSyncErrors,
+    errors: async ({ status }) =>
+      status === 401 || status === 403
+        ? new CheckRefused(status)
+        : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
   return pulls.flatMap((pull) => {
     const head = pull.head?.sha;
@@ -1091,10 +1126,16 @@ async function gitlabPullRequests(
     }),
   );
   const project = client.repoApi(source.repo);
-  const branch = source.ref ?? (await client.defaultBranch(source.repo));
-  const requests = await client.json<Array<{ sha?: string }>>(
-    `${project}/merge_requests?state=opened&target_branch=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
-  );
+  const requests = await (async () => {
+    const branch = source.ref ?? (await client.defaultBranch(source.repo));
+    return client.json<Array<{ sha?: string }>>(
+      `${project}/merge_requests?state=opened&target_branch=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
+    );
+  })().catch((error) => {
+    if (error instanceof GitHostError && [401, 403].includes(error.status))
+      throw new CheckRefused(error.status);
+    throw error;
+  });
   return requests.flatMap((request) => {
     const head = request.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];

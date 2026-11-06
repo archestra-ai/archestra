@@ -26,6 +26,7 @@ import {
 } from "./appa-github-sync-panel";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name", () => ({ useAppName: () => "Acme AI" }));
 vi.mock("sonner");
 const navigation = vi.hoisted(() => ({
   search: new URLSearchParams(),
@@ -127,12 +128,12 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
-test("shows the repository protection Archestra keeps, with bypass entries and editors who have no GitHub owner", async () => {
+test("shows the repository protection kept for server rules files, with bypass entries and editors who have no GitHub owner", async () => {
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
         branchRules: {
-          state: "active",
+          state: "incomplete",
           url: "https://github.com/example/policies/rules/5",
           bypassActors: 2,
         },
@@ -147,10 +148,9 @@ test("shows the repository protection Archestra keeps, with bypass entries and e
   );
   show();
   expect(await screen.findByText("Repository protection")).toBeVisible();
+  // In the deployment's own name.
   expect(
-    screen.getByText(
-      "Merges need an up-to-date pull request, a code owner's approval and the Archestra Guardrails policy check",
-    ),
+    screen.getByText("Acme AI restores the missing rules at the next sync"),
   ).toBeVisible();
   expect(
     screen.getByText(

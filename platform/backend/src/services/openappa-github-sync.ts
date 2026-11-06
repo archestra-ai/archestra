@@ -8,6 +8,7 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { inArray } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import {
   type AllowedCacheKey,
@@ -768,8 +769,11 @@ export async function checkDueAppaGithubSyncs() {
 // Pull request checks: a pull's own checks on what a pull request would merge
 // =============================================================================
 
-/** The check every policy pull request carries; the branch ruleset requires it. */
-const POLICY_CHECK_NAME = "Archestra Guardrails policy";
+/**
+ * The check every policy pull request carries. The branch ruleset requires it
+ * by this name, so the name stays the same whatever the deployment is called.
+ */
+const POLICY_CHECK_NAME = "Guardrails policy";
 
 /** The most open pull requests checked in one repository each minute. */
 const MAX_CHECKED_PULLS = 50;
@@ -979,8 +983,7 @@ function checkSummary(outcome: PullOutcome) {
   return outcome.accepted
     ? {
         title: "Git sync would accept this policy",
-        summary:
-          "Archestra checked the policy this pull request would merge, with every file it includes, as Git sync checks a commit before applying it.",
+        summary: `${archestraMcpBranding.appName} checked the policy this pull request would merge, with every file it includes, as Git sync checks a commit before applying it.`,
       }
     : {
         title: "Git sync would refuse this policy",
@@ -1707,9 +1710,11 @@ export function hasOwnFile(
 /**
  * Where Archestra's lines sit in CODEOWNERS. Everything between the markers
  * is rewritten from the registry; everything else is the repository's own.
+ * The markers find the block, so they stay the same whatever the deployment
+ * is called.
  */
-const OWNERS_BEGIN = "# BEGIN Archestra: MCP server rules owners";
-const OWNERS_END = "# END Archestra: MCP server rules owners";
+const OWNERS_BEGIN = "# BEGIN Guardrails: MCP server rules owners";
+const OWNERS_END = "# END Guardrails: MCP server rules owners";
 
 /** The branch of the one code owners pull request Archestra keeps open. */
 const OWNERS_BRANCH = "archestra/openappa-code-owners";
@@ -1727,8 +1732,8 @@ const CODEOWNERS_PATHS = [
  */
 const OWNERS_MAP_FILE = "code-owners.toml";
 
-/** The ruleset Archestra keeps on the synced branch. */
-const RULESET_NAME = "Archestra Guardrails policy";
+/** The ruleset Archestra keeps on the synced branch, found again by this name. */
+const RULESET_NAME = "Guardrails policy";
 
 /** A GitHub user (`@login`) or team (`@org/team`) as CODEOWNERS names one. */
 const GITHUB_OWNER =
@@ -1793,13 +1798,11 @@ async function repositoryProtection(params: {
     return {
       branchRules: {
         state: "unsupported",
-        detail:
-          "Archestra keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.",
+        detail: `${archestraMcpBranding.appName} keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.`,
       },
       codeOwners: {
         state: "unsupported",
-        detail:
-          "Archestra writes code owners on GitHub repositories only; GitLab keeps its own CODEOWNERS.",
+        detail: `${archestraMcpBranding.appName} writes code owners on GitHub repositories only; GitLab keeps its own CODEOWNERS.`,
         unowned: [],
         mapErrors: [],
       },
@@ -1935,7 +1938,7 @@ async function githubBranchRules(
     return {
       state: "disabled",
       url: page(ours.id),
-      detail: `The ruleset is ${existing.body.enforcement} on GitHub, so Archestra leaves it as it is.`,
+      detail: `The ruleset is ${existing.body.enforcement} on GitHub, so ${archestraMcpBranding.appName} leaves it as it is.`,
     };
   const { include = [], exclude = [] } =
     existing.body.conditions?.ref_name ?? {};
@@ -2527,8 +2530,8 @@ function withOwnersBlock(
 ): string | null {
   const block = [
     OWNERS_BEGIN,
-    `# Written from who may edit each MCP server in Archestra and ${OWNERS_MAP_FILE}.`,
-    "# Change those, not these lines: Archestra rewrites them.",
+    `# Written from who may edit each MCP server in ${archestraMcpBranding.appName} and ${OWNERS_MAP_FILE}.`,
+    `# Change those, not these lines: ${archestraMcpBranding.appName} rewrites them.`,
     ...lines,
     OWNERS_END,
   ].join("\n");
@@ -2699,14 +2702,14 @@ function ownersPullBody(params: {
   githubErrors: Array<{ line?: number; kind?: string; message?: string }>;
 }): string {
   const sections = [
-    `Archestra keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in Archestra or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
+    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in ${archestraMcpBranding.appName} or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
     params.lines.length > 0
       ? `### Owners\n\n${params.lines.map((line) => `- \`${line}\``).join("\n")}`
       : "### Owners\n\nNo server's editors have a GitHub owner yet.",
   ];
   if (params.unowned.length > 0)
     sections.push(
-      `### Editors without a GitHub owner\n\nAdd them to \`${OWNERS_MAP_FILE}\`, or ask them to connect GitHub in Archestra:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
+      `### Editors without a GitHub owner\n\nAdd them to \`${OWNERS_MAP_FILE}\`, or ask them to connect GitHub in ${archestraMcpBranding.appName}:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
     );
   if (params.mapErrors.length > 0)
     sections.push(

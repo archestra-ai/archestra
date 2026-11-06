@@ -613,7 +613,7 @@ function serverScopeErrors(
 ): string[] {
   if (!SERVER_PREFIX.test(prefix) || prefix.includes("__"))
     return [
-      `${path}: ${SERVER_RULES_FOLDER}/ holds one file per MCP server, named by its tools' prefix; ${JSON.stringify(prefix)} is not one Archestra gives a server`,
+      `${path}: ${SERVER_RULES_FOLDER}/ holds one file per MCP server, named by its tools' prefix; ${JSON.stringify(prefix)} is not a tool prefix`,
     ];
   const outside = [
     ...tablesOf(policy.tool)

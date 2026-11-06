@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -127,7 +128,7 @@ export async function proposeServerRulesChange(
   const body = [
     params.summary.trim(),
     "",
-    `Requested in Archestra by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
     `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${SERVER_RULES_INCLUDE}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [

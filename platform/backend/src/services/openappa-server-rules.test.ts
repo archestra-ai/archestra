@@ -494,7 +494,7 @@ delta = { trust = "suspicious" }
   state.head = THIRD;
   await syncAppaGithubPolicy(org.id);
   expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toBe(
-    'mcp/README.toml: mcp/ holds one file per MCP server, named by its tools\' prefix; "README" is not one Archestra gives a server',
+    'mcp/README.toml: mcp/ holds one file per MCP server, named by its tools\' prefix; "README" is not a tool prefix',
   );
 });
 
@@ -635,7 +635,7 @@ test("each open pull request carries the checks a pull would make on its merge r
   await checkDueAppaGithubSyncs();
   expect(runs).toEqual([
     expect.objectContaining({
-      name: "Archestra Guardrails policy",
+      name: "Guardrails policy",
       head_sha: goodHead,
       conclusion: "success",
     }),
@@ -644,7 +644,7 @@ test("each open pull request carries the checks a pull would make on its merge r
     {
       sha: badHead,
       state: "failure",
-      context: "Archestra Guardrails policy",
+      context: "Guardrails policy",
       description: expect.stringMatching(
         /^mcp\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for/,
       ),
@@ -884,7 +884,7 @@ test("on GitLab, a pull reads every page of mcp/, merge requests get the policy 
   expect(gitlab.statuses).toEqual([
     expect.objectContaining({
       state: "success",
-      name: "Archestra Guardrails policy",
+      name: "Guardrails policy",
     }),
   ]);
   await checkDueAppaGithubSyncs();
@@ -1297,7 +1297,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           ? [
               {
                 id: 5,
-                name: "Archestra Guardrails policy",
+                name: "Guardrails policy",
                 source_type: "Repository",
               },
             ]
@@ -1320,7 +1320,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
     {
       method: "POST",
       body: {
-        name: "Archestra Guardrails policy",
+        name: "Guardrails policy",
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1343,7 +1343,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Archestra Guardrails policy", integration_id: 123 },
+                { context: "Guardrails policy", integration_id: 123 },
               ],
             },
           },
@@ -1355,7 +1355,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
   // nothing is written again.
   existing = {
     id: 5,
-    name: "Archestra Guardrails policy",
+    name: "Guardrails policy",
     target: "branch",
     source_type: "Repository",
     enforcement: "active",
@@ -1382,7 +1382,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
         parameters: {
           do_not_enforce_on_create: false,
           required_status_checks: [
-            { context: "Archestra Guardrails policy", integration_id: 123 },
+            { context: "Guardrails policy", integration_id: 123 },
           ],
           strict_required_status_checks_policy: true,
         },
@@ -1419,7 +1419,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
               do_not_enforce_on_create: false,
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Archestra Guardrails policy", integration_id: 123 },
+                { context: "Guardrails policy", integration_id: 123 },
               ],
             },
           },
@@ -1439,7 +1439,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Archestra Guardrails policy", integration_id: 123 },
+                { context: "Guardrails policy", integration_id: 123 },
               ],
             },
           }
@@ -1477,7 +1477,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
   // ones come back, the stricter ones and their own additions stay.
   existing = {
     id: 5,
-    name: "Archestra Guardrails policy",
+    name: "Guardrails policy",
     target: "branch",
     enforcement: "active",
     conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1505,7 +1505,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
     {
       method: "PUT",
       body: {
-        name: "Archestra Guardrails policy",
+        name: "Guardrails policy",
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1531,7 +1531,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Archestra Guardrails policy", integration_id: 123 },
+                { context: "Guardrails policy", integration_id: 123 },
               ],
             },
           },
@@ -1668,12 +1668,12 @@ test("the code owners of each server's file follow who may edit the server, prop
   await syncAppaGithubPolicy(org.id);
   const proposed = `* @acme/admins
 
-# BEGIN Archestra: MCP server rules owners
+# BEGIN Guardrails: MCP server rules owners
 # Written from who may edit each MCP server in Archestra and code-owners.toml.
 # Change those, not these lines: Archestra rewrites them.
 /mcp/helpdesk.toml @dana-acme
 /mcp/payments_api.toml @acme/payments
-# END Archestra: MCP server rules owners
+# END Guardrails: MCP server rules owners
 `;
   expect(trees).toEqual([
     {

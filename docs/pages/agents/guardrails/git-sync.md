@@ -58,7 +58,7 @@ include = [
 ]
 ```
 
-Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below. OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below: OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
 
 1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
@@ -76,8 +76,8 @@ What to know:
 Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
 
 - **Code owners:** a pull request that adds each server's editors to `CODEOWNERS` as owners of its file, updated when editors change.
-- **The policy check:** every pull request into the synced branch gets the **Archestra Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
-- **Branch rules:** a ruleset named **Archestra Guardrails policy** on the synced branch. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. No one can force-push or delete the branch. Archestra adds no one who may bypass the ruleset; a bypass an administrator adds on GitHub stays, and Settings shows it.
+- **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
+- **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
 People map to GitHub through the account they connected in Archestra. Map teams, roles, and anyone else in `code-owners.toml`, beside `appa.toml`:
 

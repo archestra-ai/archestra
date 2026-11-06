@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
@@ -323,10 +324,11 @@ type ProtectionView = {
  */
 function RepositoryProtection() {
   const { data } = useAppaRepositoryProtection(true);
+  const appName = useAppName();
   if (!data) return null;
   const rows: Array<{ label: string; view: ProtectionView }> = [
-    { label: "Branch rules", view: branchRulesView(data.branchRules) },
-    { label: "Code owners", view: codeOwnersView(data.codeOwners) },
+    { label: "Branch rules", view: branchRulesView(data.branchRules, appName) },
+    { label: "Code owners", view: codeOwnersView(data.codeOwners, appName) },
   ];
   const { unowned, mapErrors } = data.codeOwners;
   return (
@@ -394,7 +396,10 @@ function RepositoryProtection() {
   );
 }
 
-function branchRulesView(rules: Protection["branchRules"]): ProtectionView {
+function branchRulesView(
+  rules: Protection["branchRules"],
+  appName: string,
+): ProtectionView {
   const link = rules.url
     ? { href: rules.url, label: "View ruleset" }
     : undefined;
@@ -408,21 +413,21 @@ function branchRulesView(rules: Protection["branchRules"]): ProtectionView {
     case "active":
       return {
         status:
-          "Merges need an up-to-date pull request, a code owner's approval and the Archestra Guardrails policy check",
+          "Merges need an up-to-date pull request, a code owner's approval and the Guardrails policy check",
         tone: "ok",
         link,
         detail: bypass,
       };
     case "incomplete":
       return {
-        status: "Archestra restores the missing rules at the next sync",
+        status: `${appName} restores the missing rules at the next sync`,
         tone: "pending",
         link,
         detail: bypass,
       };
     case "missing":
       return {
-        status: "Archestra creates the ruleset at the next sync",
+        status: `${appName} creates the ruleset at the next sync`,
         tone: "pending",
       };
     case "disabled":
@@ -456,7 +461,10 @@ function branchRulesView(rules: Protection["branchRules"]): ProtectionView {
   }
 }
 
-function codeOwnersView(owners: Protection["codeOwners"]): ProtectionView {
+function codeOwnersView(
+  owners: Protection["codeOwners"],
+  appName: string,
+): ProtectionView {
   switch (owners.state) {
     case "up_to_date":
       return {
@@ -473,7 +481,7 @@ function codeOwnersView(owners: Protection["codeOwners"]): ProtectionView {
       };
     case "out_of_date":
       return {
-        status: "Archestra opens a pull request at the next sync",
+        status: `${appName} opens a pull request at the next sync`,
         tone: "pending",
       };
     case "not_used":

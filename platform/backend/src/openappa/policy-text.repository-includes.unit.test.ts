@@ -352,7 +352,7 @@ on = ["tool_output"]
     expect(
       includedFileErrors("mcp/Payments API.toml", "[policy]\nversion = 2\n"),
     ).toEqual([
-      'mcp/Payments API.toml: mcp/ holds one file per MCP server, named by its tools\' prefix; "Payments API" is not one Archestra gives a server',
+      'mcp/Payments API.toml: mcp/ holds one file per MCP server, named by its tools\' prefix; "Payments API" is not a tool prefix',
     ]);
     expect(
       includedFileErrors(

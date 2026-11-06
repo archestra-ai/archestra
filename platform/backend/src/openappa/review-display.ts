@@ -1,3 +1,5 @@
+import { withoutProxyCopies } from "./derived-arguments";
+
 /**
  * The reviewed call as an approval prompt shows it: the tool by the name the
  * user knows it under, and its arguments as named values.
@@ -19,7 +21,7 @@ export function approvalPromptCall(params: {
 } {
   const review = params.review && displayedReview(params.review);
   if (review?.tool) {
-    const toolArgs = parseReviewedArguments(review.arguments);
+    const toolArgs = reviewedCallArguments(review);
     return {
       toolName: reviewedToolLabel(review.tool),
       ...(toolArgs ? { toolArgs } : {}),
@@ -41,6 +43,18 @@ export function reviewedToolLabel(tool: string): string {
   if (parts.length === 3 && parts[0] === "mcp" && parts[1] && parts[2])
     return `${parts[1]}__${parts[2]}`;
   return tool;
+}
+
+/**
+ * The reviewed call's own arguments: the reviewed object without the copies
+ * the proxy rules the call with, or undefined when it is not an object.
+ */
+export function reviewedCallArguments(review: {
+  tool?: string;
+  arguments?: string;
+}): Record<string, unknown> | undefined {
+  const args = parseReviewedArguments(review.arguments);
+  return args && review.tool ? withoutProxyCopies(review.tool, args) : args;
 }
 
 /** The reviewed arguments as an object, or undefined when they are not one. */

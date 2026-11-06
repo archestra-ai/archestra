@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-05
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -52,7 +52,7 @@ Give people **Can use** on an agent to let them run it without changing it. Give
 Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
 
 1. Open the item's **Permissions** control.
-2. Add a person, team, role, service account, or **Everyone in the organization**.
+2. Add a person, team, role, service account, OAuth client (on Knowledge Bases, knowledge connectors, and files), or **Everyone in the organization**.
 3. Choose their level, then save.
 
 | Level | Allows |

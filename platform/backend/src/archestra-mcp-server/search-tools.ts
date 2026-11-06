@@ -457,7 +457,7 @@ async function getSearchableTools(params: {
   conversationId?: string;
   delegationChain?: string;
   parentLlm?: ModelSelection;
-  tokenAuth?: TargetInstallCaller;
+  tokenAuth?: TargetInstallCaller & { oauthClientId?: string };
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
@@ -487,6 +487,7 @@ async function getSearchableTools(params: {
     assignedToolNames: assignedNames,
     agentId,
     userId,
+    oauthClientId: params.tokenAuth?.oauthClientId,
     organizationId,
     exclusionSets,
   });
@@ -602,7 +603,13 @@ async function getSearchableTools(params: {
     const knowledgeDescription = isKnowledge
       ? await buildKnowledgeSourcesDescription(
           agentId,
-          organizationId ? { userId, organizationId } : undefined,
+          organizationId
+            ? {
+                userId,
+                oauthClientId: params.tokenAuth?.oauthClientId,
+                organizationId,
+              }
+            : undefined,
         )
       : null;
     if (isKnowledge && !knowledgeDescription) continue;

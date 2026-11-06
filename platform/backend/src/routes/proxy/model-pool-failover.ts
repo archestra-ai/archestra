@@ -24,6 +24,7 @@ import {
   type ModelPoolMember,
   type ModelPoolWithHealth,
 } from "@/types";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { poolFailoverReason } from "./llm-proxy-helpers";
 import {
   canReachMember,
@@ -140,10 +141,11 @@ export function mayUseModelPool(params: {
 }
 
 /**
- * The plan for a request whose model is a pool's name, or null when model
- * pools are off (a beta feature), no pool has that name, the caller may not
- * use it, or none of its members can answer the client's wire. The session id keeps one conversation on one member
- * while it is healthy, which keeps the provider's prompt cache warm.
+ * Plan a named or explicitly selected pool. Returns null when pools are off,
+ * a named pool does not exist, or the caller cannot use that named pool.
+ * A missing selected pool throws 404; no enabled members or any enabled member
+ * incompatible with the client wire throws 400. Session affinity keeps a
+ * conversation on one healthy member to reuse the provider's prompt cache.
  */
 export async function planModelPool(params: {
   organizationId: string;
@@ -169,7 +171,11 @@ export async function planModelPool(params: {
         organizationId: params.organizationId,
         name: params.name,
       });
-  if (!pool) return null;
+  if (!pool) {
+    if (params.poolId)
+      throw new ApiError(404, "The selected model pool no longer exists");
+    return null;
+  }
   if (
     pool.id !== params.poolId &&
     pool.id !== params.grantedPoolId &&
@@ -177,22 +183,18 @@ export async function planModelPool(params: {
   ) {
     return null;
   }
-  const reachable = pool.members.filter((member) =>
+  const enabled = pool.members.filter((member) => member.enabled);
+  if (enabled.length === 0)
+    throw new ApiError(400, "The selected model pool has no enabled members");
+  const reachable = enabled.filter((member) =>
     canReachMember(params.inbound, member.provider),
   );
-  if (reachable.length < pool.members.length) {
-    logger.info(
-      {
-        poolId: pool.id,
-        inbound: params.inbound,
-        skipped: pool.members
-          .filter((member) => !reachable.includes(member))
-          .map((member) => member.provider),
-      },
-      "Model pool members on a wire this client cannot reach are skipped",
+  if (reachable.length < enabled.length) {
+    throw new ApiError(
+      400,
+      `This model pool has members that cannot serve ${params.inbound} requests. Use a compatible request format or remove incompatible members; the pool will not be silently bypassed.`,
     );
   }
-  if (reachable.length === 0) return null;
   const benches = await readBenches({ ...pool, members: reachable });
   const benchedUntil = new Map<string, number>();
   for (const [memberId, bench] of benches) {
@@ -425,9 +427,11 @@ export async function openThroughModelPool<T>(params: {
       await recordPreviousFailure("failed_over");
       lastFailure = undefined;
       const failover =
-        error instanceof MemberUnavailableError
-          ? { reason: "key_unavailable", retryAfterMs: undefined }
-          : poolFailoverReason(error);
+        error instanceof ObservedProviderUsageError
+          ? undefined
+          : error instanceof MemberUnavailableError
+            ? { reason: "key_unavailable", retryAfterMs: undefined }
+            : poolFailoverReason(error);
       attempt.attemptOutcome = "failed";
       if (error instanceof MemberTimeoutError) attempt.cutOff = true;
       // An error that doesn't fail over still gets a reason; its message is in

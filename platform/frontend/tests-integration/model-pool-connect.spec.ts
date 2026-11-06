@@ -355,7 +355,8 @@ test.describe("LLM Proxy pool discovery", () => {
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4o", exact: true }),
     ).toHaveCount(0);
   });
 
@@ -432,10 +433,12 @@ test.describe("LLM Proxy pool discovery", () => {
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4.1" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4.1", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4o", exact: true }),
     ).toHaveCount(0);
   });
 

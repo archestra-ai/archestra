@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -8,6 +8,7 @@ import logger from "@/logging";
 import SkillModel from "@/models/skill";
 import SkillFileModel from "@/models/skill-file";
 import { expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import type { InsertSkill, Skill } from "@/types";
 import { backfillSkillPublicationArtifacts } from "./skill-publication-backfill";
 

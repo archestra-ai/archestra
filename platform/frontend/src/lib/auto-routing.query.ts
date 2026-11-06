@@ -69,8 +69,13 @@ const autoRoutingKeys = {
     [...autoRoutingKeys.all, "diagnostics", budgetUsdPerDay] as const,
 };
 
-export function useAutoRoutingSettings() {
+export function useAutoRoutingSettings({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   return useQuery({
+    enabled,
     queryKey: autoRoutingKeys.settings(),
     queryFn: async () => {
       const { data, error } = await getAutoRoutingSettings();

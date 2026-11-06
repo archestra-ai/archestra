@@ -277,19 +277,21 @@ test("without member:read, agent and credential breakdowns cover only the caller
     cost: "2",
   });
   const breakdowns = async () => {
-    const [agents, proxy, overview, byKey, byAgent] = await Promise.all(
-      [
-        "/api/statistics/agents?timeframe=all",
-        "/api/statistics/llm-proxy?timeframe=all",
-        "/api/statistics/overview?timeframe=all",
-        "/api/statistics/model-usage?timeframe=all&model=example&groupBy=key",
-        "/api/statistics/model-usage?timeframe=all&model=example&groupBy=agent",
-      ].map(async (url) => {
-        const response = await app.inject({ url });
-        expect(response.statusCode).toBe(200);
-        return response.json();
-      }),
-    );
+    const [agents, proxy, overview, byKey, byAgent, byPerson] =
+      await Promise.all(
+        [
+          "/api/statistics/agents?timeframe=all",
+          "/api/statistics/llm-proxy?timeframe=all",
+          "/api/statistics/overview?timeframe=all",
+          "/api/statistics/model-usage?timeframe=all&model=example&groupBy=key",
+          "/api/statistics/model-usage?timeframe=all&model=example&groupBy=agent",
+          "/api/statistics/llm-usage?timeframe=all&groupBy=agentId,userId",
+        ].map(async (url) => {
+          const response = await app.inject({ url });
+          expect(response.statusCode).toBe(200);
+          return response.json();
+        }),
+      );
     return {
       agents: agents.map((row: { agentId: string }) => row.agentId),
       proxyTotal: proxy.totals.billedCost,
@@ -299,6 +301,8 @@ test("without member:read, agent and credential breakdowns cover only the caller
       topAgent: overview.topAgent,
       keys: byKey.data.map((row: { id: string }) => row.id),
       agentRows: byAgent.data.map((row: { id: string }) => row.id),
+      people: byPerson.data.map((row: { userId: string | null }) => row.userId),
+      peopleSpend: byPerson.totals.billedCost,
     };
   };
 
@@ -310,6 +314,8 @@ test("without member:read, agent and credential breakdowns cover only the caller
     topAgent: theirAgent.name,
     keys: expect.arrayContaining([`virtual_key:${theirKey.id}`]),
     agentRows: expect.arrayContaining([theirAgent.id]),
+    people: expect.arrayContaining([someone.id, user.id]),
+    peopleSpend: 9,
   });
 
   const role = await makeCustomRole(organizationId, {
@@ -323,6 +329,8 @@ test("without member:read, agent and credential breakdowns cover only the caller
     topAgent: sharedAgent.name,
     keys: ["unknown:unattributed"],
     agentRows: [sharedAgent.id],
+    people: [user.id],
+    peopleSpend: 2,
   });
   // A credential filter cannot reach someone else's key either.
   const filtered = await app.inject({

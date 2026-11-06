@@ -293,7 +293,7 @@ class OpenAppaHelperBridge {
       });
     } catch (error) {
       logger.warn(
-        { installId: install.id, credential, error },
+        { err: error, installId: install.id, credential },
         "OpenAPPA battery credential could not be resolved",
       );
       value = null;

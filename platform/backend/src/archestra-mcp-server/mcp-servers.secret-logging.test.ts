@@ -7,9 +7,10 @@ import { beforeEach, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 import logger from "@/logging";
+import { spyOnLogger } from "@/test/logging";
 
 const EDIT_CONFIG_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
 const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;

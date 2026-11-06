@@ -236,6 +236,7 @@ describe("Model Router auto model", () => {
           featuresSchemaVersion: 1,
         });
         expect(decision.features).toEqual({
+          scorerUsage: { inputTokens: 420, outputTokens: 6 },
           signals: {
             "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },
           },

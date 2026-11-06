@@ -52,12 +52,21 @@ for (const provider of [
     let handlerFinished: ReturnType<typeof deferred>;
     let clientDisconnected: boolean;
     let finalizationGate: ReturnType<typeof deferred> | undefined;
+    let policyGate: ReturnType<typeof deferred> | undefined;
+    let policyStarted: ReturnType<typeof deferred>;
+    let bufferResponse: boolean;
+    let invalidPolicyBatch: "added" | "duplicate" | undefined;
     let unregister: (() => void) | undefined;
     let failures: number;
     let failure: unknown;
     let cleanups: number;
     let completions: number;
-    let mode: "headers" | "stream" | "tool-stream" | "complete";
+    let mode:
+      | "headers"
+      | "stream"
+      | "tool-stream"
+      | "terminal-tool-stream"
+      | "complete";
     const model =
       provider === "anthropic"
         ? "claude-3-5-sonnet-20241022"
@@ -108,10 +117,10 @@ for (const provider of [
     function sendHeldToolCall(response: ServerResponse) {
       if (provider === "gemini") {
         response.write(
-          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ functionCall: { id: "held-call", name: "lookup", args: {} } }] } }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
+          `data: ${JSON.stringify({ candidates: [{ index: 0, content: { role: "model", parts: [{ functionCall: { id: "held-call", name: "lookup", args: {} } }] }, ...(mode === "terminal-tool-stream" ? { finishReason: "STOP" } : {}) }], usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 1, totalTokenCount: 13 } })}\n\n`,
         );
         response.write(
-          `data: ${JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "After held call" }] } }] })}\n\n`,
+          `data: ${JSON.stringify({ candidates: [{ index: mode === "terminal-tool-stream" ? 1 : 0, content: { role: "model", parts: [{ text: "After held call" }] } }] })}\n\n`,
         );
       } else if (provider === "anthropic") {
         response.write(
@@ -183,12 +192,30 @@ for (const provider of [
       handlerFinished = deferred();
       clientDisconnected = false;
       finalizationGate = undefined;
+      policyGate = undefined;
+      bufferResponse = false;
+      invalidPolicyBatch = undefined;
+      policyStarted = deferred();
       failures = 0;
       failure = undefined;
       cleanups = 0;
       completions = 0;
       unregister = registerLlmProxyPlugin({
         id: `disconnect-proof-${crypto.randomUUID()}`,
+        buffersModelResponse: () => bufferResponse,
+        onToolCalls: async ({ toolCalls }) => {
+          policyStarted.resolve();
+          await policyGate?.promise;
+          if (invalidPolicyBatch)
+            return {
+              decision: "allow",
+              toolCalls:
+                invalidPolicyBatch === "added"
+                  ? [{ ...toolCalls[0], id: "added-call" }]
+                  : [toolCalls[0], toolCalls[0]],
+            };
+          return undefined;
+        },
         onModelResponse: async () => {
           providerFinished.resolve();
           await finalizationGate?.promise;
@@ -220,7 +247,8 @@ for (const provider of [
             closed = true;
           });
           if (mode !== "headers") sendStart(response);
-          if (mode === "tool-stream") sendHeldToolCall(response);
+          if (mode === "tool-stream" || mode === "terminal-tool-stream")
+            sendHeldToolCall(response);
           if (mode === "complete") finish(response);
           received.resolve();
         });
@@ -271,6 +299,7 @@ for (const provider of [
 
     afterEach(async () => {
       finalizationGate?.resolve();
+      policyGate?.resolve();
       upstreamResponse?.destroy();
       upstream.closeAllConnections();
       await new Promise<void>((resolve) => upstream.close(() => resolve()));
@@ -526,50 +555,144 @@ for (const provider of [
       });
     });
 
-    test("discards unreleased tool calls on disconnect while preserving partial usage", async () => {
-      mode = "tool-stream";
-      const controller = new AbortController();
-      const response = await post(controller.signal);
-      expect(response.status).toBe(200);
-      const reader = response.body?.getReader();
-      expect(reader).toBeDefined();
-      const decoder = new TextDecoder();
-      let receivedText = "";
-      while (!receivedText.includes("After held call")) {
-        const chunk = await reader?.read();
-        expect(chunk?.done).toBe(false);
-        receivedText += decoder.decode(chunk?.value, { stream: true });
-      }
-      expect(receivedText).not.toContain("held-call");
-      controller.abort();
-      await vi.waitFor(() => expect(closed).toBe(true), { timeout: 1500 });
-      await vi.waitFor(() => expect(cleanups).toBe(1));
-      expect(failures).toBe(1);
-      expect(completions).toBe(0);
-      await vi.waitFor(async () => {
-        const rows =
-          await InteractionModel.getAllInteractionsForProfile(agentId);
-        expect(rows).toHaveLength(1);
-        expect(rows[0].inputTokens).toBe(provider === "openai" ? null : 12);
-        expect(rows[0].outputTokens).toBe(provider === "openai" ? null : 1);
-        expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
-        expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
-        if (provider === "responses") {
-          expect(rows[0].response).toMatchObject({
-            status: "incomplete",
-            error: {
-              code: "client_disconnected",
-              message: "Client disconnected during inference",
-            },
-          });
+    for (const earlyTerminal of provider === "gemini"
+      ? [false, true]
+      : [false]) {
+      test(`discards unreleased tool calls on disconnect while preserving partial usage (early terminal=${earlyTerminal})`, async () => {
+        mode = earlyTerminal ? "terminal-tool-stream" : "tool-stream";
+        const controller = new AbortController();
+        const response = await post(controller.signal);
+        expect(response.status).toBe(200);
+        const reader = response.body?.getReader();
+        expect(reader).toBeDefined();
+        const decoder = new TextDecoder();
+        let receivedText = "";
+        while (!receivedText.includes("After held call")) {
+          const chunk = await reader?.read();
+          expect(chunk?.done).toBe(false);
+          receivedText += decoder.decode(chunk?.value, { stream: true });
         }
-        if (provider !== "openai") {
+        expect(receivedText).not.toContain("held-call");
+        controller.abort();
+        await vi.waitFor(() => expect(closed).toBe(true), { timeout: 1500 });
+        await vi.waitFor(() => expect(cleanups).toBe(1));
+        expect(failures).toBe(1);
+        expect(completions).toBe(0);
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(rows[0].inputTokens).toBe(provider === "openai" ? null : 12);
+          expect(rows[0].outputTokens).toBe(provider === "openai" ? null : 1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          if (provider === "responses") {
+            expect(rows[0].response).toMatchObject({
+              status: "incomplete",
+              error: {
+                code: "client_disconnected",
+                message: "Client disconnected during inference",
+              },
+            });
+          }
+          if (provider !== "openai") {
+            const receipts = await InteractionBillingModel.findMany([
+              rows[0].id,
+            ]);
+            expect(receipts).toHaveLength(1);
+            expect(receipts[0].usage.status).toBe("incomplete");
+            expect(receipts[0].usage.issues).toContain("partial_stream");
+          }
+        });
+      });
+    }
+
+    if (provider === "gemini") {
+      test("discards unreleased calls on a post-drain policy disconnect while preserving final usage", async () => {
+        mode = "tool-stream";
+        policyGate = deferred();
+        const controller = new AbortController();
+        const response = await post(controller.signal);
+        expect(response.status).toBe(200);
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        await policyStarted.promise;
+        controller.abort();
+        await vi.waitFor(() => expect(clientDisconnected).toBe(true));
+        policyGate.resolve();
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
           const receipts = await InteractionBillingModel.findMany([rows[0].id]);
           expect(receipts).toHaveLength(1);
-          expect(receipts[0].usage.issues).toContain("partial_stream");
-        }
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        });
       });
-    });
+    }
+
+    if (provider === "gemini") {
+      test("discards buffered calls when the client disconnects during final response policy", async () => {
+        mode = "tool-stream";
+        bufferResponse = true;
+        finalizationGate = deferred();
+        const controller = new AbortController();
+        const request = post(controller.signal).catch(() => undefined);
+        await received.promise;
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        await providerFinished.promise;
+        controller.abort();
+        await vi.waitFor(() => expect(clientDisconnected).toBe(true));
+        finalizationGate.resolve();
+        await request;
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        });
+      });
+    }
+
+    if (provider === "gemini") {
+      test.for([
+        "added",
+        "duplicate",
+      ] as const)("discards unreleased calls when policy mapping fails (%s)", async (batch) => {
+        mode = "tool-stream";
+        invalidPolicyBatch = batch;
+        const response = await post(new AbortController().signal);
+        if (!upstreamResponse) throw new Error("Upstream request missing");
+        finish(upstreamResponse);
+        const delivered = await response.text();
+        expect(delivered).not.toContain("functionCall");
+        expect(delivered).not.toContain("held-call");
+        await vi.waitFor(async () => {
+          const rows =
+            await InteractionModel.getAllInteractionsForProfile(agentId);
+          expect(rows).toHaveLength(1);
+          expect(JSON.stringify(rows[0].response)).not.toContain("held-call");
+          expect(JSON.stringify(rows[0].response)).not.toContain("lookup");
+          expect(rows[0].inputTokens).toBe(12);
+          expect(rows[0].outputTokens).toBe(40);
+          const receipts = await InteractionBillingModel.findMany([rows[0].id]);
+          expect(receipts).toHaveLength(1);
+          expect(receipts[0].usage.issues).not.toContain("partial_stream");
+        });
+        expect(failures).toBe(1);
+      });
+    }
 
     test("preserves final usage when the client disconnects during proxy finalization", async () => {
       mode = "complete";

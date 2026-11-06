@@ -364,8 +364,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         testAgent.id,
       );
       expect(rows).toHaveLength(1);
-      // A streaming response keeps accruing time after its first chunk.
-      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 550) : 250);
+      // Four streamed chunks each add 100 ms after yielding; normal EOF
+      // includes the final interval while a failure stops after the first.
+      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 650) : 250);
     });
 
     test("streaming request increments token and cost metrics", async () => {

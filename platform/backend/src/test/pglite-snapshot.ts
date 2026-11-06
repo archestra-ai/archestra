@@ -17,8 +17,10 @@ import { getMigrationsSql } from "./migrations-helper.js";
 
 /**
  * Replays the migrations into a fresh in-memory PGlite, empties the tables
- * they seed and writes the gzipped data directory to `outPath`. The file
- * appears atomically, so concurrent runs never read a partial snapshot.
+ * they seed and writes the data directory to `outPath` as an uncompressed
+ * tar: every database-backed test file loads it, and an uncompressed load
+ * takes about 350 ms against about 500 ms gzipped. The file appears
+ * atomically, so concurrent runs never read a partial snapshot.
  */
 export async function buildSnapshot(outPath: string): Promise<void> {
   const pg = new PGlite("memory://", { extensions: { vector } });
@@ -28,7 +30,7 @@ export async function buildSnapshot(outPath: string): Promise<void> {
   // Migrations seed rows (e.g. a default organization). Ship an empty
   // snapshot so a freshly loaded test database needs no reset (setup.ts).
   await truncatePublicTables(pg);
-  const dump = await pg.dumpDataDir("gzip");
+  const dump = await pg.dumpDataDir("none");
   const bytes = Buffer.from(await dump.arrayBuffer());
   await pg.close();
 

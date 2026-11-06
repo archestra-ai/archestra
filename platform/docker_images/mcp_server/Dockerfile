@@ -147,7 +147,8 @@ RUN apk add --no-cache \
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
-   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
+   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest.
+   # CVE-2026-107891 requires a newer musl package than that digest contains.
    # CVE-2026-92392: curl/libcurl vulnerabilities are resolved in 8.23.0-r0.
    # The explicit `apk add curl` above installs them, so explicit floors below ensure
    # a cached layer cannot retain the older packages.
@@ -188,7 +189,10 @@ RUN apk add --no-cache \
    # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
-   apk add --no-cache --upgrade "zlib>=1.3.2-r1"
+   apk add --no-cache --upgrade "zlib>=1.3.2-r1" && \
+   # Require the Alpine 3.23 musl fix for both installed packages and invalidate
+   # cached layers with 1.2.5-r23.
+   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

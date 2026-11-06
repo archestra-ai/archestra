@@ -21,10 +21,12 @@
 // Binds the ports of the layers below before any other module loads.
 import "@/server/composition";
 import { and, eq, gt, inArray } from "drizzle-orm";
+import config from "@/config";
 import db, {
   getDatabaseConnectionString,
   initializeDatabase,
 } from "@/database";
+import { resolveNativeDatabaseConnectionString } from "@/database/rds-iam";
 import {
   openappaOperationsTable,
   openappaSessionsTable,
@@ -38,7 +40,12 @@ assertPortsBound();
 async function main() {
   await initializeDatabase();
   const native = await import("@archestra/openappa-rs");
-  const url = new URL(getDatabaseConnectionString());
+  const url = new URL(
+    await resolveNativeDatabaseConnectionString(getDatabaseConnectionString(), {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    }),
+  );
   // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
   url.searchParams.delete("schema");
   await native.initializeOpenappa(url.toString(), 2);

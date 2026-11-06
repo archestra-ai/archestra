@@ -29,6 +29,7 @@ import {
   minimaxUsageTokens,
   ollamaNativeUsageTokens,
   openAIUsageTokens,
+  xaiUsageTokens,
   zhipuaiUsageTokens,
 } from "./llm-usage";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
@@ -87,7 +88,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   mistral: openAIUsageTokens,
   perplexity: getChatOrResponsesUsage,
   groq: openAIUsageTokens,
-  xai: openAIUsageTokens,
+  xai: xaiUsageTokens,
   openrouter: openAIUsageTokens,
   anthropic: anthropicUsageTokens,
   azure: getChatOrResponsesUsage,

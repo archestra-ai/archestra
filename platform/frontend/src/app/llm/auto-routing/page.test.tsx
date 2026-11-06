@@ -1046,6 +1046,14 @@ describe("past sessions", () => {
     ).toHaveTextContent(
       "240 found · 30 of 240 scored · scoring, $0.50 of $2.00",
     );
+    expect(
+      screen.getByText("Budget accounted: $0.50 of $2.00"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Includes estimates when the scorer did not report a cost/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("counts unreadable and failed sessions as done, not pending", async () => {
@@ -1062,7 +1070,7 @@ describe("past sessions", () => {
       await screen.findByTestId("auto-routing-past-sessions-funnel"),
     ).toHaveTextContent("240 found · 200 scored");
     expect(
-      screen.getByText("Not scored: 30 without text, 10 failed"),
+      screen.getByText("Not scored: 30 skipped, 10 failed"),
     ).toBeInTheDocument();
   });
 

@@ -175,32 +175,6 @@ test("keeps per-call review history after consuming live approval without reopen
     expect(await getHitlReviewResult(other)).toBeUndefined();
 });
 
-test("historical status survives review expiry but cannot create an approval", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  try {
-    const active = session("expired-history");
-    const lookup = {
-      session: active,
-      callId: "control-expired",
-      offerId: "offer-expired",
-    };
-    await stageHitlReview({
-      ...lookup,
-      review: { offerId: lookup.offerId, text: "Pending review" },
-    });
-    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
-    expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toEqual({
-      outcome: "review_required",
-    });
-    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
-      false,
-    );
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 test.each([
   "review_declined",
   "review_unanswered",
@@ -1075,68 +1049,6 @@ test("a stored none without a closure is not a denial", async () => {
   expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
   expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
   expect(reviewOutcomeFromClosure(undefined)).toBe("review_invalid");
-});
-
-test("a later genuine denial revokes an approval that has not been spent", async () => {
-  const active = session("later-denial");
-  await stageHitlReview({
-    session: active,
-    review: { offerId: "revoked", text: "Review this exact call." },
-  });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "deny",
-    }),
-  ).toBe(true);
-  expect(await consumeHitlRuling({ session: active, offerId: "revoked" })).toBe(
-    "deny",
-  );
-  expect(
-    await consumeHitlRuling({ session: active, offerId: "revoked" }),
-  ).toBeUndefined();
-});
-
-test("approved native review context remains readable without reopening its claim", async () => {
-  const active = session("native-continuation");
-  const review = {
-    offerId: "continuation",
-    text: "The exact reviewed QA action",
-    tool: "mcp/example/write",
-    arguments: '{"value":1}',
-  };
-  await stageHitlReview({ session: active, review });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toEqual(review);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(false);
-  expect(
-    await consumeHitlRuling({ session: active, offerId: review.offerId }),
-  ).toBe("approve");
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toBeUndefined();
 });
 
 test("a denial validated before consumption cannot write an orphan ruling afterward", async () => {

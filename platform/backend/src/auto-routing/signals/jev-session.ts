@@ -18,8 +18,10 @@ export interface JevSessionReading {
   tierNeeded: [number, number, number];
   /** Probability that the session's context grows past the long-context threshold. */
   pLong: number;
-  /** Upstream-reported cost of the scoring call, when the endpoint reports one. */
+  /** Reported cost, or token-priced cost on the first-party endpoint; null if unknown. */
   costUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 // State template v5: full sorted tool names, without descriptions or a first-N cutoff.
@@ -115,10 +117,28 @@ export class JevSessionSource
       );
     }
     const { tier_needed, long_context } = parsed.data.answers;
+    const inputTokens = parsed.data.usage?.input_tokens ?? null;
+    const outputTokens = parsed.data.usage?.output_tokens ?? null;
+    // A custom endpoint may charge a different rate. Only the first-party
+    // endpoint can use TypeSafe's published rate when no cost is reported.
+    // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
+    // Output tokens are free. Keep this rate out of endpoint-agnostic model sync.
+    const inputPricePerMillion =
+      (baseUrl ?? config.llm.jev.baseUrl) ===
+        "https://api.typesafe.ai/v1/systemone" &&
+      this.spec.model === "jev-1.13.0"
+        ? 0.042
+        : null;
+    const calculatedCost =
+      inputTokens !== null && inputPricePerMillion !== null
+        ? (inputTokens * inputPricePerMillion) / 1_000_000
+        : null;
     return {
       tierNeeded: tierDistribution(tier_needed.probabilities),
       pLong: long_context.noul,
-      costUsd: parsed.data.usage?.cost ?? null,
+      costUsd: parsed.data.usage?.cost ?? calculatedCost,
+      inputTokens,
+      outputTokens,
     };
   }
 }

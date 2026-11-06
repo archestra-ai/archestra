@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 import { sql } from "drizzle-orm";
 import config from "@/config";
@@ -11,6 +11,7 @@ import ContentEncryptionStateModel from "@/models/content-encryption-state.ee";
 import EncryptionKeyCanaryModel from "@/models/encryption-key-canary";
 import MessageModel from "@/models/message";
 import { beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { runContentEncryptionBackfill } from "./backfill.ee";

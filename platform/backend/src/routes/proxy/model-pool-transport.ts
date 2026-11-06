@@ -6,7 +6,7 @@
  * a request in those shapes and returns a response or chunk stream in those
  * shapes, whatever the member's own provider speaks: the same wire is sent
  * as is with the member's model id, and a different wire goes through a
- * translator. Members a client's wire cannot reach are left out of its plan.
+ * translator. A pool containing incompatible enabled members is rejected.
  */
 import {
   isClaudeOnBedrock,
@@ -16,13 +16,20 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
+import {
+  openAIUsageTokens,
+  reportsReasoningOutsideCompletion,
+  withReasoningOutsideCompletion,
+} from "@/observability/metrics/llm-usage";
 import type {
   Anthropic,
   Bedrock,
+  Gemini,
   LLMProvider,
   OpenAi,
   UsageView,
 } from "@/types";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
@@ -46,6 +53,7 @@ import {
 import { withAnthropicToolCallIds } from "./adapters/anthropic";
 import {
   anthropicResponseToOpenai,
+  mapStopReason,
   openaiToAnthropic,
 } from "./adapters/anthropic-openai-translator";
 import { withBedrockToolCallIds } from "./adapters/bedrock";
@@ -55,7 +63,12 @@ import {
   openaiToConverse,
 } from "./adapters/bedrock-openai-translator";
 import { makeGeminiOpenaiAdapterFactory } from "./adapters/gemini-openai";
-import { openaiToGemini } from "./adapters/gemini-openai-translator";
+import {
+  createOpenaiToGeminiStreamTranslator,
+  geminiToOpenai,
+  openaiResponseToGemini,
+  openaiToGemini,
+} from "./adapters/gemini-openai-translator";
 import {
   anthropicToOpenai,
   createOpenaiToAnthropicStreamTranslator,
@@ -64,10 +77,16 @@ import {
 import { withOpenAiChatToolCallIds } from "./utils/tool-call-ids";
 
 /** The request formats a pool can carry a request in. */
-export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
+export type PoolWire =
+  | "openai-chat"
+  | "anthropic"
+  | "bedrock-converse"
+  | "gemini";
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
+  /** Actual provider usage when the client wire cannot represent its cache split. */
+  getUsage?: () => UsageView | null;
   /** Observed usage retained even when translation cannot emit a terminal event. */
   getStreamUsage?: () => UsageView | null;
   execute(request: unknown): Promise<unknown>;
@@ -89,6 +108,7 @@ export function inboundPoolWire(
 ): PoolWire | null {
   if (interactionType === "anthropic:messages") return "anthropic";
   if (interactionType === "bedrock:converse") return "bedrock-converse";
+  if (interactionType === "gemini:generateContent") return "gemini";
   const [provider, surface] = interactionType.split(":");
   if (
     surface === "chatCompletions" &&
@@ -112,8 +132,54 @@ export function canReachMember(
 /**
  * The transport for one member. `client` is built with the member provider's
  * own adapter (see `memberAdapter`).
+ *
+ * The client's route reads the answer with its own adapter, so an OpenAI chat
+ * answer is put in that route's reasoning dialect: xAI leaves reasoning out of
+ * `completion_tokens`, every other member and translator counts it inside
+ * (see `reportsReasoningOutsideCompletion`). Without this an xAI member's
+ * reasoning goes uncounted behind an OpenAI client and a Gemini member's is
+ * counted twice behind an xAI client.
  */
 export function memberTransport(params: {
+  inbound: PoolWire;
+  provider: SupportedProvider;
+  modelId: string;
+  client: unknown;
+  /** The client route's dialect; absent for routes that count it inside. */
+  inboundReasoningOutsideCompletion?: boolean;
+}): MemberTransport {
+  const transport = memberTransportOnWire(params);
+  const inboundOutside = params.inboundReasoningOutsideCompletion ?? false;
+  const memberOutside =
+    wireOf(params.provider) === "openai-chat" &&
+    reportsReasoningOutsideCompletion(params.provider);
+  if (params.inbound !== "openai-chat" || inboundOutside === memberOutside) {
+    return transport;
+  }
+  const inDialect = <T>(value: T): T => {
+    const usage = (value as { usage?: OpenAi.Types.Usage | null } | null)
+      ?.usage;
+    return usage
+      ? {
+          ...value,
+          usage: withReasoningOutsideCompletion(usage, inboundOutside),
+        }
+      : value;
+  };
+  return {
+    ...transport,
+    execute: async (request) => inDialect(await transport.execute(request)),
+    executeStream: async (request, onAccepted) =>
+      mapStream(
+        await transport.executeStream(request, onAccepted),
+        (chunk) => [inDialect(chunk)],
+        () => [],
+      ),
+  };
+}
+
+/** `memberTransport` before the answer's usage is put in the route's dialect. */
+function memberTransportOnWire(params: {
   inbound: PoolWire;
   provider: SupportedProvider;
   modelId: string;
@@ -139,10 +205,24 @@ export function memberTransport(params: {
     const withModel = (request: unknown) => {
       if (target === "bedrock-converse")
         return { ...(request as object), modelId };
+      if (target === "gemini")
+        return { ...(request as object), _model: modelId };
       const body = request as OpenAi.Types.ChatCompletionsRequest &
         Anthropic.Types.MessagesRequest;
+      // The selected OpenAI model may require the modern output-limit field
+      // even when the caller or a translator supplied the legacy one.
+      const { max_tokens, ...openaiBody } = body;
+      const destinationBody =
+        provider === "openai"
+          ? {
+              ...openaiBody,
+              ...(max_tokens != null && body.max_completion_tokens == null
+                ? { max_completion_tokens: max_tokens }
+                : {}),
+            }
+          : body;
       return {
-        ...body,
+        ...destinationBody,
         model: modelId,
         messages:
           target === "anthropic"
@@ -158,7 +238,9 @@ export function memberTransport(params: {
   }
 
   if (inbound === "openai-chat" && target === "anthropic") {
+    let getUsage: (() => UsageView | null) | undefined;
     return {
+      getStreamUsage: () => getUsage?.() ?? null,
       async execute(request) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
@@ -188,6 +270,7 @@ export function memberTransport(params: {
           onAccepted,
         );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
+        getUsage = translator.getUsage;
         return mapStream(events, translator.translate, translator.finish);
       },
     };
@@ -269,13 +352,8 @@ export function memberTransport(params: {
               event as Parameters<typeof stream.processChunk>[0],
             );
             if (stream.state.usage) {
-              observedUsage = {
-                ...stream.state.usage,
-                // Match the translated wire: completion tokens include thinking.
-                outputTokens:
-                  stream.state.usage.outputTokens +
-                  (stream.state.usage.reasoningTokens ?? 0),
-              };
+              // Output already includes thinking, as completion tokens do.
+              observedUsage = stream.state.usage;
             }
             return sseToChunks(result.sseData);
           },
@@ -294,6 +372,72 @@ export function memberTransport(params: {
               ...sseToChunks(stream.formatEndSSE()),
             ];
           },
+        );
+      },
+    };
+  }
+
+  if (inbound === "gemini") {
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
+    let usage: UsageView | null = null;
+    const observe = (raw: OpenAi.Types.ChatCompletionChunk["usage"]) => {
+      if (!raw) return;
+      const tokens = openAIUsageTokens(raw);
+      usage = {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheWriteTokens: tokens.cacheWrite,
+        cacheWrite1hTokens: tokens.cacheWrite1h,
+        reasoningTokens: tokens.reasoning,
+      };
+    };
+    return {
+      getUsage: () => usage,
+      getStreamUsage: viaOpenai.getStreamUsage,
+      async execute(request) {
+        const response = (await viaOpenai.execute(
+          geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+        )) as OpenAi.Types.ChatCompletionsResponse;
+        observe(response.usage);
+        try {
+          return openaiResponseToGemini(response);
+        } catch (error) {
+          if (!usage) throw error;
+          throw new ObservedProviderUsageError({
+            original: error,
+            usage,
+            response: {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Upstream response cannot be translated",
+            },
+          });
+        }
+      },
+      async executeStream(request, onAccepted) {
+        const chunks = await viaOpenai.executeStream(
+          {
+            ...geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+            stream: true,
+          },
+          onAccepted,
+        );
+        const translator = createOpenaiToGeminiStreamTranslator();
+        return mapStream(
+          chunks,
+          (raw) => {
+            const chunk = raw as OpenAi.Types.ChatCompletionChunk;
+            observe(chunk.usage);
+            return translator.translate(chunk);
+          },
+          translator.finish,
         );
       },
     };
@@ -353,11 +497,13 @@ export function requestedMaxOutputTokens(request: unknown): number | undefined {
     max_completion_tokens?: unknown;
     max_tokens?: unknown;
     inferenceConfig?: { maxTokens?: unknown };
+    generationConfig?: { maxOutputTokens?: unknown };
   } | null;
   const limit =
     body?.max_completion_tokens ??
     body?.max_tokens ??
-    body?.inferenceConfig?.maxTokens;
+    body?.inferenceConfig?.maxTokens ??
+    body?.generationConfig?.maxOutputTokens;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? limit
     : undefined;
@@ -407,9 +553,12 @@ const TRANSLATED = new Set([
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
   "anthropic>gemini",
+  "gemini>openai-chat",
+  "gemini>anthropic",
+  "gemini>bedrock-converse",
 ]);
 
-function wireOf(provider: SupportedProvider): PoolWire | "gemini" | null {
+function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";
@@ -431,16 +580,21 @@ function anthropicEventsToOpenAiChunks(ctx: {
   chatcmplId: string;
   createdUnix: number;
   requestedModel: string;
-}): { translate(event: unknown): unknown[]; finish(): unknown[] } {
+}): {
+  translate(event: unknown): unknown[];
+  finish(): unknown[];
+  getUsage(): UsageView | null;
+} {
   // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK event union
   type Event = any;
   let nextToolIndex = 0;
   let toolIndexByBlock = new Map<number, number>();
-  let finishReason: string | null = null;
+  let finishReason: Anthropic.Types.MessagesResponse["stop_reason"] = null;
+  let observedUsage = false;
   let inputTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
-  let cacheWrite1h = 0;
+  let cacheWrite1h: number | undefined;
   let outputTokens = 0;
   const chunk = (delta: Record<string, unknown>, finish: string | null) => ({
     id: ctx.chatcmplId,
@@ -450,15 +604,27 @@ function anthropicEventsToOpenAiChunks(ctx: {
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
   return {
+    getUsage: () =>
+      observedUsage
+        ? {
+            inputTokens,
+            outputTokens,
+            cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
+            cacheWrite1hTokens: cacheWrite1h,
+          }
+        : null,
     translate(raw) {
       const event = raw as Event;
       switch (event?.type) {
         case "message_start": {
           const usage = event.message?.usage ?? {};
+          observedUsage ||= event.message?.usage !== undefined;
           inputTokens = usage.input_tokens ?? 0;
           cacheRead = usage.cache_read_input_tokens ?? 0;
           cacheWrite = usage.cache_creation_input_tokens ?? 0;
-          cacheWrite1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+          cacheWrite1h =
+            usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined;
           outputTokens = usage.output_tokens ?? 0;
           toolIndexByBlock = new Map();
           return [chunk({ role: "assistant" }, null)];
@@ -509,6 +675,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
         case "message_delta": {
           finishReason = event.delta?.stop_reason ?? finishReason;
           const usage = event.usage ?? {};
+          observedUsage ||= event.usage !== undefined;
           outputTokens = usage.output_tokens ?? outputTokens;
           inputTokens = usage.input_tokens ?? inputTokens;
           cacheRead = usage.cache_read_input_tokens ?? cacheRead;
@@ -530,14 +697,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
       }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [
-        chunk(
-          {},
-          finishReason === "max_tokens"
-            ? "length"
-            : finishReason === "tool_use"
-              ? "tool_calls"
-              : "stop",
-        ),
+        chunk({}, mapStopReason(finishReason)),
         {
           id: ctx.chatcmplId,
           object: "chat.completion.chunk",
@@ -555,7 +715,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
                     ...(cacheWrite > 0
                       ? { cache_write_tokens: cacheWrite }
                       : {}),
-                    ...(cacheWrite1h > 0
+                    ...((cacheWrite1h ?? 0) > 0
                       ? { cache_write_1h_tokens: cacheWrite1h }
                       : {}),
                   },

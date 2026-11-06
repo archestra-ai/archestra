@@ -75,7 +75,16 @@ export type FileStorageS3Config = {
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+// Tests read .env.example, as CI does (it copies .env.example to .env): a
+// developer's own settings, such as API keys, URLs or a kubeconfig, would
+// make tests behave differently locally than in CI.
+dotenv.config({
+  path: path.resolve(
+    __dirname,
+    process.env.VITEST ? "../../.env.example" : "../../.env",
+  ),
+  quiet: true,
+});
 
 const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
@@ -2776,6 +2785,8 @@ const config = {
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
+    iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
   // is a per-provider config map iterated as provider descriptors).

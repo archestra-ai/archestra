@@ -696,7 +696,7 @@ export const ModelSelector = memo(function ModelSelector({
                   {selectedModelDisplayName}
                 </span>
               ) : (
-                <span className="text-muted-foreground">
+                <span className="truncate text-muted-foreground">
                   {placeholder ?? "Best available model"}
                 </span>
               )}

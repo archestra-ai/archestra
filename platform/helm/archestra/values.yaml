@@ -82,6 +82,40 @@ archestra:
       # Expiration (in seconds) for the projected ServiceAccount token when
       # injectWebIdentityTokenVolume is true.
       webIdentityTokenExpirationSeconds: 3600
+    # Google Cloud SQL Auth Proxy, run as a native sidecar (Kubernetes 1.29+)
+    # in the web, worker, and migration Job pods. The proxy opens a TLS
+    # connection to the instance with an ephemeral client certificate and, with
+    # --auto-iam-authn, logs in as the pod's Google service account (Workload
+    # Identity), so no database password is needed anywhere.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # (traffic to 127.0.0.1 never leaves the pod; the proxy encrypts the rest),
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    cloudSqlProxy:
+      enabled: false
+      # project:region:instance
+      instanceConnectionName: ""
+      image:
+        repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+        tag: "2.26.3"
+        digest: "sha256:f333a9c59890c3c67b8505166c5dbdcc0b29fca9173a2e09ca0446ab6997a736"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. Defaults connect over the VPC and log in with IAM.
+      args:
+        - --private-ip
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)

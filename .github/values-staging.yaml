@@ -8,6 +8,11 @@ archestra:
   # pod: 544 total, with 56 slots left for reserved connections and other users.
   database:
     connectionBudget: 550
+    # Cloud SQL instance from infra gcp/gke/cloudsql.tf. The pods log in as
+    # the archestra-staging-platform service account; no password exists.
+    cloudSqlProxy:
+      enabled: true
+      instanceConnectionName: friendly-path-465518-r6:us-central1:archestra-staging-pg
 
   # Staging's measured CPU use is below the chart's production-sized requests.
   # Keep scheduling room for rolling-update surge pods; no CPU limit prevents
@@ -117,6 +122,9 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-staging-platform@friendly-path-465518-r6.iam.gserviceaccount.com
       rbac:
         # Namespaces backing deployment environments the platform may deploy
         # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
@@ -192,7 +200,8 @@ postgresql:
   # depends on the GKE node lifecycle — replacing a node used to take the only
   # database pod down with it, which is what kept staging dying at random.
   #
-  # The connection string is injected by the deploy workflow from the
-  # ARCHESTRA_STAGING_DATABASE_URL repo secret, so it is not in this file.
-  # The chart hard-fails if external_database_url is set while this is true.
+  # The pods reach it through the Cloud SQL Auth Proxy sidecar
+  # (archestra.database.cloudSqlProxy), which encrypts the connection and logs
+  # in with IAM. The URL names the IAM database user and holds no secret.
   enabled: false
+  external_database_url: "postgresql://archestra-staging-platform%40friendly-path-465518-r6.iam@127.0.0.1:5432/archestra_dev?sslmode=disable"

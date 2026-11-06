@@ -15,9 +15,8 @@ archestra:
         # GKE does not need it: the backend falls back to the pod's resolv.conf,
         # and the NetworkPolicy floor allows DNS by kube-dns selector.
         kubeDnsServiceRead: false
-      serviceAccount:
-        annotations:
-          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+      # Each installation sets its own Google service account in its values
+      # file: it is the identity for both Vertex AI and its Cloud SQL login.
 
   env:
     ARCHESTRA_ANALYTICS: disabled

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import type React from "react";
+import { describe, expect, test, vi } from "vitest";
 import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 
 const tiers = {
@@ -34,5 +35,23 @@ describe("AutoRoutedModelTrigger", () => {
       expect(tooltip).toHaveTextContent(tier);
     }
     expect(tooltip).toHaveTextContent("Add a provider API key to pick one.");
+  });
+
+  test("does not submit the surrounding agent form when clicked or pressed", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <AutoRoutedModelTrigger tiers={tiers} />
+      </form>,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Auto routed/ });
+    await user.click(trigger);
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

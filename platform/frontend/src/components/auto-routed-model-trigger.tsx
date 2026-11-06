@@ -33,6 +33,7 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
           {/* aria-disabled rather than disabled, so it still takes focus
               and hover and the tooltip can open. */}
           <Button
+            type="button"
             variant="outline"
             size="sm"
             aria-disabled

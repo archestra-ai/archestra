@@ -3050,6 +3050,10 @@ export function AgentForm({
       {createApiKeyDialog}
     </>
   );
+  const defaultModelPlaceholder =
+    isClaudeCodeRuntime && !agent
+      ? "Select a Claude model"
+      : (organizationDefaultModel.label ?? undefined);
   const modelControl = (
     <>
       {!llmApiKeyId ? (
@@ -3061,23 +3065,35 @@ export function AgentForm({
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div>
+                <div
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: the selector inside is disabled, so this wrapper takes focus to open the tooltip with the full default name
+                  tabIndex={0}
+                  className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   <ModelSelector
                     selectedModel=""
                     onModelChange={() => {}}
                     disabled
                     variant="outline"
                     enabled={false}
-                    placeholder={
-                      isClaudeCodeRuntime && !agent
-                        ? "Select a Claude model"
-                        : (organizationDefaultModel.label ?? undefined)
-                    }
+                    placeholder={defaultModelPlaceholder}
                   />
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Select a provider API key first
+              <TooltipContent
+                side="bottom"
+                align="start"
+                className="w-max max-w-xs text-left text-xs text-wrap"
+              >
+                {/* The placeholder truncates, so the full name lives here. */}
+                {defaultModelPlaceholder &&
+                  defaultModelPlaceholder ===
+                    organizationDefaultModel.label && (
+                    <p className="font-medium">{defaultModelPlaceholder}</p>
+                  )}
+                <p className="text-muted-foreground">
+                  Add a provider API key to pick a model.
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -127,18 +127,14 @@ vi.mock("@/lib/config/config.query", () => ({
     feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
 }));
 
+let mockModels: Array<Record<string, unknown>> = [];
+
 vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
-      {
-        id: "gemini-2.5-pro",
-        dbId: "gemini-2.5-pro",
-        provider: "vertex_ai",
-        displayName: "Gemini 2.5 Pro",
-      },
-    ],
-    isPending: false,
-  }),
+  useLlmModels: () => ({ data: mockModels, isPending: false }),
+}));
+
+vi.mock("@/lib/agent.query", () => ({
+  useUpdateAgentModels: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -153,6 +149,7 @@ vi.mock("@/lib/organization.query");
 
 import {
   useAppearanceSettings,
+  useDefaultModelRuntimeDependents,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateIntegrationSettings,
@@ -195,6 +192,14 @@ beforeEach(() => {
     },
   ];
   mockRuntimeBackend = null;
+  mockModels = [
+    {
+      id: "gemini-2.5-pro",
+      dbId: "gemini-2.5-pro",
+      provider: "vertex_ai",
+      displayName: "Gemini 2.5 Pro",
+    },
+  ];
 
   vi.mocked(useOrganization).mockReturnValue({
     data: mockOrganization,
@@ -210,6 +215,9 @@ beforeEach(() => {
     mutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
+  vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+    data: { agents: [], hiddenBlockingCount: 0 },
+  } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 });
 
 describe("AgentSettingsPage", () => {
@@ -300,5 +308,174 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+});
+
+describe("Default model blocked by Agent Runtime agents", () => {
+  it("names the Claude Code agents that can't run the default and opens a dialog offering only keys they can use", async () => {
+    const user = userEvent.setup();
+    mockApiKeys = [
+      { id: "key-1", name: "gemini - org", provider: "gemini", scope: "org" },
+      {
+        id: "key-2",
+        name: "anthropic - org",
+        provider: "anthropic",
+        scope: "org",
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            canUpdate: true,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(
+      screen.getByText("Can't make Gemini 2.5 Pro the default"),
+    ).toBeVisible();
+    expect(screen.getByText("Release Notes Writer")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Set model" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Set a model for Release Notes Writer",
+    });
+    // Claude Code can't use the Gemini key, so only the Anthropic key is offered.
+    expect(within(dialog).getByText("anthropic - org")).toBeVisible();
+    expect(within(dialog).queryByText("gemini - org")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("counts a Responses-only model as blocking an agent whose runtime uses Chat Completions", async () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: "copilot-1" };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockApiKeys = [
+      {
+        id: "key-1",
+        name: "copilot",
+        provider: "github-copilot",
+        scope: "org",
+      },
+    ];
+    mockModels = [
+      {
+        id: "gpt-5.1-codex",
+        dbId: "copilot-1",
+        provider: "github-copilot",
+        displayName: "GPT-5.1 Codex",
+        capabilities: { supportedEndpoints: ["/responses"] },
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Chat Completions Agent",
+            runtimeCommand: null,
+            inferenceProtocol: "openai_chat",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(screen.getByText(/requires the Responses API/)).toBeVisible();
+  });
+
+  it("does not count a Claude Code agent on subscription authentication, which runs on the person's Claude account instead", () => {
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("counts blocking agents the viewer can't read, without saying anything about them", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: { agents: [], hiddenBlockingCount: 2 },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "2 agents can't run this" }),
+    );
+    expect(screen.getByText("2 agents you can't view")).toBeVisible();
+    expect(screen.queryByText(/Claude Code/)).not.toBeInTheDocument();
+  });
+
+  it("offers no Set model action for an agent the viewer can't update", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-read-only",
+            name: "Read-only agent",
+            canUpdate: false,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(screen.getByText("Ask an agent admin")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Set model" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no warning when every runtime agent can run the default", () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
   });
 });

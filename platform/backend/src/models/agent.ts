@@ -1403,27 +1403,44 @@ class AgentModel {
   }
 
   /**
-   * Runtime Agents without an explicit model/key pair inherit the
-   * organization's effective default model. This narrow query supports
-   * validating a proposed default without loading each Agent's relations.
+   * Runtime Agents that run on the organization's default model: those with
+   * no model/key pair of their own, or a pair that resolution skips (half of
+   * it missing, or the model no longer linked to the key). This narrow query
+   * supports validating a proposed default without loading relations.
    */
   static async findRuntimeAgentsInheritingOrganizationDefault(
     organizationId: string,
-  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime">>> {
+  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime" | "agentType">>> {
+    const agents = schema.agentsTable;
+    const links = schema.llmProviderApiKeyModelsTable;
     return db
       .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        runtime: schema.agentsTable.runtime,
+        id: agents.id,
+        name: agents.name,
+        runtime: agents.runtime,
+        agentType: agents.agentType,
       })
-      .from(schema.agentsTable)
+      .from(agents)
       .where(
         and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          isNull(schema.agentsTable.llmApiKeyId),
-          isNull(schema.agentsTable.modelId),
-          isNotNull(schema.agentsTable.runtime),
-          notDeleted(schema.agentsTable),
+          eq(agents.organizationId, organizationId),
+          isNotNull(agents.runtime),
+          notDeleted(agents),
+          or(
+            isNull(agents.llmApiKeyId),
+            isNull(agents.modelId),
+            notExists(
+              db
+                .select({ id: links.id })
+                .from(links)
+                .where(
+                  and(
+                    eq(links.apiKeyId, agents.llmApiKeyId),
+                    eq(links.modelId, agents.modelId),
+                  ),
+                ),
+            ),
+          ),
         ),
       );
   }

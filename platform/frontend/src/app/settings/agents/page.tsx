@@ -2,10 +2,13 @@
 
 import {
   DocsPage,
+  getAgentRuntimeDefaultModelCompatibility,
   getDocsUrl,
+  isClaudeCodeRuntimeCommand,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   providerSupportsChat,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -44,11 +47,14 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useDefaultModelRuntimeDependents,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { DefaultModelBlockedBadge } from "./_parts/default-model-blocked-badge";
+import type { RuntimeAgent } from "./_parts/runtime-agent";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -172,17 +178,75 @@ export default function AgentSettingsPage() {
     setFileUploads(savedFileUploadsRef.current);
   };
 
+  // Agent Runtime agents with no model of their own run on this default, so
+  // a model their runtime can't serve would break them. Check every option
+  // up front, with the same rule the server applies on save.
+  const { data: runtimeDependents, isPlaceholderData: dependentsLoading } =
+    useDefaultModelRuntimeDependents({ modelId: defaultModel || null });
+  // Agents the viewer can't read: the server counts them for the selected
+  // model only, and never says more.
+  const hiddenBlockingCount = dependentsLoading
+    ? 0
+    : (runtimeDependents?.hiddenBlockingCount ?? 0);
+  const blockedBy = useCallback(
+    (model: {
+      provider: SupportedProvider;
+      id: string;
+      capabilities?: { supportedEndpoints?: string[] | null };
+    }) => {
+      const reasonFor = (agent: RuntimeAgent) => {
+        const result = getAgentRuntimeDefaultModelCompatibility({
+          ...agent,
+          provider: model.provider,
+          modelId: model.id,
+          supportedEndpoints: model.capabilities?.supportedEndpoints,
+        });
+        return result.compatible ? null : result.message;
+      };
+      const agents = (runtimeDependents?.agents ?? []).filter(
+        (agent) => reasonFor(agent) !== null,
+      );
+      return {
+        agents,
+        reason: agents[0] ? reasonFor(agents[0]) : null,
+        // Only agents the viewer can read say anything about their runtime.
+        allClaudeCode:
+          agents.length > 0 &&
+          agents.every((agent) =>
+            isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
+          ),
+      };
+    },
+    [runtimeDependents],
+  );
+
   const modelItems = useMemo(() => {
     if (!allModels || isPlaceholderData) return [];
-    return allModels.map((model) => ({
-      value: model.dbId,
-      model: model.displayName ?? model.id,
-      modelId: model.id,
-      provider: model.provider,
-      isFree: model.isFree,
-      isBest: model.isBest,
-    }));
-  }, [allModels, isPlaceholderData]);
+    return allModels.map((model) => {
+      const blocking = blockedBy(model).agents.length;
+      return {
+        value: model.dbId,
+        model: model.displayName ?? model.id,
+        modelId: model.id,
+        provider: model.provider,
+        isFree: model.isFree,
+        isBest: model.isBest,
+        description:
+          blocking > 0
+            ? `Can't run ${blocking} Agent Runtime ${blocking === 1 ? "agent" : "agents"}`
+            : undefined,
+      };
+    });
+  }, [allModels, isPlaceholderData, blockedBy]);
+
+  const selectedModel = useMemo(
+    () =>
+      isPlaceholderData
+        ? undefined
+        : allModels?.find((model) => model.dbId === defaultModel),
+    [allModels, defaultModel, isPlaceholderData],
+  );
+  const blocked = selectedModel ? blockedBy(selectedModel) : null;
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -279,6 +343,20 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
+                  {selectedModel && (
+                    <DefaultModelBlockedBadge
+                      agents={blocked?.agents ?? []}
+                      hiddenCount={hiddenBlockingCount}
+                      reason={
+                        blocked?.allClaudeCode
+                          ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
+                          : (blocked?.reason ??
+                            "Their Agent Runtime can't use this model.")
+                      }
+                      allClaudeCode={blocked?.allClaudeCode ?? false}
+                      modelName={selectedModel.displayName ?? selectedModel.id}
+                    />
+                  )}
                   {selectedApiKeyIsSubscription && (
                     <Alert>
                       <AlertDescription>
@@ -378,7 +456,11 @@ export default function AgentSettingsPage() {
 
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
-        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
+        disabledSave={
+          (selectedApiKeyId !== "" && defaultModel === "") ||
+          (changes.hasModelChanges &&
+            (blocked?.agents.length ?? 0) + hiddenBlockingCount > 0)
+        }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}

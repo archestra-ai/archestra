@@ -28,6 +28,9 @@ export const useUpdateSecuritySettings = vi.fn();
 export const useUpdateMcpSettings = vi.fn();
 export const useUpdateSkillsSettings = vi.fn();
 export const useUpdateAgentSettings = vi.fn();
+export const useDefaultModelRuntimeDependents = vi.fn(() => ({
+  data: { agents: [], hiddenBlockingCount: 0 },
+}));
 export const useUpdateConnectionSettings = vi.fn();
 export const useUpdateIntegrationSettings = vi.fn();
 export const useUpdateDefaultEnvironment = vi.fn();

@@ -47,6 +47,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout scan policy and image sources.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -84,12 +85,16 @@ jobs:
           [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "reference=local://${image_id}" >> "$GITHUB_OUTPUT"
           echo "Candidate ${GITHUB_SHA}: ${IMAGE} -> ${image_id}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Log in to Docker Hub
+        uses: ./.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Scan exact candidate bytes
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
 
   release-image-security:
@@ -150,6 +155,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout scan policy and image sources.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,9 +163,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hub
+        uses: ./.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Scan exact full and slim Platform image bytes
         uses: ./.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}

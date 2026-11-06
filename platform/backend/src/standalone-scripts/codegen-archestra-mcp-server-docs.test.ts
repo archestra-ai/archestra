@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { renderSchemaRows } from "./codegen-archestra-mcp-server-docs";
+import {
+  preserveLastUpdated,
+  renderSchemaRows,
+  splitToolReference,
+} from "./codegen-archestra-mcp-server-docs";
 
 describe("codegen-archestra-mcp-server-docs", () => {
   test("renders compact nullable types without losing nested fields", () => {
@@ -133,6 +137,70 @@ describe("codegen-archestra-mcp-server-docs", () => {
             'When `source="native"`: Native label. When `source="external_mcp"`: External label.',
         }),
       ]),
+    );
+  });
+  test("keeps dates across UTC days for unchanged split pages", () => {
+    const reference = (date: string, skillDescription: string) => `---
+title: "Archestra MCP Server"
+description: "Built-in tools"
+lastUpdated: ${date}
+---
+
+## Tools Reference
+
+### Identity
+
+| Tool | Description | Permission |
+|------|-------------|------------|
+| [\`whoami\`](#whoami) | Identify the caller. | None |
+
+#### whoami
+
+Identify the caller.
+
+### Skills
+
+| Tool | Description | Permission |
+|------|-------------|------------|
+| [\`load_skill\`](#load_skill) | ${skillDescription} | None |
+
+#### load_skill
+
+${skillDescription}
+`;
+    const previous = splitToolReference(
+      reference("2026-11-05", "Load a skill."),
+    );
+    const nextDay = splitToolReference(
+      reference("2026-11-06", "Load a skill."),
+    );
+
+    expect(preserveLastUpdated(nextDay.index, previous.index)).toBe(
+      previous.index,
+    );
+    for (const slug of Object.keys(nextDay.pages)) {
+      expect(
+        preserveLastUpdated(nextDay.pages[slug], previous.pages[slug]),
+      ).toBe(previous.pages[slug]);
+    }
+
+    const changed = splitToolReference(
+      reference("2026-11-06", "Load an available skill."),
+    );
+    expect(
+      preserveLastUpdated(
+        changed.pages["skills-and-files"],
+        previous.pages["skills-and-files"],
+      ),
+    ).toContain("lastUpdated: 2026-11-06");
+    expect(
+      preserveLastUpdated(
+        changed.pages["getting-started"],
+        previous.pages["getting-started"],
+      ),
+    ).toBe(previous.pages["getting-started"]);
+    expect(preserveLastUpdated(changed.index, previous.index)).toBe(
+      previous.index,
     );
   });
 });

@@ -9,14 +9,7 @@ import { cn } from "@/lib/utils/tailwind";
 function Popover({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  const withinDialog = React.useContext(DialogContentContext);
-  return (
-    <PopoverPrimitive.Root
-      data-slot="popover"
-      modal={withinDialog}
-      {...props}
-    />
-  );
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger({
@@ -40,8 +33,11 @@ function PopoverContent({
   sideOffset = 4,
   portal = true,
   portalContainer,
+  onWheel,
+  onTouchMove,
   ...props
 }: PopoverContentProps) {
+  const withinDialog = React.useContext(DialogContentContext);
   const content = (
     <PopoverPrimitive.Content
       data-slot="popover-content"
@@ -52,6 +48,14 @@ function PopoverContent({
         className,
       )}
       {...props}
+      onWheel={(event) => {
+        onWheel?.(event);
+        if (withinDialog) event.stopPropagation();
+      }}
+      onTouchMove={(event) => {
+        onTouchMove?.(event);
+        if (withinDialog) event.stopPropagation();
+      }}
     />
   );
 

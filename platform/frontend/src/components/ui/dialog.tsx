@@ -4,6 +4,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import * as React from "react";
 
+import { DialogContentContext } from "@/components/ui/dialog-content-context";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -133,7 +134,9 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        <DialogContentContext.Provider value={true}>
+          {children}
+        </DialogContentContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"

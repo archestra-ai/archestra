@@ -588,14 +588,23 @@ export function isChatCompletionsOnlyRouterProvider(
   );
 }
 
+/** Whether a runtime command invokes the maintained Claude Code runtime or wrapper. */
+export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-claude-code" ||
+    command === "archestra-claude-code-runtime"
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
-  switch (runtimeCommand?.[0]) {
-    case "archestra-claude-code":
-    case "archestra-claude-code-runtime":
-      return ["anthropic"];
+  const command = runtimeCommand?.[0];
+  if (isClaudeCodeRuntimeCommand(command)) {
+    return ["anthropic"];
+  }
+  switch (command) {
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
     // These wrappers use Chat Completions on a custom model endpoint.
@@ -620,10 +629,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   provider: SupportedProvider;
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
-  if (
-    runtimeCommand === "archestra-claude-code" ||
-    runtimeCommand === "archestra-claude-code-runtime"
-  ) {
+  if (isClaudeCodeRuntimeCommand(runtimeCommand)) {
     if (
       !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
         params.inferenceProtocol,
@@ -702,8 +708,7 @@ export function getAgentRuntimeModelCompatibility(params: {
   if (!providerCompatibility.compatible) return providerCompatibility;
 
   if (
-    (params.runtimeCommand?.[0] === "archestra-claude-code" ||
-      params.runtimeCommand?.[0] === "archestra-claude-code-runtime") &&
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
     params.provider === "bedrock" &&
     params.modelId &&
     !isClaudeOnBedrock(params.modelId)

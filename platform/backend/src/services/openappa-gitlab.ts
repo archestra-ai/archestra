@@ -6,6 +6,7 @@ import {
   GitHostError,
   type GitlabProject,
 } from "@/git-hosts/git-host-client";
+import logger from "@/logging";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { ApiError } from "@/types";
 import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
@@ -144,17 +145,21 @@ class OpenAppaGitlab {
     if (project.empty_repo || !project.default_branch)
       return { status: "empty", validations: null };
     const ref = params.ref || project.default_branch;
+    const unknown = (err: unknown) => {
+      logger.warn({ err }, "OpenAPPA could not check a GitLab path");
+      return false;
+    };
     const [policy, validations] = await Promise.all([
       client
         .pathExists({ repo: params.repo, ref, path: params.path })
-        .catch(() => false),
+        .catch(unknown),
       client
         .pathExists({
           repo: params.repo,
           ref,
           path: params.validationDirectory,
         })
-        .catch(() => false),
+        .catch(unknown),
     ]);
     return { status: policy ? "policy" : "other", validations };
   }

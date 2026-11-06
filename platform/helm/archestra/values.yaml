@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.22" # x-release-please-version
+  imageTag: "1.5.0-rc.24" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -51,6 +51,37 @@ archestra:
     # true explicitly uses the bulk pool value; false uses chart sizing when
     # connectionBudget is set.
     poolMaxFromEnvFrom: null
+    # Amazon RDS / Aurora IAM database authentication.
+    # Generates a fresh 15-minute IAM token per new connection in the query
+    # pool, cache pool, LISTEN/NOTIFY client, and migration Job, using the pod's
+    # AWS credentials (IRSA, EKS Pod Identity, OIDC token projection, or env/secret
+    # credentials) and verifying the RDS TLS certificate with the bundled cloud
+    # database CA certificates.
+    iamAuth:
+      enabled: false
+      # Optional AWS region for RDS IAM token signing. Derived from the RDS
+      # endpoint hostname or AWS_REGION / AWS_DEFAULT_REGION when left empty.
+      awsRegion: ""
+      # Optional IAM role ARN for RDS IAM authentication.
+      # - On EKS (injectWebIdentityTokenVolume: false): automatically sets
+      #   `eks.amazonaws.com/role-arn` on the platform ServiceAccount (IRSA) unless
+      #   already set in `archestra.orchestrator.kubernetes.serviceAccount.annotations`.
+      # - On non-EKS clusters with OIDC federation (injectWebIdentityTokenVolume: true):
+      #   sets `AWS_ROLE_ARN` on the web, worker, and migration Job pods.
+      roleArn: ""
+      # Mount a projected Kubernetes ServiceAccount token volume (`aws-iam-token`)
+      # and set `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` on web, worker,
+      # and migration Job pods. Enable this on non-EKS Kubernetes clusters (GKE,
+      # AKS, kind, on-prem) federated with an AWS IAM OIDC identity provider.
+      # Leave false on EKS (where the EKS Pod Identity Webhook or Pod Identity
+      # Agent injects credentials automatically).
+      injectWebIdentityTokenVolume: false
+      # Audience for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenAudience: "sts.amazonaws.com"
+      # Expiration (in seconds) for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenExpirationSeconds: 3600
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)
@@ -543,7 +574,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.22" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.24" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers

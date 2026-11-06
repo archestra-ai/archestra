@@ -123,38 +123,31 @@ export const githubCopilotResponsesAdapterFactory: LLMProvider<
  * text part" for message text. Either kills the turn, so Archestra's own chat
  * could not complete a single Copilot Responses turn.
  *
- * Re-anchoring each event onto the id of the item currently open restores the
- * invariant consumers rely on. Ordering guarantees this is sound: an item's
- * events always sit between its `output_item.added` and its `output_item.done`
- * (Copilot streams one item at a time, verified live), so the most recently
- * opened item owns whatever follows. Only ids change — nothing is added,
- * dropped, or reordered — and gateway clients get the same repair, which is
- * the point: the stream they receive is the conformant one either way.
+ * Re-anchor by output_index, which stays stable even when message, reasoning,
+ * and function-call items overlap. For legacy events without an index, only
+ * use the sole open item; choosing the most recently opened item would attach
+ * another item's deltas or closing events to the wrong identity.
  */
 async function* withStableReasoningIds(
   stream: AsyncIterable<GithubCopilotResponseChunk>,
 ): AsyncIterable<GithubCopilotResponseChunk> {
-  let currentItemId: string | null = null;
+  const openItems = new Map<number | undefined, string>();
 
   for await (const chunk of stream) {
     const type = (chunk as { type?: string }).type;
     const item = (chunk as { item?: { type?: string; id?: string } }).item;
+    const outputIndex = (chunk as { output_index?: number }).output_index;
+    const index =
+      outputIndex === undefined && openItems.size === 1
+        ? openItems.keys().next().value
+        : outputIndex;
 
-    // Opening an item defines the id everything up to its close must carry.
+    // Opening an item defines the id its indexed events must carry.
     // Copilot has been seen to omit `id` on a reasoning item, so mint one
     // rather than propagate an undefined key.
     if (type === "response.output_item.added" && item) {
-      currentItemId = item.id ?? `item_${randomUUID()}`;
-      yield {
-        ...chunk,
-        item: { ...item, id: currentItemId },
-      } as GithubCopilotResponseChunk;
-      continue;
-    }
-
-    if (type === "response.output_item.done" && item) {
-      const id = currentItemId ?? item.id;
-      currentItemId = null;
+      const id = item.id ?? `item_${randomUUID()}`;
+      openItems.set(outputIndex, id);
       yield {
         ...chunk,
         item: { ...item, id },
@@ -162,12 +155,25 @@ async function* withStableReasoningIds(
       continue;
     }
 
-    // Every other per-item event (content parts, text deltas, reasoning
-    // summaries, function-call arguments) is bound to the open item.
-    if (currentItemId && "item_id" in (chunk as unknown as object)) {
+    const id =
+      outputIndex === undefined && openItems.size !== 1
+        ? undefined
+        : openItems.get(index);
+    if (type === "response.output_item.done" && item) {
+      if (id) openItems.delete(index);
       yield {
         ...chunk,
-        item_id: currentItemId,
+        item: { ...item, id: id ?? item.id },
+      } as GithubCopilotResponseChunk;
+      continue;
+    }
+
+    // Every other per-item event (content parts, text deltas, reasoning
+    // summaries, function-call arguments) is bound to its own open item.
+    if (id && "item_id" in (chunk as unknown as object)) {
+      yield {
+        ...chunk,
+        item_id: id,
       } as GithubCopilotResponseChunk;
       continue;
     }

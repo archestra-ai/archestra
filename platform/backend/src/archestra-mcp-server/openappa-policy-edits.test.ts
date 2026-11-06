@@ -154,6 +154,9 @@ describe("policy edits", () => {
       expect(errorText(await call({ edits, expectedRevision: 0 }))).toContain(
         "The policy changed. Read it again",
       );
+    expect(
+      (await GuardrailsPolicyModel.findLatest(organizationId))?.revision,
+    ).toBe(1);
   });
 
   test("refused edits explain the fix and save nothing", async () => {

@@ -24,7 +24,10 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
-use crate::{BindingFailure, Fault, policy::open_fault};
+use crate::{
+    errors::{BindingFailure, Fault},
+    policy::open_fault,
+};
 
 /// The credential values the host resolved for one organization's policy, variable →
 /// value. Secrets: nothing here is logged or formatted.

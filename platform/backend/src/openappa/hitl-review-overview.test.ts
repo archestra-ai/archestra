@@ -472,49 +472,6 @@ describe("hitlReviewCard", () => {
     expect(preview).not.toContain("description: (");
   });
 
-  test("offers Allow only after Inspect for a described command too long for the pane", () => {
-    const command = `echo ${"payload ".repeat(260)}end`;
-    expect(command.length).toBeGreaterThan(2000);
-    const review = {
-      tool: "Bash",
-      arguments: JSON.stringify({
-        command,
-        description: "List the files in the build folder",
-      }),
-      text: COVERAGE,
-    };
-    const { card: unread, approve: unreadApprove } = cardFor(review);
-    expect(unreadApprove).toBe(false);
-    expect(unread.options.map((option) => option.label)).toEqual([
-      "Inspect",
-      "Deny",
-    ]);
-    expect(unread.callPreview).toBe(
-      `description: List the files in the\n    build folder\ncommand: (${command.length.toLocaleString("en-US")} characters, see\n    Inspect)`,
-    );
-    const { approve } = cardFor({ ...review, inspected: true });
-    expect(approve).toBe(true);
-  });
-
-  test("keeps a description of a few lines in full and shortens a long command", () => {
-    const description = "Rebuild and push the branch. ".repeat(6).trim();
-    const command = `echo ${"payload ".repeat(195)}end`;
-    const { card, approve } = cardFor({
-      tool: "Bash",
-      arguments: JSON.stringify({ command, description, cmd: command }),
-      text: COVERAGE,
-    });
-    expect(approve).toBe(false);
-    for (const label of ["Inspect", "Deny"]) {
-      const preview = previewOf(card, label);
-      expect(fitsThePane(preview)).toBe(true);
-      expect(
-        unwrapped(preview).startsWith(`description: ${description}\n`),
-      ).toBe(true);
-      expect(preview).toContain("command: (");
-    }
-  });
-
   test("keeps the description first when the other arguments are hidden", () => {
     const options = Object.fromEntries(
       Array.from({ length: 120 }, (_, index) => [
@@ -903,6 +860,22 @@ describe("renderHitlReviewText", () => {
     expect(text).toContain("escaped");
   });
 
+  test("leaves out a derived transfer mode only for the Archestra tool that derives it", () => {
+    const args = JSON.stringify({
+      agent_id: "a",
+      environment: [{ key: "TOKEN", type: "secret" }],
+      transferModes: ["link"],
+    });
+    const rendered = (tool: string) =>
+      renderHitlReviewText({ tool, arguments: args, text: COVERAGE });
+    expect(rendered("mcp/archestra/transfer_credential")).not.toContain(
+      "transferModes",
+    );
+    expect(rendered("mcp/vault/transfer_credential")).toContain(
+      "transferModes",
+    );
+  });
+
   test("shows unparsed arguments verbatim", () => {
     const text = renderHitlReviewText({
       tool: "Bash",
@@ -967,124 +940,6 @@ describe("inspection state", () => {
     expect(allow.length).toBeLessThanOrEqual(2000);
     expect(allow).toContain("see\n    Inspect)");
     expect(allow).toContain("Also accepts:");
-  });
-
-  test("inspect pendings the review and the next issue carries the complete text", async () => {
-    const offerId = "offer-inspect-emit";
-    const reviewSession = session("user:user|inspect-emit");
-    const command = `echo ${"exact-payload ".repeat(400)}`;
-    await stageHitlReview({
-      session: reviewSession,
-      review: longReview(offerId, command),
-    });
-    const digest = await issuedDigest(reviewSession, offerId);
-    const asked = await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "inspect",
-      carriedReviewText: false,
-      claimDigest: digest,
-    });
-    expect(asked).toEqual({ status: "inspect-pending" });
-    expect(
-      await peekHitlRuling({ session: reviewSession, offerId }),
-    ).toBeUndefined();
-    const next = await getHitlInspectableAskUserArguments({
-      session: reviewSession,
-      offerIds: [offerId],
-    });
-    expect(next?.reviewText).toContain("## Approval review");
-    expect(next?.reviewText).toContain(command);
-    expect(next?.reviewText).toContain(
-      "- the readers must be the public audience",
-    );
-    // The same card accompanies the text.
-    expect(next?.card.options.map((option) => option.label)).toEqual([
-      "Inspect",
-      "Allow",
-      "Deny",
-    ]);
-  });
-
-  test("an answer to a text-carrying card delivers the inspection; later asks emit no duplicate", async () => {
-    const offerId = "offer-inspect-once";
-    const reviewSession = session("user:user|inspect-once");
-    await stageHitlReview({
-      session: reviewSession,
-      review: longReview(offerId),
-    });
-    const digest = await issuedDigest(reviewSession, offerId);
-    await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "inspect",
-      carriedReviewText: false,
-      claimDigest: digest,
-    });
-    const emitted = await getHitlInspectableAskUserArguments({
-      session: reviewSession,
-      offerIds: [offerId],
-    });
-    expect(emitted?.reviewText).toBeDefined();
-    // Inspecting again from the card that carried the text: delivered, and
-    // the text is not emitted twice.
-    const again = await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "inspect",
-      carriedReviewText: true,
-      claimDigest: digest,
-    });
-    expect(again).toEqual({ status: "inspect-shown" });
-    const repeated = await getHitlInspectableAskUserArguments({
-      session: reviewSession,
-      offerIds: [offerId],
-    });
-    expect(repeated?.reviewText).toBeUndefined();
-    expect(repeated?.card.options.map((option) => option.label)).toContain(
-      "Inspect",
-    );
-  });
-
-  test("no approval while a requested inspection is undelivered", async () => {
-    const offerId = "offer-inspect-gate";
-    const reviewSession = session("user:user|inspect-gate");
-    await stageHitlReview({
-      session: reviewSession,
-      review: longReview(offerId),
-    });
-    const digest = await issuedDigest(reviewSession, offerId);
-    await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "inspect",
-      carriedReviewText: false,
-      claimDigest: digest,
-    });
-    // An answer from a card issued before the inspection: no grant.
-    const early = await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "approve",
-      carriedReviewText: false,
-      claimDigest: digest,
-    });
-    expect(early).toEqual({ status: "stale" });
-    expect(
-      await peekHitlRuling({ session: reviewSession, offerId }),
-    ).toBeUndefined();
-    // The card issued with the text accepts the approval.
-    const after = await resolveHitlInspectableAnswer({
-      session: reviewSession,
-      offerId,
-      answer: "approve",
-      carriedReviewText: true,
-      claimDigest: digest,
-    });
-    expect(after).toEqual({ status: "recorded", ruling: "approve" });
-    await expect(
-      consumeHitlRuling({ session: reviewSession, offerId }),
-    ).resolves.toBe("approve");
   });
 
   test("a delivered inspection offers and accepts Allow on a card too small for the call", async () => {

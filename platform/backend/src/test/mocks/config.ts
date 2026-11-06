@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-type DeepPartial<T> = {
+export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
 
@@ -37,7 +37,7 @@ export async function configModuleMock(
   };
 }
 
-function deepMerge<T>(base: T, overrides: DeepPartial<T>): T {
+export function deepMerge<T>(base: T, overrides: DeepPartial<T>): T {
   for (const key of Object.keys(overrides) as Array<keyof T>) {
     const value = overrides[key];
     if (

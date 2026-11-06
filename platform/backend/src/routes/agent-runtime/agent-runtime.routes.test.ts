@@ -1101,6 +1101,79 @@ describe("Agent Runtime routes", () => {
     expect(forbidden.statusCode).toBe(404);
   });
 
+  test.each([
+    "TASK_STATE_COMPLETED",
+    "TASK_STATE_FAILED",
+    "TASK_STATE_CANCELED",
+    "TASK_STATE_REJECTED",
+  ] as const)("returns a conflict when canceling a %s run", async (state) => {
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state,
+    });
+    await createRun({ taskId: task.id, actorUserId: user.id });
+    const actual = await vi.importActual<
+      typeof import("@/services/agent-runtime/start-task")
+    >("@/services/agent-runtime/start-task");
+    vi.mocked(cancelDetachedAgentTask).mockImplementation(
+      actual.cancelDetachedAgentTask,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/cancel`,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        message: "Task cannot be canceled",
+        type: "api_conflict_error",
+      },
+    });
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(state);
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, task.id));
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      action: "agentRun.canceled",
+      outcome: "failure",
+      httpStatus: 409,
+      before: { state },
+      after: null,
+    });
+  });
+
+  test("returns a conflict when the run becomes terminal during cancellation", async () => {
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
+    const actual = await vi.importActual<
+      typeof import("@/services/agent-runtime/start-task")
+    >("@/services/agent-runtime/start-task");
+    vi.mocked(cancelDetachedAgentTask).mockImplementation(
+      actual.cancelDetachedAgentTask,
+    );
+
+    const responses = await Promise.all([
+      app.inject({ method: "POST", url: `/api/agent-runs/${task.id}/cancel` }),
+      app.inject({ method: "POST", url: `/api/agent-runs/${task.id}/cancel` }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 409,
+    ]);
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      "TASK_STATE_CANCELED",
+    );
+  });
+
   test("lets the initiating user rename, pin, unpin, and delete a finished run", async () => {
     const task = await createTask(agent.id);
     const run = await AgentRunModel.create({

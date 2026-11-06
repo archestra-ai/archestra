@@ -8,6 +8,7 @@ import {
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isClaudeCodeRuntimeCommand,
   isClaudeOnBedrock,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
@@ -190,6 +191,11 @@ describe("getAgentRuntimeModelCompatibility", () => {
       compatible: false,
       message: expect.stringContaining("Codex runtime requires an OpenAI"),
     });
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code")).toBe(true);
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code-runtime")).toBe(
+      true,
+    );
+    expect(isClaudeCodeRuntimeCommand("archestra-codex")).toBe(false);
   });
 
   test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {

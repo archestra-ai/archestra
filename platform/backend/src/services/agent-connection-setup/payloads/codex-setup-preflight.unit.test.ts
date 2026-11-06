@@ -358,33 +358,35 @@ test.each([
 
 const WSL_MODE = "[desktop]\nrunCodexInWindowsSubsystemForLinux = true\n";
 
-test.each([
+// Codex's sandbox is checked only on Linux (and in WSL), where it runs.
+test.skipIf(process.platform !== "linux").each([
   { name: "with the LLM proxy", proxy: ctx.proxy },
   { name: "gateway-only", proxy: null },
-])("a missing sandbox stops $name setup before changing configuration or registering tools", async ({
-  proxy,
-}) => {
-  const f = await fixture();
-  try {
-    await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
-    const result = await exec("bash", [f.script], {
-      env: { ...f.env, BROKEN_SANDBOX: "1" },
-    }).catch((error) => error);
-    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
-    expect(result.stderr).toContain("sudo apt install bubblewrap");
-    expect(result.stderr).toContain("No client configuration was changed");
-    expect(await readFile(f.config, "utf8")).toBe(original);
-    expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
-      "# existing shell profile\n",
-    );
-    expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
-    expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
-      /mcp (add|remove)|plugin|debug models/,
-    );
-  } finally {
-    await rm(f.home, { recursive: true, force: true });
-  }
-});
+])(
+  "a missing sandbox stops $name setup before changing configuration or registering tools",
+  async ({ proxy }) => {
+    const f = await fixture();
+    try {
+      await writeFile(f.script, renderSetupScript({ ...ctx, proxy }));
+      const result = await exec("bash", [f.script], {
+        env: { ...f.env, BROKEN_SANDBOX: "1" },
+      }).catch((error) => error);
+      expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+      expect(result.stderr).toContain("sudo apt install bubblewrap");
+      expect(result.stderr).toContain("No client configuration was changed");
+      expect(await readFile(f.config, "utf8")).toBe(original);
+      expect(await readFile(path.join(f.home, ".zshrc"), "utf8")).toBe(
+        "# existing shell profile\n",
+      );
+      expect(await readdir(f.codexHome)).toEqual(["config.toml"]);
+      expect(await readFile(path.join(f.home, "calls"), "utf8")).not.toMatch(
+        /mcp (add|remove)|plugin|debug models/,
+      );
+    } finally {
+      await rm(f.home, { recursive: true, force: true });
+    }
+  },
+);
 
 test.each([
   {

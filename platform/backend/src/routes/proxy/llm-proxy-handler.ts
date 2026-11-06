@@ -96,6 +96,7 @@ import {
   getLlmProxyRequestTelemetry,
   type LlmProxyRequestTelemetry,
 } from "@/observability/llm-proxy-request";
+import { reportsReasoningOutsideCompletion } from "@/observability/metrics/llm-usage";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
@@ -145,6 +146,7 @@ import {
 import { authorizeA2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
@@ -180,6 +182,7 @@ import {
   withoutResponsesModelOutput,
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "./common";
 import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
@@ -203,6 +206,7 @@ import {
   handleError,
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
+  poolFailoverReason,
   recordBlockedToolCallMetrics,
   reportBillableUsageMetrics,
   shouldForwardAnthropicBeta,
@@ -281,6 +285,7 @@ export interface LLMProxyContext<TRequest> {
   upstreamAttempt: UpstreamAttempt;
   /** The current transport's usage, independent of translated terminal events. */
   getUpstreamStreamUsage?: MemberTransport["getStreamUsage"];
+  getUpstreamUsage?: MemberTransport["getUsage"];
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
   /** Set when a platform call on the organization default was auto routed. */
@@ -928,6 +933,42 @@ async function handleObservedLLMProxy<
   // a "Bearer:<token>" sentinel so downstream client creation can distinguish
   // auth tokens from raw API keys. Normalize both forms before virtual-key lookup.
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
+  const rawApiKeyMatchesPassthrough =
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    Boolean(
+      passthroughVirtualKeyId &&
+        passthroughUserId &&
+        rawApiKey &&
+        rawApiKey === passthroughVirtualKeyToken,
+    );
+  if (
+    rawApiKeyMatchesPassthrough &&
+    passthroughVirtualKeyId &&
+    passthroughUserId
+  ) {
+    if (providerName === "anthropic") {
+      const claudeCodeToken = await claudeCodeAccountManager.resolveProxyToken({
+        virtualKeyId: passthroughVirtualKeyId,
+        organizationId: resolvedAgent.organizationId,
+        userId: passthroughUserId,
+        agentId,
+      });
+      if (!claudeCodeToken) {
+        throw new ApiError(
+          400,
+          "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+        );
+      }
+      apiKey = `Bearer:${claudeCodeToken}`;
+      perKeyBaseUrl = ANTHROPIC_SUBSCRIPTION_UPSTREAM;
+    } else {
+      throw new ApiError(
+        400,
+        "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
+      );
+    }
+  }
 
   // In-process callers forward a stored provider secret through the local
   // proxy (with the in-process proof) tagged with CHAT_API_KEY_ID_HEADER and
@@ -989,6 +1030,7 @@ async function handleObservedLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !rawApiKeyMatchesPassthrough &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -1042,6 +1084,7 @@ async function handleObservedLLMProxy<
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    !rawApiKeyMatchesPassthrough &&
     !personalTokenUserId &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
@@ -1057,22 +1100,35 @@ async function handleObservedLLMProxy<
         expectedOrganizationId: resolvedAgent.organizationId,
         requestedModel: requestAdapter.getModel(),
         allowModelPool: true,
+        agentId,
+        agent: resolvedAgent,
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
-      wasVirtualKeyResolved = true;
-      virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
       grantedPoolId = virtualResult.modelPoolId;
-      // A personal standard virtual key identifies its owner; include it in the
-      // cross-credential consistency check.
-      if (virtualResult.virtualKeyIsPersonal) {
-        regularVirtualKeyUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+      if (virtualResult.passthroughVirtualKeyId) {
+        passthroughVirtualKeyId = virtualResult.passthroughVirtualKeyId;
+        passthroughUserId = virtualResult.virtualKeyAuthorId ?? undefined;
+        if (passthroughUserId) {
+          userId = passthroughUserId;
+          resolvedUser = await UserModel.getById(userId);
+        }
+        authMethod = "passthrough_virtual_key";
+      } else {
+        wasVirtualKeyResolved = true;
+        virtualKeyId = virtualResult.virtualKeyId;
+        // A personal standard virtual key identifies its owner; include it in the
+        // cross-credential consistency check.
+        if (virtualResult.virtualKeyIsPersonal) {
+          regularVirtualKeyUserId =
+            virtualResult.virtualKeyAuthorId ?? undefined;
+        }
+        authMethod = "virtual_key";
       }
-      authMethod = "virtual_key";
     } catch (error) {
       // The token resolved as a local virtual key on success above. If it
       // didn't and this is an internal chat forward, the secret belongs to a
@@ -1276,8 +1332,8 @@ async function handleObservedLLMProxy<
     requestAdapter.getModel(),
   );
   // A request for a model pool's name is served by the pool's members when
-  // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-  // the client's can't reach are left out of the plan.
+  // the caller may use the pool (see `mayUseModelPool`). Incompatible members
+  // make the selected pool fail explicitly, rather than silently shrinking it.
   const poolWire = openAiCodexPassthrough
     ? null
     : inboundPoolWire(provider.interactionType);
@@ -1290,6 +1346,11 @@ async function handleObservedLLMProxy<
     typeof chatModelPoolHeader === "string" && chatModelPoolHeader
       ? chatModelPoolHeader
       : undefined;
+  if (chatModelPoolId && !poolWire)
+    throw new ApiError(
+      400,
+      "The selected model pool does not support this request format",
+    );
   const modelPoolPlan =
     poolWire && (!internalCall || chatModelPoolId)
       ? await planModelPool({
@@ -2160,6 +2221,8 @@ async function handleObservedLLMProxy<
         inbound,
         provider: member.provider,
         modelId: member.modelId,
+        inboundReasoningOutsideCompletion:
+          reportsReasoningOutsideCompletion(providerName),
         client: createUpstreamClient({
           adapter,
           apiKey: memberApiKey,
@@ -2373,7 +2436,10 @@ async function handleObservedLLMProxy<
             },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
-              reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
+              reply.raw.setHeader(
+                "x-archestra-pool",
+                encodeURIComponent(modelPoolPlan.poolName),
+              );
               reply.raw.setHeader(
                 "x-archestra-attempts",
                 String(attempt.attempt ?? 1),
@@ -2720,7 +2786,10 @@ async function handleObservedLLMProxy<
         outputTokens: provider.unavailableUsageAccounting ? null : 0,
         // A pool member that failed before answering is free, like the
         // attempts before it.
-        ...(upstreamAttempt.attemptOutcome === "failed" ? { cost: "0" } : {}),
+        ...(upstreamAttempt.modelPoolId &&
+        upstreamAttempt.attemptOutcome === "failed"
+          ? { cost: "0" }
+          : {}),
       };
       await persistProxyInteraction({
         record,
@@ -2873,6 +2942,22 @@ async function handleStreaming<
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
   let failedStreamResponse: unknown;
+  let streamFailureMessage: string | undefined;
+  const loggedStreamResponse = () => {
+    const response =
+      failedStreamResponse ??
+      streamAdapter.toLoggedResponse?.() ??
+      streamAdapter.toProviderResponse();
+    if (
+      failedStreamResponse !== undefined ||
+      streamFailureMessage === undefined
+    )
+      return response;
+    // Read lazily after finalization discards unreleased calls. Retain partial
+    // content, but never let observed tokens hide the lifecycle error.
+    const partial = asRecord(response);
+    return { ...partial, error: partial?.error ?? streamFailureMessage };
+  };
   let clientGone = false;
   // Set once a terminal reaches the client, whichever path released it: the
   // stream loop, the policy release, or a failed generation. An error frame
@@ -3014,12 +3099,21 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
+  let toolCallsReleased = false;
   const observedUsage = () =>
+    ctx.getUpstreamUsage?.() ??
     (!upstreamFinished ? ctx.getUpstreamStreamUsage?.() : null) ??
     streamAdapter.state.usage;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
+    // Candidate completion and policy approval do not imply delivery. Clear
+    // held Gemini calls on every exit before release (including rewrite errors
+    // and buffered-response disconnects), without changing upstream usage.
+    if (streamAdapter.provider === "gemini" && !toolCallsReleased) {
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+    }
     try {
       await ctx.throughput?.reconcile(observedUsage());
     } catch (error) {
@@ -3158,9 +3252,7 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            failedStreamResponse ??
-              streamAdapter.toLoggedResponse?.() ??
-              streamAdapter.toProviderResponse(),
+            loggedStreamResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -3191,9 +3283,7 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          failedStreamResponse ??
-            streamAdapter.toLoggedResponse?.() ??
-            streamAdapter.toProviderResponse(),
+          loggedStreamResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -3330,33 +3420,44 @@ async function handleStreaming<
           //
           // Whatever an adapter does put in `sseData` is forwarded verbatim,
           // so an adapter that emits a chunk carrying both text and a tool call
-          // defeats this (gemini.ts, minimax.ts, and openai.ts's `delta.content`
+          // defeats this (minimax.ts and openai.ts's `delta.content`
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
             childStream.emitModel(result.sseData, result.isResponsePreamble);
           }
 
-          if (result.isFinal) {
+          if (result.isFinal && streamAdapter.provider !== "gemini") {
             providerTerminalSeen = true;
             break;
           }
         }
+        // Gemini finishes candidates independently and can send usage afterward.
+        // Only a normal drain completes its generation; an abort must still
+        // discard held calls and preserve partial usage, even after a STOP.
+        if (streamAdapter.provider === "gemini" && !reply.raw.destroyed) {
+          providerTerminalSeen = true;
+        }
 
         // Set response attributes on span per OTEL GenAI semconv
         const { state } = streamAdapter;
-        // Correct zero-input usage before any consumer (span cost, metrics, the
-        // finally-block cost/persistence) reads it — they all share state.usage.
-        if (state.usage) {
+        // Client-wire translation can lose cache writes or separate reasoning
+        // from output. Trace the same actual usage used for stored accounting.
+        const transportUsage = ctx.getUpstreamUsage?.();
+        let usage = transportUsage ?? observedUsage();
+        if (usage) {
           const fallbackAdapter =
             provider.createRequestAdapter(originalRequest);
-          state.usage = applyInputTokenFallback({
-            usage: state.usage,
+          usage = applyInputTokenFallback({
+            usage,
             provider: providerName,
             providerMessages: fallbackAdapter.getProviderMessages(),
             tools: fallbackAdapter.getTools(),
             model: actualModel,
           });
+          // Actual provider usage may have no lossless representation in the
+          // client's protocol. Keep its adapter state in client-wire units.
+          if (!transportUsage) state.usage = usage;
         }
         if (state.model) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, state.model);
@@ -3364,47 +3465,47 @@ async function handleStreaming<
         if (state.responseId) {
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
-        if (state.usage) {
+        if (usage) {
           // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached
-          // tokens. Internally state.usage.inputTokens is uncached-only (cost,
+          // tokens. Internally usage.inputTokens is uncached-only (cost,
           // metrics, and DB depend on that), so add cache read/write back for
           // the span attributes. The uncached value is still derivable as
           // input_tokens - cache_read.input_tokens - cache_creation.input_tokens.
           const totalInputTokens =
-            state.usage.inputTokens +
-            (state.usage.cacheReadTokens ?? 0) +
-            (state.usage.cacheWriteTokens ?? 0);
+            usage.inputTokens +
+            (usage.cacheReadTokens ?? 0) +
+            (usage.cacheWriteTokens ?? 0);
           llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_OUTPUT_TOKENS,
-            state.usage.outputTokens,
+            usage.outputTokens,
           );
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
-            totalInputTokens + state.usage.outputTokens,
+            totalInputTokens + usage.outputTokens,
           );
-          if (state.usage.cacheReadTokens) {
+          if (usage.cacheReadTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
-              state.usage.cacheReadTokens,
+              usage.cacheReadTokens,
             );
           }
-          if (state.usage.cacheWriteTokens) {
+          if (usage.cacheWriteTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
-              state.usage.cacheWriteTokens,
+              usage.cacheWriteTokens,
             );
           }
-          if (state.usage.cacheWrite1hTokens) {
+          if (usage.cacheWrite1hTokens) {
             llmSpan.setAttribute(
               ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
-              state.usage.cacheWrite1hTokens,
+              usage.cacheWrite1hTokens,
             );
           }
-          if (state.usage.reasoningTokens) {
+          if (usage.reasoningTokens) {
             llmSpan.setAttribute(
               ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
-              state.usage.reasoningTokens,
+              usage.reasoningTokens,
             );
           }
           const cost = await calculateUsageCost({
@@ -3412,7 +3513,7 @@ async function handleStreaming<
             billingEndpoint: ctx.billingEndpoint,
             requestedModel: ctx.requestedModel,
             model: ctx.upstreamAttempt.modelId ?? actualModel,
-            usage: state.usage,
+            usage,
             provider: ctx.upstreamAttempt.provider ?? providerName,
           });
           if (cost !== undefined) {
@@ -3661,6 +3762,12 @@ async function handleStreaming<
         for (const event of allEvents) {
           childStream.emitPolicy(event);
         }
+        toolCallsReleased = !bufferModelResponse;
+      } else if (streamAdapter.provider === "gemini") {
+        // The upstream has finished, so retain final usage, but a disconnect
+        // during policy evaluation must not record calls never handed over.
+        streamAdapter.state.toolCalls = [];
+        streamAdapter.state.rawToolCallEvents = [];
       }
     }
 
@@ -3705,6 +3812,7 @@ async function handleStreaming<
 
     if (bufferModelResponse && !reply.raw.destroyed) {
       childStream.flushAll();
+      toolCallsReleased = true;
       appaReceipts?.markReleased(bufferedOutcome.decision);
     }
 
@@ -3726,6 +3834,10 @@ async function handleStreaming<
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;
+    streamFailureMessage = upstreamErrorMessage(
+      lifecycleError,
+      provider.extractErrorMessage,
+    );
     if (clientDisconnected) clientGone = true;
     if (
       lifecycleError instanceof CodexResponsesGenerationError &&
@@ -4199,7 +4311,9 @@ async function handleNonStreaming<
       }
       const adapter = provider.createResponseAdapter(result, request);
       try {
-        await ctx.throughput?.reconcile(adapter.getUsage());
+        await ctx.throughput?.reconcile(
+          ctx.getUpstreamUsage?.() ?? adapter.getUsage(),
+        );
       } catch (error) {
         // Preserve interaction/spend accounting for the completed provider
         // call before reporting token-meter storage failure to the client.
@@ -4211,7 +4325,7 @@ async function handleNonStreaming<
       // reuse this usage) all see the estimate.
       const fallbackAdapter = provider.createRequestAdapter(originalRequest);
       const usage = applyInputTokenFallback({
-        usage: adapter.getUsage(),
+        usage: ctx.getUpstreamUsage?.() ?? adapter.getUsage(),
         provider: providerName,
         providerMessages: fallbackAdapter.getProviderMessages(),
         tools: fallbackAdapter.getTools(),
@@ -5078,6 +5192,7 @@ async function openUpstream<TRequest, T>(params: {
     ...retry
   } = params;
   ctx.getUpstreamStreamUsage = undefined;
+  ctx.getUpstreamUsage = undefined;
   let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
@@ -5103,6 +5218,7 @@ async function openUpstream<TRequest, T>(params: {
     dispatched = true;
     // Replace on every attempt so a failed member cannot leak usage to its sibling.
     ctx.getUpstreamStreamUsage = attemptTransport.getStreamUsage;
+    ctx.getUpstreamUsage = attemptTransport.getUsage;
     return open(attemptTransport);
   };
   const routed = ctx.autoRoutedTier;
@@ -5117,6 +5233,7 @@ async function openUpstream<TRequest, T>(params: {
         authorizedOpen({
           execute: routedTransport.execute,
           getStreamUsage: routedTransport.getStreamUsage,
+          getUsage: routedTransport.getUsage,
           executeStream: (request) =>
             routedTransport.executeStream(request, onAccepted),
         }),
@@ -5125,11 +5242,19 @@ async function openUpstream<TRequest, T>(params: {
   }
   const pool = ctx.modelPool;
   if (!pool) {
-    return openUpstreamWithRetry({
-      open: () => authorizedOpen(transport),
-      ...retry,
-    });
+    try {
+      return await openUpstreamWithRetry({
+        open: () => authorizedOpen(transport),
+        ...retry,
+      });
+    } catch (error) {
+      ctx.upstreamAttempt.attemptOutcome = "failed";
+      ctx.upstreamAttempt.failureReason =
+        poolFailoverReason(error)?.reason ?? "error";
+      throw error;
+    }
   }
+
   try {
     return await openThroughModelPool({
       plan: pool.plan,
@@ -5138,6 +5263,7 @@ async function openUpstream<TRequest, T>(params: {
       prepareAttempt: (member) => {
         // Preparation can fail before authorizedOpen installs the next getter.
         ctx.getUpstreamStreamUsage = undefined;
+        ctx.getUpstreamUsage = undefined;
         return pool.prepareAttempt(member);
       },
       beforeAttempt: (member) => pool.checkLimits(member),

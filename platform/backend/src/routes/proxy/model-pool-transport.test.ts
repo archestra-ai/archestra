@@ -1,3 +1,4 @@
+import AnthropicSDK from "@anthropic-ai/sdk";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { HttpResponse, http } from "msw";
@@ -30,6 +31,9 @@ describe("the output a request allows", () => {
     expect(
       requestedMaxOutputTokens({ inferenceConfig: { maxTokens: 512 } }),
     ).toBe(512);
+    expect(
+      requestedMaxOutputTokens({ generationConfig: { maxOutputTokens: 2048 } }),
+    ).toBe(2048);
   });
 
   test("is undefined when the request sets no limit", () => {
@@ -48,6 +52,9 @@ describe("which members a client's wire reaches", () => {
     expect(canReachMember("openai-chat", "gemini")).toBe(true);
     expect(canReachMember("anthropic", "gemini")).toBe(true);
     expect(canReachMember("bedrock-converse", "gemini")).toBe(false);
+    expect(canReachMember("gemini", "gemini")).toBe(true);
+    expect(canReachMember("gemini", "openai")).toBe(true);
+    expect(canReachMember("gemini", "anthropic")).toBe(true);
   });
 });
 
@@ -330,7 +337,7 @@ describe("memberTransport", () => {
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
 const bedrockServer = useMswServer();
-for (const inbound of ["openai-chat", "anthropic"] as const) {
+for (const inbound of ["openai-chat", "anthropic", "gemini"] as const) {
   for (const stream of [false, true]) {
     test(`normalizes Gemini tool history for a Bedrock fallback (${inbound}, stream=${stream})`, async () => {
       const signedId = `gemsig-${"s".repeat(100)}.call-1`;
@@ -381,49 +388,81 @@ for (const inbound of ["openai-chat", "anthropic"] as const) {
           apiKey: "synthetic-bedrock-key",
         }),
       });
-      const request = {
-        model: "pool",
-        max_tokens: 16,
-        messages:
-          inbound === "openai-chat"
-            ? [
+      const request =
+        inbound === "gemini"
+          ? {
+              contents: [
                 {
-                  role: "assistant",
-                  content: null,
-                  tool_calls: [
+                  role: "model",
+                  parts: [
                     {
-                      id: signedId,
-                      type: "function",
-                      function: { name: "read_value", arguments: "{}" },
-                    },
-                  ],
-                },
-                { role: "tool", tool_call_id: signedId, content: "done" },
-              ]
-            : [
-                {
-                  role: "assistant",
-                  content: [
-                    {
-                      type: "tool_use",
-                      id: signedId,
-                      name: "read_value",
-                      input: {},
+                      functionCall: {
+                        id: signedId,
+                        name: "read_value",
+                        args: {},
+                      },
+                      thoughtSignature: "synthetic",
                     },
                   ],
                 },
                 {
                   role: "user",
-                  content: [
+                  parts: [
                     {
-                      type: "tool_result",
-                      tool_use_id: signedId,
-                      content: "done",
+                      functionResponse: {
+                        id: signedId,
+                        name: "read_value",
+                        response: { content: "done" },
+                      },
                     },
                   ],
                 },
               ],
-      };
+              generationConfig: { maxOutputTokens: 16 },
+            }
+          : {
+              model: "pool",
+              max_tokens: 16,
+              messages:
+                inbound === "openai-chat"
+                  ? [
+                      {
+                        role: "assistant",
+                        content: null,
+                        tool_calls: [
+                          {
+                            id: signedId,
+                            type: "function",
+                            function: { name: "read_value", arguments: "{}" },
+                          },
+                        ],
+                      },
+                      { role: "tool", tool_call_id: signedId, content: "done" },
+                    ]
+                  : [
+                      {
+                        role: "assistant",
+                        content: [
+                          {
+                            type: "tool_use",
+                            id: signedId,
+                            name: "read_value",
+                            input: {},
+                          },
+                        ],
+                      },
+                      {
+                        role: "user",
+                        content: [
+                          {
+                            type: "tool_result",
+                            tool_use_id: signedId,
+                            content: "done",
+                          },
+                        ],
+                      },
+                    ],
+            };
       if (stream) await collect(await transport.executeStream(request));
       else await transport.execute(request);
       expect(bodies).toHaveLength(1);
@@ -432,6 +471,77 @@ for (const inbound of ["openai-chat", "anthropic"] as const) {
       expect(use).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
       expect(result).toBe(use);
       expect(use).not.toBe(signedId);
+    });
+  }
+}
+
+for (const [stopReason, expected] of [
+  ["refusal", "SAFETY"],
+  ["model_context_window_exceeded", "MAX_TOKENS"],
+] as const) {
+  for (const stream of [false, true]) {
+    test(`preserves Anthropic ${stopReason} for a native Gemini fallback (stream=${stream})`, async () => {
+      const base = {
+        id: "stop-reason",
+        type: "message",
+        role: "assistant",
+        model: "claude-haiku-4-5",
+        content: [],
+        usage: { input_tokens: 2, output_tokens: 0 },
+        stop_reason: stopReason,
+        stop_sequence: null,
+      };
+      bedrockServer.use(
+        http.post("https://anthropic.pool.test/v1/messages", () =>
+          stream
+            ? new HttpResponse(
+                [
+                  {
+                    type: "message_start",
+                    message: { ...base, stop_reason: null },
+                  },
+                  {
+                    type: "message_delta",
+                    delta: { stop_reason: stopReason, stop_sequence: null },
+                    usage: { output_tokens: 0 },
+                  },
+                  { type: "message_stop" },
+                ]
+                  .map(
+                    (event) =>
+                      `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  )
+                  .join(""),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            : HttpResponse.json(base),
+        ),
+      );
+      const transport = memberTransport({
+        inbound: "gemini",
+        provider: "anthropic",
+        modelId: "claude-haiku-4-5",
+        client: new AnthropicSDK({
+          apiKey: "synthetic-key",
+          baseURL: "https://anthropic.pool.test",
+          maxRetries: 0,
+        }),
+      });
+      const request = {
+        contents: [{ role: "user", parts: [{ text: "synthetic request" }] }],
+        generationConfig: { maxOutputTokens: 32 },
+      };
+      const responses = (
+        stream
+          ? await collect(await transport.executeStream(request))
+          : [await transport.execute(request)]
+      ) as { candidates?: { finishReason?: string }[] }[];
+      expect(
+        responses
+          .flatMap((response) => response.candidates ?? [])
+          .map((candidate) => candidate.finishReason)
+          .filter(Boolean),
+      ).toEqual([expected]);
     });
   }
 }

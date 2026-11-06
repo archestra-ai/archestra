@@ -1,3 +1,4 @@
+import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
@@ -786,7 +787,7 @@ function applicableCredentials(params: {
   organizationId: string;
   userId: string | null;
 }) {
-  return params.runtime.command?.[0] === "archestra-claude-code"
+  return isClaudeCodeRuntimeCommand(params.runtime.command?.[0])
     ? params.runtime.credentials?.filter(
         ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
       )

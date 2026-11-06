@@ -97,13 +97,13 @@ export function createOpenAiCompatibleAdapterFactory(
     },
 
     createResponseAdapter(response: Response): LLMResponseAdapter<Response> {
-      return new OpenAIResponseAdapter(response, provider);
+      return new OpenAIResponseAdapter(response, { provider });
     },
 
     createStreamAdapter(
       request?: Request,
     ): LLMStreamAdapter<StreamChunk, Response> {
-      return new OpenAIStreamAdapter(provider, request);
+      return new OpenAIStreamAdapter({ provider, clientRequest: request });
     },
 
     extractApiKey(headers: Headers): string | undefined {

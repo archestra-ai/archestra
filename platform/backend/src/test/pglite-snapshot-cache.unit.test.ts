@@ -28,35 +28,36 @@ describe("pruneSnapshotCache", () => {
       fs.writeFileSync(file, name);
       fs.utimesSync(file, hoursAgo(usedHoursAgo), hoursAgo(usedHoursAgo));
     };
-    // a was used last 5 hours ago, e 1 hour ago.
+    // a was used last 5 hours ago, e 1 hour ago. a and b are gzipped, as
+    // snapshots were before they were stored uncompressed.
     write("a.tar.gz", 5);
     write("b.tar.gz", 4);
-    write("c.tar.gz", 3);
-    write("d.tar.gz", 2);
-    write("e.tar.gz", 1.5);
+    write("c.tar", 3);
+    write("d.tar", 2);
+    write("e.tar", 1.5);
     // A build that died, and one another run is still writing.
-    write("f.tar.gz.123.partial", 2);
-    write("g.tar.gz.456.partial", 0.1);
+    write("f.tar.123.partial", 2);
+    write("g.tar.456.partial", 0.1);
     // The names of a run that died before its teardown, and of a live run,
     // with the times they claimed their snapshots.
-    write(`h.tar.gz.789-${now - 25 * 3600_000}.inuse`, 25);
-    write(`e.tar.gz.790-${now - 1.5 * 3600_000}.inuse`, 1.5);
+    write(`h.tar.789-${now - 25 * 3600_000}.inuse`, 25);
+    write(`e.tar.790-${now - 1.5 * 3600_000}.inuse`, 1.5);
 
     pruneSnapshotCache(3, directory, now);
 
     expect(fs.readdirSync(directory).sort()).toEqual([
-      "c.tar.gz",
-      "d.tar.gz",
-      "e.tar.gz",
-      `e.tar.gz.790-${now - 1.5 * 3600_000}.inuse`,
-      "g.tar.gz.456.partial",
+      "c.tar",
+      "d.tar",
+      "e.tar",
+      `e.tar.790-${now - 1.5 * 3600_000}.inuse`,
+      "g.tar.456.partial",
     ]);
   });
 
   test("keeps a snapshot another run uses between the listing and the removal", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
     const now = Date.now();
-    const snapshot = path.join(directory, "a.tar.gz");
+    const snapshot = path.join(directory, "a.tar");
     fs.writeFileSync(snapshot, "a");
     const daysAgo = (now - 48 * 3600_000) / 1000;
     fs.utimesSync(snapshot, daysAgo, daysAgo);
@@ -82,7 +83,7 @@ describe("pruneSnapshotCache", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
     const now = Date.now();
     for (const [index, name] of ["a", "b"].entries()) {
-      const file = path.join(directory, `${name}.tar.gz`);
+      const file = path.join(directory, `${name}.tar`);
       fs.writeFileSync(file, name);
       const seconds = (now - (index + 1) * 60_000) / 1000;
       fs.utimesSync(file, seconds, seconds);
@@ -90,7 +91,7 @@ describe("pruneSnapshotCache", () => {
 
     pruneSnapshotCache(1, directory, now);
 
-    expect(fs.readdirSync(directory).sort()).toEqual(["a.tar.gz", "b.tar.gz"]);
+    expect(fs.readdirSync(directory).sort()).toEqual(["a.tar", "b.tar"]);
   });
 
   test("does nothing when the cache directory does not exist yet", () => {
@@ -105,7 +106,7 @@ describe("pruneSnapshotCache", () => {
     );
     try {
       const now = Date.now();
-      const snapshot = path.join(directory, "a.tar.gz");
+      const snapshot = path.join(directory, "a.tar");
       fs.writeFileSync(snapshot, "snapshot");
       // Another process claimed the snapshot two days ago and died: its name is
       // a hard link to the cached file, as claimSnapshot makes it.
@@ -134,7 +135,7 @@ describe("claimSnapshot", () => {
 
   test("gives the run a name for the snapshot that pruning the cache does not remove", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
-    const snapshot = path.join(directory, "a.tar.gz");
+    const snapshot = path.join(directory, "a.tar");
     fs.writeFileSync(snapshot, "snapshot");
 
     const runSnapshot = claimSnapshot(snapshot);
@@ -148,7 +149,7 @@ describe("claimSnapshot", () => {
   test("returns null when the snapshot is not cached", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
 
-    expect(claimSnapshot(path.join(directory, "a.tar.gz"))).toBeNull();
+    expect(claimSnapshot(path.join(directory, "a.tar"))).toBeNull();
     expect(fs.readdirSync(directory)).toEqual([]);
   });
 });
@@ -162,14 +163,14 @@ describe("publishedSnapshotIsCurrent", () => {
 
   test("reuses only this run's name for the current snapshot, while it exists", () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "pglite-snapshot-"));
-    const current = path.join(directory, "current.tar.gz");
+    const current = path.join(directory, "current.tar");
     fs.writeFileSync(current, "snapshot");
     const runSnapshot = claimSnapshot(current) as string;
 
     expect(publishedSnapshotIsCurrent(runSnapshot, current)).toBe(true);
     // The cached name itself, another snapshot's run name, or none.
     expect(publishedSnapshotIsCurrent(current, current)).toBe(false);
-    const old = path.join(directory, "old.tar.gz");
+    const old = path.join(directory, "old.tar");
     fs.writeFileSync(old, "snapshot");
     expect(
       publishedSnapshotIsCurrent(claimSnapshot(old) as string, current),

@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 import { count } from "drizzle-orm";
 import config from "@/config";
@@ -8,6 +8,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import { AuditLogModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 
 async function seedAuditLog(organizationId: string, createdAt: Date) {

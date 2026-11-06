@@ -244,7 +244,32 @@ describe("Claude Code authentication", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("disables personal subscription and explains how to restore the command when runtimeCommand is not archestra-claude-code", () => {
+  it("enables personal subscription when runtimeCommand is archestra-claude-code-runtime", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <ClaudeCodeInferenceSettings
+          agentId=""
+          authentication="subscription"
+          onAuthenticationChange={vi.fn()}
+          model="opus"
+          onModelChange={vi.fn()}
+          provider="anthropic"
+          vertexEnabled={false}
+          runtimeCommand="archestra-claude-code-runtime"
+          apiKeySelector={<button type="button">Provider key</button>}
+          modelSelector={<button type="button">Provider model</button>}
+        />
+      </QueryClientProvider>,
+    );
+
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    expect(subscriptionRadio).not.toBeDisabled();
+    expect(subscriptionRadio).toBeChecked();
+  });
+
+  it("disables personal subscription and explains how to restore the command when runtimeCommand is a custom non-Claude entrypoint", () => {
     render(
       <QueryClientProvider client={client}>
         <ClaudeCodeInferenceSettings
@@ -255,7 +280,7 @@ describe("Claude Code authentication", () => {
           onModelChange={vi.fn()}
           provider="anthropic"
           vertexEnabled={false}
-          runtimeCommand="archestra-claude-code-runtime"
+          runtimeCommand="custom-claude-entrypoint"
           apiKeySelector={<button type="button">Provider key</button>}
           modelSelector={<button type="button">Provider model</button>}
         />
@@ -273,7 +298,7 @@ describe("Claude Code authentication", () => {
     expect(providerRadio).toBeChecked();
     expect(
       screen.getByText(
-        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current archestra-claude-code-runtime entrypoint will be lost.",
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
       ),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();

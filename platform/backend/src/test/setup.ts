@@ -29,6 +29,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { assertPortsBound } from "@/models/ports";
 // Dependency-free by design — safe to import before test files apply mocks.
 import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
+import { onDatabaseAccess } from "./database-access";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // The composition module, imported first, bound the ports of the layers
@@ -579,49 +580,13 @@ function quoteLiteral(value: string): string {
 
 function installDatabase(client: PGlite): TestDatabase {
   pgliteClient = client;
-  trackDatabaseAccess(client);
+  onDatabaseAccess(client, () => {
+    databaseTouched = true;
+  });
   testDb = drizzle({ client });
   return testDb;
 }
 
-function trackDatabaseAccess(client: PGlite): void {
-  // Patch the prototype rather than shadowing instance methods: tests can spy
-  // on PGlite.prototype.query. Drizzle transactions use a separate client, so
-  // entering any transaction must count as access as well. Count reads too:
-  // an extra reset is safer than inferring which SQL writes.
-  const sqlPrototype = PGlite.prototype as unknown as {
-    [databaseAccessTrackersKey]?: WeakMap<PGlite, () => void>;
-    query: (...args: unknown[]) => Promise<unknown>;
-    exec: (...args: unknown[]) => Promise<unknown>;
-    transaction: (...args: unknown[]) => Promise<unknown>;
-  };
-  if (!sqlPrototype[databaseAccessTrackersKey]) {
-    const trackers = new WeakMap<PGlite, () => void>();
-    const query = sqlPrototype.query;
-    const exec = sqlPrototype.exec;
-    const transaction = sqlPrototype.transaction;
-    sqlPrototype.query = function (this: PGlite, ...args: unknown[]) {
-      trackers.get(this)?.();
-      return Reflect.apply(query, this, args);
-    };
-    sqlPrototype.exec = function (this: PGlite, ...args: unknown[]) {
-      trackers.get(this)?.();
-      return Reflect.apply(exec, this, args);
-    };
-    sqlPrototype.transaction = function (this: PGlite, ...args: unknown[]) {
-      trackers.get(this)?.();
-      return Reflect.apply(transaction, this, args);
-    };
-    sqlPrototype[databaseAccessTrackersKey] = trackers;
-  }
-  sqlPrototype[databaseAccessTrackersKey].set(client, () => {
-    databaseTouched = true;
-  });
-}
-
-const databaseAccessTrackersKey = Symbol.for(
-  "archestra.test.pgliteAccessTrackers",
-);
 // The database a shared worker keeps between files (keepDatabaseForNextFile).
 // Setup runs again for every file, so it lives on the global object.
 const KEPT_DATABASE = Symbol.for("archestra.test.keptPglite");

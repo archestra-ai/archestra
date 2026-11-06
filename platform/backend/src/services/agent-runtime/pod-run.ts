@@ -81,6 +81,8 @@ import { agentRunTranscriptStore } from "./transcript-store";
 export interface SubagentExecutionPolicy {
   /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
   callerAgentId?: string;
+  /** Resolved per-user/team/org scope key for distributed load-balancer state updates. */
+  scopeKey?: string;
   /** Assigned runtime subagent pool on the caller for distributed queue reconciliation. */
   assignedAgentIds?: string[];
   /** Dispatch counter value when this run was planned, used to detect intervening claims. */
@@ -636,6 +638,13 @@ export async function runTaskInAgentRuntime(params: {
   let remainingFallbackIds = [...fallbackAgentIds];
   let currentPlannedDispatchCount = policy?.plannedDispatchCount ?? null;
   let prefetchedFallback: CandidateConfig | null = null;
+  let currentCandidate: CandidateConfig | null = {
+    agentId: params.agentId,
+    runtime: params.runtime,
+    limits: params.limits,
+    modelId: params.modelId,
+    llmApiKeyId: params.llmApiKeyId,
+  };
 
   const peekNextFallbackCandidate =
     async (): Promise<CandidateConfig | null> => {
@@ -643,9 +652,11 @@ export async function runTaskInAgentRuntime(params: {
       while (remainingFallbackIds.length > 0) {
         const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
           callerAgentId: policy?.callerAgentId,
+          scopeKey: policy?.scopeKey,
           remainingCandidateIds: remainingFallbackIds,
           assignedAgentIds: policy?.assignedAgentIds,
           plannedDispatchCount: currentPlannedDispatchCount,
+          failedAgentId: currentCandidate?.agentId,
         });
         remainingFallbackIds = claimed.remainingCandidateIds;
         currentPlannedDispatchCount = claimed.dispatchCount;
@@ -706,14 +717,6 @@ export async function runTaskInAgentRuntime(params: {
       }
       return null;
     };
-
-  let currentCandidate: CandidateConfig | null = {
-    agentId: params.agentId,
-    runtime: params.runtime,
-    limits: params.limits,
-    modelId: params.modelId,
-    llmApiKeyId: params.llmApiKeyId,
-  };
   let lastError: unknown;
   let hasPriorAttempt = false;
   let anySessionLaunched = false;

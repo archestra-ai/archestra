@@ -4,6 +4,7 @@ import {
   buildCustomAgentRuntime,
   findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
+  isClaudeCodeRuntimeCommand,
   resolveAgentCatalogId,
   summarizeAgentRuntimeTier,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
@@ -91,7 +92,7 @@ export function defaultAgentRuntime(): AgentRuntimeConfig {
 export function supportsClaudeCodeSubscription(
   runtime: Pick<AgentRuntimeConfig, "command"> | null | undefined,
 ): boolean {
-  return runtime?.command?.[0] === "archestra-claude-code";
+  return isClaudeCodeRuntimeCommand(runtime?.command?.[0]);
 }
 
 export function isClaudeCodeRuntimeConfig(

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
@@ -1010,6 +1011,14 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         agentId: run.agentId,
         taskId: run.taskId,
+      }).catch((error: unknown) => {
+        if (
+          error instanceof A2AError &&
+          error.kind === A2AErrorKind.TaskNotCancelable
+        ) {
+          throw new ApiError(409, error.message);
+        }
+        throw error;
       });
       request.auditAfter = {
         taskId: run.taskId,

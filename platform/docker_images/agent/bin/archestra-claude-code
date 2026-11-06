@@ -24,9 +24,9 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
 fi
 
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]]; then
-  # The personal setup-token is injected from the configured secrets backend.
-  # Keep the proxy URL and personal passthrough key; the native OAuth token
-  # remains the provider credential on each request.
+  # CLAUDE_CODE_OAUTH_TOKEN and X-Archestra-Virtual-Key both carry the run's
+  # one-off virtual key; the proxy swaps it for the user's connected Claude
+  # subscription token server-side so the raw OAuth token never enters the pod.
   unset ANTHROPIC_AUTH_TOKEN
   : "${CLAUDE_CODE_OAUTH_TOKEN:?Reconnect your Claude Code account}"
   : "${ANTHROPIC_BASE_URL:?Claude Code requires the Agent LLM proxy}"
@@ -81,9 +81,12 @@ chmod 0600 "${mcp_config}"
 claude_json="${CLAUDE_CONFIG_DIR:-${HOME}}/.claude.json"
 mkdir -p "$(dirname "${claude_json}")"
 workspace="$(pwd)"
-trust_patch="$(jq -n --arg dir "${workspace}" \
+trust_patch="$(jq -n --arg dir "${workspace}" --arg repo "${workspace}/repo" \
   '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,
-    projects:{($dir):{hasTrustDialogAccepted:true}}}')"
+    projects:{
+      ($dir):{hasTrustDialogAccepted:true,hasClaudeMdExternalIncludesApproved:true},
+      ($repo):{hasTrustDialogAccepted:true,hasClaudeMdExternalIncludesApproved:true}
+    }}')"
 if [[ -s "${claude_json}" ]] && jq -e . "${claude_json}" >/dev/null 2>&1; then
   merged="$(jq --argjson patch "${trust_patch}" '. * $patch' "${claude_json}")"
 else

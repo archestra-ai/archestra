@@ -70,7 +70,12 @@ describe("JevSessionSource", () => {
     expect(result.tierNeeded[0]).toBeCloseTo(0.2, 12);
     expect(result.tierNeeded[1]).toBeCloseTo(0.5, 12);
     expect(result.tierNeeded[2]).toBeCloseTo(0.3, 12);
-    expect(result).toMatchObject({ pLong: 0.35, costUsd: null });
+    expect(result).toMatchObject({
+      pLong: 0.35,
+      inputTokens: 420,
+      outputTokens: 6,
+    });
+    expect(result.costUsd).toBeCloseTo(0.00001764, 12);
     expect(requests).toEqual([
       {
         authorization: "Bearer sk-typesafe",
@@ -123,6 +128,31 @@ describe("JevSessionSource", () => {
     const result = await source.read(INPUT, { organizationId: org.id });
 
     expect(result.pLong).toBe(0.35);
+    expect(result.costUsd).toBeNull();
+    expect(result.inputTokens).toBe(420);
+  });
+
+  test("preserves a reported zero cost and unknown usage", async () => {
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage: { cost: 0 } }),
+      ),
+    );
+    expect(await source.read(INPUT, ctx())).toMatchObject({
+      costUsd: 0,
+      inputTokens: null,
+      outputTokens: null,
+    });
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage: undefined }),
+      ),
+    );
+    expect(await source.read(INPUT, ctx())).toMatchObject({
+      costUsd: null,
+      inputTokens: null,
+      outputTokens: null,
+    });
   });
 
   test("times out after the configured budget", async () => {
@@ -135,6 +165,19 @@ describe("JevSessionSource", () => {
     );
 
     await expectSourceError(source.read(INPUT, ctx()), "timeout");
+  });
+
+  test.each([
+    { input_tokens: -1 },
+    { output_tokens: 1.5 },
+    { cost: -0.01 },
+  ])("rejects invalid usage metadata: %j", async (usage) => {
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage }),
+      ),
+    );
+    await expectSourceError(source.read(INPUT, ctx()), "invalid_response");
   });
 
   test("reports an HTTP error with its status", async () => {

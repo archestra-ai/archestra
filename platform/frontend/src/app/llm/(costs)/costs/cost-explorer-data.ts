@@ -197,7 +197,6 @@ export function splitOptions(metric: MetricId, group: DimId): DimId[] {
   if (group === "person") {
     if (metric === "appRuns") return ["app"];
     if (metric === "skillActivations") return ["skill"];
-    return ["model"];
   }
   if (LLM_METRICS.includes(metric) && BREAKDOWN_DIMS.includes(group))
     return BREAKDOWN_DIMS.filter((d) => d !== group);
@@ -219,7 +218,14 @@ export function normalize(q: PivotQuery): PivotQuery {
 }
 
 /** LLM dimensions that combine through GET /api/statistics/llm-usage. */
-const BREAKDOWN_DIMS: DimId[] = ["team", "key", "provider", "model"];
+const BREAKDOWN_DIMS: DimId[] = [
+  "team",
+  "agent",
+  "person",
+  "key",
+  "provider",
+  "model",
+];
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   cacheSavings: "time",
@@ -228,6 +234,7 @@ const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   skillActivations: "skill",
 };
 
+// Named "<metric> by <grouping> [and <split>]", the way the controls read.
 export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   {
     id: "spend-model",
@@ -235,14 +242,29 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     q: { metric: "billed", group: "model", split: "none", chart: "bars" },
   },
   {
-    id: "cache-model",
-    label: "Cache reads by model",
-    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+    id: "team-model",
+    label: "Spend by team and model",
+    q: { metric: "billed", group: "team", split: "model", chart: "table" },
   },
   {
-    id: "cache-savings",
-    label: "Prompt cache savings",
-    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
+    id: "keys",
+    label: "Spend by credential",
+    q: { metric: "billed", group: "key", split: "none", chart: "table" },
+  },
+  {
+    id: "key-provider",
+    label: "Spend by credential and provider",
+    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
+  },
+  {
+    id: "provider-keys",
+    label: "Spend by provider key",
+    q: {
+      metric: "billed",
+      group: "providerKey",
+      split: "none",
+      chart: "table",
+    },
   },
   {
     id: "spend-label",
@@ -256,47 +278,37 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   },
   {
     id: "who",
-    label: "Who is using it",
+    label: "Tokens by person",
     q: { metric: "tokens", group: "person", split: "none", chart: "lines" },
   },
   {
-    id: "apps",
-    label: "Apps by runs",
-    q: { metric: "appRuns", group: "app", split: "none", chart: "bars" },
+    id: "agent-person",
+    label: "Tokens by agent and person",
+    q: { metric: "tokens", group: "agent", split: "person", chart: "bars" },
+  },
+  {
+    id: "cache-model",
+    label: "Cache reads by model",
+    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-savings",
+    label: "Cache savings over time",
+    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
   },
   {
     id: "tools",
-    label: "Tool calls by server",
+    label: "Tool calls by server and tool",
     q: { metric: "toolCalls", group: "server", split: "tool", chart: "bars" },
   },
   {
-    id: "team-model",
-    label: "Team spend by model",
-    q: { metric: "billed", group: "team", split: "model", chart: "table" },
-  },
-  {
-    id: "key-provider",
-    label: "Credential spend by provider",
-    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
-  },
-  {
-    id: "keys",
-    label: "Credentials by spend",
-    q: { metric: "billed", group: "key", split: "none", chart: "table" },
-  },
-  {
-    id: "provider-keys",
-    label: "Provider keys by spend",
-    q: {
-      metric: "billed",
-      group: "providerKey",
-      split: "none",
-      chart: "table",
-    },
+    id: "apps",
+    label: "App runs by app",
+    q: { metric: "appRuns", group: "app", split: "none", chart: "bars" },
   },
   {
     id: "skills",
-    label: "Skills by reach",
+    label: "Skill activations by skill",
     q: {
       metric: "skillActivations",
       group: "skill",
@@ -1115,18 +1127,22 @@ function resolveSource(q: PivotQuery): Source {
     }
     return { kind: "skill", dims };
   }
-  // A provider, or a team, credential or model broken down by another of
-  // them, comes from the grouped LLM usage endpoint.
+  // A provider, or a team, agent, person, credential or model broken down by
+  // another of them, comes from the grouped LLM usage endpoint. People by
+  // model keep the per-person endpoint, which answers it on its own.
   if (
     LLM_METRICS.includes(q.metric) &&
     (q.group === "provider" ||
       (BREAKDOWN_DIMS.includes(q.group) &&
         split !== null &&
-        BREAKDOWN_DIMS.includes(split)))
+        BREAKDOWN_DIMS.includes(split) &&
+        !(q.group === "person" && split === "model")))
   ) {
     const dims: LlmUsageDimension[] = ["day"];
     for (const d of [q.group, split]) {
       if (d === "team") dims.push("teamId");
+      if (d === "agent") dims.push("agentId");
+      if (d === "person") dims.push("userId");
       if (d === "key") dims.push("credentialId");
       if (d === "provider") dims.push("provider");
       if (d === "model") dims.push("model");
@@ -1417,6 +1433,15 @@ function llmDimValue(
   switch (dim) {
     case "team":
       return { g: row.teamId ?? "?", gLabel: row.teamName ?? "Unknown team" };
+    case "agent":
+      return {
+        g: row.agentId ?? "?",
+        gLabel: row.agentName ?? "Unknown agent",
+      };
+    case "person":
+      return row.userId
+        ? { g: row.userId, gLabel: row.userName ?? "Unknown" }
+        : { g: "unattributed", gLabel: "No person recorded" };
     case "provider":
       return {
         g: row.provider ?? "?",

@@ -615,7 +615,7 @@ describe("shared LLM throughput admission", () => {
     );
   });
 
-  test("counts additional Gemini thoughts and complete provider iterations without duplicating primary totals", async ({
+  test("counts Gemini thoughts once, inside output, and complete provider iterations without duplicating primary totals", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -633,7 +633,8 @@ describe("shared LLM throughput admission", () => {
     await gemini.admit({ max_tokens: 100 });
     await gemini.reconcile({
       inputTokens: 20,
-      outputTokens: 10,
+      // 10 visible + 30 thoughts: reasoning is a subset of output.
+      outputTokens: 40,
       reasoningTokens: 30,
       cacheReadTokens: 40,
     });

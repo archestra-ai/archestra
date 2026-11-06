@@ -82,7 +82,7 @@ export const ResourceSharedWithQuerySchema = z
           if (subject) return subject;
           ctx.addIssue({
             code: "custom",
-            message: `Invalid subject "${key}": expected org, role:<id>, team:<id>, user:<id>, or serviceAccount:<id>`,
+            message: `Invalid subject "${key}": expected org, role:<id>, team:<id>, user:<id>, serviceAccount:<id>, or oauthClient:<id>`,
           });
           return z.NEVER;
         }),
@@ -91,7 +91,7 @@ export const ResourceSharedWithQuerySchema = z
   )
   .optional()
   .describe(
-    "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.",
+    "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.",
   );
 
 /**
@@ -111,7 +111,8 @@ export const ResourceOwnerQuerySchema = z
 /**
  * A grant subject as one URL-safe token, for the `sharedWith` list query
  * parameter: `org` for the whole organization, otherwise `<type>:<id>` —
- * `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`.
+ * `role:<id>`, `team:<id>`, `user:<id>`, `serviceAccount:<id>`, or
+ * `oauthClient:<id>`.
  */
 export function permissionSubjectKey(subject: PermissionSubject): string {
   return subject.type === "organization"

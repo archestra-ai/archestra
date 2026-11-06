@@ -1073,6 +1073,7 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           serviceAccountId: mcpGwToken.serviceAccountId,
+          oauthClientId: mcpGwToken.oauthClientId,
         });
 
     // Filter out agent skills and app-only tools.
@@ -1475,6 +1476,7 @@ async function listToolsInProcess(params: {
   agentId: string;
   organizationId: string;
   serviceAccountId: string | undefined;
+  oauthClientId?: string;
 }) {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
@@ -1483,6 +1485,7 @@ async function listToolsInProcess(params: {
     tokenAuth: {
       organizationId: params.organizationId,
       serviceAccountId: params.serviceAccountId,
+      oauthClientId: params.oauthClientId,
     },
   });
   return tools;

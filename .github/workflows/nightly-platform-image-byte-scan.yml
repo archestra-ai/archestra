@@ -31,6 +31,7 @@ jobs:
     permissions:
       actions: read # Required to read retained E2E image-build references.
       contents: read # Required to checkout the validator and local scan actions.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,11 +48,15 @@ jobs:
           SOURCE_BRANCH: ${{ github.ref_name }}
         run: python3 .github/scripts/platform-byte-scan-inputs.py select
 
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Scan exact full and slim Platform image bytes
         uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ steps.images.outputs.source_sha }}
           full-image: ${{ steps.images.outputs.full }}
           slim-image: ${{ steps.images.outputs.slim }}
-          dockerhub-user: ${{ secrets.DOCKER_READONLY_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_READONLY_PASSWORD }}

@@ -83,7 +83,7 @@ on:
         type: string
         default: gzip
       environment:
-        description: "GitHub Environment for the build and manifest jobs. Its secrets replace same-named caller secrets: release-publish holds the Docker Hub credentials, staging-build the Sentry source-map token. Empty for none."
+        description: "GitHub Environment for the build and manifest jobs. release-publish is the only OIDC subject allowed to push to Docker Hub; staging-build holds the Sentry source-map token, which replaces a same-named caller secret. Empty for none."
         required: false
         type: string
         default: ""
@@ -91,10 +91,6 @@ on:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
-        required: false
-      DOCKER_USERNAME:
-        required: false
-      DOCKER_PASSWORD:
         required: false
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
         required: false
@@ -192,12 +188,14 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           registry: europe-west1-docker.pkg.dev
 
+      # Docker Hub OIDC: push is granted only to the release-publish
+      # environment's subject.
       - name: Log in to Docker Hub
         if: ${{ inputs.push_image && inputs.auth_provider == 'dockerhub' }}
         uses: $/.github/actions/docker-login
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       # Registry-backed layer cache, one ref per architecture. Docker Hub
       # contains release images only; release jobs promote scanned OCI archives
@@ -345,12 +343,14 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           registry: europe-west1-docker.pkg.dev
 
+      # Docker Hub OIDC: pushes for Docker Hub images, and the Docker Scout
+      # login for release scans of every image.
       - name: Log in to Docker Hub
-        if: ${{ inputs.auth_provider == 'dockerhub' }}
+        if: ${{ inputs.auth_provider == 'dockerhub' || startsWith(inputs.checkout_ref, 'platform-v') }}
         uses: $/.github/actions/docker-login
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       # Every per-arch digest comes from this run's successful build matrix,
       # checked out at checkout_ref. Validate the complete set before scanning
@@ -369,8 +369,6 @@ jobs:
         with:
           image: ${{ steps.release-scan.outputs.amd64 }}
           platform: linux/amd64
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
 
       - name: Scan release arm64 bytes before tagging
@@ -379,8 +377,6 @@ jobs:
         with:
           image: ${{ steps.release-scan.outputs.arm64 }}
           platform: linux/arm64
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
 
       - name: Create manifest list and push

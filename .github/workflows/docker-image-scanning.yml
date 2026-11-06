@@ -59,6 +59,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -108,14 +109,17 @@ jobs:
       - name: Verify candidate bytes
         id: image
         run: python3 .github/scripts/release-candidate.py verify
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Scan exact candidate bytes
         id: scan
         uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
           platform: linux/${{ matrix.arch }}
-          dockerhub-user: ${{ secrets.DOCKER_READONLY_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_READONLY_PASSWORD }}
           exit-code: "true"
       - name: Record successful scan
         env:
@@ -216,6 +220,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout scan policy and image sources.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -223,12 +228,16 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Scan exact full and slim Platform image bytes
         uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
-          dockerhub-user: ${{ secrets.DOCKER_READONLY_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_READONLY_PASSWORD }}
 
   handoff-fixture:
     name: Build non-publishing handoff fixture

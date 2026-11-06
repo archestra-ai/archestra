@@ -71,9 +71,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
     # transitively pull older x/net and grpc versions and would otherwise override these requirements.
+    # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \

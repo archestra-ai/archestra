@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { parquetWriteBuffer } from "hyparquet-writer";
 import { describe, expect, it } from "vitest";
 import type { Cube } from "./cost-explorer-data";
@@ -79,11 +80,24 @@ describe("cost explorer export columns", () => {
 
   it("keeps pivot buckets and gives duplicate column names distinct names", () => {
     const columns = parquetColumns({
-      cube: { ...cube, buckets: ["total", "total"] },
+      cube: {
+        ...cube,
+        splitKeys: [
+          { key: "a", label: "total", total: 1.375 },
+          { key: "b", label: "total", total: 2 },
+        ],
+        rows: cube.rows.map((row) => ({
+          ...row,
+          children: [
+            { key: "a", label: "total", total: row.series[0], series: [] },
+            { key: "b", label: "total", total: row.series[1], series: [] },
+          ],
+        })),
+      },
       metric: "billed",
       dimLabel: "model",
       view: "pivot",
-      bySplit: false,
+      bySplit: true,
     });
     expect(columns.map((column) => column.name)).toEqual([
       "model",

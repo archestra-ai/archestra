@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import config from "@/config";
 import {
   buildPgConnectionConfig,
   isRdsIamAuthEnabled,
@@ -617,8 +616,7 @@ function parseFanoutMessage(
 }
 
 function createDefaultPgClient(connectionString: string): PgClient {
-  const iamAuthEnabled =
-    config.database.iamAuthEnabled || isRdsIamAuthEnabled();
+  const iamAuthEnabled = isRdsIamAuthEnabled();
   return new pg.Client(
     buildPgConnectionConfig(
       connectionString,
@@ -629,7 +627,6 @@ function createDefaultPgClient(connectionString: string): PgClient {
       },
       {
         iamAuthEnabled,
-        awsRegion: config.database.awsRegion || undefined,
       },
     ),
   );

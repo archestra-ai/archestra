@@ -156,13 +156,15 @@ archestra:
       enabled: true
       # Annotates the platform ServiceAccount with eks.amazonaws.com/role-arn (omit when using EKS Pod Identity):
       roleArn: arn:aws:iam::123456789012:role/archestra-rds-iam-role
-      # Optional when connecting through a custom DNS name instead of *.rds.amazonaws.com:
+      # Optional override when the endpoint hostname does not embed the AWS region
+      # (TLS hostname verification checks the URL hostname against the server certificate,
+      # so the URL must use an endpoint name covered by the certificate):
       # awsRegion: eu-west-1
   env:
     ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
 ```
 
-The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and hostname on every connection.
+The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and URL hostname on every connection (`sslmode=no-verify` is rejected under IAM auth); use an endpoint hostname covered by the server certificate (such as the RDS instance, cluster, or RDS Proxy endpoint, or a custom certificate covering your alias).
 
 ### 3. Non-AWS Kubernetes Clusters (GKE, AKS, OpenShift, on-prem)
 

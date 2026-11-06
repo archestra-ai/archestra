@@ -20,7 +20,10 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
-import { resolveNativeDatabaseConnectionString } from "@/database/rds-iam";
+import {
+  resolveNativeDatabaseConnectionString,
+  withNativeStorageRetry,
+} from "@/database/rds-iam";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
@@ -690,29 +693,6 @@ export function callerUserId(
     : undefined;
 }
 
-const TRANSIENT_NATIVE_STORAGE_PATTERN =
-  /SQLSTATE (?:57P0[123]|0800[01346])|connection closed|broken pipe|connection reset|unexpected EOF/i;
-
-function isTransientNativeStorageDisconnect(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  return TRANSIENT_NATIVE_STORAGE_PATTERN.test(error.message);
-}
-
-async function withNativeStorageRetry<T>(fn: () => Promise<T>): Promise<T> {
-  const maxRetries = Math.max(1, config.openappa.postgresMaxConnections);
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (!isTransientNativeStorageDisconnect(error) || attempt >= maxRetries) {
-        throw error;
-      }
-    }
-  }
-}
-
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
   organizationId: string,
@@ -728,7 +708,7 @@ async function withRuntime(
     const rawResult = await retryWhilePolicyMoved({
       run: async (attempt) => {
         if (attempt > 0) policy = await effectivePolicy(organizationId);
-        return withNativeStorageRetry(() => call(module, policy));
+        return call(module, policy);
       },
     });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
@@ -2212,10 +2192,12 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = await module.loadChildReturns(
-      params.organizationId,
-      params.parentSessionId,
-      lookup,
+    const records = await withNativeStorageRetry(() =>
+      module.loadChildReturns(
+        params.organizationId,
+        params.parentSessionId,
+        lookup,
+      ),
     );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
@@ -2247,9 +2229,8 @@ export async function loadChildAddresses(params: {
 }): Promise<Array<{ parentSessionId: string; value: string }>> {
   try {
     const module = await binding();
-    return await module.loadChildAddresses(
-      params.organizationId,
-      params.childSessionId,
+    return await withNativeStorageRetry(() =>
+      module.loadChildAddresses(params.organizationId, params.childSessionId),
     );
   } catch (error) {
     logger.warn(
@@ -2389,15 +2370,17 @@ export async function listPeerMessages(params: {
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
-      module.listPeerMessages(
-        JSON.stringify({
-          ...peerActor(params.session),
-          ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-          tool: archestraMcpBranding.getToolName(
-            TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
-          ),
-        }),
-        policy,
+      withNativeStorageRetry(() =>
+        module.listPeerMessages(
+          JSON.stringify({
+            ...peerActor(params.session),
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            tool: archestraMcpBranding.getToolName(
+              TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+            ),
+          }),
+          policy,
+        ),
       ),
     z.object({ notices: z.array(PeerNoticeWireSchema) }),
   );
@@ -2550,16 +2533,18 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.loadOfferReview(
-          params.organizationId,
-          params.sessionId,
-          params.offerId,
-          encryption,
-        ),
+    const result = await withNativeStorageRetry(() =>
+      withOpenappaContentEncryption(
+        params.organizationId,
+        params.sessionId,
+        (encryption) =>
+          module.loadOfferReview(
+            params.organizationId,
+            params.sessionId,
+            params.offerId,
+            encryption,
+          ),
+      ),
     );
     if (!result) return null;
     return {
@@ -2822,10 +2807,8 @@ async function peerResponse<T>(
   try {
     const module = await binding();
     const raw = await retryWhilePolicyMoved({
-      run: async () => {
-        const policy = await effectivePolicy(session.organization_id);
-        return withNativeStorageRetry(() => call(module, policy));
-      },
+      run: async () =>
+        call(module, await effectivePolicy(session.organization_id)),
     });
     return schema.parse(JSON.parse(raw));
   } catch (error) {

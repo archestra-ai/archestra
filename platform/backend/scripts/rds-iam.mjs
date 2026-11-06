@@ -39,34 +39,34 @@ function computeCredentialFingerprint(env) {
   ].join("|");
 }
 
-function createRefreshingCredentialProvider(env = process.env) {
+/**
+ * Wraps the AWS credential provider chain so rotated projected WebIdentity
+ * token files (`AWS_WEB_IDENTITY_TOKEN_FILE`), shared credential files, or
+ * expired provider instances are rebuilt automatically.
+ * @public — exported for unit tests
+ */
+export function createRefreshingCredentialProvider({
+  env = process.env,
+  providerFactory = () => fromNodeProviderChain(),
+  now = () => Date.now(),
+  maxAgeMs = CREDENTIAL_PROVIDER_MAX_AGE_MS,
+} = {}) {
   let cachedProvider = null;
   let cachedFingerprint = "";
   let cachedAt = 0;
 
   return async (options) => {
-    if (
-      env !== process.env &&
-      env.AWS_ACCESS_KEY_ID &&
-      env.AWS_SECRET_ACCESS_KEY
-    ) {
-      return {
-        accessKeyId: env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-        sessionToken: env.AWS_SESSION_TOKEN,
-      };
-    }
-    const now = Date.now();
+    const currentTime = now();
     const fingerprint = computeCredentialFingerprint(env);
     if (
       !cachedProvider ||
       fingerprint !== cachedFingerprint ||
-      now - cachedAt >= CREDENTIAL_PROVIDER_MAX_AGE_MS ||
+      currentTime - cachedAt >= maxAgeMs ||
       options?.forceRefresh
     ) {
-      cachedProvider = fromNodeProviderChain();
+      cachedProvider = providerFactory();
       cachedFingerprint = fingerprint;
-      cachedAt = now;
+      cachedAt = currentTime;
     }
     try {
       return await cachedProvider(options);
@@ -116,16 +116,18 @@ function escapeUri(value) {
 
 /**
  * Returns true when RDS IAM database authentication is enabled in the environment.
+ * @public — exported for unit tests
  */
-function isRdsIamAuthEnabled(env = process.env) {
+export function isRdsIamAuthEnabled(env = process.env) {
   return env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true";
 }
 
 /**
  * Extracts the AWS region from an RDS, Aurora, or RDS Proxy endpoint hostname.
  * Returns null when the hostname does not match the RDS endpoint pattern.
+ * @public — exported for unit tests
  */
-function rdsRegionFromHostname(hostname) {
+export function rdsRegionFromHostname(hostname) {
   if (!hostname || typeof hostname !== "string") {
     return null;
   }
@@ -140,8 +142,9 @@ function rdsRegionFromHostname(hostname) {
  * 2. `ARCHESTRA_DATABASE_AWS_REGION` environment variable
  * 3. Region embedded in the `*.rds.amazonaws.com` hostname
  * 4. `AWS_REGION` or `AWS_DEFAULT_REGION` environment variable
+ * @public — exported for unit tests
  */
-function resolveDatabaseAwsRegion({
+export function resolveDatabaseAwsRegion({
   hostname,
   awsRegion,
   env = process.env,
@@ -173,8 +176,9 @@ function resolveDatabaseAwsRegion({
 
 /**
  * Generates a presigned 15-minute RDS IAM authentication token for `rds-db:connect`.
+ * @public — exported for unit tests
  */
-async function generateRdsIamAuthToken({
+export async function generateRdsIamAuthToken({
   hostname,
   port = 5432,
   username,
@@ -240,18 +244,26 @@ async function generateRdsIamAuthToken({
 /**
  * Creates a node-postgres dynamic `password` callback that signs a fresh RDS IAM
  * token on every new connection.
+ * @public — exported for unit tests
  */
-function createRdsIamPasswordCallback({
+export function createRdsIamPasswordCallback({
   hostname,
   port = 5432,
   username,
   awsRegion,
   credentials,
   env = process.env,
+  providerFactory,
+  now,
 }) {
   const region = resolveDatabaseAwsRegion({ hostname, awsRegion, env });
   const resolvedCredentials =
-    credentials ?? createRefreshingCredentialProvider(env);
+    credentials ??
+    createRefreshingCredentialProvider({
+      env,
+      providerFactory,
+      now,
+    });
   return () =>
     generateRdsIamAuthToken({
       hostname,
@@ -340,8 +352,9 @@ function parseDatabaseUrl(connectionString, env = process.env) {
 /**
  * Resolves the node-postgres `ssl` option for RDS IAM connections while keeping
  * TLS certificate and hostname verification with the RDS CA bundle.
+ * @public — exported for unit tests
  */
-function resolvePgSslConfig(
+export function resolvePgSslConfig(
   connectionString,
   { iamAuthEnabled = true, env = process.env } = {},
 ) {
@@ -367,7 +380,9 @@ function resolvePgSslConfig(
   }
 
   if (sslMode === "no-verify" || sslParam === "no-verify") {
-    return { rejectUnauthorized: false };
+    throw new Error(
+      "sslmode=no-verify is not permitted when RDS IAM database authentication is enabled; use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+    );
   }
 
   const sslConfig = {

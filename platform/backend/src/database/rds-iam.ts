@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import tls, { type ConnectionOptions } from "node:tls";
@@ -25,6 +26,13 @@ interface GenerateRdsIamAuthTokenOptions {
   credentials?: AwsCredentialsInput;
 }
 
+interface RefreshingCredentialProviderOptions {
+  env?: NodeJS.ProcessEnv;
+  providerFactory?: () => ReturnType<typeof fromNodeProviderChain>;
+  now?: () => number;
+  maxAgeMs?: number;
+}
+
 interface CreateRdsIamPasswordCallbackOptions {
   hostname: string;
   port?: number;
@@ -32,6 +40,8 @@ interface CreateRdsIamPasswordCallbackOptions {
   awsRegion?: string;
   credentials?: AwsCredentialsInput;
   env?: NodeJS.ProcessEnv;
+  providerFactory?: () => ReturnType<typeof fromNodeProviderChain>;
+  now?: () => number;
 }
 
 interface RdsIamConnectionOptions {
@@ -74,36 +84,36 @@ function computeCredentialFingerprint(env: NodeJS.ProcessEnv): string {
   ].join("|");
 }
 
-function createRefreshingCredentialProvider(
-  env: NodeJS.ProcessEnv = process.env,
-): ReturnType<typeof fromNodeProviderChain> {
+/**
+ * Wraps the AWS credential provider chain so rotated projected WebIdentity
+ * token files (`AWS_WEB_IDENTITY_TOKEN_FILE`), shared credential files, or
+ * expired provider instances are rebuilt automatically.
+ * @public — exported for unit tests
+ */
+export function createRefreshingCredentialProvider({
+  env = process.env,
+  providerFactory = () => fromNodeProviderChain(),
+  now = () => Date.now(),
+  maxAgeMs = CREDENTIAL_PROVIDER_MAX_AGE_MS,
+}: RefreshingCredentialProviderOptions = {}): ReturnType<
+  typeof fromNodeProviderChain
+> {
   let cachedProvider: ReturnType<typeof fromNodeProviderChain> | null = null;
   let cachedFingerprint = "";
   let cachedAt = 0;
 
   return async (options) => {
-    if (
-      env !== process.env &&
-      env.AWS_ACCESS_KEY_ID &&
-      env.AWS_SECRET_ACCESS_KEY
-    ) {
-      return {
-        accessKeyId: env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-        sessionToken: env.AWS_SESSION_TOKEN,
-      };
-    }
-    const now = Date.now();
+    const currentTime = now();
     const fingerprint = computeCredentialFingerprint(env);
     if (
       !cachedProvider ||
       fingerprint !== cachedFingerprint ||
-      now - cachedAt >= CREDENTIAL_PROVIDER_MAX_AGE_MS ||
+      currentTime - cachedAt >= maxAgeMs ||
       options?.forceRefresh
     ) {
-      cachedProvider = fromNodeProviderChain();
+      cachedProvider = providerFactory();
       cachedFingerprint = fingerprint;
-      cachedAt = now;
+      cachedAt = currentTime;
     }
     try {
       return await cachedProvider(options);
@@ -294,10 +304,17 @@ export function createRdsIamPasswordCallback({
   awsRegion,
   credentials,
   env = process.env,
+  providerFactory,
+  now,
 }: CreateRdsIamPasswordCallbackOptions): () => Promise<string> {
   const region = resolveDatabaseAwsRegion({ hostname, awsRegion, env });
   const resolvedCredentials =
-    credentials ?? createRefreshingCredentialProvider(env);
+    credentials ??
+    createRefreshingCredentialProvider({
+      env,
+      providerFactory,
+      now,
+    });
   return () =>
     generateRdsIamAuthToken({
       hostname,
@@ -412,7 +429,9 @@ export function resolvePgSslConfig(
   }
 
   if (sslMode === "no-verify" || sslParam === "no-verify") {
-    return { rejectUnauthorized: false };
+    throw new Error(
+      "sslmode=no-verify is not permitted when RDS IAM database authentication is enabled; use the bundled RDS CA bundle or set sslrootcert / PGSSLROOTCERT.",
+    );
   }
 
   const sslConfig: ConnectionOptions = {
@@ -609,6 +628,9 @@ export async function resolveNativeDatabaseConnectionString(
   }
 
   const createBridgePromise = (async () => {
+    const bridgeSecret = crypto.randomBytes(32).toString("hex");
+    const expectedSecretBytes = Buffer.from(bridgeSecret, "utf8");
+
     const server = net.createServer((clientSocket) => {
       clientSocket.unref();
       const upstreamTcp = net.connect(rdsPort, rdsHost);
@@ -663,17 +685,37 @@ export async function resolveNativeDatabaseConnectionString(
             return;
           }
           if (clientBuf[0] !== 0x70) {
-            upstreamSocket.write(clientBuf);
-            clientBuf = Buffer.alloc(0);
-            passthrough = true;
+            destroyBoth(
+              new Error(
+                "Rejected RDS IAM loopback bridge client: expected PasswordMessage.",
+              ),
+            );
             return;
           }
           const msgLen = clientBuf.readInt32BE(1);
           if (msgLen < 4 || clientBuf.length < 1 + msgLen) {
             return;
           }
+          const rawPasswordPayload = clientBuf.subarray(5, 1 + msgLen);
+          const nullIndex = rawPasswordPayload.indexOf(0);
+          const clientSecretBytes =
+            nullIndex >= 0
+              ? rawPasswordPayload.subarray(0, nullIndex)
+              : rawPasswordPayload;
           clientBuf = clientBuf.subarray(1 + msgLen);
           passwordIntercepted = true;
+
+          if (
+            clientSecretBytes.length !== expectedSecretBytes.length ||
+            !crypto.timingSafeEqual(clientSecretBytes, expectedSecretBytes)
+          ) {
+            destroyBoth(
+              new Error(
+                "Rejected RDS IAM loopback bridge client: invalid per-bridge secret.",
+              ),
+            );
+            return;
+          }
 
           Promise.resolve(passwordCallback())
             .then((token) => {
@@ -774,7 +816,7 @@ export async function resolveNativeDatabaseConnectionString(
     const { parsedUrl } = parseDatabaseUrl(connectionString, env);
     parsedUrl.hostname = "127.0.0.1";
     parsedUrl.port = String(address.port);
-    parsedUrl.password = "rds-iam-bridge";
+    parsedUrl.password = bridgeSecret;
     for (const param of [
       "password",
       "ssl",
@@ -797,6 +839,64 @@ export async function resolveNativeDatabaseConnectionString(
     nativeBridgePromises.set(cacheKey, createBridgePromise);
   }
   return createBridgePromise;
+}
+
+const TRANSIENT_NATIVE_STORAGE_PATTERN =
+  /SQLSTATE (?:57P0[123]|0800[01346])|connection closed|broken pipe|connection reset|unexpected EOF/i;
+
+/**
+ * Returns true when a native storage error represents a dropped or terminated
+ * PostgreSQL connection that may be retried on a fresh pool connection for
+ * read-only or idempotent operations.
+ * @public — exported for unit tests
+ */
+export function isTransientNativeStorageDisconnect(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return TRANSIENT_NATIVE_STORAGE_PATTERN.test(error.message);
+}
+
+/**
+ * Retries a read-only or idempotent native OpenAPPA storage operation with
+ * bounded exponential backoff when an idle pooled connection was terminated
+ * (e.g. `57P01` or `connection closed`). Never wrap non-idempotent mutations
+ * (`dispatchHook`, `executeRemedyByOffer`, `readPeerMessage`, `sendPeerMessage`)
+ * in this helper.
+ * @public — exported for unit tests
+ */
+export async function withNativeStorageRetry<T>(
+  fn: () => Promise<T>,
+  {
+    maxRetries = 2,
+    baseDelayMs = 25,
+    maxDelayMs = 200,
+    sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  }: {
+    maxRetries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<T> {
+  const boundedRetries = Math.max(0, maxRetries);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        !isTransientNativeStorageDisconnect(error) ||
+        attempt >= boundedRetries
+      ) {
+        throw error;
+      }
+      const delayMs = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+    }
+  }
 }
 
 /**

@@ -4,18 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import pg from "pg";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import {
-  buildPgConnectionConfig,
-  closeRdsIamNativeBridges,
-  configurePgDefaultsForRdsIam,
-  createRdsIamPasswordCallback,
-  generateRdsIamAuthToken,
-  isRdsIamAuthEnabled,
-  rdsRegionFromHostname,
-  resolveDatabaseAwsRegion,
-  resolveNativeDatabaseConnectionString,
-  resolvePgSslConfig,
-} from "./rds-iam";
+// @ts-expect-error — plain ESM module used by docker-entrypoint.sh and drizzle.config.ts
+import * as mjsRdsIam from "../../scripts/rds-iam.mjs";
+import * as tsRdsIam from "./rds-iam";
 
 const TEST_CREDENTIALS = {
   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
@@ -23,14 +14,33 @@ const TEST_CREDENTIALS = {
   sessionToken: "AQoDYXdzEJr1234567890",
 };
 
-describe("rds-iam", () => {
+type RdsIamModule = typeof tsRdsIam;
+
+const MODULES: Array<[string, RdsIamModule]> = [
+  ["src/database/rds-iam.ts", tsRdsIam],
+  ["scripts/rds-iam.mjs", mjsRdsIam as unknown as RdsIamModule],
+];
+
+describe.each(MODULES)("rds-iam (%s)", (_moduleName, rdsIam) => {
+  const {
+    buildPgConnectionConfig,
+    configurePgDefaultsForRdsIam,
+    createRdsIamPasswordCallback,
+    createRefreshingCredentialProvider,
+    generateRdsIamAuthToken,
+    isRdsIamAuthEnabled,
+    rdsRegionFromHostname,
+    resolveDatabaseAwsRegion,
+    resolvePgSslConfig,
+  } = rdsIam;
+
   const originalPgDefaultPassword = pg.defaults.password;
   const originalPgDefaultSsl = pg.defaults.ssl;
 
   afterEach(async () => {
     pg.defaults.password = originalPgDefaultPassword;
     pg.defaults.ssl = originalPgDefaultSsl;
-    await closeRdsIamNativeBridges();
+    await tsRdsIam.closeRdsIamNativeBridges();
   });
 
   test("rdsRegionFromHostname extracts regions from RDS, Aurora, Proxy, GovCloud, and China endpoints", () => {
@@ -202,7 +212,6 @@ describe("rds-iam", () => {
 
     const pool = new pg.Pool(poolConfig);
     try {
-      // Simulate two separate connections opened by pg.Pool over time
       const poolOptions = (pool as unknown as { options: pg.ClientConfig })
         .options;
       const client1 = new pg.Client(poolOptions) as unknown as {
@@ -226,7 +235,6 @@ describe("rds-iam", () => {
       await pool.end();
     }
 
-    // Also verify standalone pg.Client (used by LISTEN/NOTIFY in pg-notify-hub.ts)
     const notifyClientConfig = buildPgConnectionConfig(
       url,
       { connectionTimeoutMillis: 1_000, keepAlive: true },
@@ -257,8 +265,6 @@ describe("rds-iam", () => {
     expect(typeof ssl).toBe("object");
     if (ssl && typeof ssl === "object") {
       expect(ssl.rejectUnauthorized).toBe(true);
-      // Must not override checkServerIdentity with a no-op so Node's default
-      // tls.checkServerIdentity verifies the RDS endpoint hostname.
       expect(ssl.checkServerIdentity).toBeUndefined();
       expect(Array.isArray(ssl.ca)).toBe(true);
       const caList = ssl.ca as string[];
@@ -269,7 +275,7 @@ describe("rds-iam", () => {
     }
   });
 
-  test("resolvePgSslConfig loads custom sslrootcert when provided and respects sslmode=disable", () => {
+  test("resolvePgSslConfig loads custom sslrootcert, respects sslmode=disable, and rejects sslmode=no-verify", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-ca-test-"));
     const caFile = path.join(tempDir, "custom-rds-ca.pem");
     const customPem =
@@ -293,6 +299,13 @@ describe("rds-iam", () => {
         { iamAuthEnabled: true, env: {} },
       );
       expect(disabledSsl).toBe(false);
+
+      expect(() =>
+        resolvePgSslConfig(
+          "postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=no-verify",
+          { iamAuthEnabled: true, env: {} },
+        ),
+      ).toThrow(/sslmode=no-verify is not permitted/);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -327,7 +340,6 @@ describe("rds-iam", () => {
     expect(env.PGPASSWORD).toBeUndefined();
     expect(env.PGSSLMODE).toBeUndefined();
 
-    // drizzle-kit constructs `new pg.Pool({ connectionString: url, max: 1 })`
     const drizzlePool = new pg.Pool({
       connectionString: sanitizedUrl,
       max: 1,
@@ -354,6 +366,89 @@ describe("rds-iam", () => {
     }
   });
 
+  test("createRefreshingCredentialProvider caches within TTL and rebuilds on env/file rotation, TTL expiry, or provider failure", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-webid-test-"));
+    const tokenFile = path.join(tempDir, "token.jwt");
+    fs.writeFileSync(tokenFile, "jwt-v1", "utf8");
+    const initialMtime = new Date(1_700_000_000_000);
+    fs.utimesSync(tokenFile, initialMtime, initialMtime);
+
+    let currentTime = 1_000;
+    let factoryCount = 0;
+    let shouldFail = false;
+    const env: NodeJS.ProcessEnv = {
+      AWS_ACCESS_KEY_ID: "AKIA_INITIAL",
+      AWS_SECRET_ACCESS_KEY: "secret_initial",
+      AWS_SESSION_TOKEN: "session_initial",
+      AWS_ROLE_ARN: "arn:aws:iam::123456789012:role/test-role",
+      AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile,
+    };
+
+    const providerFactory = vi.fn(() => {
+      factoryCount += 1;
+      const instanceId = factoryCount;
+      return async () => {
+        if (shouldFail) {
+          throw new Error("Simulated STS failure");
+        }
+        return {
+          accessKeyId: `${env.AWS_ACCESS_KEY_ID}_${instanceId}`,
+          secretAccessKey: `${env.AWS_SECRET_ACCESS_KEY}_${instanceId}`,
+          sessionToken: `${env.AWS_SESSION_TOKEN}_${instanceId}`,
+        };
+      };
+    });
+
+    try {
+      const refreshingProvider = createRefreshingCredentialProvider({
+        env,
+        providerFactory,
+        now: () => currentTime,
+        maxAgeMs: 60_000,
+      });
+
+      // 1. Initial call creates provider #1; second call within TTL reuses cached provider #1
+      const creds1 = await refreshingProvider();
+      currentTime += 10_000;
+      const creds2 = await refreshingProvider();
+      expect(providerFactory).toHaveBeenCalledTimes(1);
+      expect(creds1.accessKeyId).toBe("AKIA_INITIAL_1");
+      expect(creds2.accessKeyId).toBe("AKIA_INITIAL_1");
+
+      // 2. Projected AWS_WEB_IDENTITY_TOKEN_FILE mtime changes on disk -> rebuilds provider #2
+      const rotatedMtime = new Date(1_700_000_060_000);
+      fs.writeFileSync(tokenFile, "jwt-v2", "utf8");
+      fs.utimesSync(tokenFile, rotatedMtime, rotatedMtime);
+      const creds3 = await refreshingProvider();
+      expect(providerFactory).toHaveBeenCalledTimes(2);
+      expect(creds3.accessKeyId).toBe("AKIA_INITIAL_2");
+
+      // 3. Env credential change -> rebuilds provider #3
+      env.AWS_ACCESS_KEY_ID = "AKIA_ROTATED";
+      const creds4 = await refreshingProvider();
+      expect(providerFactory).toHaveBeenCalledTimes(3);
+      expect(creds4.accessKeyId).toBe("AKIA_ROTATED_3");
+
+      // 4. Advance clock past 60s TTL -> rebuilds provider #4
+      currentTime += 60_001;
+      const creds5 = await refreshingProvider();
+      expect(providerFactory).toHaveBeenCalledTimes(4);
+      expect(creds5.accessKeyId).toBe("AKIA_ROTATED_4");
+
+      // 5. Provider error clears cachedProvider so the next call rebuilds provider #5
+      shouldFail = true;
+      await expect(refreshingProvider()).rejects.toThrow(
+        "Simulated STS failure",
+      );
+      shouldFail = false;
+      const creds6 = await refreshingProvider();
+      expect(providerFactory).toHaveBeenCalledTimes(5);
+      expect(creds6.accessKeyId).toBe("AKIA_ROTATED_5");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("createRdsIamPasswordCallback signs fresh tokens on each call and picks up rotated env credentials", async () => {
     const rotatingEnv: NodeJS.ProcessEnv = {
       AWS_ACCESS_KEY_ID: "AKIA_INITIAL_KEY",
@@ -365,6 +460,11 @@ describe("rds-iam", () => {
       port: 5432,
       username: "archestra_user",
       env: rotatingEnv,
+      providerFactory: () => async () => ({
+        accessKeyId: rotatingEnv.AWS_ACCESS_KEY_ID ?? "",
+        secretAccessKey: rotatingEnv.AWS_SECRET_ACCESS_KEY ?? "",
+        sessionToken: rotatingEnv.AWS_SESSION_TOKEN,
+      }),
     });
 
     const token1 = await callback();
@@ -383,11 +483,17 @@ describe("rds-iam", () => {
     expect(token2).toContain("AKIA_ROTATED_KEY");
     expect(token2).toContain("session_rotated");
   });
+});
 
-  test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens per native connection when enabled", async () => {
+describe("rds-iam native bridge & retry helpers", () => {
+  afterEach(async () => {
+    await tsRdsIam.closeRdsIamNativeBridges();
+  });
+
+  test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens per native connection and rejects invalid per-bridge secrets", async () => {
     const rawUrl = "postgresql://archestra_iam@127.0.0.1:5432/archestra";
     expect(
-      await resolveNativeDatabaseConnectionString(rawUrl, {
+      await tsRdsIam.resolveNativeDatabaseConnectionString(rawUrl, {
         iamAuthEnabled: false,
         env: {},
       }),
@@ -432,40 +538,119 @@ describe("rds-iam", () => {
 
     try {
       let seq = 0;
-      const bridgeUrl = await resolveNativeDatabaseConnectionString(
+      const credentialsSpy = vi.fn(async () => {
+        seq += 1;
+        return {
+          accessKeyId: `AKIA_NATIVE_${seq}`,
+          secretAccessKey: `SECRET_NATIVE_${seq}`,
+          sessionToken: `native-token-${seq}`,
+        };
+      });
+
+      const bridgeUrl = await tsRdsIam.resolveNativeDatabaseConnectionString(
         `postgresql://archestra_iam@127.0.0.1:${upstreamPort}/archestra?sslmode=disable`,
         {
           iamAuthEnabled: true,
           awsRegion: "eu-central-1",
-          credentials: async () => {
-            seq += 1;
-            return {
-              accessKeyId: `AKIA_NATIVE_${seq}`,
-              secretAccessKey: `SECRET_NATIVE_${seq}`,
-              sessionToken: `native-token-${seq}`,
-            };
-          },
+          credentials: credentialsSpy,
           env: {},
         },
       );
 
-      expect(bridgeUrl).toContain(
-        "postgresql://archestra_iam:rds-iam-bridge@127.0.0.1:",
-      );
-      expect(bridgeUrl).toContain("sslmode=disable");
+      const parsedBridgeUrl = new URL(bridgeUrl);
+      expect(parsedBridgeUrl.hostname).toBe("127.0.0.1");
+      expect(parsedBridgeUrl.password).toMatch(/^[0-9a-f]{64}$/);
+      expect(parsedBridgeUrl.searchParams.get("sslmode")).toBe("disable");
 
+      // Valid connections presenting the per-bridge secret receive fresh IAM tokens
       for (let i = 0; i < 2; i++) {
         const client = new pg.Client({ connectionString: bridgeUrl });
         await client.connect();
         await client.end().catch(() => {});
       }
 
+      expect(credentialsSpy).toHaveBeenCalledTimes(2);
       expect(receivedPasswords).toHaveLength(2);
       expect(receivedPasswords[0]).toContain("native-token-1");
       expect(receivedPasswords[1]).toContain("native-token-2");
       expect(receivedPasswords[0]).not.toBe(receivedPasswords[1]);
+
+      // Unauthenticated local connection with wrong secret is rejected without calling credentialsSpy
+      const badUrl = new URL(bridgeUrl);
+      badUrl.password = "wrong-bridge-secret";
+      const badClient = new pg.Client({
+        connectionString: badUrl.toString(),
+      });
+      await expect(badClient.connect()).rejects.toThrow();
+      await badClient.end().catch(() => {});
+
+      expect(credentialsSpy).toHaveBeenCalledTimes(2);
+      expect(receivedPasswords).toHaveLength(2);
     } finally {
       await new Promise<void>((resolve) => mockPgServer.close(() => resolve()));
     }
+  });
+
+  test("withNativeStorageRetry retries transient disconnect errors with bounded exponential backoff and does not retry non-transient errors", async () => {
+    const delays: number[] = [];
+    let attempts = 0;
+
+    const result = await tsRdsIam.withNativeStorageRetry(
+      async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Error(
+            "db error: ERROR: terminating connection due to administrator command (SQLSTATE 57P01)",
+          );
+        }
+        return "recovered";
+      },
+      {
+        maxRetries: 2,
+        baseDelayMs: 25,
+        maxDelayMs: 200,
+        sleep: async (ms) => {
+          delays.push(ms);
+        },
+      },
+    );
+
+    expect(result).toBe("recovered");
+    expect(attempts).toBe(3);
+    expect(delays).toEqual([25, 50]);
+
+    // Non-transient error fails immediately on attempt 1 without backoff
+    let nonTransientAttempts = 0;
+    await expect(
+      tsRdsIam.withNativeStorageRetry(
+        async () => {
+          nonTransientAttempts += 1;
+          throw new Error("duplicate key value violates unique constraint");
+        },
+        {
+          maxRetries: 2,
+          sleep: async (ms) => {
+            delays.push(ms);
+          },
+        },
+      ),
+    ).rejects.toThrow("duplicate key value violates unique constraint");
+    expect(nonTransientAttempts).toBe(1);
+
+    // Exhausting maxRetries rethrows the transient error
+    let exhaustedAttempts = 0;
+    await expect(
+      tsRdsIam.withNativeStorageRetry(
+        async () => {
+          exhaustedAttempts += 1;
+          throw new Error("connection closed");
+        },
+        {
+          maxRetries: 2,
+          sleep: async () => {},
+        },
+      ),
+    ).rejects.toThrow("connection closed");
+    expect(exhaustedAttempts).toBe(3);
   });
 });

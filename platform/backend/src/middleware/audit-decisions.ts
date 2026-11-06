@@ -1162,6 +1162,18 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "internal backfill progress marker",
   },
+  llmUsageHourlyTable: {
+    audited: false,
+    reason: "derived hourly totals of interactions for cost statistics",
+  },
+  llmUsageRollupStateTable: {
+    audited: false,
+    reason: "internal rollup progress marker",
+  },
+  llmUsageRollupDirtyTable: {
+    audited: false,
+    reason: "internal queue of rollup hours to recompute",
+  },
   interactionBillingTable: {
     audited: false,
     reason: "content-free idempotent billing receipts",

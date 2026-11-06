@@ -70,6 +70,7 @@
     "src/standalone-scripts/check-test-fixture-imports.ts",
     "src/standalone-scripts/clean-db-on-dev.ts",
     "src/standalone-scripts/codegen-access-control-docs.ts",
+    "src/standalone-scripts/costs-bench/run-bench.ts",
     "src/standalone-scripts/codegen-appa-guide.ts",
     "src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "src/standalone-scripts/codegen-openapi.ts",

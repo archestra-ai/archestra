@@ -58,6 +58,10 @@ import type {
 import { isUuid } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import {
+  billingModelFactsFor,
+  statisticsTimeframeInterval,
+} from "./llm-usage-rollup";
 import { interactionBelongsToOrganization } from "./log-organization";
 
 /**
@@ -733,31 +737,7 @@ class StatisticsModel {
     if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
       return null; // Custom timeframes use date range filtering instead
     }
-
-    switch (timeframe) {
-      case "5m":
-        return "5 minutes";
-      case "15m":
-        return "15 minutes";
-      case "30m":
-        return "30 minutes";
-      case "1h":
-        return "1 hour";
-      case "24h":
-        return "24 hours";
-      case "7d":
-        return "7 days";
-      case "30d":
-        return "30 days";
-      case "90d":
-        return "90 days";
-      case "12m":
-        return "12 months";
-      case "all":
-        return "100 years"; // Effectively all time
-      default:
-        return "24 hours";
-    }
+    return statisticsTimeframeInterval(timeframe);
   }
 
   /**
@@ -3590,30 +3570,9 @@ const billingReceiptJoin = and(
   eq(schema.interactionBillingTable.interactionId, schema.interactionsTable.id),
   sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
 );
-const billingModelFacts = sql`LATERAL (
-  SELECT component->>'model' AS model,
-    bool_or(component->>'model' = COALESCE(
-      jsonb_path_query_first(${schema.interactionBillingTable.usage}, '$.components[*] ? (@.kind == "message")')->>'model',
-      ${schema.interactionBillingTable.usage}->'components'->0->>'model'
-    )) AS parent_request,
-    sum((component->>'inputTokens')::bigint) AS input_tokens,
-    sum((component->>'outputTokens')::bigint) AS output_tokens,
-    sum((component->>'cacheReadTokens')::bigint) AS cache_read_tokens,
-    sum((component->>'cacheWriteTokens')::bigint) AS cache_write_tokens,
-    sum((component->>'cost')::numeric) AS cost,
-    -- A cache direction with no known rate adds no savings, as in
-    -- componentCacheCosts.
-    sum(round((
-      COALESCE((component->>'cacheReadTokens')::numeric * ((component->'prices'->>'input')::numeric - (component->'prices'->>'cacheRead')::numeric), 0)
-      + CASE WHEN component->'prices'->>'cacheWrite' IS NULL THEN 0 ELSE
-          (component->>'cacheWriteTokens')::numeric * (component->'prices'->>'input')::numeric
-          - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * (component->'prices'->>'cacheWrite')::numeric
-          - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
-        END
-    ) / 1000000, 10)) AS cache_savings
-  FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
-  GROUP BY component->>'model'
-) AS billing_model`;
+const billingModelFacts = billingModelFactsFor(
+  sql`${schema.interactionBillingTable.usage}`,
+);
 const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;
 const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
 const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;

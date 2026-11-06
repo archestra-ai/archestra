@@ -408,6 +408,26 @@ builtin = "archestra"
     ).toEqual([
       'mcp/github.toml: the github battery also declares annotator "github.repository-visibility", and a server file cannot replace a battery\'s annotator. Name it github.<another name>.',
     ]);
+    // TOML spells a key many ways; the parsed name is the one checked.
+    const escaped = files({
+      "mcp/github.toml": `[policy]
+version = 2
+
+[[policy."annot\\u0061tor"]]
+name = "github.repository-vis\\u0069bility"
+builtin = "archestra"
+`,
+    });
+    expect(serverFilesDeclareAnnotators(escaped)).toBe(true);
+    expect(
+      expandRepositoryIncludes({
+        content: root,
+        files: escaped,
+        batteryHelpers,
+      }).errors,
+    ).toEqual([
+      'mcp/github.toml: the github battery also declares annotator "github.repository-visibility", and a server file cannot replace a battery\'s annotator. Name it github.<another name>.',
+    ]);
     // With no battery declaring them, both are the server's own.
     const folded = expandRepositoryIncludes({
       content: root,
@@ -447,6 +467,14 @@ delta = { audience = ["self"] }
     expect(
       serverCatchAllPrefixes(files({ "mcp/helpdesk.toml": HELPDESK })),
     ).toEqual([]);
+    // An escaped spelling of the catch-all is the catch-all too.
+    expect(
+      serverCatchAllPrefixes(
+        files({
+          "mcp/helpdesk.toml": `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "helpdesk__\\u002a"\ndelta = {}\n`,
+        }),
+      ),
+    ).toEqual(["helpdesk"]);
     const root = `include = ["mcp/*.toml"]\n[policy]\nversion = 2\n`;
     const expanded = expandRepositoryIncludes({
       content: root,

@@ -768,10 +768,11 @@ test("a server's file cannot replace an annotator of a battery the policy includ
     files: {
       [FIRST]: {
         "appa.toml": root,
+        // An escaped key is still policy.annotator once parsed.
         "mcp/github.toml": `[policy]
 version = 2
 
-[[policy.annotator]]
+[[policy."annot\\u0061tor"]]
 name = "github.repository-visibility"
 builtin = "archestra"
 `,

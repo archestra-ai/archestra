@@ -363,7 +363,8 @@ export function expandRepositoryIncludes(params: {
 
 /**
  * Whether a server file among `files` declares an annotator: only then does
- * a fold need the names of the batteries' annotators.
+ * a fold need the names of the batteries' annotators. Read from the parsed
+ * file, as the fold reads it, since TOML can spell a key many ways.
  */
 export function serverFilesDeclareAnnotators(
   files: ReadonlyMap<string, string>,
@@ -371,7 +372,6 @@ export function serverFilesDeclareAnnotators(
   for (const [path, text] of files)
     if (
       isServerRulesFile(path) &&
-      text.includes("annotator") &&
       tablesOf(asRecord(parsePolicyToml(text)?.policy)?.annotator).length > 0
     )
       return true;
@@ -388,7 +388,8 @@ export function serverCatchAllPrefixes(
   const prefixes = new Set<string>();
   for (const [path, text] of files) {
     const prefix = SERVER_RULES_FILE.exec(path)?.[1];
-    if (prefix === undefined || !text.includes(`${prefix}__*`)) continue;
+    if (prefix === undefined) continue;
+    // The parsed names, as the fold reads them: an escaped spelling counts.
     const rules = tablesOf(asRecord(parsePolicyToml(text)?.policy)?.tool);
     if (rules.some((rule) => isServerCatchAll(prefix, rule)))
       prefixes.add(prefix);

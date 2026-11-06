@@ -46,7 +46,7 @@ describe("GroupChatFilesSetting", () => {
     renderSetting();
 
     const toggle = await screen.findByRole("switch", {
-      name: /group-chat files/i,
+      name: /file sign-in/i,
     });
     await waitFor(() => expect(toggle).toBeEnabled());
     await user.click(toggle);
@@ -73,7 +73,9 @@ describe("GroupChatFilesSetting", () => {
     const request = await navigator.clipboard.readText();
     expect(request).toContain(APP_ID);
     expect(request).toContain(REDIRECT_URI);
-    expect(request).toContain("Files.Read and offline_access");
+    expect(request).toContain(
+      "Files.Read, Files.Read.All (for channel files), and offline_access",
+    );
     expect(
       await screen.findByRole("button", { name: /copied/i }),
     ).toBeInTheDocument();

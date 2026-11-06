@@ -1111,8 +1111,9 @@ export class ChatOpsManager {
     const arrivedMessage: IncomingChatMessage = { ...message };
     await this.addPlatformMessageFiles({ provider, message });
     // A file only its sender can open (a Teams group-chat file in their
-    // OneDrive): hold the message and ask them to sign in; it is answered
-    // again, with the file, once they have.
+    // OneDrive, or a channel file the app has no site grant for): hold the
+    // message and ask them to sign in; it is answered again, with the file,
+    // once they have.
     const signInFiles =
       message.skippedAttachments?.filter(
         (skipped) => skipped.reason === "sign_in_required",

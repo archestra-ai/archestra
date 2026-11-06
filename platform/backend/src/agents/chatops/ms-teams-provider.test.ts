@@ -2564,6 +2564,252 @@ describe("MSTeamsProvider group-chat files read with the sender's sign-in", () =
   });
 });
 
+describe("MSTeamsProvider channel files read with the sender's sign-in", () => {
+  const TENANT_ID = "11111111-1111-4111-8111-111111111111";
+  const APP_ID = "22222222-2222-4222-8222-222222222222";
+  const TEAM_ID = "33333333-3333-4333-8333-333333333333";
+  const SENDER_ID = "44444444-4444-4444-8444-444444444444";
+  const CHANNEL_ID = "19:files@thread.tacv2";
+  const MESSAGE_ID = "1792632504796";
+  const SITE = "https://contoso.sharepoint.com/sites/Engineering";
+  const CHANNEL_FILE = `${SITE}/Shared%20Documents/General/Design%20spec.pdf`;
+  const APP_PDF = Buffer.from("%PDF-1.7 read with the app's site grant");
+  const USER_PDF = Buffer.from("%PDF-1.7 read with the sender's sign-in");
+  const server = useMswServer(...graphAuthHandlers());
+  setupTestCacheManager();
+
+  function makeProvider(): MSTeamsProvider {
+    return new MSTeamsProvider({
+      enabled: true,
+      appId: APP_ID,
+      appSecret: "test-secret",
+      tenantId: TENANT_ID,
+      graphTenantId: TENANT_ID,
+      graphClientId: APP_ID,
+      graphClientSecret: "test-secret",
+      groupChatFileSignIn: true,
+    });
+  }
+
+  function channelMessage(): IncomingChatMessage {
+    return {
+      messageId: MESSAGE_ID,
+      channelId: CHANNEL_ID,
+      workspaceId: TEAM_ID,
+      senderId: SENDER_ID,
+      senderName: "Alice",
+      senderEmail: "alice@contoso.com",
+      text: "summarize this",
+      rawText: "summarize this",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: {
+        conversationType: "channel",
+        tenantId: TENANT_ID,
+        conversationReference: { conversation: { id: CHANNEL_ID } },
+      },
+    };
+  }
+
+  /**
+   * A channel message sharing `fileUrl`. The app reads the team's site only
+   * when `appGranted`; the sender's token opens the channel's General folder.
+   */
+  function channelFile(params: { fileUrl: string; appGranted: boolean }) {
+    return [
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/${MESSAGE_ID}`,
+        () =>
+          HttpResponse.json({
+            id: MESSAGE_ID,
+            attachments: [
+              {
+                contentType: "reference",
+                contentUrl: params.fileUrl,
+                name: "Design spec.pdf",
+              },
+            ],
+          }),
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/sites/:host/:kind/:name",
+        ({ request }) =>
+          params.appGranted &&
+          request.headers.get("authorization") === "Bearer graph-token"
+            ? HttpResponse.json({ id: "site-1" })
+            : new HttpResponse(null, { status: 403 }),
+      ),
+      http.get("https://graph.microsoft.com/v1.0/sites/site-1/drives", () =>
+        HttpResponse.json({
+          value: [{ id: "drive-app", webUrl: `${SITE}/Shared%20Documents` }],
+        }),
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/drives/drive-app/:root/:folder/:file/content",
+        () =>
+          new HttpResponse(APP_PDF, {
+            headers: { "content-type": "application/octet-stream" },
+          }),
+      ),
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/filesFolder`,
+        ({ request }) =>
+          request.headers.get("authorization") === "Bearer user-token"
+            ? HttpResponse.json({
+                id: "folder-general",
+                webUrl: `${SITE}/Shared%20Documents/General`,
+                parentReference: { driveId: "drive-user" },
+              })
+            : new HttpResponse(null, { status: 403 }),
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/drives/drive-user/items/:folder/:file/content",
+        ({ request }) => {
+          const path = decodeURIComponent(new URL(request.url).pathname);
+          return request.headers.get("authorization") === "Bearer user-token" &&
+            path ===
+              "/v1.0/drives/drive-user/items/folder-general:/Design spec.pdf:/content"
+            ? new HttpResponse(USER_PDF, {
+                headers: { "content-type": "application/octet-stream" },
+              })
+            : new HttpResponse(null, { status: 404 });
+        },
+      ),
+    ];
+  }
+
+  async function signInSender(scope: string): Promise<void> {
+    await ChatOpsMsTeamsUserConnectionModel.save({
+      tenantId: TENANT_ID,
+      aadObjectId: SENDER_ID,
+      scope,
+      tokens: {
+        accessToken: "user-token",
+        refreshToken: "user-refresh",
+        accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
+      },
+    });
+  }
+
+  function delivered(bytes: Buffer) {
+    return [
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: bytes.toString("base64"),
+          name: "Design spec.pdf",
+        },
+      },
+    ];
+  }
+
+  test("a channel file the app has no site grant for asks its sender to sign in", async () => {
+    server.use(...channelFile({ fileUrl: CHANNEL_FILE, appGranted: false }));
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(channelMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "Design spec.pdf", reason: "sign_in_required" },
+      },
+    ]);
+  });
+
+  test("a team the app's site grant covers needs no sign-in", async () => {
+    server.use(...channelFile({ fileUrl: CHANNEL_FILE, appGranted: true }));
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(channelMessage());
+
+    expect(outcomes).toEqual(delivered(APP_PDF));
+  });
+
+  test("a sender signed in for channel files has the file read from the channel's folder with their token", async () => {
+    server.use(...channelFile({ fileUrl: CHANNEL_FILE, appGranted: false }));
+    await signInSender("openid https://graph.microsoft.com/Files.Read.All");
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(channelMessage());
+
+    expect(outcomes).toEqual(delivered(USER_PDF));
+  });
+
+  test("a sign-in made for group-chat files still asks the sender to sign in for a channel file", async () => {
+    server.use(...channelFile({ fileUrl: CHANNEL_FILE, appGranted: false }));
+    await signInSender("openid Files.Read");
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(channelMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "Design spec.pdf", reason: "sign_in_required" },
+      },
+    ]);
+  });
+
+  test("the sender's token never reads a file outside the channel's folder", async () => {
+    server.use(
+      ...channelFile({
+        fileUrl:
+          "https://contoso.sharepoint.com/sites/Finance/Shared%20Documents/Budget/Design%20spec.pdf",
+        appGranted: false,
+      }),
+    );
+    await signInSender("openid Files.Read.All");
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(channelMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "Design spec.pdf", reason: "download_failed" },
+      },
+    ]);
+  });
+
+  test("the sign-in card in a channel asks Microsoft for every file the sender can open", async () => {
+    const provider = makeProvider();
+    await provider.initialize();
+    const sent: Activity[] = [];
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (provider as any).adapter = {
+      continueConversation: async (
+        _appId: string,
+        _ref: unknown,
+        logic: (context: {
+          sendActivity: (a: Activity) => void;
+        }) => Promise<void>,
+      ) => logic({ sendActivity: (activity) => sent.push(activity) }),
+    };
+
+    const posted = await provider.requestFileSignIn({
+      message: channelMessage(),
+      fileNames: ["Design spec.pdf"],
+    });
+
+    expect(posted).toBe(true);
+    const card = sent[0]?.attachments?.[0]?.content as {
+      actions: Array<{ url: string }>;
+    };
+    const key = new URL(card.actions[0].url).searchParams.get("key") ?? "";
+    const authorize = new URL((await provider.beginUserSignIn(key)) ?? "");
+    expect(authorize.searchParams.get("scope")?.split(" ")).toContain(
+      "https://graph.microsoft.com/Files.Read.All",
+    );
+  });
+});
+
 test.each([
   ["Change which agent handles the conversation", "/select-agent"],
   ["Change which agent handles this conversation", "/select-agent"],

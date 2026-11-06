@@ -12,6 +12,7 @@ import {
   inArray,
   isNull,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { alias, type PgColumn, type PgSelect } from "drizzle-orm/pg-core";
@@ -33,10 +34,7 @@ import {
   mcpToolCallBelongsToOrganization,
 } from "./log-organization";
 import { MCP_TOOL_CALL_TOOL_NAME as TOOL_NAME } from "./mcp-tool-call-name";
-import StatisticsModel, {
-  billedModelJoins,
-  llmUsageAggregates,
-} from "./statistics";
+import StatisticsModel, { llmUsageAggregates, usageFacts } from "./statistics";
 
 /**
  * Grouped usage reporting: one row per distinct combination of the requested
@@ -461,7 +459,7 @@ class UsageStatisticsModel {
     /** Only this service account's usage. */
     serviceAccountId?: string;
   }): Promise<LlmUsageResponse> {
-    const i = schema.interactionsTable;
+    const i = await usageFacts(params.timeframe);
     const agents = schema.agentsTable;
     const teams = schema.teamsTable;
     const keys = schema.virtualApiKeysTable;
@@ -478,14 +476,10 @@ class UsageStatisticsModel {
     const proxy = alias(agents, "org_llm_proxy");
     const users = schema.usersTable;
 
-    const billed = billedModelJoins();
     // Expand team grants only for agents with traffic in the window, not for
     // every agent in the organization.
     const teamAssignments = AgentTeamModel.readAssignments(organizationId, {
-      agentIds: db
-        .selectDistinct({ id: i.profileId })
-        .from(i)
-        .where(and(...StatisticsModel.timeframeConditions(params.timeframe))),
+      agentIds: db.selectDistinct({ id: i.profileId }).from(i),
     });
     const method = sql<string>`COALESCE(${i.authMethod}, 'unknown')`;
     const credential = sql<string | null>`CASE
@@ -494,13 +488,15 @@ class UsageStatisticsModel {
       WHEN ${method} = 'oauth_client_credentials' THEN ${i.authenticatedAppId}
       ELSE NULL END`;
     const provider = sql<string>`split_part(${i.type}, ':', 1)`;
-    const model = byModel ? billed.model : sql<string>`${i.model}`;
+    const model = byModel
+      ? sql<string>`${i.billedModel}`
+      : sql<string>`${i.model}`;
 
     const dimensionColumns: Record<
       LlmUsageDimension,
       Record<string, SQL | PgColumn>
     > = {
-      day: { day: utcDay(i.createdAt) },
+      day: { day: utcDay(i.hour) },
       teamId: { teamId: teams.id, teamName: teams.name },
       agentId: {
         agentId: sql<string>`COALESCE(${proxy.id}, ${agents.id})`,
@@ -519,13 +515,12 @@ class UsageStatisticsModel {
       model: { model },
     };
     const selected = selectDimensions(dimensionColumns, groupBy);
-    const aggregates = llmUsageAggregates(byModel);
+    const aggregates = llmUsageAggregates(i, byModel);
 
     const where = and(
-      ...StatisticsModel.timeframeConditions(params.timeframe),
       needsAgent
         ? eq(agents.organizationId, organizationId)
-        : interactionBelongsToOrganization(organizationId),
+        : interactionBelongsToOrganization(organizationId, i),
       byTeam ? eq(teams.organizationId, organizationId) : undefined,
       byTeam || byAgent ? notDeleted(agents) : undefined,
       byCredential
@@ -541,14 +536,10 @@ class UsageStatisticsModel {
       params.model ? eq(model, params.model) : undefined,
     );
 
-    // Join only what the requested dimensions need: the receipt expansion and
-    // the team grants each multiply rows, and each is wasted work otherwise.
+    // Join only what the requested dimensions need: the team grants multiply
+    // rows, and are wasted work otherwise.
     const scoped = <Q extends PgSelect>(query: Q) => {
       let q: PgSelect = query;
-      if (byModel)
-        q = q
-          .leftJoin(billed.receipt, billed.receiptOn)
-          .leftJoin(billed.facts, sql`true`);
       if (needsAgent) q = q.innerJoin(agents, eq(agents.id, i.profileId));
       if (byAgent)
         q = q.leftJoin(
@@ -660,7 +651,7 @@ const IS_ERROR = sql`COALESCE(${calls.isError}, CASE WHEN ${calls.encryptedChatC
 /** Number of groups the query produced, before LIMIT/OFFSET. */
 const TOTAL_GROUPS = sql<number>`CAST(COUNT(*) OVER () AS INTEGER)`;
 
-function utcDay(column: AnyColumn): SQL<string> {
+function utcDay(column: SQLWrapper): SQL<string> {
   return sql<string>`to_char(date_trunc('day', ${column} at time zone 'UTC'), 'YYYY-MM-DD')`;
 }
 

@@ -42,6 +42,8 @@ class LlmUsageRollupModel {
   ): Promise<UsageWindow | null> {
     const bounds = timeframeBounds(timeframe);
     if (!bounds) return null;
+    const grain =
+      statisticsTimeBucket(timeframe) === "minute" ? "minute" : "hour";
     const result = await db.execute<{
       start: string;
       end: string | null;
@@ -69,13 +71,16 @@ class LlmUsageRollupModel {
         ) AS pending
       FROM bounds, served`);
     const [row] = result.rows;
+    // Minute buckets need raw rows: the rollup only has hours.
     const serves =
+      grain === "hour" &&
       row.served_from !== null &&
       row.served_to !== null &&
       row.served_from < row.served_to;
     return {
       start: row.start,
       end: row.end,
+      grain,
       served: serves
         ? { from: row.served_from as string, to: row.served_to as string }
         : null,
@@ -87,9 +92,11 @@ class LlmUsageRollupModel {
    * Usage rows of a window, one per key and hour (see `llm_usage_hourly` for
    * the columns). Aggregate them; a group can span several rows.
    */
-  static facts(window: UsageWindow) {
+  static facts(window: UsageWindow | null) {
     const h = schema.llmUsageHourlyTable;
     const i = schema.interactionsTable;
+    // An unparseable range matches nothing, as in timeframeConditions.
+    if (!window) return usageFactsQuery(sql`FALSE`, "hour").as("usage_facts");
     const inWindow = and(
       gte(i.createdAt, sql`${window.start}::timestamp`),
       window.end === null
@@ -97,7 +104,7 @@ class LlmUsageRollupModel {
         : lte(i.createdAt, sql`${window.end}::timestamp`),
     ) as SQL;
     if (!window.served) {
-      return usageFactsQuery(inWindow).as("usage_facts");
+      return usageFactsQuery(inWindow, window.grain).as("usage_facts");
     }
     const { from, to } = window.served;
     const pending = window.pendingHours.map(
@@ -131,6 +138,7 @@ class LlmUsageRollupModel {
           ...pending,
         ),
       ) as SQL,
+      window.grain,
     );
     return unionAll(rolled, raw).as("usage_facts");
   }
@@ -224,12 +232,17 @@ class LlmUsageRollupModel {
 
 export default LlmUsageRollupModel;
 
+/** A window's usage rows (see {@link LlmUsageRollupModel.facts}). */
+export type UsageFacts = ReturnType<typeof LlmUsageRollupModel.facts>;
+
 /** A timeframe's bounds and the part of it the rollup serves. */
 export type UsageWindow = {
   /** First instant, as a `timestamp` literal. */
   start: string;
   /** Last instant (inclusive), or null for a window ending now. */
   end: string | null;
+  /** Unit raw rows are grouped by; the rollup only serves `hour` windows. */
+  grain: "hour" | "minute";
   /** Rolled hours `[from, to)` inside the window, if any. */
   served: { from: string; to: string } | null;
   /** Hours inside `served` that must be read from raw rows. */
@@ -242,7 +255,7 @@ export type UsageWindow = {
  * cache savings recomputed from each component's prices. `usage` is the
  * receipt's usage, or NULL for none (the LATERAL then yields no rows).
  */
-export function billingModelFactsFor(usage: SQL) {
+function billingModelFactsFor(usage: SQL) {
   return sql`LATERAL (
   SELECT component->>'model' AS model,
     bool_or(component->>'model' = COALESCE(
@@ -302,6 +315,49 @@ export function statisticsTimeframeInterval(
   }
 }
 
+/**
+ * The `date_trunc` unit statistics bucket a timeframe by before any
+ * re-bucketing into wider intervals.
+ */
+export function statisticsTimeBucket(timeframe: StatisticsTimeFrame): string {
+  if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+    const customRange = parseCustomStatisticsTimeframe(timeframe);
+    if (!customRange) return "hour";
+
+    const durationMs =
+      customRange.endTime.getTime() - customRange.startTime.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+
+    if (durationHours <= 2) return "minute";
+    if (durationHours <= 48) return "hour";
+    if (durationHours <= 720) return "day"; // 30 days
+    return "week";
+  }
+
+  switch (timeframe) {
+    case "5m":
+    case "15m":
+    case "30m":
+    case "1h":
+      // Minutes; 30m and 1h are rounded to 5-minute intervals afterwards.
+      return "minute";
+    case "24h":
+    case "7d":
+      // 7d is grouped into 6-hour intervals afterwards.
+      return "hour";
+    case "30d":
+    case "90d":
+      // 90d is grouped into 3-day intervals afterwards.
+      return "day";
+    case "12m":
+      return "week";
+    case "all":
+      return "month";
+    default:
+      return "hour";
+  }
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
@@ -333,6 +389,7 @@ async function recompute(tx: Transaction, hour: string): Promise<string> {
           gte(i.createdAt, sql`${hour}::timestamp`),
           lt(i.createdAt, sql`${hour}::timestamp + interval '1 hour'`),
         ) as SQL,
+        "hour",
         tx,
       ),
     );
@@ -372,17 +429,21 @@ const billingModel = billingModelFactsFor(
 const parentRow = sql`(billing_model.model IS NULL OR billing_model.parent_request)`;
 
 /**
- * Rollup rows computed from `interactions` matching `where`, grouped by hour
- * and every key column. Both the rollup writer and the raw half of
+ * Rollup rows computed from `interactions` matching `where`, grouped by
+ * `grain` (in the `hour` column) and every key column. Both the rollup writer and the raw half of
  * {@link LlmUsageRollupModel.facts} use it.
  */
-function usageFactsQuery(where: SQL, executor: typeof db | Transaction = db) {
+function usageFactsQuery(
+  where: SQL,
+  grain: UsageWindow["grain"],
+  executor: typeof db | Transaction = db,
+) {
   const i = schema.interactionsTable;
   const r = schema.interactionBillingTable;
   // Decode every computed column like its rollup column, so raw and rolled
   // rows read identically.
   const h = schema.llmUsageHourlyTable;
-  const hour = sql<Date>`date_trunc('hour', ${i.createdAt})`;
+  const hour = sql<Date>`date_trunc(${sql.raw(`'${grain}'`)}, ${i.createdAt})`;
   const billedModel = sql<
     string | null
   >`COALESCE(billing_model.model, ${i.model})`;

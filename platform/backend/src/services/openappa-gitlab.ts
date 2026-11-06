@@ -299,13 +299,26 @@ class OpenAppaGitlab {
             .map((path) => ({ action: "delete" as const, path })),
         ],
       });
-      return client.createGitlabMergeRequest({
-        repo: params.repo,
-        sourceBranch: head,
-        targetBranch: params.branch,
-        title: params.title,
-        description: params.summary,
-      });
+      try {
+        return await client.createGitlabMergeRequest({
+          repo: params.repo,
+          sourceBranch: head,
+          targetBranch: params.branch,
+          title: params.title,
+          description: params.summary,
+        });
+      } catch (error) {
+        // Without GitLab's answer the request may have opened all the same.
+        const opened =
+          error instanceof GitHostError && error.status === 0
+            ? await openRequestFor({ client, repo: params.repo, head })
+            : null;
+        if (opened) return opened;
+        // A lookup that failed too leaves the branch: it may hold a request.
+        if (opened === null)
+          await deleteBranch({ client, repo: params.repo, branch: head });
+        throw error;
+      }
     });
   }
 
@@ -317,6 +330,26 @@ class OpenAppaGitlab {
     if (!request.sourceBranch.startsWith("archestra/openappa-"))
       throw new ApiError(404, "OpenAPPA policy merge request not found");
     return request;
+  }
+
+  /**
+   * Whether `ancestor` is in `commit`'s history: GitLab's merge base of the
+   * two is `ancestor` itself.
+   */
+  async contains(params: {
+    access: GitAccess;
+    repo: string;
+    commit: string;
+    ancestor: string;
+  }): Promise<boolean> {
+    if (params.commit === params.ancestor) return true;
+    const client = gitClient(params.access);
+    const base = await withGitlabErrors(() =>
+      client.json<{ id?: string }>(
+        `${client.repoApi(params.repo)}/repository/merge_base?refs[]=${encodeURIComponent(params.ancestor)}&refs[]=${encodeURIComponent(params.commit)}`,
+      ),
+    );
+    return base.id === params.ancestor;
   }
 
   async branchCommit(params: {
@@ -378,6 +411,50 @@ class OpenAppaGitlab {
 }
 
 export const openappaGitlab = new OpenAppaGitlab();
+
+/**
+ * The open merge request from `head`, null when there is none, or undefined
+ * when GitLab could not say.
+ */
+async function openRequestFor(params: {
+  client: GitHostClient;
+  repo: string;
+  head: string;
+}): Promise<{ iid: number; webUrl: string } | null | undefined> {
+  try {
+    const requests = await params.client.json<
+      Array<{ iid?: number; web_url?: string }>
+    >(
+      `${params.client.repoApi(params.repo)}/merge_requests?state=opened&source_branch=${encodeURIComponent(params.head)}`,
+    );
+    const request = requests[0];
+    return request?.iid && request.web_url
+      ? { iid: request.iid, webUrl: request.web_url }
+      : null;
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not look for a policy merge request");
+    return undefined;
+  }
+}
+
+/** Remove a branch whose merge request did not open; a failure is logged. */
+async function deleteBranch(params: {
+  client: GitHostClient;
+  repo: string;
+  branch: string;
+}) {
+  const response = await params.client
+    .request(
+      `${params.client.repoApi(params.repo)}/repository/branches/${encodeURIComponent(params.branch)}`,
+      { method: "DELETE" },
+    )
+    .catch(() => null);
+  if (!response?.ok)
+    logger.warn(
+      { status: response?.status, branch: params.branch },
+      "OpenAPPA could not delete a branch whose merge request did not open",
+    );
+}
 
 const POLICY_MAX_BYTES = 1024 * 1024;
 const POLICY_TEST_MAX_BYTES = 65536;

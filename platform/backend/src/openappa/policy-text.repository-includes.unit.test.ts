@@ -8,6 +8,7 @@ import {
   isRepositoryInclude,
   repositoryIncludePaths,
   serverCatchAllPrefixes,
+  serverFilesDeclareAnnotators,
   serverRulesPath,
   withoutRepositoryIncludes,
 } from "./policy-text";
@@ -367,6 +368,60 @@ on = ["tool_output"]
         server: "helpdesk",
       }),
     ).toBe(false);
+  });
+
+  test("a server's file cannot replace an annotator a battery the root includes declares", () => {
+    const github = `[policy]
+version = 2
+
+[[policy.annotator]]
+name = "github.repository-visibility"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "github.release-check"
+builtin = "archestra"
+`;
+    const root = `include = ["batteries/github/appa.toml", "mcp/*.toml"]\n\n[policy]\nversion = 2\n`;
+    const included = files({ "mcp/github.toml": github });
+    expect(serverFilesDeclareAnnotators(included)).toBe(true);
+    expect(
+      serverFilesDeclareAnnotators(
+        files({
+          "mcp/helpdesk.toml": HELPDESK,
+          "teams/payments.toml": PAYMENTS,
+        }),
+      ),
+    ).toBe(false);
+    // Folded in, the annotator would be the root's, and replace the battery's
+    // for every server the battery governs.
+    const batteryHelpers = new Map([
+      ["github.repository-visibility", "github"],
+      ["github.repository-readers", "github"],
+    ]);
+    expect(
+      expandRepositoryIncludes({
+        content: root,
+        files: included,
+        batteryHelpers,
+      }).errors,
+    ).toEqual([
+      'mcp/github.toml: the github battery also declares annotator "github.repository-visibility", and a server file cannot replace a battery\'s annotator. Name it github.<another name>.',
+    ]);
+    // With no battery declaring them, both are the server's own.
+    const folded = expandRepositoryIncludes({
+      content: root,
+      files: included,
+      batteryHelpers: new Map(),
+    });
+    expect(folded.errors).toEqual([]);
+    expect(
+      (
+        parse(folded.content) as {
+          policy: { annotator: Array<{ name: string }> };
+        }
+      ).policy.annotator.map((entry) => entry.name),
+    ).toEqual(["github.repository-visibility", "github.release-check"]);
   });
 
   test("<prefix>__* is the server's own catch-all: one rule for each of its tools the file has no plain rule for, after the file's own", () => {

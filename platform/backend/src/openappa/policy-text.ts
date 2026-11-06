@@ -129,10 +129,12 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
  * includes every one the commit holds, so a server's first file needs no line
  * of its own in `appa.toml`. Whatever review merged it, such a file reaches
  * only its own server: rules for that server's tools, annotators under its
- * name, and none of the helpers that serve every call. The files cannot
+ * name that no included battery declares too, and none of the helpers that
+ * serve every call. The files cannot
  * overlap, so their order does not matter. `<prefix>__*` is the server's own
  * catch-all: the host writes it out as one rule for each of the server's tools
- * the file has no rule of its own for, after the file's other rules.
+ * the file has no rule of its own for, after the file's other rules. Neither
+ * `mcp/*.toml` nor the catch-all is OpenAPPA's own: only the host reads them.
  *
  * Archestra stores none of these files. They are read from the repository at
  * the commit Git sync accepted, so who may change one, and how, is the
@@ -149,7 +151,9 @@ export const SERVER_RULES_FOLDER = "mcp";
 
 /**
  * The include entry for every server rules file the commit holds. It is
- * Archestra's spelling: OpenAPPA itself reads each include entry as one file.
+ * Archestra's spelling: OpenAPPA itself reads each include entry as one file,
+ * so the repository's own `appa` checks cannot load it, and the policy check
+ * Archestra posts on each pull request is what checks server files.
  */
 export const SERVER_RULES_INCLUDE = `${SERVER_RULES_FOLDER}/*.toml`;
 
@@ -235,6 +239,12 @@ export function expandRepositoryIncludes(params: {
   files: ReadonlyMap<string, string>;
   /** Each server's current tools by prefix, for the files' `<prefix>__*` rules. */
   serverTools?: ReadonlyMap<string, readonly string[]>;
+  /**
+   * The annotators the root's batteries declare, each with its battery. A
+   * folded annotator is the root's, and a root's helper replaces a battery's
+   * of the same name, so a server file may declare none of these.
+   */
+  batteryHelpers?: ReadonlyMap<string, string>;
 }): {
   content: string;
   errors: string[];
@@ -291,6 +301,21 @@ export function expandRepositoryIncludes(params: {
       continue;
     }
     const prefix = SERVER_RULES_FILE.exec(path)?.[1];
+    const replaced =
+      prefix === undefined
+        ? []
+        : tablesOf(parsed.policy.annotator).flatMap((annotator) => {
+            const battery = params.batteryHelpers?.get(nameOf(annotator));
+            return battery === undefined
+              ? []
+              : [
+                  `${path}: the ${battery} battery also declares annotator ${JSON.stringify(nameOf(annotator))}, and a server file cannot replace a battery's annotator. Name it ${prefix}.<another name>.`,
+                ];
+          });
+    if (replaced.length > 0) {
+      errors.push(...replaced);
+      continue;
+    }
     if (prefix !== undefined && parsed.policy.tool) {
       const written = withServerCatchAll({
         prefix,
@@ -334,6 +359,23 @@ export function expandRepositoryIncludes(params: {
   else delete document.include;
   document.policy = policy;
   return { content: stringifyToml(document), errors: [], paths, covered };
+}
+
+/**
+ * Whether a server file among `files` declares an annotator: only then does
+ * a fold need the names of the batteries' annotators.
+ */
+export function serverFilesDeclareAnnotators(
+  files: ReadonlyMap<string, string>,
+): boolean {
+  for (const [path, text] of files)
+    if (
+      isServerRulesFile(path) &&
+      text.includes("annotator") &&
+      tablesOf(asRecord(parsePolicyToml(text)?.policy)?.annotator).length > 0
+    )
+      return true;
+  return false;
 }
 
 /**
@@ -509,8 +551,8 @@ function parseIncluded(
     deployment,
     ...policy
   } = asRecord(document.policy) ?? {};
-  // OpenAPPA refuses an included file without the policy version, so the
-  // repository's own `appa` checks load the same files the host folds.
+  // OpenAPPA refuses an included file without the policy version, so a file
+  // the root names loads in the repository's own `appa` checks as it folds here.
   const errors: string[] =
     stated === version
       ? []

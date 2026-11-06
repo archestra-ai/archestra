@@ -309,6 +309,12 @@ export class GitHostClient {
     state: "open" | "merged" | "closed";
     sourceBranch: string;
     mergeable: boolean | null;
+    /**
+     * The commit a merged request put on its target branch: the merge
+     * commit, the squash commit of a fast-forward, or the head it
+     * fast-forwarded to; null until it merges.
+     */
+    mergedCommit: string | null;
   }> {
     const request = await this.json<{
       iid: number;
@@ -316,21 +322,26 @@ export class GitHostClient {
       state: string;
       source_branch: string;
       detailed_merge_status?: string;
+      sha?: string | null;
+      merge_commit_sha?: string | null;
+      squash_commit_sha?: string | null;
     }>(`${this.repoApi(repo)}/merge_requests/${iid}`);
+    const merged = request.state === "merged";
     return {
       iid: request.iid,
       webUrl: request.web_url,
-      state:
-        request.state === "merged"
-          ? "merged"
-          : request.state === "opened"
-            ? "open"
-            : "closed",
+      state: merged ? "merged" : request.state === "opened" ? "open" : "closed",
       sourceBranch: request.source_branch,
       mergeable:
         request.detailed_merge_status === undefined
           ? null
           : request.detailed_merge_status === "mergeable",
+      mergedCommit: merged
+        ? (request.merge_commit_sha ??
+          request.squash_commit_sha ??
+          request.sha ??
+          null)
+        : null,
     };
   }
 

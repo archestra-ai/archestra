@@ -9,12 +9,19 @@ import {
 } from "@archestra/shared";
 import { inArray } from "drizzle-orm";
 import { userHasPermission } from "@/auth";
-import { LRUCacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { gitClient } from "@/git-hosts/git-access";
+import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -693,7 +700,11 @@ async function checkCommitPolicy(params: {
         { organizationId, error },
         "OpenAPPA could not check a pulled policy",
       );
-      return { valid: false, errors: [] };
+      // An outage, not a verdict on the policy: the caller tries again.
+      throw new ApiError(
+        503,
+        "APPA could not check this policy right now. Git sync tries again at its next check.",
+      );
     });
   if (!validation.valid)
     throw new ApiError(
@@ -763,23 +774,28 @@ const POLICY_CHECK_NAME = "Archestra Guardrails policy";
 /** The most open pull requests checked in one repository each minute. */
 const MAX_CHECKED_PULLS = 50;
 
-/**
- * Pull request results checked already, by repository, head and the merge
- * result checked: a new commit on either side is checked again, nothing else.
- */
-const checkedPulls = new LRUCacheManager<true>({
-  maxSize: 4096,
-  defaultTtl: TimeInMs.Day,
-});
+/** How long a check stands for one pull request result and deployment. */
+const CHECKED_TTL = TimeInMs.Day;
 
 /**
- * A repository that refused a check, for ten minutes: a credential without
- * the permission is not asked again every minute.
+ * How long a repository that refused a check is left alone: a credential
+ * without the permission is not asked again every minute.
  */
-const refusedChecks = new LRUCacheManager<true>({
-  maxSize: 512,
-  defaultTtl: 10 * TimeInMs.Minute,
-});
+const REFUSED_TTL = 10 * TimeInMs.Minute;
+
+/** The host refused the check: the credential may not post one. */
+class CheckRefused extends ApiError {
+  constructor(status: number) {
+    super(403, `The policy check was refused (HTTP ${status})`);
+  }
+}
+
+/** The outcome posted for one pull request result, and what it was checked against. */
+type CheckedResult = {
+  deployment: string;
+  accepted: boolean;
+  reason: string | null;
+};
 
 /**
  * Check every open pull request (merge request on GitLab) into the synced
@@ -787,13 +803,19 @@ const refusedChecks = new LRUCacheManager<true>({
  * commit as the "Archestra Guardrails policy" check. A branch rule that
  * requires the check stops a merge Git sync would refuse; without one, the
  * reviewers still see it.
+ *
+ * What was checked is kept in the shared cache, so another replica's pass
+ * neither checks a result again nor posts it twice. A result is checked again
+ * when a commit moves on either side, or when the deployment it was checked
+ * against changes: the accepted commit, or the composition this organization
+ * serves, which its bindings and batteries shape.
  */
 async function checkAppaGithubPullRequests(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.repo || !row.path || !row.interval || !row.sourceCommit) return;
   const source = { ...row, repo: row.repo, path: row.path };
-  const repository = [organizationId, source.repo].join("\u0000");
-  if (refusedChecks.get(repository)) return;
+  const refused = checkKey("refused", organizationId, source.repo);
+  if (await cacheManager.get(refused)) return;
   let pulls: CheckedPull[];
   try {
     pulls = row.gitlabTokenId
@@ -801,33 +823,103 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       : await githubPullRequests(source);
   } catch (error) {
     if (!(error instanceof MissingGithubPermission)) throw error;
-    refusedChecks.set(repository, true);
-    logger.warn(
-      { organizationId, error: error.message },
-      "OpenAPPA cannot check the policy repository's pull requests",
-    );
+    await refuseChecks({ key: refused, organizationId, reason: error.message });
     return;
   }
-  for (const pull of pulls.slice(0, MAX_CHECKED_PULLS)) {
-    const key = [organizationId, source.repo, pull.head, pull.result].join(
-      "\u0000",
-    );
-    if (checkedPulls.get(key)) continue;
+  const deployment = await deploymentState(organizationId, row.sourceCommit);
+  const checking = pulls.slice(0, MAX_CHECKED_PULLS);
+  const keys = checking.map((pull) =>
+    checkKey("checked", organizationId, source.repo, pull.head, pull.result),
+  );
+  const checked = await cacheManager.getMany<CheckedResult>(keys);
+  for (const [index, pull] of checking.entries()) {
+    const key = keys[index] as AllowedCacheKey;
+    const previous = checked.get(key);
+    if (previous?.deployment === deployment) continue;
     const outcome = await outcomeAt({ source, commitSha: pull.result });
-    // A read that failed for now is checked again next minute.
+    // A read or a check that failed for now is checked again next minute.
     if (!outcome) continue;
-    try {
-      await pull.post(outcome);
-    } catch (error) {
-      refusedChecks.set(repository, true);
-      logger.warn(
-        { organizationId, error },
-        "OpenAPPA could not post the policy check on a pull request: a GitHub App needs the Checks permission (read and write), a token the commit statuses scope",
+    const result: CheckedResult = {
+      deployment,
+      accepted: outcome.accepted,
+      reason: outcome.accepted ? null : outcome.reason,
+    };
+    // A changed deployment that leaves the outcome as posted posts nothing.
+    if (
+      previous?.accepted !== result.accepted ||
+      previous.reason !== result.reason
+    )
+      try {
+        await pull.post(outcome);
+      } catch (error) {
+        if (error instanceof CheckRefused) {
+          await refuseChecks({
+            key: refused,
+            organizationId,
+            reason:
+              "a GitHub App needs the Checks permission (read and write), a token the commit statuses scope, and a GitLab token the api scope",
+          });
+          return;
+        }
+        logger.warn(
+          { organizationId, err: error },
+          "OpenAPPA could not post the policy check on a pull request; it tries again next minute",
+        );
+        continue;
+      }
+    await cacheManager
+      .set(key, result, CHECKED_TTL)
+      .catch((err) =>
+        logger.warn(
+          { organizationId, err },
+          "OpenAPPA could not record a posted policy check; the next pass checks it again",
+        ),
       );
-      return;
-    }
-    checkedPulls.set(key, true);
   }
+}
+
+/** A shared cache key for the policy check, from its parts. */
+function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+  return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
+    .update(JSON.stringify(parts))
+    .digest("hex")}` as const;
+}
+
+async function refuseChecks(params: {
+  key: AllowedCacheKey;
+  organizationId: string;
+  reason: string;
+}) {
+  logger.warn(
+    { organizationId: params.organizationId, reason: params.reason },
+    "OpenAPPA cannot check the policy repository's pull requests; it asks again in ten minutes",
+  );
+  await cacheManager
+    .set(params.key, true, REFUSED_TTL)
+    .catch((err) =>
+      logger.warn(
+        { organizationId: params.organizationId, err },
+        "OpenAPPA could not record a refused policy check",
+      ),
+    );
+}
+
+/**
+ * What a pull's checks depend on besides the commit checked: the accepted
+ * commit, whose files the current policy folds in, and the composition the
+ * organization serves, which changes with its policy, bindings and batteries.
+ */
+async function deploymentState(
+  organizationId: string,
+  sourceCommit: string,
+): Promise<string> {
+  const served = await OpenAppaEffectivePolicyModel.find(organizationId);
+  return JSON.stringify([
+    sourceCommit,
+    served?.rootRevision ?? null,
+    served?.contentHash ?? null,
+    served?.installFingerprint ?? null,
+  ]);
 }
 
 type PullOutcome = { accepted: true } | { accepted: false; reason: string };
@@ -978,7 +1070,10 @@ async function postGithubCheck(params: {
       context: POLICY_CHECK_NAME,
       description: (outcome.accepted ? title : summary).slice(0, 140),
     },
-    errors: githubSyncErrors,
+    errors: async ({ status }) =>
+      status === 403 || status === 404
+        ? new CheckRefused(status)
+        : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
 }
 
@@ -1006,13 +1101,23 @@ async function gitlabPullRequests(
         result: head,
         post: async (outcome) => {
           const { title, summary } = checkSummary(outcome);
-          await client.json(`${project}/statuses/${head}`, {
-            body: {
-              state: outcome.accepted ? "success" : "failed",
-              name: POLICY_CHECK_NAME,
-              description: (outcome.accepted ? title : summary).slice(0, 255),
-            },
-          });
+          await client
+            .json(`${project}/statuses/${head}`, {
+              body: {
+                state: outcome.accepted ? "success" : "failed",
+                name: POLICY_CHECK_NAME,
+                description: (outcome.accepted ? title : summary).slice(0, 255),
+              },
+            })
+            .catch((error) => {
+              // A 404 can be a head pushed over since; only these refuse.
+              if (
+                error instanceof GitHostError &&
+                [401, 403].includes(error.status)
+              )
+                throw new CheckRefused(error.status);
+              throw error;
+            });
         },
       },
     ];
@@ -1643,6 +1748,8 @@ export type RepositoryProtection = {
       | "error";
     url?: string;
     detail?: string;
+    /** Bypass entries an administrator added on GitHub: they skip these rules. */
+    bypassActors?: number;
   };
   /** The CODEOWNERS lines for server rules files. */
   codeOwners: {
@@ -1830,9 +1937,25 @@ async function githubBranchRules(
       url: page(ours.id),
       detail: `The ruleset is ${existing.body.enforcement} on GitHub, so Archestra leaves it as it is.`,
     };
-  const strengthened = strengthenedRuleset(existing.body, desired);
-  if (!strengthened) return { state: "active", url: page(ours.id) };
-  if (!apply) return { state: "incomplete", url: page(ours.id) };
+  const { include = [], exclude = [] } =
+    existing.body.conditions?.ref_name ?? {};
+  // Whether `~DEFAULT_BRANCH` names the synced branch, read only when used.
+  const isDefault =
+    source.ref === null ||
+    ([...include, ...exclude].includes("~DEFAULT_BRANCH") &&
+      (await defaultBranch({ token, base })) === branch);
+  const strengthened = strengthenedRuleset(existing.body, desired, {
+    ref: `refs/heads/${branch}`,
+    isDefault,
+  });
+  // Kept as an administrator added them, and shown, since they skip it all.
+  const bypassActors = existing.body.bypass_actors?.length ?? 0;
+  const found = {
+    url: page(ours.id),
+    ...(bypassActors > 0 ? { bypassActors } : {}),
+  };
+  if (!strengthened) return { state: "active", ...found };
+  if (!apply) return { state: "incomplete", ...found };
   const updated = await githubCall({
     token,
     url: `${base}/rulesets/${ours.id}`,
@@ -1840,13 +1963,16 @@ async function githubBranchRules(
     body: strengthened,
   });
   if (!updated.ok) return unavailable(updated);
-  return { state: "active", url: page(ours.id) };
+  return { state: "active", ...found };
 }
 
 /**
  * The ruleset Archestra keeps: a pull request with a code owner's approval
- * of its latest push, the policy check, and no force push or deletion. No
- * one bypasses it, Archestra included.
+ * of its latest push, the policy check on a branch that is up to date, and no
+ * force push or deletion. Archestra adds no one who may bypass it, itself
+ * included. Up to date, because the check stands for the merge result it saw:
+ * once the branch moves, a pull request merges only after it is updated and
+ * its new result checked.
  */
 function desiredRuleset(params: {
   branch: string;
@@ -1876,7 +2002,7 @@ function desiredRuleset(params: {
       {
         type: "required_status_checks",
         parameters: {
-          strict_required_status_checks_policy: false,
+          strict_required_status_checks_policy: true,
           required_status_checks: [
             {
               context: POLICY_CHECK_NAME,
@@ -1896,11 +2022,13 @@ function desiredRuleset(params: {
 /**
  * The existing ruleset with Archestra's rules added where missing or weaker,
  * or null when it already has them. What an administrator made stricter, or
- * added, stays.
+ * added, stays, bypass entries included; an exclusion that leaves the synced
+ * branch out does not.
  */
 function strengthenedRuleset(
   existing: Ruleset,
   desired: ReturnType<typeof desiredRuleset>,
+  branch: { ref: string; isDefault: boolean },
 ): Ruleset | null {
   let changed = false;
   const rules = [...(existing.rules ?? [])].map((rule) => ({
@@ -1955,27 +2083,34 @@ function strengthenedRuleset(
           (ours.integration_id === undefined ||
             check.integration_id === ours.integration_id),
       );
-      if (!present) {
+      const strict =
+        have.parameters?.strict_required_status_checks_policy === true;
+      if (!present || !strict) {
         rules[at] = {
           type: have.type,
           parameters: {
             ...have.parameters,
-            strict_required_status_checks_policy:
-              have.parameters?.strict_required_status_checks_policy ?? false,
-            required_status_checks: [
-              ...checks.filter((check) => check.context !== ours.context),
-              ours,
-            ],
+            strict_required_status_checks_policy: true,
+            required_status_checks: present
+              ? checks
+              : [
+                  ...checks.filter((check) => check.context !== ours.context),
+                  ours,
+                ],
           },
         };
         changed = true;
       }
     }
   }
+  // The synced branch is protected when an include names it and no
+  // exclusion takes it out again.
   const include = existing.conditions?.ref_name?.include ?? [];
-  const branch = desired.conditions?.ref_name?.include?.[0] as string;
-  const covers = include.includes(branch) || include.includes("~ALL");
-  if (!covers) changed = true;
+  const exclude = existing.conditions?.ref_name?.exclude ?? [];
+  const names = (pattern: string) => refPatternMatches(pattern, branch);
+  const covers = include.some(names);
+  const kept = exclude.filter((pattern) => !names(pattern));
+  if (!covers || kept.length < exclude.length) changed = true;
   if (!changed) return null;
   return {
     name: existing.name,
@@ -1983,13 +2118,46 @@ function strengthenedRuleset(
     enforcement: existing.enforcement,
     conditions: {
       ref_name: {
-        include: covers ? include : [...include, branch],
-        exclude: existing.conditions?.ref_name?.exclude ?? [],
+        include: covers ? include : [...include, branch.ref],
+        exclude: kept,
       },
     },
     bypass_actors: existing.bypass_actors ?? [],
     rules,
   };
+}
+
+/**
+ * Whether a ruleset's ref pattern names the branch, as GitHub reads one:
+ * `~ALL`, `~DEFAULT_BRANCH`, or an fnmatch pattern over the full ref, where
+ * `*` and `?` stay within one path segment and `**` crosses segments.
+ */
+function refPatternMatches(
+  pattern: string,
+  branch: { ref: string; isDefault: boolean },
+): boolean {
+  if (pattern === "~ALL") return true;
+  if (pattern === "~DEFAULT_BRANCH") return branch.isDefault;
+  let source = "";
+  for (let at = 0; at < pattern.length; at++) {
+    const char = pattern[at] as string;
+    if (char === "*" && pattern[at + 1] === "*") {
+      source += ".*";
+      at++;
+    } else if (char === "*") source += "[^/]*";
+    else if (char === "?") source += "[^/]";
+    else if (char === "[" && pattern.indexOf("]", at + 2) > at) {
+      const close = pattern.indexOf("]", at + 2);
+      const set = pattern.slice(at + 1, close).replace(/[\\^]/g, "\\$&");
+      source += set.startsWith("!") ? `[^${set.slice(1)}]` : `[${set}]`;
+      at = close;
+    } else source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  try {
+    return new RegExp(`^${source}$`).test(branch.ref);
+  } catch {
+    return false;
+  }
 }
 
 /** The App whose check the ruleset requires, or none for a token. */

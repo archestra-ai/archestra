@@ -23,6 +23,7 @@ import {
   SERVER_RULES_FOLDER,
   SERVER_RULES_INCLUDE,
   serverCatchAllPrefixes,
+  serverFilesDeclareAnnotators,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
@@ -342,6 +343,7 @@ class OpenAppaRepositoryIncludes {
       content: params.content,
       files,
       serverTools: await serverToolsFor(params.organizationId, files),
+      batteryHelpers: await batteryHelpersFor({ ...params, files }),
     });
   }
 
@@ -358,6 +360,7 @@ class OpenAppaRepositoryIncludes {
       content: params.content,
       files: params.files,
       serverTools: await serverToolsFor(params.organizationId, params.files),
+      batteryHelpers: await batteryHelpersFor(params),
     });
   }
 
@@ -486,6 +489,7 @@ function fold(params: {
   content: string;
   files: ReadonlyMap<string, string>;
   serverTools?: ReadonlyMap<string, readonly string[]>;
+  batteryHelpers?: ReadonlyMap<string, string>;
 }): ExpandedRoot {
   const { paths, covered, ...expanded } = expandRepositoryIncludes(params);
   return {
@@ -499,6 +503,21 @@ function fold(params: {
       };
     }),
   };
+}
+
+/**
+ * The annotators the batteries `content` includes declare, by name, when a
+ * server file among `files` declares an annotator; nothing is read otherwise.
+ */
+async function batteryHelpersFor(params: {
+  organizationId: string;
+  content: string;
+  files: ReadonlyMap<string, string>;
+}): Promise<Map<string, string> | undefined> {
+  if (!serverFilesDeclareAnnotators(params.files)) return undefined;
+  // Loaded when used: the declarations fold repository files through here.
+  const { openappaDeclarations } = await import("@/openappa/declarations");
+  return openappaDeclarations.batteryHelpers(params);
 }
 
 /**
@@ -584,7 +603,10 @@ async function repositoryReader(
             }>)
               if (item.type === "blob" && item.id && item.name)
                 names.set(item.name, item.id);
-            url = nextPage(response.headers.get("link"));
+            url = nextPage(
+              response.headers.get("link"),
+              client.repoApi(source.repo),
+            );
           }
           return names;
         }),
@@ -704,9 +726,22 @@ function utf8(path: string, bytes: Uint8Array): string {
   }
 }
 
-/** The `rel="next"` URL of a Link header, or null on the last page. */
-function nextPage(link: string | null): string | null {
-  return link?.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
+/**
+ * The `rel="next"` URL of a GitLab Link header, or null on the last page. The
+ * token goes with the request, so only a page on the API's own origin is read.
+ */
+function nextPage(link: string | null, api: string): string | null {
+  const next = link?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+  if (!next) return null;
+  let origin: string | null = null;
+  try {
+    origin = new URL(next).origin;
+  } catch {
+    origin = null;
+  }
+  if (origin !== new URL(api).origin)
+    throw new ApiError(502, "GitLab named a next page on another host");
+  return next;
 }
 
 /** A host client's failure as the API error the fold reports. */

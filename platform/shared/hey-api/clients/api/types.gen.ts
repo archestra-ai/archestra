@@ -121535,6 +121535,7 @@ export type GetAppaRepositoryProtectionResponses = {
             state: 'active' | 'incomplete' | 'missing' | 'disabled' | 'needs_permission' | 'unavailable' | 'unsupported' | 'error';
             url?: string;
             detail?: string;
+            bypassActors?: number;
         };
         codeOwners: {
             state: 'up_to_date' | 'pull_request' | 'out_of_date' | 'not_used' | 'needs_permission' | 'unsupported' | 'error';

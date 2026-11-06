@@ -127,6 +127,48 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
+test("shows the repository protection Archestra keeps, with bypass entries and editors who have no GitHub owner", async () => {
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+          bypassActors: 2,
+        },
+        codeOwners: {
+          state: "pull_request",
+          url: "https://github.com/example/policies/pull/2",
+          unowned: [{ server: "Payments API", editors: ["team Payments"] }],
+          mapErrors: [],
+        },
+      }),
+    ),
+  );
+  show();
+  expect(await screen.findByText("Repository protection")).toBeVisible();
+  expect(
+    screen.getByText(
+      "Merges need an up-to-date pull request, a code owner's approval and the Archestra Guardrails policy check",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      "2 bypass entries on GitHub can merge without these rules.",
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole("link", { name: "View ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/2");
+  expect(
+    screen.getByText(/One server's editors have no GitHub owner/),
+  ).toHaveTextContent("Payments API (team Payments)");
+});
+
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {
   server.use(
     http.patch(url, async ({ request }) => {

@@ -10,16 +10,21 @@ import {
 import GithubAppConfigModel from "@/models/github-app-config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
+import { createGitlabToken } from "@/services/git-credentials";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
   getRepositoryProtection,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
-import { expect, test } from "@/test";
+import { expect, test, vi } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
 import {
   getServerRules,
@@ -30,6 +35,9 @@ import {
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture
 const server = useMswServer();
+// The real cache, stored in this file's test database: what one replica
+// checked, every replica sees.
+setupTestCacheManager();
 const REPO = "https://api.github.com/repos/example/policies";
 const FIRST = "1".repeat(40);
 const SECOND = "2".repeat(40);
@@ -76,6 +84,7 @@ function serveRepository(state: {
     ".github/CODEOWNERS",
     "mcp/payments_api.toml",
     "mcp/helpdesk.toml",
+    "mcp/github.toml",
     "mcp/README.toml",
   ];
   const at = (request: Request) =>
@@ -671,6 +680,244 @@ test("each open pull request carries the checks a pull would make on its merge r
   expect(listed).toBe(1);
 });
 
+test("a pull request check retries what failed for now, and checks again when the deployment it was checked against changes", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await connect({ organizationId: org.id, writerUserId: admin.id });
+  const root = `include = ["mcp/*.toml"]\n${RULES}`;
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+      [THIRD]: { "appa.toml": root, "mcp/payments_api.toml": INVOICES },
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+  let listed = 0;
+  let failPost = true;
+  const statuses: Array<{ state: string }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, () => {
+      listed++;
+      return HttpResponse.json([
+        { head: { sha: "9".repeat(40) }, merge_commit_sha: THIRD },
+      ]);
+    }),
+    // A personal access token posts a commit status.
+    http.post(`${REPO}/check-runs`, () =>
+      HttpResponse.json({}, { status: 403 }),
+    ),
+    http.post(`${REPO}/statuses/:sha`, async ({ request }) => {
+      if (failPost) {
+        failPost = false;
+        return HttpResponse.json({ message: "Server Error" }, { status: 502 });
+      }
+      statuses.push((await request.json()) as (typeof statuses)[number]);
+      return HttpResponse.json({ id: 2 }, { status: 201 });
+    }),
+  );
+  const validate = vi.spyOn(guardrailsPolicyService, "validate");
+
+  // APPA could not check the policy: an outage, not a refusal, so nothing
+  // is posted and the next pass checks it.
+  validate.mockRejectedValueOnce(new Error("runtime unavailable"));
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([]);
+  // GitHub failed to take the check: no pause, and the next pass posts it.
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([]);
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([expect.objectContaining({ state: "success" })]);
+  expect(listed).toBe(3);
+  // Checked: another pass, on any replica, checks nothing again.
+  const checks = validate.mock.calls.length;
+  await checkDueAppaGithubSyncs();
+  expect(validate.mock.calls.length).toBe(checks);
+
+  // The composition changed: the result is checked again, and an outcome
+  // that stays the same posts nothing new.
+  await OpenAppaEffectivePolicyModel.invalidate(org.id);
+  await checkDueAppaGithubSyncs();
+  expect(validate.mock.calls.length).toBe(checks + 1);
+  expect(statuses).toHaveLength(1);
+  // A change that refuses the result posts the refusal.
+  validate.mockResolvedValueOnce({ valid: false, errors: [], warnings: [] });
+  await openappaBatteriesService.recompile(org.id);
+  await checkDueAppaGithubSyncs();
+  expect(statuses).toEqual([
+    expect.objectContaining({ state: "success" }),
+    expect.objectContaining({ state: "failure" }),
+  ]);
+});
+
+test("a server's file cannot replace an annotator of a battery the policy includes", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connect({ organizationId: org.id });
+  const root = `include = ["batteries/github/appa.toml", "mcp/*.toml"]\n${RULES}`;
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": root,
+        "mcp/github.toml": `[policy]
+version = 2
+
+[[policy.annotator]]
+name = "github.repository-visibility"
+builtin = "archestra"
+`,
+      },
+    },
+  });
+
+  await syncAppaGithubPolicy(org.id);
+  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
+    sourceCommit: null,
+    lastSyncError:
+      'mcp/github.toml: the github battery also declares annotator "github.repository-visibility", and a server file cannot replace a battery\'s annotator. Name it github.<another name>.',
+  });
+});
+
+test("on GitLab, a pull reads every page of mcp/, merge requests get the policy check as a commit status, and a merged request says when it is applied", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  const pat = await makeUser({ name: "Pat" });
+  await makeTeamMember(payments.id, pat.id);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    {
+      organizationId: org.id,
+      initialPermissionGrants: [
+        {
+          subject: { type: "team", id: payments.id },
+          actions: ["read", "use", "update"],
+        },
+      ],
+    },
+  );
+  for (const name of ["refund_payment", "get_invoice"])
+    await ToolModel.createToolIfNotExists({
+      name: `payments_api__${name}`,
+      description: name,
+      parameters: {},
+      catalogId: catalog.id,
+    });
+  const GITLAB = "https://gitlab.example.test";
+  const gitlab = new FakeGitlab(GITLAB, "glpat-policy");
+  // Two files a page, so mcp/ spans two pages.
+  gitlab.treePageSize = 2;
+  server.use(...gitlab.handlers());
+  const project = "platform/policies";
+  gitlab.addProject({
+    path: project,
+    files: {
+      "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
+      "mcp/helpdesk.toml": `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "helpdesk__read_ticket"\ndelta = {}\n`,
+      "mcp/ledger.toml": `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "ledger__export"\ndelta = {}\n`,
+      "mcp/payments_api.toml": REFUNDS,
+    },
+  });
+  const gitlabTokenId = (
+    await createGitlabToken({
+      organizationId: org.id,
+      data: { name: "GitLab", gitlabUrl: GITLAB, token: "glpat-policy" },
+    })
+  ).id;
+  await OpenAppaGithubSyncModel.save(org.id, {
+    repo: project,
+    ref: "main",
+    path: "appa.toml",
+    interval: "1h",
+    githubAppConfigId: null,
+    githubPatId: null,
+    validationDirectory: "",
+    gitlabTokenId,
+  });
+
+  await syncAppaGithubPolicy(org.id);
+  const accepted = (await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit;
+  expect(accepted).toMatch(/^[a-f0-9]{40}$/);
+  const effective = await openappaBatteriesService.getEffectivePolicy(org.id);
+  expect(effective.lastError).toBeNull();
+  // Payments' file is on the second page of mcp/, read from the Link header.
+  for (const tool of [
+    "helpdesk__read_ticket",
+    "ledger__export",
+    "payments_api__refund_payment",
+  ])
+    expect(effective.content).toContain(tool);
+
+  // Pat proposes Payments' rules; the merge request gets the check.
+  const proposed = await proposeServerRulesChange({
+    organizationId: org.id,
+    userId: pat.id,
+    catalogId: catalog.id,
+    content: INVOICES,
+    expectedCommit: accepted as string,
+    summary: "Invoices are suspicious",
+  });
+  expect(proposed).toMatchObject({ delivery: "pull_request", number: 1 });
+  await checkDueAppaGithubSyncs();
+  expect(gitlab.statuses).toEqual([
+    expect.objectContaining({
+      state: "success",
+      name: "Archestra Guardrails policy",
+    }),
+  ]);
+  await checkDueAppaGithubSyncs();
+  expect(gitlab.statuses).toHaveLength(1);
+
+  const status = () =>
+    getServerRulesChangeStatus({
+      organizationId: org.id,
+      userId: pat.id,
+      catalogId: catalog.id,
+      number: 1,
+    });
+  const queuedSyncs = async () =>
+    (
+      await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"))
+    ).length;
+  expect(await status()).toMatchObject({ state: "open", applied: false });
+  gitlab.merge(project, 1);
+  // Merged, and the accepted commit does not hold it yet: a sync is queued.
+  const before = await queuedSyncs();
+  expect(await status()).toMatchObject({ state: "merged", applied: false });
+  expect(await queuedSyncs()).toBe(before + 1);
+  // Pulled, and later commits keep it: applied, and nothing more is queued.
+  gitlab.commit(project, "main", { "README.md": "# Policies\n" });
+  await syncAppaGithubPolicy(org.id);
+  const queued = await queuedSyncs();
+  expect(await status()).toMatchObject({ state: "merged", applied: true });
+  expect(await queuedSyncs()).toBe(queued);
+});
+
 test("a server's editors propose its rules as a pull request; readers and outsiders cannot", async ({
   makeOrganization,
   makeUser,
@@ -895,6 +1142,57 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(pulls[0]).toMatchObject({ base: "main" });
   expect(pulls[0]?.body).toContain("Requested in Archestra by Pat");
 
+  // GitHub refused the pull request: the branch made for it goes too.
+  const deleted: string[] = [];
+  server.use(
+    http.post(`${REPO}/pulls`, () =>
+      HttpResponse.json({ message: "Validation Failed" }, { status: 422 }),
+    ),
+    http.delete(
+      ({ request }) => request.url.startsWith(`${REPO}/git/refs/heads/`),
+      ({ request }) => {
+        deleted.push(
+          new URL(request.url).pathname.split("/refs/heads/")[1] ?? "",
+        );
+        return new HttpResponse(null, { status: 204 });
+      },
+    ),
+  );
+  await expect(
+    proposeServerRulesChange({
+      ...change,
+      userId: pat.id,
+      summary: "Refunds need a trusted session",
+    }),
+  ).rejects.toMatchObject({ statusCode: 502 });
+  expect(deleted).toEqual([refs[1]?.ref.replace("refs/heads/", "")]);
+  // No answer at all: the pull request opened all the same, so it is the
+  // proposal, and its branch stays.
+  server.use(
+    http.post(`${REPO}/pulls`, () => HttpResponse.error()),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          `example:${refs[2]?.ref.replace("refs/heads/", "")}`
+          ? [
+              {
+                number: 8,
+                html_url: "https://github.com/example/policies/pull/8",
+              },
+            ]
+          : [],
+      ),
+    ),
+  );
+  expect(
+    await proposeServerRulesChange({
+      ...change,
+      userId: pat.id,
+      summary: "Refunds need a trusted session",
+    }),
+  ).toMatchObject({ number: 8 });
+  expect(deleted).toHaveLength(1);
+
   server.use(
     http.get(`${REPO}/pulls/7`, () =>
       HttpResponse.json({
@@ -1043,7 +1341,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           {
             type: "required_status_checks",
             parameters: {
-              strict_required_status_checks_policy: false,
+              strict_required_status_checks_policy: true,
               required_status_checks: [
                 { context: "Archestra Guardrails policy", integration_id: 123 },
               ],
@@ -1086,7 +1384,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           required_status_checks: [
             { context: "Archestra Guardrails policy", integration_id: 123 },
           ],
-          strict_required_status_checks_policy: false,
+          strict_required_status_checks_policy: true,
         },
       },
     ],
@@ -1096,6 +1394,84 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
     url: "https://github.com/example/policies/rules/5",
   });
   expect(written).toHaveLength(1);
+
+  // A branch that need not be up to date lets a pull request merge on a
+  // check of an older merge result: the rule is made strict again.
+  const lax = structuredClone(existing) as {
+    rules: Array<{ type: string; parameters?: Record<string, unknown> }>;
+  };
+  const checks = lax.rules.find(
+    (rule) => rule.type === "required_status_checks",
+  );
+  if (checks?.parameters)
+    checks.parameters.strict_required_status_checks_policy = false;
+  existing = lax;
+  written.length = 0;
+  await syncAndProtect(org.id);
+  expect(written).toEqual([
+    {
+      method: "PUT",
+      body: expect.objectContaining({
+        rules: expect.arrayContaining([
+          {
+            type: "required_status_checks",
+            parameters: {
+              do_not_enforce_on_create: false,
+              strict_required_status_checks_policy: true,
+              required_status_checks: [
+                { context: "Archestra Guardrails policy", integration_id: 123 },
+              ],
+            },
+          },
+        ]),
+      }),
+    },
+  ]);
+
+  // An exclusion that takes the synced branch out undoes the include: it is
+  // dropped, and exclusions of other branches stay.
+  existing = {
+    ...(existing as Record<string, unknown>),
+    rules: (existing as { rules: unknown[] }).rules.map((rule) =>
+      (rule as { type: string }).type === "required_status_checks"
+        ? {
+            type: "required_status_checks",
+            parameters: {
+              strict_required_status_checks_policy: true,
+              required_status_checks: [
+                { context: "Archestra Guardrails policy", integration_id: 123 },
+              ],
+            },
+          }
+        : rule,
+    ),
+    conditions: {
+      ref_name: {
+        include: ["~ALL"],
+        exclude: [
+          "refs/heads/release/*",
+          "refs/heads/ma?n",
+          "~DEFAULT_BRANCH",
+          "refs/heads/**",
+        ],
+      },
+    },
+  };
+  server.use(
+    http.get(REPO, () => HttpResponse.json({ default_branch: "main" })),
+  );
+  written.length = 0;
+  await syncAndProtect(org.id);
+  expect(written).toEqual([
+    {
+      method: "PUT",
+      body: expect.objectContaining({
+        conditions: {
+          ref_name: { include: ["~ALL"], exclude: ["refs/heads/release/*"] },
+        },
+      }),
+    },
+  ]);
 
   // An administrator made some rules stricter and others weaker: the weaker
   // ones come back, the stricter ones and their own additions stay.
@@ -1153,7 +1529,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           {
             type: "required_status_checks",
             parameters: {
-              strict_required_status_checks_policy: false,
+              strict_required_status_checks_policy: true,
               required_status_checks: [
                 { context: "Archestra Guardrails policy", integration_id: 123 },
               ],
@@ -1163,6 +1539,12 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
       },
     },
   ]);
+  // The bypass an administrator added stays, and the status says so.
+  expect((await getRepositoryProtection(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+    bypassActors: 1,
+  });
 
   // Turned off on GitHub: an administrator's choice, left as it is.
   existing = { ...existing, enforcement: "disabled" };

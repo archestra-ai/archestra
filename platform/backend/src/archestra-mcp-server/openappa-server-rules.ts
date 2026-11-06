@@ -114,7 +114,7 @@ const registry = defineArchestraTools([
     title: "Check an MCP server's Guardrails rules pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check a pull request propose_guardrails_server_rules_change opened for this server: `state` (open, merged or closed) and `applied`, whether Git sync has pulled the merge, so new calls follow it. A merged request not yet applied queues a sync. On GitLab `applied` is null; read the rules again to see what is merged.",
+      "Check a pull request propose_guardrails_server_rules_change opened for this server: `state` (open, merged or closed) and `applied`, whether Git sync has pulled the merge, so new calls follow it. A merged request not yet applied queues a sync.",
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       number: z.number().int().positive(),

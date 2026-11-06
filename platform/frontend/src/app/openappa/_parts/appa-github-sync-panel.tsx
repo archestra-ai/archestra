@@ -398,19 +398,27 @@ function branchRulesView(rules: Protection["branchRules"]): ProtectionView {
   const link = rules.url
     ? { href: rules.url, label: "View ruleset" }
     : undefined;
+  // Kept as an administrator added them on GitHub; each one skips the rules.
+  const bypass = rules.bypassActors
+    ? rules.bypassActors === 1
+      ? "One bypass entry on GitHub can merge without these rules."
+      : `${rules.bypassActors} bypass entries on GitHub can merge without these rules.`
+    : undefined;
   switch (rules.state) {
     case "active":
       return {
         status:
-          "Merges need a pull request, a code owner's approval and the Archestra Guardrails policy check",
+          "Merges need an up-to-date pull request, a code owner's approval and the Archestra Guardrails policy check",
         tone: "ok",
         link,
+        detail: bypass,
       };
     case "incomplete":
       return {
         status: "Archestra restores the missing rules at the next sync",
         tone: "pending",
         link,
+        detail: bypass,
       };
     case "missing":
       return {

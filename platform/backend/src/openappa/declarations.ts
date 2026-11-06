@@ -32,8 +32,13 @@ import type {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
-import { type DeployedBattery, declaredCredentials } from "./battery-target";
+import {
+  type DeployedBattery,
+  declaredAnnotators,
+  declaredCredentials,
+} from "./battery-target";
 import { withHostToolRules } from "./host-tool-rules";
+import { parsePolicyToml } from "./policy-text";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
 export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
@@ -247,6 +252,39 @@ class OpenAppaDeclarations {
       tokenEnvReaders: declarations.tokenEnvReaders,
       errors,
     };
+  }
+
+  /**
+   * The annotators the batteries `content` includes declare, by name, with
+   * the battery that declares each. A battery that does not resolve declares
+   * none here; resolving the root says why.
+   */
+  async batteryHelpers(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<Map<string, string>> {
+    const include = parsePolicyToml(params.content)?.include;
+    const spellings = (Array.isArray(include) ? include : []).flatMap(
+      (entry) => {
+        const spelling = typeof entry === "string" ? classify(entry) : null;
+        return spelling ? [spelling] : [];
+      },
+    );
+    const settled = await mapWithConcurrency(
+      spellings,
+      RESOLVE_CONCURRENCY,
+      (spelling) =>
+        this.resolveSpelling({
+          organizationId: params.organizationId,
+          ...spelling,
+        }),
+    );
+    const helpers = new Map<string, string>();
+    for (const result of settled)
+      if (result.status === "fulfilled" && result.value)
+        for (const name of declaredAnnotators(result.value))
+          helpers.set(name, result.value.name);
+    return helpers;
   }
 
   /**

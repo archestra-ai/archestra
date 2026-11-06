@@ -124,6 +124,8 @@ export const AppaRepositoryProtectionSchema = z
       ]),
       url: z.string().optional(),
       detail: z.string().optional(),
+      /** Bypass entries an administrator added on GitHub; they skip the rules. */
+      bypassActors: z.number().int().positive().optional(),
     }),
     codeOwners: z.object({
       state: z.enum([

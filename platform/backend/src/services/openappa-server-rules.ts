@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
+import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
@@ -17,6 +18,7 @@ import {
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { policyDiff } from "@/services/guardrails-policy-proposal";
 import {
+  githubFetch,
   githubJson,
   githubPolicyChangeErrors,
 } from "@/services/openappa-github";
@@ -173,13 +175,24 @@ export async function getServerRulesChangeStatus(
         404,
         "No rules change for this server has that number",
       );
-    if (request.state === "merged")
+    const merged = request.state === "merged" && !!request.mergedCommit;
+    // Applied once the accepted commit contains what the merge put there.
+    const applied =
+      merged &&
+      (await openappaGitlab.contains({
+        access,
+        repo: source.repo,
+        commit: source.sourceCommit,
+        ancestor: request.mergedCommit as string,
+      }));
+    // A pull applies what is merged; queue one rather than wait for the schedule.
+    if (merged && !applied)
       await OpenAppaGithubSyncModel.enqueue(params.organizationId);
     return {
       number: request.iid,
       url: request.webUrl,
       state: request.state,
-      applied: null,
+      applied: merged ? applied : false,
     };
   }
   const { token, api } = await githubWriter(source);
@@ -530,18 +543,83 @@ async function openGithubPull(params: {
     method: "POST",
     body: { ref: `refs/heads/${params.head}`, sha: checkedSha(created.sha) },
   });
-  const pull = await github<{ number: number; html_url: string }>({
-    token,
-    url: `${base}/pulls`,
-    method: "POST",
-    body: {
-      title: params.title,
-      body: params.body,
-      head: params.head,
-      base: branch,
-    },
-  });
-  return { number: pull.number, url: pull.html_url };
+  let answered = false;
+  try {
+    const pull = await githubJson<{ number: number; html_url: string }>({
+      token,
+      url: `${base}/pulls`,
+      method: "POST",
+      body: {
+        title: params.title,
+        body: params.body,
+        head: params.head,
+        base: branch,
+      },
+      errors: (response) => {
+        answered = true;
+        return githubPolicyChangeErrors(response);
+      },
+    });
+    return { number: pull.number, url: pull.html_url };
+  } catch (error) {
+    // Without GitHub's answer the pull request may have opened all the same.
+    const opened = answered
+      ? null
+      : await openPullFor({
+          token,
+          base,
+          repo: source.repo,
+          head: params.head,
+        });
+    if (opened) return opened;
+    // A lookup that failed too leaves the branch: it may hold a pull request.
+    if (opened === null) await deleteBranch({ token, base, head: params.head });
+    throw error;
+  }
+}
+
+/**
+ * The open pull request from `head`, null when there is none, or undefined
+ * when GitHub could not say.
+ */
+async function openPullFor(params: {
+  token: string;
+  base: string;
+  repo: string;
+  head: string;
+}): Promise<{ number: number; url: string } | null | undefined> {
+  const owner = params.repo.slice(0, params.repo.indexOf("/"));
+  try {
+    const pulls = await github<Array<{ number?: number; html_url?: string }>>({
+      token: params.token,
+      url: `${params.base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${params.head}`)}`,
+    });
+    const pull = pulls[0];
+    return pull?.number && pull.html_url
+      ? { number: pull.number, url: pull.html_url }
+      : null;
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not look for a rules pull request");
+    return undefined;
+  }
+}
+
+/** Remove a rules branch whose pull request did not open; a failure is logged. */
+async function deleteBranch(params: {
+  token: string;
+  base: string;
+  head: string;
+}) {
+  const response = await githubFetch({
+    url: `${params.base}/git/refs/heads/${params.head}`,
+    token: params.token,
+    method: "DELETE",
+  }).catch(() => null);
+  if (!response?.ok)
+    logger.warn(
+      { status: response?.status, head: params.head },
+      "OpenAPPA could not delete a rules branch whose pull request did not open",
+    );
 }
 
 async function githubWriter(source: Source) {

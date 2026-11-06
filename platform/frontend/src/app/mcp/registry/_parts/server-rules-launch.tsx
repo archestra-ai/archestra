@@ -3,11 +3,14 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import Link from "next/link";
 import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useChatAgentBootstrap } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
 import { openAppaChatHref } from "@/lib/openappa-routes";
+
+type ServerRulesCatalog = { id: string; name: string };
 
 /**
  * For a server's editors: change its own Guardrails rules with the APPA
@@ -18,8 +21,40 @@ import { openAppaChatHref } from "@/lib/openappa-routes";
 export function ServerRulesMenuItem({
   catalog,
 }: {
-  catalog: { id: string; name: string };
+  catalog: ServerRulesCatalog;
 }) {
+  const href = useServerRulesHref(catalog);
+  if (!href) return null;
+  return (
+    <DropdownMenuItem asChild>
+      <Link href={href}>
+        <AppaKeeperIcon />
+        Edit Guardrails rules
+      </Link>
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * The same launch as a button, for the setup wizard's last step: there a
+ * server editor without a Guardrails permission configures the server's
+ * Guardrails through its own rules file.
+ */
+export function ServerRulesButton({
+  catalog,
+  children,
+  ...props
+}: Omit<ButtonProps, "asChild"> & { catalog: ServerRulesCatalog }) {
+  const href = useServerRulesHref(catalog);
+  if (!href) return null;
+  return (
+    <Button {...props} asChild>
+      <Link href={href}>{children}</Link>
+    </Button>
+  );
+}
+
+function useServerRulesHref(catalog: ServerRulesCatalog): string | null {
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const agents = useChatAgentBootstrap(openappaEnabled);
   const keeper = agents.data?.find(
@@ -32,12 +67,5 @@ export function ServerRulesMenuItem({
     name: catalog.name,
   });
   if (!openappaEnabled || !keeper || !prompt) return null;
-  return (
-    <DropdownMenuItem asChild>
-      <Link href={openAppaChatHref(keeper.id, prompt)}>
-        <AppaKeeperIcon />
-        Edit Guardrails rules
-      </Link>
-    </DropdownMenuItem>
-  );
+  return openAppaChatHref(keeper.id, prompt);
 }

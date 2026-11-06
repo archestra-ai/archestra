@@ -58,7 +58,7 @@ include = [
 ]
 ```
 
-1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server.
+1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. **Configure Guardrails with agent**, on the last step of editing the server, opens the same chat for anyone without a Guardrails permission.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file, and adds it to `appa.toml` the first time.
 4. A reviewer merges it, and Git sync applies it at the next sync.

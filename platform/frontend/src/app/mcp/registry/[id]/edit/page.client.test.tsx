@@ -1,12 +1,26 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/app/openappa/_parts/openappa-chat-button", () => ({
+  OpenAppaChatButton: ({ children }: { children: React.ReactNode }) => (
+    <a href="/coverage-review">{children}</a>
+  ),
+}));
+vi.mock("../../_parts/server-rules-launch", () => ({
+  ServerRulesButton: ({ children }: { children: React.ReactNode }) => (
+    <a href="/server-rules">{children}</a>
+  ),
+}));
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
@@ -52,10 +66,28 @@ describe("McpCatalogItemEditPage", () => {
         name: "filesystem",
         icon: null,
         serverType: "local",
+        effectiveActions: ["read", "update"],
       },
       isPending: false,
     } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
+    canReadGuardrails(true);
   });
+
+  function canReadGuardrails(data: boolean) {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+  }
+
+  function onToolsStepWithGuardrails() {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("step=tools") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useFeature).mockImplementation(
+      ((name: string) => name === "openappaEnabled") as typeof useFeature,
+    );
+  }
 
   it("does not open an app's backing entry for editing", () => {
     vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
@@ -88,5 +120,26 @@ describe("McpCatalogItemEditPage", () => {
       "/mcp/registry/server-1/edit?step=tools",
       { scroll: false },
     );
+  });
+
+  it("sends a server editor without a Guardrails permission to the server's own rules", () => {
+    onToolsStepWithGuardrails();
+    canReadGuardrails(false);
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.getByRole("link", { name: "Configure Guardrails with agent" }),
+    ).toHaveAttribute("href", "/server-rules");
+  });
+
+  it("keeps the coverage review for anyone who may read the Guardrails policy", () => {
+    onToolsStepWithGuardrails();
+
+    render(<McpCatalogItemEditPage id="server-1" />);
+
+    expect(
+      screen.getByRole("link", { name: "Configure Guardrails with agent" }),
+    ).toHaveAttribute("href", "/coverage-review");
   });
 });

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.22](https://github.com/archestra-ai/archestra/compare/platform-v1.4.21...platform-v1.4.22) (2026-11-06)
+
+
+### Features
+
+* **costs:** backport JSON and Parquet exports to 1.4 ([#10313](https://github.com/archestra-ai/archestra/issues/10313)) ([6ff1264](https://github.com/archestra-ai/archestra/commit/6ff12643ae3135a712c5ff48d5b2ec99fad84c31))
+* **costs:** split agent usage by person and rename explorer presets ([#10274](https://github.com/archestra-ai/archestra/issues/10274)) (backport release/1.4) ([#10287](https://github.com/archestra-ai/archestra/issues/10287)) ([de586ed](https://github.com/archestra-ai/archestra/commit/de586edf731148269446e8e2a790e7bfc04a2eb7))
+
+
+### Bug Fixes
+
+* **agent-runtime:** use one-off per-run virtual key for Claude Code subscriptions (backport release/1.4) ([#10286](https://github.com/archestra-ai/archestra/issues/10286)) ([24beaa5](https://github.com/archestra-ai/archestra/commit/24beaa56a46ce598ea3888a105e5a70242521b07))
+* **agents:** allow Built-in as the only access filter (backport release/1.4) ([#10314](https://github.com/archestra-ai/archestra/issues/10314)) ([7a9b5b0](https://github.com/archestra-ai/archestra/commit/7a9b5b04cd15097f74f08197562c119bcb74442b))
+* **backend:** count reasoning tokens as output for Gemini and xAI (backport release/1.4) ([#10289](https://github.com/archestra-ai/archestra/issues/10289)) ([b85ba0f](https://github.com/archestra-ai/archestra/commit/b85ba0f30dd4b15788315b9d7e1fa9eaeabbc87f))
+* **chat:** list personal agents shared by name in the chat agent picker (backport release/1.4) ([#10277](https://github.com/archestra-ai/archestra/issues/10277)) ([a962fb7](https://github.com/archestra-ai/archestra/commit/a962fb7c72d5f320757cec685db5be539b11fa01))
+* **openappa:** backport the Archestra tool labels and peer-read policy dispatch to 1.4 ([#10304](https://github.com/archestra-ai/archestra/issues/10304)) ([c007069](https://github.com/archestra-ai/archestra/commit/c00706980fc55d85c1d7d8906b65af0a26e18b56))
+* **release:** patch Docker CLI compress dependency (backport release/1.4) ([#10319](https://github.com/archestra-ai/archestra/issues/10319)) ([15a9340](https://github.com/archestra-ai/archestra/commit/15a9340ffe2909df5facdc3dd3aa5541ca962507))
+* **release:** patch MCP and platform image dependencies (backport release/1.4) ([#10316](https://github.com/archestra-ai/archestra/issues/10316)) ([d20c8ab](https://github.com/archestra-ai/archestra/commit/d20c8ab423e6676f9bb3e4afb2891258575a9eb9))
+* **sandbox:** key each command exec by its id so sandboxes never share cached (backport release/1.4) ([#10275](https://github.com/archestra-ai/archestra/issues/10275)) ([58baf95](https://github.com/archestra-ai/archestra/commit/58baf951ede9f9e12f76b3f05270172da547ac48))
+
 ## [1.4.21](https://github.com/archestra-ai/archestra/compare/platform-v1.4.20...platform-v1.4.21) (2026-11-05)
 
 

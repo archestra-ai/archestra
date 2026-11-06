@@ -3,7 +3,8 @@
 --
 -- Run it with psql against a migrated, empty scratch database whose name
 -- starts with "costs_bench", as a superuser (it disables triggers and foreign
--- key checks for the load). See README.md next to it.
+-- key checks for the load). Then roll it up with backfill.ts and time the
+-- views with run-bench.ts, both next to it.
 --
 --   psql "$URL" -v interactions=20000000 -f seed.sql
 --

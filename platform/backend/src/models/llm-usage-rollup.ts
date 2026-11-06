@@ -13,7 +13,7 @@ import {
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { unionAll } from "drizzle-orm/pg-core";
+import { type SubqueryWithSelection, unionAll } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { AttributionLabels } from "@/types/attribution-label";
 
@@ -49,7 +49,6 @@ class LlmUsageRollupModel {
       end: string | null;
       served_from: string | null;
       served_to: string | null;
-      pending: string[];
     }>(sql`
       WITH bounds AS (
         SELECT (${bounds.start})::timestamp AS start, (${bounds.end})::timestamp AS "end"
@@ -63,12 +62,7 @@ class LlmUsageRollupModel {
         LEFT JOIN ${schema.llmUsageRollupStateTable} AS state ON state.id = ${STATE_ID}
       )
       SELECT bounds.start::text AS start, bounds."end"::text AS "end",
-        served.served_from::text AS served_from, served.served_to::text AS served_to,
-        ARRAY(
-          SELECT dirty.hour::text FROM ${schema.llmUsageRollupDirtyTable} AS dirty
-          WHERE dirty.hour >= served.served_from AND dirty.hour < served.served_to
-          ORDER BY dirty.hour
-        ) AS pending
+        served.served_from::text AS served_from, served.served_to::text AS served_to
       FROM bounds, served`);
     const [row] = result.rows;
     // Minute buckets need raw rows: the rollup only has hours.
@@ -84,7 +78,6 @@ class LlmUsageRollupModel {
       served: serves
         ? { from: row.served_from as string, to: row.served_to as string }
         : null,
-      pendingHours: serves ? row.pending : [],
     };
   }
 
@@ -107,13 +100,19 @@ class LlmUsageRollupModel {
       return usageFactsQuery(inWindow, window.grain).as("usage_facts");
     }
     const { from, to } = window.served;
-    const pending = window.pendingHours.map(
-      (hour) =>
+    const d = schema.llmUsageRollupDirtyTable;
+    // Marked hours are read from raw rows. The rolled and raw halves test the
+    // same marks because one statement reads them under one snapshot.
+    const marked = db
+      .select({ hour: sql<Date>`${d.hour}`.as("marked_hour") })
+      .from(d)
+      .where(
         and(
-          gte(i.createdAt, sql`${hour}::timestamp`),
-          lt(i.createdAt, sql`${hour}::timestamp + interval '1 hour'`),
-        ) as SQL,
-    );
+          gte(d.hour, sql`${from}::timestamp`),
+          lt(d.hour, sql`${to}::timestamp`),
+        ),
+      )
+      .as("marked");
     const rolled = db
       .select(rollupSelection)
       .from(h)
@@ -121,26 +120,21 @@ class LlmUsageRollupModel {
         and(
           gte(h.hour, sql`${from}::timestamp`),
           lt(h.hour, sql`${to}::timestamp`),
-          window.pendingHours.length === 0
-            ? undefined
-            : sql`NOT (${h.hour} = ANY(ARRAY[${sql.join(
-                window.pendingHours.map((hour) => sql`${hour}::timestamp`),
-                sql`, `,
-              )}]))`,
+          sql`NOT EXISTS (SELECT 1 FROM ${d} WHERE ${d.hour} = ${h.hour})`,
         ),
       );
-    const raw = usageFactsQuery(
+    const edges = usageFactsQuery(
       and(
         inWindow,
         or(
           lt(i.createdAt, sql`${from}::timestamp`),
           gte(i.createdAt, sql`${to}::timestamp`),
-          ...pending,
         ),
       ) as SQL,
       window.grain,
     );
-    return unionAll(rolled, raw).as("usage_facts");
+    const remarked = usageFactsQuery(inWindow, window.grain, db, marked);
+    return unionAll(rolled, edges, remarked).as("usage_facts");
   }
 
   /**
@@ -168,6 +162,7 @@ class LlmUsageRollupModel {
    */
   static async rollHour(hour: string): Promise<void> {
     await withDbTransaction(async (tx) => {
+      await lockRollup(tx);
       // No state row means nothing is rolled yet.
       const advanced = await tx.execute(sql`
         INSERT INTO ${schema.llmUsageRollupStateTable} AS state (id, rolled_through)
@@ -176,18 +171,20 @@ class LlmUsageRollupModel {
         WHERE state.rolled_through = ${hour}::timestamp OR state.rolled_through IS NULL`);
       if (advanced.rowCount === 0) return;
       const settleAfter = await recompute(tx, hour);
-      // A mark already there (a change since the hour was read) keeps the
-      // hour due for another recompute, which settles it in turn.
+      // A mark already there (a change in the hour before it was rolled)
+      // becomes a change mark: computed again, then settled in turn. Keeping it
+      // as it was could keep an older settle horizon than this computation's.
       await tx.execute(sql`
-        INSERT INTO ${schema.llmUsageRollupDirtyTable} (hour, settle_after)
+        INSERT INTO ${schema.llmUsageRollupDirtyTable} AS dirty (hour, settle_after)
         VALUES (${hour}::timestamp, ${settleAfter}::bigint)
-        ON CONFLICT (hour) DO NOTHING`);
+        ON CONFLICT (hour) DO UPDATE SET version = dirty.version + 1, settle_after = NULL`);
     });
   }
 
   /**
-   * The oldest marked hour that is due: marked by a change, or computed and
-   * waiting to settle once every transaction running at that point has ended.
+   * The oldest rolled, marked hour that is due: marked by a change, or
+   * computed and waiting to settle once every transaction running at that
+   * point has ended.
    */
   static async nextMarkedHour(): Promise<MarkedHour | null> {
     const result = await db.execute<{
@@ -197,8 +194,10 @@ class LlmUsageRollupModel {
     }>(sql`
       SELECT hour::text AS hour, version::text AS version, settle_after IS NOT NULL AS settling
       FROM ${schema.llmUsageRollupDirtyTable}
-      WHERE settle_after IS NULL
-        OR settle_after <= pg_snapshot_xmin(pg_current_snapshot())::text::bigint
+      WHERE (settle_after IS NULL
+          OR settle_after <= pg_snapshot_xmin(pg_current_snapshot())::text::bigint)
+        -- An hour not rolled yet is computed when it is rolled.
+        AND hour < (SELECT rolled_through FROM ${schema.llmUsageRollupStateTable} WHERE id = ${STATE_ID})
       ORDER BY hour
       LIMIT 1`);
     const [row] = result.rows;
@@ -215,6 +214,7 @@ class LlmUsageRollupModel {
    */
   static async recomputeMarkedHour(marked: MarkedHour): Promise<void> {
     await withDbTransaction(async (tx) => {
+      await lockRollup(tx);
       const settleAfter = await recompute(tx, marked.hour);
       await tx.execute(
         marked.settling
@@ -243,11 +243,15 @@ export type UsageWindow = {
   end: string | null;
   /** Unit raw rows are grouped by; the rollup only serves `hour` windows. */
   grain: "hour" | "minute";
-  /** Rolled hours `[from, to)` inside the window, if any. */
+  /**
+   * Rolled hours `[from, to)` inside the window, if any. Its marked hours are
+   * read from raw rows.
+   */
   served: { from: string; to: string } | null;
-  /** Hours inside `served` that must be read from raw rows. */
-  pendingHours: string[];
 };
+
+/** A subquery of hours, in its `hour` column. */
+type HourSet = SubqueryWithSelection<{ hour: SQL.Aliased<Date> }, string>;
 
 /**
  * Receipt facts per billed model for one interaction: a LATERAL over the
@@ -373,6 +377,16 @@ const STATE_ID = 1;
 const ROLL_DELAY = "15 minutes";
 
 /**
+ * Serialize the rollup's writes: two computations of one hour at once would
+ * each delete the rows the other cannot see yet and keep both inserts.
+ */
+async function lockRollup(tx: Transaction) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended('llm_usage_rollup', 0))`,
+  );
+}
+
+/**
  * Replace an hour's rollup rows with rows computed from `interactions`, and
  * return the snapshot horizon to settle after: every transaction id at or
  * above it may still commit rows into the hour.
@@ -430,13 +444,15 @@ const parentRow = sql`(billing_model.model IS NULL OR billing_model.parent_reque
 
 /**
  * Rollup rows computed from `interactions` matching `where`, grouped by
- * `grain` (in the `hour` column) and every key column. Both the rollup writer and the raw half of
- * {@link LlmUsageRollupModel.facts} use it.
+ * `grain` (in the `hour` column) and every key column. Both the rollup writer
+ * and the raw half of {@link LlmUsageRollupModel.facts} use it.
  */
 function usageFactsQuery(
   where: SQL,
   grain: UsageWindow["grain"],
   executor: typeof db | Transaction = db,
+  /** Only the interactions inside one of these hours. */
+  hours?: HourSet,
 ) {
   const i = schema.interactionsTable;
   const r = schema.interactionBillingTable;
@@ -452,7 +468,7 @@ function usageFactsQuery(
     sql`COALESCE(SUM(${column}) FILTER (WHERE ${parentRow}), 0)::${sql.raw(cast)}`;
   const split = (receipt: string, fallback: SQLWrapper) =>
     sql`COALESCE(SUM(COALESCE(billing_model.${sql.raw(receipt)}, ${fallback})), 0)`;
-  return executor
+  const query = executor
     .select({
       hour: hour.mapWith(h.hour).as("hour"),
       profileId: i.profileId,
@@ -499,9 +515,6 @@ function usageFactsQuery(
       baselineCost: sql<string>`${own(i.baselineCost, "numeric")}`
         .mapWith(h.baselineCost)
         .as("baseline_cost"),
-      cacheCost: sql<string>`${own(i.cacheCost, "numeric")}`
-        .mapWith(h.cacheCost)
-        .as("cache_cost"),
       cacheSavings: sql<string>`${own(i.cacheSavings, "numeric")}`
         .mapWith(h.cacheSavings)
         .as("cache_savings"),
@@ -545,6 +558,18 @@ function usageFactsQuery(
           .as("model_cache_savings"),
     })
     .from(i)
+    .$dynamic();
+  // A range join, so each hour is an index range scan of `interactions`.
+  const scoped = hours
+    ? query.innerJoin(
+        hours,
+        and(
+          gte(i.createdAt, hours.hour),
+          lt(i.createdAt, sql`${hours.hour} + interval '1 hour'`),
+        ),
+      )
+    : query;
+  return scoped
     .leftJoin(r, eq(r.interactionId, i.id))
     .leftJoin(billingModel, sql`true`)
     .where(where)
@@ -604,7 +629,6 @@ const rollupSelection = (() => {
     cacheWriteTokens: h.cacheWriteTokens,
     cost: h.cost,
     baselineCost: h.baselineCost,
-    cacheCost: h.cacheCost,
     cacheSavings: h.cacheSavings,
     failedOverAttempts: h.failedOverAttempts,
     maxCreatedAt: h.maxCreatedAt,

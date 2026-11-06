@@ -80,7 +80,6 @@ export const llmUsageHourlyTable = pgTable(
     }).notNull(),
     cost: numeric("cost").notNull(),
     baselineCost: numeric("baseline_cost").notNull(),
-    cacheCost: numeric("cache_cost").notNull(),
     cacheSavings: numeric("cache_savings").notNull(),
     failedOverAttempts: integer("failed_over_attempts").notNull(),
     /** Newest request of the group; null on a row holding only a model split. */
@@ -130,8 +129,7 @@ export const llmUsageRollupStateTable = pgTable("llm_usage_rollup_state", {
  * `settle_after` (a transaction id) is set once an hour has been computed: the
  * hour is computed one final time when every transaction that was running at
  * that point has ended, so a row committed late by one of them is included.
- * Readers use the rollup for such an hour: anything it can still miss is not
- * committed, so a raw read would not see it either.
+ * Readers take every marked hour, settling or not, from raw rows.
  */
 export const llmUsageRollupDirtyTable = pgTable("llm_usage_rollup_dirty", {
   hour: timestamp("hour", { mode: "date" }).primaryKey(),

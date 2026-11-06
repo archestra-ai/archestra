@@ -693,13 +693,6 @@ class StatisticsModel {
   }
 
   /**
-   * Get time bucket size for aggregation
-   */
-  private static getTimeBucket(timeframe: StatisticsTimeFrame): string {
-    return statisticsTimeBucket(timeframe);
-  }
-
-  /**
    * Round a timestamp down to the start of its bucket.
    *
    * Buckets are aligned to whole multiples of the interval measured from the
@@ -852,7 +845,7 @@ class StatisticsModel {
     const { timeframe, organizationId, teamIds } = params;
     const f = await usageFacts(timeframe);
     const agg = usageAggregates(f);
-    const bucket = usageBucket(f, StatisticsModel.getTimeBucket(timeframe));
+    const bucket = usageBucket(f, statisticsTimeBucket(timeframe));
 
     // Collapse the window to one row per agent, billing team and bucket before
     // fanning out to teams: the team grants then multiply a few hundred rows
@@ -1112,7 +1105,7 @@ class StatisticsModel {
     const { timeframe, organizationId, userId, serviceAccountId } = params;
     const f = await usageFacts(timeframe);
     const agg = usageAggregates(f);
-    const bucket = usageBucket(f, StatisticsModel.getTimeBucket(timeframe));
+    const bucket = usageBucket(f, statisticsTimeBucket(timeframe));
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
     // One row per agent naming every team it is shared with, so an agent
@@ -1282,7 +1275,7 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const f = await usageFacts(timeframe);
     const m = usageAggregates(f).model;
-    const bucket = usageBucket(f, StatisticsModel.getTimeBucket(timeframe));
+    const bucket = usageBucket(f, statisticsTimeBucket(timeframe));
     const rows = await db
       .select({
         model: m.model,
@@ -2215,7 +2208,7 @@ class StatisticsModel {
     } = params;
     const f = await usageFacts(timeframe);
     const m = usageAggregates(f).model;
-    const bucket = usageBucket(f, StatisticsModel.getTimeBucket(timeframe));
+    const bucket = usageBucket(f, statisticsTimeBucket(timeframe));
     const charge = teamIds
       ? await StatisticsModel.teamChargeScope({ organizationId, teamIds })
       : null;
@@ -2277,7 +2270,7 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const f = await usageFacts(timeframe);
     const agg = usageAggregates(f);
-    const bucket = usageBucket(f, StatisticsModel.getTimeBucket(timeframe));
+    const bucket = usageBucket(f, statisticsTimeBucket(timeframe));
     const rows = await db
       .select({
         timeBucket: bucket,
@@ -2478,7 +2471,7 @@ class StatisticsModel {
    * Whether the rows coming back from SQL still have to be merged into wider
    * buckets in JS.
    *
-   * `getTimeBucket` can only ask `DATE_TRUNC` for a whole calendar unit, so a
+   * `statisticsTimeBucket` can only ask `DATE_TRUNC` for a whole calendar unit, so a
    * timeframe whose bucket is a multiple of one — 7d's six hours cut from
    * hourly rows, 90d's three days cut from daily rows, and every sub-hour
    * timeframe, cut from per-minute rows — arrives finer than it should be and
@@ -3047,7 +3040,7 @@ class StatisticsModel {
     const model = byModel ? m.model : sql<null>`NULL::text`;
     // created_at stores UTC without a timezone. Return an explicit instant so
     // database drivers cannot interpret the bucket in the server's local zone.
-    const bucket = sql<string>`${usageBucket(f, StatisticsModel.getTimeBucket(timeframe))} AT TIME ZONE 'UTC'`;
+    const bucket = sql<string>`${usageBucket(f, statisticsTimeBucket(timeframe))} AT TIME ZONE 'UTC'`;
     const rows = await db
       .select({
         userId: f.userId,
@@ -3241,9 +3234,7 @@ function tokenSum(column: AnyColumn): SQL<number> {
  * record which output counts were synthesized. Separate Gemini thoughts are
  * not persisted in these columns and cannot be reconstructed here.
  */
-function reportedTokens(
-  table: typeof schema.interactionsTable = schema.interactionsTable,
-): SQL<number> {
+function reportedTokens(table: typeof schema.interactionsTable): SQL<number> {
   return sql<number>`CAST(
     COALESCE(SUM(${table.inputTokens}) FILTER (WHERE NOT ${table.inputTokensEstimated}), 0)
     + COALESCE(SUM(${table.outputTokens}), 0)

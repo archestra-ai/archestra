@@ -46,23 +46,28 @@ describe("LlmUsageRollupModel", () => {
       .set({ cost: "4" })
       .where(eq(schema.interactionsTable.id, row.id));
 
-    const marked = (await LlmUsageRollupModel.window("7d")) as UsageWindow;
-    expect(marked.pendingHours).toEqual([hourOf(row.createdAt)]);
-    expect(await totalCost(marked)).toBe(4);
+    const window = (await LlmUsageRollupModel.window("7d")) as UsageWindow;
+    expect(await markedHours()).toEqual([hourOf(row.createdAt)]);
+    expect(await totalCost(window)).toBe(4);
 
     await drain();
-    const settled = (await LlmUsageRollupModel.window("7d")) as UsageWindow;
-    expect(settled.pendingHours).toEqual([]);
-    expect(await totalCost(settled)).toBe(4);
+    expect(await markedHours()).toEqual([]);
+    expect(await totalCost(window)).toBe(4);
   });
 
   test("marks the hours of rollup-relevant changes only", async ({
     makeAgent,
     makeInteraction,
     makeOrganization,
+    makeUser,
   }) => {
     const { id: organizationId } = await makeOrganization();
     const agent = await makeAgent({ organizationId });
+    const leaver = await makeUser();
+    const attributed = await makeInteraction(agent.id, {
+      createdAt: hoursAgo(11),
+      userId: leaver.id,
+    });
     const repriced = await makeInteraction(agent.id, {
       createdAt: hoursAgo(10),
     });
@@ -104,9 +109,15 @@ describe("LlmUsageRollupModel", () => {
     const backdated = await makeInteraction(agent.id, {
       createdAt: hoursAgo(6),
     });
+    // Deleting a user sets its interactions' user_id to NULL.
+    await db
+      .delete(schema.usersTable)
+      .where(eq(schema.usersTable.id, leaver.id));
 
     expect(await markedHours()).toEqual(
-      [repriced, deleted, receipted, backdated].map((r) => hourOf(r.createdAt)),
+      [attributed, repriced, deleted, receipted, backdated].map((r) =>
+        hourOf(r.createdAt),
+      ),
     );
   });
 
@@ -142,6 +153,32 @@ describe("LlmUsageRollupModel", () => {
     expect(await markedHours()).toEqual([]);
     const window = (await LlmUsageRollupModel.window("7d")) as UsageWindow;
     expect(await totalCost(window)).toBe(3);
+  });
+
+  test("changes to the hour being written do not hold back rolling", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+  }) => {
+    const { id: organizationId } = await makeOrganization();
+    const agent = await makeAgent({ organizationId });
+    const old = await makeInteraction(agent.id, { createdAt: hoursAgo(6) });
+    const current = await makeInteraction(agent.id, {});
+    for (const cost of ["1", "2", "3"]) {
+      await db
+        .update(schema.interactionsTable)
+        .set({ cost })
+        .where(eq(schema.interactionsTable.id, current.id));
+    }
+
+    await drain();
+
+    const [state] = await db.select().from(schema.llmUsageRollupStateTable);
+    expect(state.rolledThrough?.getTime()).toBeGreaterThan(
+      old.createdAt.getTime(),
+    );
+    // The current hour's mark waits until the hour is rolled.
+    expect(await markedHours()).toEqual([hourOf(current.createdAt)]);
   });
 
   test("a custom range reads its partial first and last hours raw", async ({
@@ -302,7 +339,7 @@ async function drain() {
 }
 
 function rawOnly(window: UsageWindow): UsageWindow {
-  return { ...window, served: null, pendingHours: [] };
+  return { ...window, served: null };
 }
 
 async function factRows(window: UsageWindow) {

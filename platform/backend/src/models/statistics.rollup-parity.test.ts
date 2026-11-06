@@ -46,6 +46,10 @@ describe("cost statistics over the hourly rollup", () => {
       { agent: proxy, user: alice, hoursAgo: 20.5, model: "gpt-4o" },
       { agent: proxy, user: bob, hoursAgo: 6.1, model: "claude-sonnet" },
       { agent: shared, user: alice, hoursAgo: 2.2, model: "o3" },
+      // Requests sharing an hour (and some keys) with the ones above.
+      { agent: shared, user: alice, hoursAgo: 70.3, model: "claude-sonnet" },
+      { agent: proxy, user: bob, hoursAgo: 6.05, model: "gpt-4o" },
+      { agent: shared, user: alice, hoursAgo: 2.15, model: "o3" },
       // Too recent to be rolled: always read raw.
       { agent: proxy, user: alice, hoursAgo: 0.05, model: "gpt-4o" },
     ];

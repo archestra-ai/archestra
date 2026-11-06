@@ -31,7 +31,6 @@ CREATE TABLE "llm_usage_hourly" (
 	"cache_write_tokens" bigint NOT NULL,
 	"cost" numeric NOT NULL,
 	"baseline_cost" numeric NOT NULL,
-	"cache_cost" numeric NOT NULL,
 	"cache_savings" numeric NOT NULL,
 	"failed_over_attempts" integer NOT NULL,
 	"max_created_at" timestamp,
@@ -59,14 +58,17 @@ CREATE TABLE "llm_usage_rollup_state" (
 CREATE INDEX "llm_usage_hourly_hour_idx" ON "llm_usage_hourly" USING btree ("hour");
 
 --> statement-breakpoint
--- Mark rolled hours for recompute. Always bumps the version (never DO NOTHING):
--- the rollup clears a mark only while its version is unchanged, so a change
--- that races a recompute keeps its mark.
+-- Mark hours for recompute. Bumps the version (never DO NOTHING): the rollup
+-- clears a mark only while its version is unchanged, so a change that races a
+-- recompute keeps its mark. A mark this transaction already wrote is left as
+-- is: it commits with every change the transaction makes, so a bulk update
+-- writes one mark per hour rather than one per row.
 CREATE FUNCTION llm_usage_rollup_mark(hours timestamp[]) RETURNS void LANGUAGE sql AS $$
   INSERT INTO llm_usage_rollup_dirty AS dirty (hour)
   SELECT DISTINCT hour FROM unnest(hours) AS hour WHERE hour IS NOT NULL
   ORDER BY hour
-  ON CONFLICT (hour) DO UPDATE SET version = dirty.version + 1, settle_after = NULL;
+  ON CONFLICT (hour) DO UPDATE SET version = dirty.version + 1, settle_after = NULL
+  WHERE dirty.xmin <> pg_current_xact_id()::xid;
 $$;
 --> statement-breakpoint
 CREATE FUNCTION llm_usage_rollup_on_interaction_insert() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -93,7 +95,8 @@ $$;
 CREATE FUNCTION llm_usage_rollup_on_receipt_update() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   PERFORM llm_usage_rollup_mark(ARRAY(
-    SELECT date_trunc('hour', interactions.created_at) FROM interactions WHERE interactions.id = NEW.interaction_id
+    SELECT date_trunc('hour', interactions.created_at) FROM interactions
+    WHERE interactions.id IN (OLD.interaction_id, NEW.interaction_id)
   ));
   RETURN NULL;
 END;
@@ -110,15 +113,17 @@ CREATE TRIGGER llm_usage_rollup_interaction_inserted AFTER INSERT ON interaction
 --> statement-breakpoint
 -- Column-specific, so updates of request content or session previews never
 -- fire it. Foreign-key SET NULL actions are updates of these columns.
-CREATE TRIGGER llm_usage_rollup_interaction_updated AFTER UPDATE OF created_at, profile_id, connector_id, app_id, billing_team_id, user_id, service_account_id, auth_method, virtual_key_id, passthrough_virtual_key_id, authenticated_app_id, authenticated_app_name, provider_api_key_id, model_pool_id, external_agent_id, type, model, billing_mode, attribution_labels, input_tokens, input_tokens_estimated, output_tokens, cache_read_tokens, cache_write_tokens, cost, baseline_cost, cache_cost, cache_savings, attempt_outcome ON interactions FOR EACH ROW
-  WHEN ((OLD.created_at, OLD.profile_id, OLD.connector_id, OLD.app_id, OLD.billing_team_id, OLD.user_id, OLD.service_account_id, OLD.auth_method, OLD.virtual_key_id, OLD.passthrough_virtual_key_id, OLD.authenticated_app_id, OLD.authenticated_app_name, OLD.provider_api_key_id, OLD.model_pool_id, OLD.external_agent_id, OLD.type, OLD.model, OLD.billing_mode, OLD.attribution_labels, OLD.input_tokens, OLD.input_tokens_estimated, OLD.output_tokens, OLD.cache_read_tokens, OLD.cache_write_tokens, OLD.cost, OLD.baseline_cost, OLD.cache_cost, OLD.cache_savings, OLD.attempt_outcome) IS DISTINCT FROM (NEW.created_at, NEW.profile_id, NEW.connector_id, NEW.app_id, NEW.billing_team_id, NEW.user_id, NEW.service_account_id, NEW.auth_method, NEW.virtual_key_id, NEW.passthrough_virtual_key_id, NEW.authenticated_app_id, NEW.authenticated_app_name, NEW.provider_api_key_id, NEW.model_pool_id, NEW.external_agent_id, NEW.type, NEW.model, NEW.billing_mode, NEW.attribution_labels, NEW.input_tokens, NEW.input_tokens_estimated, NEW.output_tokens, NEW.cache_read_tokens, NEW.cache_write_tokens, NEW.cost, NEW.baseline_cost, NEW.cache_cost, NEW.cache_savings, NEW.attempt_outcome))
+CREATE TRIGGER llm_usage_rollup_interaction_updated AFTER UPDATE OF created_at, profile_id, connector_id, app_id, billing_team_id, user_id, service_account_id, auth_method, virtual_key_id, passthrough_virtual_key_id, authenticated_app_id, authenticated_app_name, provider_api_key_id, model_pool_id, external_agent_id, type, model, billing_mode, attribution_labels, input_tokens, input_tokens_estimated, output_tokens, cache_read_tokens, cache_write_tokens, cost, baseline_cost, cache_savings, attempt_outcome ON interactions FOR EACH ROW
+  WHEN ((OLD.created_at, OLD.profile_id, OLD.connector_id, OLD.app_id, OLD.billing_team_id, OLD.user_id, OLD.service_account_id, OLD.auth_method, OLD.virtual_key_id, OLD.passthrough_virtual_key_id, OLD.authenticated_app_id, OLD.authenticated_app_name, OLD.provider_api_key_id, OLD.model_pool_id, OLD.external_agent_id, OLD.type, OLD.model, OLD.billing_mode, OLD.attribution_labels, OLD.input_tokens, OLD.input_tokens_estimated, OLD.output_tokens, OLD.cache_read_tokens, OLD.cache_write_tokens, OLD.cost, OLD.baseline_cost, OLD.cache_savings, OLD.attempt_outcome) IS DISTINCT FROM (NEW.created_at, NEW.profile_id, NEW.connector_id, NEW.app_id, NEW.billing_team_id, NEW.user_id, NEW.service_account_id, NEW.auth_method, NEW.virtual_key_id, NEW.passthrough_virtual_key_id, NEW.authenticated_app_id, NEW.authenticated_app_name, NEW.provider_api_key_id, NEW.model_pool_id, NEW.external_agent_id, NEW.type, NEW.model, NEW.billing_mode, NEW.attribution_labels, NEW.input_tokens, NEW.input_tokens_estimated, NEW.output_tokens, NEW.cache_read_tokens, NEW.cache_write_tokens, NEW.cost, NEW.baseline_cost, NEW.cache_savings, NEW.attempt_outcome))
   EXECUTE FUNCTION llm_usage_rollup_on_interaction_update();
 --> statement-breakpoint
 CREATE TRIGGER llm_usage_rollup_interaction_deleted AFTER DELETE ON interactions REFERENCING OLD TABLE AS removed FOR EACH STATEMENT
   EXECUTE FUNCTION llm_usage_rollup_on_interaction_delete();
 --> statement-breakpoint
--- A receipt is written before its interaction in the same transaction, so a new
--- receipt has no interaction to mark yet; only a later repricing needs one.
-CREATE TRIGGER llm_usage_rollup_receipt_updated AFTER UPDATE OF usage, attribution_labels ON interaction_billing FOR EACH ROW
-  WHEN ((OLD.usage, OLD.attribution_labels) IS DISTINCT FROM (NEW.usage, NEW.attribution_labels))
+-- A receipt is written before its interaction in the same transaction (claiming
+-- it otherwise fails), so a new receipt has no interaction to mark yet, and
+-- receipts are only deleted with their interaction; only a later repricing
+-- needs a mark.
+CREATE TRIGGER llm_usage_rollup_receipt_updated AFTER UPDATE OF interaction_id, usage, attribution_labels ON interaction_billing FOR EACH ROW
+  WHEN ((OLD.interaction_id, OLD.usage, OLD.attribution_labels) IS DISTINCT FROM (NEW.interaction_id, NEW.usage, NEW.attribution_labels))
   EXECUTE FUNCTION llm_usage_rollup_on_receipt_update();

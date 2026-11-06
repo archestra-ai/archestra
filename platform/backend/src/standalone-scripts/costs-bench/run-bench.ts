@@ -14,7 +14,9 @@ import { listUserLimitUsage } from "@/services/user-limit-usage";
  * Time every statistics read behind the Costs, Limits and My Usage pages
  * against a database seeded by seed.sql, at several timeframes.
  *
- *   ARCHESTRA_DATABASE_URL=postgresql://…/costs_bench pnpm bench:costs
+ *   ARCHESTRA_DATABASE_URL=postgresql://…/costs_bench \
+ *     TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json \
+ *     node --import tsx src/standalone-scripts/costs-bench/run-bench.ts
  *
  * Refuses any database whose name does not start with costs_bench. Prints a
  * Markdown table; `--out <dir>` also writes the timings and the SQL each read

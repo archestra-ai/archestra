@@ -17128,12 +17128,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "cache_cost": {
-          "name": "cache_cost",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
         "cache_savings": {
           "name": "cache_savings",
           "type": "numeric",

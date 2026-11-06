@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import tls, { type ConnectionOptions } from "node:tls";
 import { fileURLToPath } from "node:url";
 import { Sha256 } from "@aws-crypto/sha256-js";
@@ -482,4 +483,257 @@ export function configurePgDefaultsForRdsIam(
   }
 
   return parsedUrl.toString();
+}
+
+const PG_SSL_REQUEST_PACKET = Buffer.from([
+  0x00, 0x00, 0x00, 0x08, 0x04, 0xd2, 0x16, 0x2f,
+]);
+const PG_CANCEL_REQUEST_CODE = 80877102;
+const nativeBridgePromises = new Map<string, Promise<string>>();
+const nativeBridgeServers = new Set<net.Server>();
+
+/**
+ * Resolves a PostgreSQL connection URL for embedded native Rust consumers
+ * (`@archestra/openappa-rs` / `rust-postgres`) that accept only a static URL
+ * string and cannot invoke a per-connection JS password callback.
+ *
+ * When RDS IAM auth is disabled (default), returns `connectionString` unchanged.
+ *
+ * When RDS IAM auth is enabled, starts an in-process loopback bridge on
+ * `127.0.0.1` that opens a verified TLS connection (using the RDS CA bundle
+ * and hostname verification) to the upstream RDS instance and injects a fresh
+ * presigned RDS IAM token into the PostgreSQL `PasswordMessage` of every new
+ * connection opened by the native pool.
+ */
+export async function resolveNativeDatabaseConnectionString(
+  connectionString: string,
+  options: RdsIamConnectionOptions = {},
+): Promise<string> {
+  const env = options.env ?? process.env;
+  const iamAuthEnabled = options.iamAuthEnabled ?? isRdsIamAuthEnabled(env);
+
+  if (!iamAuthEnabled) {
+    return connectionString;
+  }
+
+  const cacheKey = `${connectionString}|${options.awsRegion ?? env.ARCHESTRA_DATABASE_AWS_REGION ?? ""}`;
+  const existing = nativeBridgePromises.get(cacheKey);
+  if (existing && options.credentials === undefined) {
+    return existing;
+  }
+
+  const pgConfig = buildPgConnectionConfig(connectionString, {}, options);
+  const rdsHost = pgConfig.host;
+  const rdsPort = Number(pgConfig.port || 5432);
+  const sslConfig = pgConfig.ssl;
+  const passwordCallback = pgConfig.password;
+
+  if (!rdsHost || typeof passwordCallback !== "function") {
+    return connectionString;
+  }
+
+  const createBridgePromise = (async () => {
+    const server = net.createServer((clientSocket) => {
+      const upstreamTcp = net.connect(rdsPort, rdsHost);
+      let clientBuf = Buffer.alloc(0);
+      let upstreamSocket: net.Socket | tls.TLSSocket | null = null;
+      let upstreamReady = false;
+      let startupForwarded = false;
+      let passwordIntercepted = false;
+      let passthrough = false;
+
+      const destroyBoth = (err?: Error) => {
+        if (err) {
+          clientSocket.destroy(err);
+        } else {
+          clientSocket.destroy();
+        }
+        if (upstreamSocket) {
+          upstreamSocket.destroy();
+        } else {
+          upstreamTcp.destroy();
+        }
+      };
+
+      const pumpClient = () => {
+        if (!upstreamReady || !upstreamSocket) {
+          return;
+        }
+        if (!startupForwarded) {
+          if (clientBuf.length < 4) {
+            return;
+          }
+          const startupLen = clientBuf.readInt32BE(0);
+          if (startupLen < 8 || clientBuf.length < startupLen) {
+            return;
+          }
+          const startupMsg = clientBuf.subarray(0, startupLen);
+          clientBuf = clientBuf.subarray(startupLen);
+          startupForwarded = true;
+          upstreamSocket.write(startupMsg);
+
+          if (
+            startupLen === 16 &&
+            startupMsg.readInt32BE(4) === PG_CANCEL_REQUEST_CODE
+          ) {
+            passthrough = true;
+          }
+        }
+
+        if (startupForwarded && !passwordIntercepted && !passthrough) {
+          if (clientBuf.length < 5) {
+            return;
+          }
+          if (clientBuf[0] !== 0x70) {
+            upstreamSocket.write(clientBuf);
+            clientBuf = Buffer.alloc(0);
+            passthrough = true;
+            return;
+          }
+          const msgLen = clientBuf.readInt32BE(1);
+          if (msgLen < 4 || clientBuf.length < 1 + msgLen) {
+            return;
+          }
+          clientBuf = clientBuf.subarray(1 + msgLen);
+          passwordIntercepted = true;
+
+          Promise.resolve(passwordCallback())
+            .then((token) => {
+              const tokenBytes = Buffer.from(`${token}\0`, "utf8");
+              const msg = Buffer.allocUnsafe(1 + 4 + tokenBytes.length);
+              msg[0] = 0x70;
+              msg.writeInt32BE(4 + tokenBytes.length, 1);
+              tokenBytes.copy(msg, 5);
+              upstreamSocket?.write(msg);
+              if (clientBuf.length > 0) {
+                upstreamSocket?.write(clientBuf);
+                clientBuf = Buffer.alloc(0);
+              }
+              passthrough = true;
+            })
+            .catch((err: unknown) => {
+              destroyBoth(err instanceof Error ? err : new Error(String(err)));
+            });
+        }
+      };
+
+      clientSocket.on("data", (chunk: Buffer) => {
+        if (passthrough && upstreamSocket) {
+          upstreamSocket.write(chunk);
+          return;
+        }
+        clientBuf = Buffer.concat([clientBuf, chunk]);
+        pumpClient();
+      });
+
+      upstreamTcp.once("connect", () => {
+        if (sslConfig === false) {
+          upstreamSocket = upstreamTcp;
+          upstreamReady = true;
+          upstreamTcp.on("data", (d) => clientSocket.write(d));
+          upstreamTcp.on("end", () => clientSocket.end());
+          upstreamTcp.on("close", () => clientSocket.destroy());
+          pumpClient();
+          return;
+        }
+
+        upstreamTcp.write(PG_SSL_REQUEST_PACKET);
+        upstreamTcp.once("data", (resp: Buffer) => {
+          if (resp[0] !== 0x53) {
+            destroyBoth(
+              new Error(
+                "Upstream PostgreSQL server rejected SSLRequest required for RDS IAM authentication.",
+              ),
+            );
+            return;
+          }
+          const tlsSock = tls.connect({
+            socket: upstreamTcp,
+            host: rdsHost,
+            servername: rdsHost,
+            ...(typeof sslConfig === "object" ? sslConfig : {}),
+          });
+          upstreamSocket = tlsSock;
+          tlsSock.once("secureConnect", () => {
+            upstreamReady = true;
+            tlsSock.on("data", (d) => clientSocket.write(d));
+            tlsSock.on("end", () => clientSocket.end());
+            tlsSock.on("close", () => clientSocket.destroy());
+            tlsSock.on("error", () => clientSocket.destroy());
+            pumpClient();
+          });
+          tlsSock.on("error", () => clientSocket.destroy());
+        });
+      });
+
+      upstreamTcp.on("error", () => clientSocket.destroy());
+      clientSocket.on("error", () => destroyBoth());
+      clientSocket.on("close", () => destroyBoth());
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        server.removeListener("error", reject);
+        resolve();
+      });
+    });
+
+    server.unref();
+    nativeBridgeServers.add(server);
+    server.once("close", () => {
+      nativeBridgeServers.delete(server);
+      nativeBridgePromises.delete(cacheKey);
+    });
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close();
+      throw new Error("Failed to bind RDS IAM loopback bridge.");
+    }
+
+    const { parsedUrl } = parseDatabaseUrl(connectionString, env);
+    parsedUrl.hostname = "127.0.0.1";
+    parsedUrl.port = String(address.port);
+    parsedUrl.password = "rds-iam-bridge";
+    for (const param of [
+      "password",
+      "ssl",
+      "sslmode",
+      "sslrootcert",
+      "sslcert",
+      "sslkey",
+      "uselibpqcompat",
+    ]) {
+      parsedUrl.searchParams.delete(param);
+    }
+    parsedUrl.searchParams.set("sslmode", "disable");
+    return parsedUrl.toString();
+  })().catch((err) => {
+    nativeBridgePromises.delete(cacheKey);
+    throw err;
+  });
+
+  if (options.credentials === undefined) {
+    nativeBridgePromises.set(cacheKey, createBridgePromise);
+  }
+  return createBridgePromise;
+}
+
+/**
+ * Closes any active in-process RDS IAM loopback bridges (for test cleanup).
+ * @public — exported for unit tests
+ */
+export async function closeRdsIamNativeBridges(): Promise<void> {
+  const servers = [...nativeBridgeServers];
+  nativeBridgeServers.clear();
+  nativeBridgePromises.clear();
+  await Promise.all(
+    servers.map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        }),
+    ),
+  );
 }

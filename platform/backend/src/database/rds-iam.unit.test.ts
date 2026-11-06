@@ -1,16 +1,19 @@
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import pg from "pg";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildPgConnectionConfig,
+  closeRdsIamNativeBridges,
   configurePgDefaultsForRdsIam,
   createRdsIamPasswordCallback,
   generateRdsIamAuthToken,
   isRdsIamAuthEnabled,
   rdsRegionFromHostname,
   resolveDatabaseAwsRegion,
+  resolveNativeDatabaseConnectionString,
   resolvePgSslConfig,
 } from "./rds-iam";
 
@@ -24,9 +27,10 @@ describe("rds-iam", () => {
   const originalPgDefaultPassword = pg.defaults.password;
   const originalPgDefaultSsl = pg.defaults.ssl;
 
-  afterEach(() => {
+  afterEach(async () => {
     pg.defaults.password = originalPgDefaultPassword;
     pg.defaults.ssl = originalPgDefaultSsl;
+    await closeRdsIamNativeBridges();
   });
 
   test("rdsRegionFromHostname extracts regions from RDS, Aurora, Proxy, GovCloud, and China endpoints", () => {
@@ -363,5 +367,90 @@ describe("rds-iam", () => {
       "mydb.123456789012.us-west-2.rds.amazonaws.com:5432/?",
     );
     expect(token).toContain("DBUser=archestra_user");
+  });
+
+  test("resolveNativeDatabaseConnectionString injects fresh RDS IAM tokens per native connection when enabled", async () => {
+    const rawUrl = "postgresql://archestra_iam@127.0.0.1:5432/archestra";
+    expect(
+      await resolveNativeDatabaseConnectionString(rawUrl, {
+        iamAuthEnabled: false,
+        env: {},
+      }),
+    ).toBe(rawUrl);
+
+    const receivedPasswords: string[] = [];
+    const mockPgServer = net.createServer((socket) => {
+      let startupDone = false;
+      socket.on("data", (data) => {
+        if (!startupDone) {
+          startupDone = true;
+          // Send AuthenticationCleartextPassword ('R', len=8, type=3)
+          const authReq = Buffer.alloc(9);
+          authReq[0] = 0x52;
+          authReq.writeInt32BE(8, 1);
+          authReq.writeInt32BE(3, 5);
+          socket.write(authReq);
+          return;
+        }
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        if (buf[0] === 0x70) {
+          const msgLen = buf.readInt32BE(1);
+          const pwd = buf.subarray(5, 1 + msgLen - 1).toString("utf8");
+          receivedPasswords.push(pwd);
+          // Send AuthenticationOk ('R', len=8, type=0) + ReadyForQuery ('Z', len=5, 'I')
+          const okAndReady = Buffer.from([
+            0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a, 0x00,
+            0x00, 0x00, 0x05, 0x49,
+          ]);
+          socket.write(okAndReady);
+          socket.end();
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      mockPgServer.listen(0, "127.0.0.1", resolve),
+    );
+    const serverAddr = mockPgServer.address();
+    const upstreamPort =
+      typeof serverAddr === "object" && serverAddr ? serverAddr.port : 0;
+
+    try {
+      let seq = 0;
+      const bridgeUrl = await resolveNativeDatabaseConnectionString(
+        `postgresql://archestra_iam@127.0.0.1:${upstreamPort}/archestra?sslmode=disable`,
+        {
+          iamAuthEnabled: true,
+          awsRegion: "eu-central-1",
+          credentials: async () => {
+            seq += 1;
+            return {
+              accessKeyId: `AKIA_NATIVE_${seq}`,
+              secretAccessKey: `SECRET_NATIVE_${seq}`,
+              sessionToken: `native-token-${seq}`,
+            };
+          },
+          env: {},
+        },
+      );
+
+      expect(bridgeUrl).toContain(
+        "postgresql://archestra_iam:rds-iam-bridge@127.0.0.1:",
+      );
+      expect(bridgeUrl).toContain("sslmode=disable");
+
+      for (let i = 0; i < 2; i++) {
+        const client = new pg.Client({ connectionString: bridgeUrl });
+        await client.connect();
+        await client.end().catch(() => {});
+      }
+
+      expect(receivedPasswords).toHaveLength(2);
+      expect(receivedPasswords[0]).toContain("native-token-1");
+      expect(receivedPasswords[1]).toContain("native-token-2");
+      expect(receivedPasswords[0]).not.toBe(receivedPasswords[1]);
+    } finally {
+      await new Promise<void>((resolve) => mockPgServer.close(() => resolve()));
+    }
   });
 });

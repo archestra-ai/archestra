@@ -21,6 +21,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
+import { resolveNativeDatabaseConnectionString } from "@/database/rds-iam";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
@@ -534,7 +535,15 @@ async function binding() {
   openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
-    const url = new URL(getDatabaseConnectionString());
+    const url = new URL(
+      await resolveNativeDatabaseConnectionString(
+        getDatabaseConnectionString(),
+        {
+          iamAuthEnabled: config.database.iamAuthEnabled,
+          awsRegion: config.database.awsRegion || undefined,
+        },
+      ),
+    );
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
     await module.initializeOpenappa(

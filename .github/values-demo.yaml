@@ -41,11 +41,28 @@ archestra:
     # ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL repository secret.
     ARCHESTRA_AUTH_ADMIN_EMAIL: "__FILL_ME__"
 
-  # Credentials come from the archestra-demo-runtime Secret, which
-  # archestra-ai/infra syncs from GCP Secret Manager (one key per env var).
-  # Never also set these names under env: an env entry, even "", would
-  # replace the synced value.
+  # Every credential, including the session, encryption and offer-signing
+  # keys the chart would otherwise generate, comes from the archestra-demo-runtime Secret
+  # that archestra-ai/infra syncs from GCP Secret Manager (gcp/gke/apps/
+  # runtime-secrets, one key per env var). These entries replace the chart's
+  # generated values. Never also set these names under env: an env entry,
+  # even "", would replace the synced value.
   envFromSecrets:
+    - name: ARCHESTRA_AUTH_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SECRET
+    - name: ARCHESTRA_AUTH_SESSION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+    - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
     - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
       secretName: archestra-demo-runtime
       secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD

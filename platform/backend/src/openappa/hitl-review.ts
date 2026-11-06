@@ -447,7 +447,7 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
   const parsed = parseReviewedArguments(review.arguments);
   if (review.arguments && !parsed) {
     return {
-      question: `${formatReviewQuestion(review.text)}\n\nExact arguments (unparsed):\n${review.arguments}`,
+      question: `${formatReviewQuestion(review.text)}\n\nArguments (unparsed, credential values hidden):\n${review.arguments}`,
       header: "Approval",
       options,
       allowMultiple: false,

@@ -149,8 +149,70 @@ describe("redactCredentials", () => {
       'curl -H X-Api-Key:"k 1" -b Cookie=sid https://x',
       'curl -H X-Api-Key:"[redacted]" -b Cookie=[redacted] https://x',
     ],
+    [
+      'Authorization: Digest username="u", response="secret"',
+      "Authorization: Digest [redacted]",
+    ],
+    ['Cookie: sid="secret"\nnext', "Cookie: [redacted]\nnext"],
+    [
+      String.raw`api_key=abc\def client_secret=\sec id_token=a\ b\&c x`,
+      "api_key=[redacted] client_secret=[redacted] id_token=[redacted] x",
+    ],
+    ["Cookie: sid='se\\'cret'; theme=dark", "Cookie: [redacted]"],
+    ['Authorization: Bearer "tok_secret"', "Authorization: Bearer [redacted]"],
+    [
+      `curl -H 'Cookie: sid="secret"' -H 'Accept: text/html' https://x`,
+      `curl -H 'Cookie: [redacted]' -H 'Accept: text/html' https://x`,
+    ],
+    [
+      String.raw`curl -H "Authorization: Digest username=\"u\", response=\"se\\\"cret\"" -H "Accept: */*"`,
+      'curl -H "Authorization: Digest [redacted]" -H "Accept: */*"',
+    ],
+    [
+      "X-Access-Token: t1\nX-Amz-Security-Token: t2\nsession_token: t3",
+      "X-Access-Token: [redacted]\nX-Amz-Security-Token: [redacted]\nsession_token: [redacted]",
+    ],
+    [
+      "/token?access_token=t1&refresh_token=t2&id_token=t3&client_secret=t4&aws_secret_access_key=t5&page=2",
+      "/token?access_token=[redacted]&refresh_token=[redacted]&id_token=[redacted]&client_secret=[redacted]&aws_secret_access_key=[redacted]&page=2",
+    ],
   ])("%s", (input, expected) => {
     expect(redactCredentials(input)).toBe(expected);
+  });
+
+  test("leaves names that only resemble a credential as is", () => {
+    const text = "token: t1\naccess: t2\nclient: t3\nsecretary: t4";
+    expect(redactCredentials(text)).toBe(text);
+  });
+
+  test("redacts a long value in time linear in its length", () => {
+    const families = [
+      (size: number) => `Authorization:${"\n".repeat(size)}`,
+      (size: number) => `Authorization: ${"\\".repeat(size)}`,
+      (size: number) => `Cookie: ${'a="'.repeat(size)}`,
+      (size: number) => `'Cookie: ${"\\'".repeat(size)}`,
+      (size: number) => `${"api_key=a'".repeat(size)} `,
+    ];
+    // Time per call, the fastest of a few windows that each span many calls.
+    const perCall = (text: string) => {
+      let fastest = Number.POSITIVE_INFINITY;
+      for (let window = 0; window < 3; window++) {
+        let calls = 0;
+        const started = performance.now();
+        do {
+          redactCredentials(text);
+          calls++;
+        } while (performance.now() - started < 10);
+        fastest = Math.min(fastest, (performance.now() - started) / calls);
+      }
+      return fastest;
+    };
+    for (const input of families) {
+      const small = perCall(input(2_000));
+      const large = perCall(input(32_000));
+      // 16 times the input: linear work grows about 16 times, quadratic 256.
+      expect(large).toBeLessThan(small * 64);
+    }
   });
 
   test.each([

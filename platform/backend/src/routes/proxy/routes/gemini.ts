@@ -133,7 +133,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^.+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent (non-streaming)

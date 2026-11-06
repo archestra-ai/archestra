@@ -19,7 +19,6 @@ import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
-  dynamicAccessContext,
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
 } from "./dynamic-tools";
@@ -266,6 +265,7 @@ async function visibleCandidates(params: {
   const accessParams = {
     agentId,
     userId: context.userId,
+    oauthClientId: context.tokenAuth?.oauthClientId,
     organizationId: context.organizationId,
   };
   // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
@@ -278,14 +278,12 @@ async function visibleCandidates(params: {
     accessParams,
   );
   const names = assigned.map((tool) => tool.name);
-  if (await dynamicAccessContext(accessParams)) {
-    const discoverable = await getUnassignedDiscoverableTools({
-      ...accessParams,
-      assignedToolNames: new Set(names),
-      exclusionSets,
-    });
-    names.push(...discoverable.map((tool) => tool.name));
-  }
+  const discoverable = await getUnassignedDiscoverableTools({
+    ...accessParams,
+    assignedToolNames: new Set(names),
+    exclusionSets,
+  });
+  names.push(...discoverable.map((tool) => tool.name));
 
   // `agent__<short>` proxy-discovered delegation artifacts are hidden from
   // search_tools, so a bare short name must not surface them here either.

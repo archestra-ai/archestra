@@ -16,6 +16,7 @@ import {
   KnowledgeBaseConnectorModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -181,6 +182,7 @@ export async function isDynamicallyAvailableArchestraTool(params: {
   toolName: string;
   agentId: string;
   userId?: string;
+  oauthClientId?: string;
   organizationId?: string;
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (executeArchestraTool's assignment gate) does not re-query. */
@@ -196,6 +198,40 @@ export async function isDynamicallyAvailableArchestraTool(params: {
   }
   const ctx = await dynamicAccessContext(params);
   if (!ctx) {
+    if (
+      shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME &&
+      !params.userId &&
+      params.organizationId
+    ) {
+      const [accessAllTools, agentEnvironmentId] = await Promise.all([
+        params.lookups
+          ? params.lookups.agentAccessAllTools(params.agentId)
+          : AgentModel.getAccessAllTools(params.agentId),
+        params.lookups
+          ? params.lookups.agentEnvironmentId(params.agentId)
+          : AgentModel.findEnvironmentId(params.agentId),
+      ]);
+      if (!accessAllTools) {
+        return false;
+      }
+      const exclusionSets =
+        params.exclusionSets ??
+        (await agentToolExclusionsService.getExclusionSets(params.agentId));
+      if (
+        isToolIdentityExcluded(
+          { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: params.toolName },
+          exclusionSets,
+        )
+      ) {
+        return false;
+      }
+      return agentHasSearchableKnowledgeConnectorsForNonUser({
+        agentId: params.agentId,
+        oauthClientId: params.oauthClientId,
+        organizationId: params.organizationId,
+        environmentId: agentEnvironmentId,
+      });
+    }
     return false;
   }
   // Per-agent exclusions (Auto-tool mode): an excluded built-in loses the
@@ -232,6 +268,7 @@ export async function isArchestraToolAvailableToAgent(params: {
   toolName: string;
   agentId: string;
   userId?: string;
+  oauthClientId?: string;
   organizationId?: string;
   exclusionSets?: AgentToolExclusionSets;
   lookups?: RequestLookups;
@@ -278,6 +315,7 @@ export async function getUnassignedDiscoverableTools(params: {
   assignedToolNames: Set<string>;
   agentId: string;
   userId?: string;
+  oauthClientId?: string;
   organizationId?: string;
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (search_tools, run_tool recovery) does not re-query. */
@@ -287,6 +325,25 @@ export async function getUnassignedDiscoverableTools(params: {
   const { assignedToolNames } = params;
   const ctx = await dynamicAccessContext(params);
   if (!ctx) {
+    const knowledgeToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    if (
+      !params.userId &&
+      params.organizationId &&
+      !assignedToolNames.has(knowledgeToolName) &&
+      (await isDynamicallyAvailableArchestraTool({
+        toolName: knowledgeToolName,
+        agentId: params.agentId,
+        oauthClientId: params.oauthClientId,
+        organizationId: params.organizationId,
+        exclusionSets: params.exclusionSets,
+        lookups: params.lookups,
+      }))
+    ) {
+      const knowledgeTool = await ToolModel.findByName(knowledgeToolName);
+      return knowledgeTool ? [knowledgeTool] : [];
+    }
     return [];
   }
 
@@ -393,6 +450,32 @@ async function agentHasSearchableKnowledgeConnectors(params: {
   });
   const excluded = new Set(excludedConnectorIds);
   return connectors.some((connector) => !excluded.has(connector.id));
+}
+
+async function agentHasSearchableKnowledgeConnectorsForNonUser(params: {
+  agentId: string;
+  oauthClientId?: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<boolean> {
+  const { agentId, oauthClientId, organizationId, environmentId } = params;
+  const [oauthPrincipal, excludedConnectorIds] = await Promise.all([
+    oauthClientId
+      ? ResourcePermissionSubjectModel.resolveOauthClientPrincipal({
+          oauthClientId,
+          organizationId,
+        })
+      : Promise.resolve(null),
+    AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId),
+  ]);
+  return knowledgeSourceAccessControlService.hasQueryableOrganizationConnectorsForNonUser(
+    {
+      organizationId,
+      environmentId,
+      excludedConnectorIds,
+      principal: oauthPrincipal ?? undefined,
+    },
+  );
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under

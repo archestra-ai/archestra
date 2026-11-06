@@ -55,7 +55,6 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -95,6 +94,10 @@ import {
   signPeerProof,
   stripPeerProofs,
 } from "@/openappa/peer-claims";
+import {
+  policyArguments,
+  previewAppToolTarget,
+} from "@/openappa/policy-arguments";
 import {
   isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
@@ -1186,11 +1189,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const rejected = binding.nativeHitlRulings.filter(
         (entry) => entry.ruling !== "approve",
       );
-      const rejectedCall = incomingToolCalls.find((call) => {
-        const [target] = normalizeToolCallsForPolicy(
-          [call],
-          this.resolution(binding),
-        );
+      // A preview is ruled as the app tool it runs, so its denial is matched there.
+      const targets = await Promise.all(
+        incomingToolCalls.map(async (call) => {
+          const [target] = normalizeToolCallsForPolicy(
+            [call],
+            this.resolution(binding),
+          );
+          const preview = await previewAppToolTarget(target).catch(
+            () => target,
+          );
+          return "refusal" in preview ? target : preview;
+        }),
+      );
+      const rejectedCall = incomingToolCalls.find((call, index) => {
+        const target = targets[index];
         return rejected.some((entry) => {
           if (
             isSpecialToolMember(binding, call, "control") &&
@@ -1204,7 +1217,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeToolArgumentsForPolicy(
+              policyArguments(
                 target.toolCallName,
                 JSON.parse(target.toolCallArgs),
               ),

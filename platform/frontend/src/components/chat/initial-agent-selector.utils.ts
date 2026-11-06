@@ -14,6 +14,7 @@ type InitialAgentListItem = Pick<
   | "runtime"
   | "builtIn"
   | "builtInAgentConfig"
+  | "sharedByName"
 >;
 
 export function filterAndSortInitialAgents<
@@ -27,22 +28,19 @@ export function filterAndSortInitialAgents<
   const { allAgents, currentAgentId, search, userId } = params;
 
   let result = allAgents.filter((agent) => {
-    if (
-      agent.builtIn &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.SRE &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
-    )
-      return false;
-    if (agent.scope === "personal") {
+    if (agent.builtIn)
       return (
-        agent.authorId === userId ||
-        (agent.builtIn &&
-          (agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
-            agent.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG))
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
       );
-    }
-    return true;
+    // Another user's personal agent is offered only when it is shared with
+    // this user by name. Admin oversight can read any personal agent, and a
+    // saved reference can outlive a revoked share; neither is a share.
+    return (
+      agent.scope !== "personal" ||
+      agent.authorId === userId ||
+      agent.sharedByName
+    );
   });
 
   if (search) {

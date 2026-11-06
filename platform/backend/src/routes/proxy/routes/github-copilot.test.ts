@@ -15,7 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import { generateText, jsonSchema, streamText, tool } from "ai";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import {
@@ -595,6 +595,223 @@ describe("GitHub Copilot chat completion compatibility", () => {
   });
 });
 
+describe("GitHub Copilot overlapping Responses items", () => {
+  test("the AI SDK closes message text before receiving the buffered tool call", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Overlapping Responses proof" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    stubTokenExchange();
+    const text = "I will check the time.";
+    const message = {
+      type: "message",
+      id: "message",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text, annotations: [] }],
+    };
+    const call = {
+      type: "function_call",
+      id: "function",
+      call_id: "call_time",
+      name: "get_time",
+      arguments: '{"city":"Tokyo"}',
+      status: "completed",
+    };
+    const result = {
+      id: "response",
+      object: "response",
+      model: "grok-4.6",
+      created_at: 1,
+      status: "completed",
+      output: [message, call],
+      usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+    };
+    const events = [
+      {
+        type: "response.created",
+        response: { ...result, status: "in_progress", output: [] },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { ...message, status: "in_progress", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        output_index: 0,
+        content_index: 0,
+        item_id: "raw-1",
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
+        type: "response.output_text.delta",
+        output_index: 0,
+        content_index: 0,
+        item_id: "raw-2",
+        delta: text,
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        item: { ...call, status: "in_progress", arguments: "" },
+      },
+      {
+        type: "response.function_call_arguments.delta",
+        output_index: 1,
+        item_id: "raw-3",
+        delta: call.arguments,
+      },
+      {
+        type: "response.function_call_arguments.done",
+        output_index: 1,
+        item_id: "raw-4",
+        arguments: call.arguments,
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 1,
+        item: { ...call, id: "raw-5" },
+      },
+      {
+        type: "response.output_text.done",
+        output_index: 0,
+        content_index: 0,
+        item_id: "raw-6",
+        text,
+      },
+      {
+        type: "response.content_part.done",
+        output_index: 0,
+        content_index: 0,
+        item_id: "raw-7",
+        part: message.content[0],
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 0,
+        item: { ...message, id: "raw-8" },
+      },
+      { type: "response.completed", response: result },
+    ].map((event, sequence_number) => ({ ...event, sequence_number }));
+    const drainResponse = ({ response }: { response: Response }) => {
+      void response.arrayBuffer();
+    };
+    server.events.on("response:mocked", drainResponse);
+    server.use(
+      http.post(
+        "https://api.githubcopilot.com/responses",
+        () =>
+          new HttpResponse(
+            events
+              .map(
+                (event) =>
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              )
+              .join(""),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    let outbound = "";
+    const client = createOpenAI({
+      apiKey: uniqueGithubToken(),
+      baseURL: `http://proxy.test/v1/github-copilot/${agent.id}`,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        const response = await app.inject({
+          method: "POST",
+          url: new URL(request.url).pathname,
+          headers: {
+            ...Object.fromEntries(request.headers),
+            "x-archestra-virtual-key": passthroughKey,
+          },
+          payload: await request.text(),
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        outbound = response.body;
+        return new Response(response.body, {
+          status: response.statusCode,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    });
+    try {
+      const answer = streamText({
+        model: client.responses("grok-4.6"),
+        prompt: "Check Tokyo time.",
+        maxRetries: 0,
+        tools: {
+          get_time: tool({
+            inputSchema: jsonSchema<{ city: string }>({
+              type: "object",
+              properties: { city: { type: "string" } },
+              required: ["city"],
+            }),
+          }),
+        },
+      });
+      const parts = [];
+      for await (const part of answer.fullStream) parts.push(part);
+      expect(parts.filter((part) => part.type === "error")).toEqual([]);
+      expect(await answer.text).toBe(text);
+      expect(await answer.toolCalls).toMatchObject([
+        {
+          toolCallId: "call_time",
+          toolName: "get_time",
+          input: { city: "Tokyo" },
+        },
+      ]);
+      const frames = outbound.split("\n\n").flatMap((frame) => {
+        const data = frame
+          .split("\n")
+          .find((line) => line.startsWith("data: {"));
+        return data ? [JSON.parse(data.slice(6))] : [];
+      });
+      expect(
+        frames
+          .filter((event) =>
+            [
+              "response.output_text.done",
+              "response.content_part.done",
+            ].includes(event.type),
+          )
+          .map((event) => event.item_id),
+      ).toEqual(["message", "message"]);
+      expect(
+        frames
+          .filter(
+            (event) =>
+              event.type === "response.output_item.done" &&
+              event.item.type === "message",
+          )
+          .map((event) => event.item.id),
+      ).toEqual(["message"]);
+      await drainBackgroundWork();
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agent.id));
+      expect(log.response).toMatchObject({
+        status: "completed",
+        output: [message, call],
+      });
+    } finally {
+      server.events.removeListener("response:mocked", drainResponse);
+      await app.close();
+    }
+  });
+});
+
 describe("GitHub Copilot long-context accounting", () => {
   // Real Fastify, SDK, catalog sync, migrated PGlite, receipts and limit settlement.
   // Only provider HTTP is controlled: these are accounting proofs, not GitHub invoices.
@@ -913,6 +1130,126 @@ describe("GitHub Copilot long-context accounting", () => {
       },
     };
   }
+
+  test.for([
+    { finishTokens: 4, trailingTokens: undefined },
+    { finishTokens: 4, trailingTokens: 5 },
+    { finishTokens: 0, trailingTokens: 5 },
+  ])("per-chunk usage preserves the reply and settles final accounting: %j", async ({
+    finishTokens,
+    trailingTokens,
+  }, {
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const c = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const model = "claude-haiku-5.5";
+    const envelope = {
+      id: "cumulative-usage",
+      object: "chat.completion.chunk",
+      created: 1,
+      model,
+    };
+    const usage = (prompt: number, completion: number) => ({
+      prompt_tokens: prompt,
+      completion_tokens: completion,
+      total_tokens: prompt + completion,
+    });
+    const chunks = [
+      {
+        ...envelope,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: null,
+              reasoning_text: "Thinking",
+            },
+            finish_reason: null,
+          },
+        ],
+        usage: usage(0, 0),
+      },
+      {
+        ...envelope,
+        choices: [
+          { index: 0, delta: { content: "Hello" }, finish_reason: null },
+        ],
+        usage: usage(0, 0),
+      },
+      {
+        ...envelope,
+        choices: [
+          { index: 0, delta: { content: " world" }, finish_reason: null },
+        ],
+        usage: usage(12, 2),
+      },
+      {
+        ...envelope,
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        usage: usage(20, finishTokens),
+      },
+      ...(trailingTokens === undefined
+        ? []
+        : [{ ...envelope, choices: [], usage: usage(20, trailingTokens) }]),
+    ];
+    server.use(
+      http.post(
+        COPILOT_CHAT_COMPLETIONS_URL,
+        () =>
+          new HttpResponse(
+            `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    const response = await c.send(model, 20, { stream: true });
+    expect(response.statusCode, response.body).toBe(200);
+    const frames = response.body
+      .split("\n\n")
+      .filter((frame) => frame.startsWith("data: {"))
+      .map((frame) => JSON.parse(frame.slice(6)));
+    expect(
+      frames.map((frame) => frame.choices?.[0]?.delta?.content ?? "").join(""),
+    ).toBe("Hello world");
+    const finalTokens = trailingTokens ?? finishTokens;
+    expect(frames.at(-1).usage).toMatchObject({
+      prompt_tokens: 20,
+      completion_tokens: finalTokens,
+    });
+    expect(response.body.match(/data: \[DONE\]/g)).toHaveLength(1);
+    const [log] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, c.agent.id));
+    expect(log).toMatchObject({ inputTokens: 20, outputTokens: finalTokens });
+    expect(log.response).toMatchObject({
+      choices: [{ message: { content: "Hello world" } }],
+    });
+    const rates = c.catalog["github-copilot"].models[model]
+      .cost as CapturedCost;
+    const expectedCost =
+      (20 * (rates.input ?? 0) + finalTokens * (rates.output ?? 0)) / 1_000_000;
+    expect(log.cost).toBe(expectedCost.toFixed(10));
+    const [receipt] = await InteractionBillingModel.findMany([log.id]);
+    expect(receipt.usage).toMatchObject({ status: "complete", cost: log.cost });
+    expect(
+      (await LimitModel.getModelUsageBreakdowns([c.cap.id])).get(c.cap.id)?.[0]
+        .cost,
+    ).toBeCloseTo(Number(log.cost), 10);
+  });
 
   const boundaryCases = [
     {

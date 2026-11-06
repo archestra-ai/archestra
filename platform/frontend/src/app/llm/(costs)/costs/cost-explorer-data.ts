@@ -3,13 +3,11 @@
 // combinations the API can answer, and a hook that turns whichever endpoint
 // answers into one normalized cube (rows × time buckets, optional split).
 
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type StatisticsTimeFrame,
-  type SupportedProvider,
+import type {
+  archestraApiTypes,
+  StatisticsTimeFrame,
+  SupportedProvider,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useProxyLabelCosts } from "@/lib/proxy-label-costs.query";
@@ -18,7 +16,6 @@ import {
   useProxyCostStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
-import { throwOnApiError } from "@/lib/utils/api";
 import {
   type AppUsageDimension,
   formatCompact,
@@ -200,7 +197,6 @@ export function splitOptions(metric: MetricId, group: DimId): DimId[] {
   if (group === "person") {
     if (metric === "appRuns") return ["app"];
     if (metric === "skillActivations") return ["skill"];
-    return ["model"];
   }
   if (LLM_METRICS.includes(metric) && BREAKDOWN_DIMS.includes(group))
     return BREAKDOWN_DIMS.filter((d) => d !== group);
@@ -222,7 +218,14 @@ export function normalize(q: PivotQuery): PivotQuery {
 }
 
 /** LLM dimensions that combine through GET /api/statistics/llm-usage. */
-const BREAKDOWN_DIMS: DimId[] = ["team", "key", "provider", "model"];
+const BREAKDOWN_DIMS: DimId[] = [
+  "team",
+  "agent",
+  "person",
+  "key",
+  "provider",
+  "model",
+];
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   cacheSavings: "time",
@@ -231,6 +234,7 @@ const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
   skillActivations: "skill",
 };
 
+// Named "<metric> by <grouping> [and <split>]", the way the controls read.
 export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   {
     id: "spend-model",
@@ -238,14 +242,29 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     q: { metric: "billed", group: "model", split: "none", chart: "bars" },
   },
   {
-    id: "cache-model",
-    label: "Cache reads by model",
-    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+    id: "team-model",
+    label: "Spend by team and model",
+    q: { metric: "billed", group: "team", split: "model", chart: "table" },
   },
   {
-    id: "cache-savings",
-    label: "Prompt cache savings",
-    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
+    id: "keys",
+    label: "Spend by credential",
+    q: { metric: "billed", group: "key", split: "none", chart: "table" },
+  },
+  {
+    id: "key-provider",
+    label: "Spend by credential and provider",
+    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
+  },
+  {
+    id: "provider-keys",
+    label: "Spend by provider key",
+    q: {
+      metric: "billed",
+      group: "providerKey",
+      split: "none",
+      chart: "table",
+    },
   },
   {
     id: "spend-label",
@@ -259,47 +278,37 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
   },
   {
     id: "who",
-    label: "Who is using it",
+    label: "Tokens by person",
     q: { metric: "tokens", group: "person", split: "none", chart: "lines" },
   },
   {
-    id: "apps",
-    label: "Apps by runs",
-    q: { metric: "appRuns", group: "app", split: "none", chart: "bars" },
+    id: "agent-person",
+    label: "Tokens by agent and person",
+    q: { metric: "tokens", group: "agent", split: "person", chart: "bars" },
+  },
+  {
+    id: "cache-model",
+    label: "Cache reads by model",
+    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-savings",
+    label: "Cache savings over time",
+    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
   },
   {
     id: "tools",
-    label: "Tool calls by server",
+    label: "Tool calls by server and tool",
     q: { metric: "toolCalls", group: "server", split: "tool", chart: "bars" },
   },
   {
-    id: "team-model",
-    label: "Team spend by model",
-    q: { metric: "billed", group: "team", split: "model", chart: "table" },
-  },
-  {
-    id: "key-provider",
-    label: "Credential spend by provider",
-    q: { metric: "billed", group: "key", split: "provider", chart: "table" },
-  },
-  {
-    id: "keys",
-    label: "Credentials by spend",
-    q: { metric: "billed", group: "key", split: "none", chart: "table" },
-  },
-  {
-    id: "provider-keys",
-    label: "Provider keys by spend",
-    q: {
-      metric: "billed",
-      group: "providerKey",
-      split: "none",
-      chart: "table",
-    },
+    id: "apps",
+    label: "App runs by app",
+    q: { metric: "appRuns", group: "app", split: "none", chart: "bars" },
   },
   {
     id: "skills",
-    label: "Skills by reach",
+    label: "Skill activations by skill",
     q: {
       metric: "skillActivations",
       group: "skill",
@@ -511,6 +520,8 @@ export function usePivotCube(
     limit: 50,
     ...(q.group === "providerKey" ? { includeProviderKeys: "true" } : {}),
     ...(q.group === "pool" ? { includeModelPools: "true" } : {}),
+    // Each row's trend comes back with the page instead of one request per row.
+    includeGroupTimeSeries: "true",
     enabled: on("proxy") && q.group !== "label",
   });
   const llmQ = useLlmUsage({
@@ -522,49 +533,28 @@ export function usePivotCube(
   const labelQ = useProxyLabelCosts({
     timeframe,
     labelKey: q.labelKey,
+    includeGroupTimeSeries: "true",
     enabled: on("proxy") && q.group === "label",
   });
 
   const proxyBy = src.kind === "proxy" ? src.by : null;
-  const proxyItems = useMemo(() => {
+  const proxyItems = useMemo((): ProxyItem[] => {
     if (proxyBy === "label") {
       if (!q.labelKey) return [];
       return (labelQ.data?.groups ?? []).map(({ value, ...totals }) => ({
         key: value === null ? "missing" : `value:${value}`,
         label: value ?? "Unassigned (label missing)",
-        sub: undefined as string | undefined,
         tag: value === null ? "Label missing" : undefined,
         totals,
-        filter: {
-          labelKey: q.labelKey,
-          ...(value === null
-            ? { labelUnassigned: "true" }
-            : { labelValue: value }),
-        } as ProxyFilter,
       }));
     }
     return proxyBy && proxyQ.data
       ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
       : [];
   }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey, providerCatalog]);
-  const itemQs = useQueries({
-    queries: proxyItems.map((item) => ({
-      queryKey: ["cost-explorer", "proxy-item", timeframe, item.filter],
-      queryFn: async () => {
-        const { data, error } = await archestraApiSdk.getProxyCostStatistics({
-          query: { timeframe, limit: 1, ...(item.filter ?? {}) },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        return data ?? null;
-      },
-      enabled: enabled && src.kind === "proxy" && item.filter !== null,
-      staleTime: 60_000,
-    })),
-  });
-  const itemStamp = itemQs.map((r) => r.dataUpdatedAt).join(",");
 
   const tf = String(timeframe);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: itemStamp tracks itemQs
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lists the query fields the cube reads; the query objects themselves change on every render
   return useMemo(() => {
     const metric = q.metric;
     const primary =
@@ -591,7 +581,6 @@ export function usePivotCube(
                         : proxyQ;
     const failed = [
       primary,
-      ...(src.kind === "proxy" ? itemQs : []),
       ...(src.kind === "skill" && q.group === "skill"
         ? [skillReachQ, skillCostQ]
         : []),
@@ -603,7 +592,6 @@ export function usePivotCube(
       error: failed?.error,
       retry: () => {
         void primary.refetch();
-        for (const query of itemQs) void query.refetch();
         if (dedupeTeams) void modelQ.refetch();
         if (src.kind === "skill") {
           void skillReachQ.refetch();
@@ -998,7 +986,7 @@ export function usePivotCube(
         const totals = new Map<string, number>();
         const meta = new Map<string, Omit<Fact, "b" | "v">>();
         const failedOver = new Map<string, number>();
-        proxyItems.forEach((item, i) => {
+        for (const item of proxyItems) {
           totals.set(item.key, pointValue(metric, item.totals));
           failedOver.set(item.key, item.totals.failedOverAttempts);
           meta.set(item.key, {
@@ -1006,21 +994,20 @@ export function usePivotCube(
             gLabel: item.label,
             gSub: item.sub,
             gTag: item.tag,
-            limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
+            limitTarget: item.limitTarget,
           });
-          const series = itemQs[i]?.data?.timeSeries ?? [];
-          for (const p of series) {
+          for (const p of item.totals.timeSeries ?? []) {
             facts.push({
               g: item.key,
               gLabel: item.label,
               gSub: item.sub,
               gTag: item.tag,
-              limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
+              limitTarget: item.limitTarget,
               b: p.timestamp,
               v: pointValue(metric, p),
             });
           }
-        });
+        }
         const cube = assemble(facts, { totals, meta });
         // A pool that failed over wrote one request per attempt; show how
         // many of the requests were attempts the client never saw.
@@ -1038,8 +1025,7 @@ export function usePivotCube(
           extraCols: showFailedOver
             ? [{ id: "failedOver", label: "Failed over", format: formatInt }]
             : [],
-          isLoading:
-            primary.isLoading || itemQs.some((query) => query.isLoading),
+          isLoading: primary.isLoading,
         };
       }
     }
@@ -1087,7 +1073,6 @@ export function usePivotCube(
     proxyQ.data,
     proxyQ.isLoading,
     proxyItems,
-    itemStamp,
     teamId,
     dedupeTeams,
     llmQ.data,
@@ -1142,18 +1127,22 @@ function resolveSource(q: PivotQuery): Source {
     }
     return { kind: "skill", dims };
   }
-  // A provider, or a team, credential or model broken down by another of
-  // them, comes from the grouped LLM usage endpoint.
+  // A provider, or a team, agent, person, credential or model broken down by
+  // another of them, comes from the grouped LLM usage endpoint. People by
+  // model keep the per-person endpoint, which answers it on its own.
   if (
     LLM_METRICS.includes(q.metric) &&
     (q.group === "provider" ||
       (BREAKDOWN_DIMS.includes(q.group) &&
         split !== null &&
-        BREAKDOWN_DIMS.includes(split)))
+        BREAKDOWN_DIMS.includes(split) &&
+        !(q.group === "person" && split === "model")))
   ) {
     const dims: LlmUsageDimension[] = ["day"];
     for (const d of [q.group, split]) {
       if (d === "team") dims.push("teamId");
+      if (d === "agent") dims.push("agentId");
+      if (d === "person") dims.push("userId");
       if (d === "key") dims.push("credentialId");
       if (d === "provider") dims.push("provider");
       if (d === "model") dims.push("model");
@@ -1368,19 +1357,21 @@ function assemble(
 
 type ProxyData = archestraApiTypes.GetProxyCostStatisticsResponses["200"];
 type ProxyGroup = "method" | "key" | "providerKey" | "pool" | "label";
-type ProxyFilter =
-  | { credentialId: string }
-  | { providerApiKeyId: string }
-  | { modelPoolId: string }
-  | { authMethod: ProxyData["methods"][number]["authMethod"] }
-  | { labelKey: string; labelValue: string }
-  | { labelKey: string; labelUnassigned: "true" };
+/** One row of a proxy breakdown, with its trend when the page carried one. */
+type ProxyItem = {
+  key: string;
+  label: string;
+  sub?: string;
+  tag?: string;
+  limitTarget?: CubeRow["limitTarget"];
+  totals: Omit<ProxyData["methods"][number], "authMethod">;
+};
 
 function proxyItemsFor(
   by: Exclude<ProxyGroup, "label">,
   data: ProxyData,
   providerLabel: (provider: SupportedProvider) => string,
-) {
+): ProxyItem[] {
   if (by === "providerKey") {
     return (data.providerKeys ?? []).map((k) => ({
       key: k.providerApiKeyId ?? "none",
@@ -1394,9 +1385,6 @@ function proxyItemsFor(
         ? providerLabel(k.provider as SupportedProvider)
         : undefined,
       totals: k,
-      filter: k.providerApiKeyId
-        ? ({ providerApiKeyId: k.providerApiKeyId } as ProxyFilter)
-        : null,
     }));
   }
   if (by === "pool") {
@@ -1404,36 +1392,18 @@ function proxyItemsFor(
       key: p.modelPoolId ?? "none",
       label: p.modelPoolName ?? (p.modelPoolId ? "Deleted pool" : "Not pooled"),
       sub: p.modelPoolId ? `ID ${p.modelPoolId}` : undefined,
-      tag: undefined as string | undefined,
       totals: p,
-      filter: p.modelPoolId
-        ? ({ modelPoolId: p.modelPoolId } as ProxyFilter)
-        : null,
     }));
   }
   if (by === "method") {
     return data.methods.map((m) => ({
       key: m.authMethod,
       label: METHOD_NAMES[m.authMethod] ?? m.authMethod,
-      sub: undefined as string | undefined,
-      tag: undefined as string | undefined,
-      limitTarget: undefined as CubeRow["limitTarget"],
       totals: m,
-      filter: { authMethod: m.authMethod } as ProxyFilter | null,
     }));
   }
-  const perMethod = new Map<string, number>();
-  for (const c of data.credentials)
-    perMethod.set(c.authMethod, (perMethod.get(c.authMethod) ?? 0) + 1);
   return data.credentials.map((c, i) => {
     const method = METHOD_NAMES[c.authMethod] ?? c.authMethod;
-    // A row without a credential id can only be trended when it is the
-    // method's only row; otherwise its trend is unknowable.
-    const filter: ProxyFilter | null = c.credentialId
-      ? { credentialId: c.credentialId }
-      : perMethod.get(c.authMethod) === 1
-        ? { authMethod: c.authMethod }
-        : null;
     return {
       key: c.credentialId ?? `${c.authMethod}#${i}`,
       limitTarget:
@@ -1448,7 +1418,6 @@ function proxyItemsFor(
         : "No individual credential identifier recorded",
       tag: method,
       totals: c,
-      filter,
     };
   });
 }
@@ -1464,6 +1433,15 @@ function llmDimValue(
   switch (dim) {
     case "team":
       return { g: row.teamId ?? "?", gLabel: row.teamName ?? "Unknown team" };
+    case "agent":
+      return {
+        g: row.agentId ?? "?",
+        gLabel: row.agentName ?? "Unknown agent",
+      };
+    case "person":
+      return row.userId
+        ? { g: row.userId, gLabel: row.userName ?? "Unknown" }
+        : { g: "unattributed", gLabel: "No person recorded" };
     case "provider":
       return {
         g: row.provider ?? "?",

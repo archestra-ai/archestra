@@ -195,6 +195,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
       const acl = await KbFileModel.findDocumentAcl({
         fileId: file.id,
         organizationId: params.organizationId,
+        knowledgeBaseId: params.knowledgeBaseId,
       });
 
       const existing = await KbDocumentModel.findBySourceId({

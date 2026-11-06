@@ -20,6 +20,7 @@ import {
   AgentModel,
   AgentRunInputModel,
   AgentRunModel,
+  AgentTeamModel,
   AgentWorkspaceModel,
   EnvironmentModel,
   LimitModel,
@@ -30,12 +31,14 @@ import {
   reportAgentRuntimeStarted,
   reportAgentRuntimeTerminated,
 } from "@/observability/metrics/agent-runtime";
+import { updateActiveChatSpanAgent } from "@/observability/tracing/chat";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   Agent,
   AgentRunCompletionTarget,
   AgentRunLimitsRequest,
   AgentRunRecord,
+  AgentType,
   ResolvedAgentRuntime,
 } from "@/types";
 import { type AgentRunLimits, ApiError } from "@/types";
@@ -44,8 +47,10 @@ import {
   prepareAgentRuntimeBackendDriver,
   resolveAgentRuntimeBackendDriver,
 } from "./backends";
+import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
+import { canLaunchAgentRuntimeModel } from "./preflight";
 import {
   agentRunFailure,
   classifyAgentRunFailure,
@@ -76,6 +81,8 @@ import { agentRunTranscriptStore } from "./transcript-store";
 export interface SubagentExecutionPolicy {
   /** Calling gateway or orchestrator agent ID for distributed load-balancer state updates. */
   callerAgentId?: string;
+  /** Resolved per-user/team/org scope key for distributed load-balancer state updates. */
+  scopeKey?: string;
   /** Assigned runtime subagent pool on the caller for distributed queue reconciliation. */
   assignedAgentIds?: string[];
   /** Dispatch counter value when this run was planned, used to detect intervening claims. */
@@ -620,6 +627,9 @@ export async function runTaskInAgentRuntime(params: {
 
   type CandidateConfig = {
     agentId: string;
+    agentName?: string;
+    agentType?: AgentType;
+    labels?: { key: string; value: string }[];
     runtime: ResolvedAgentRuntime;
     limits: AgentRunLimits | null | undefined;
     modelId: string | null;
@@ -628,6 +638,13 @@ export async function runTaskInAgentRuntime(params: {
   let remainingFallbackIds = [...fallbackAgentIds];
   let currentPlannedDispatchCount = policy?.plannedDispatchCount ?? null;
   let prefetchedFallback: CandidateConfig | null = null;
+  let currentCandidate: CandidateConfig | null = {
+    agentId: params.agentId,
+    runtime: params.runtime,
+    limits: params.limits,
+    modelId: params.modelId,
+    llmApiKeyId: params.llmApiKeyId,
+  };
 
   const peekNextFallbackCandidate =
     async (): Promise<CandidateConfig | null> => {
@@ -635,9 +652,11 @@ export async function runTaskInAgentRuntime(params: {
       while (remainingFallbackIds.length > 0) {
         const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
           callerAgentId: policy?.callerAgentId,
+          scopeKey: policy?.scopeKey,
           remainingCandidateIds: remainingFallbackIds,
           assignedAgentIds: policy?.assignedAgentIds,
           plannedDispatchCount: currentPlannedDispatchCount,
+          failedAgentId: currentCandidate?.agentId,
         });
         remainingFallbackIds = claimed.remainingCandidateIds;
         currentPlannedDispatchCount = claimed.dispatchCount;
@@ -652,6 +671,29 @@ export async function runTaskInAgentRuntime(params: {
           continue;
         }
         try {
+          const nextEphemeralCredentials =
+            policy?.ephemeralCredentialsByAgentId?.[nextAgent.id] ??
+            params.ephemeralCredentials;
+          const nextCredentials = await preflightAgentRuntimeCredentials({
+            runtime: nextRuntime,
+            organizationId: params.organizationId,
+            userId: params.actor.kind === "user" ? params.actor.id : null,
+            ephemeralCredentials: nextEphemeralCredentials,
+          });
+          if (
+            nextCredentials.missing.length > 0 ||
+            nextCredentials.misconfigured.length > 0
+          ) {
+            continue;
+          }
+          const nextModelReady = await canLaunchAgentRuntimeModel({
+            runtime: nextRuntime,
+            agent: nextAgent,
+            actor: params.actor,
+          });
+          if (!nextModelReady) {
+            continue;
+          }
           const tiers = await organizationAgentRuntimeTiers(
             params.organizationId,
           );
@@ -662,6 +704,9 @@ export async function runTaskInAgentRuntime(params: {
           });
           prefetchedFallback = {
             agentId: nextAgent.id,
+            agentName: nextAgent.name,
+            agentType: nextAgent.agentType ?? undefined,
+            labels: nextAgent.labels,
             runtime: nextRuntime,
             limits: nextLimits,
             modelId: nextAgent.modelId,
@@ -672,14 +717,6 @@ export async function runTaskInAgentRuntime(params: {
       }
       return null;
     };
-
-  let currentCandidate: CandidateConfig | null = {
-    agentId: params.agentId,
-    runtime: params.runtime,
-    limits: params.limits,
-    modelId: params.modelId,
-    llmApiKeyId: params.llmApiKeyId,
-  };
   let lastError: unknown;
   let hasPriorAttempt = false;
   let anySessionLaunched = false;
@@ -799,6 +836,18 @@ export async function runTaskInAgentRuntime(params: {
     prefetchedFallback = null;
     currentCandidate = nextCandidate;
     await A2ATaskModel.updateAgentId(params.taskId, currentCandidate.agentId);
+    if (currentCandidate.agentName) {
+      const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
+        currentCandidate.agentId,
+      );
+      updateActiveChatSpanAgent({
+        agentId: currentCandidate.agentId,
+        agentName: currentCandidate.agentName,
+        agentType: currentCandidate.agentType,
+        labels: currentCandidate.labels,
+        teams,
+      });
+    }
   }
 
   if (!anySessionLaunched) {

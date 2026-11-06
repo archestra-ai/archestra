@@ -176,6 +176,18 @@ describe("buildCurlExample", () => {
     expect(example).toContain('"input": "Hello!"');
   });
 
+  it("uses Responses for any provider's model published as Responses only", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "azure:gpt-5.5-pro",
+      supportedEndpoints: ["/responses"],
+    });
+    expect(example).toContain(`curl "${base}/unified-model/responses"`);
+  });
+
   it("asks for a pool on chat completions even when its name looks like a Responses model", () => {
     const example = buildCurlExample({
       connectionBaseUrl: base,
@@ -187,6 +199,25 @@ describe("buildCurlExample", () => {
     });
     expect(example).toContain(`curl "${base}/unified-model/chat/completions"`);
     expect(example).toContain('"model": "openai:gpt-5.4-codex"');
+  });
+
+  it("calls the endpoint it is told to for auto routing", () => {
+    const params = {
+      connectionBaseUrl: base,
+      target: { kind: "model-router" },
+      keyType: "standard",
+      keyValue: key,
+      model: "auto",
+    } as const;
+    expect(
+      buildCurlExample({ ...params, routerEndpoint: "chat/completions" }),
+    ).toContain(`curl "${base}/unified-model/chat/completions"`);
+    const responses = buildCurlExample({
+      ...params,
+      routerEndpoint: "responses",
+    });
+    expect(responses).toContain(`curl "${base}/unified-model/responses"`);
+    expect(responses).toContain('"model": "auto"');
   });
 
   it("uses the Perplexity Agent API for vendor-prefixed models", () => {

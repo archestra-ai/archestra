@@ -69,9 +69,9 @@ export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =
 export const ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS =
   "archestra.usage.cache_creation.1h_input_tokens";
 // Output tokens spent on reasoning / extended thinking. Per the GenAI semconv this
-// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI
-// (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for providers that
-// do not break reasoning tokens out separately.
+// value is a subset of gen_ai.usage.output_tokens. Reported by OpenAI-wire
+// providers (reasoning_tokens) and Gemini (thoughtsTokenCount); unset for
+// providers that do not break reasoning tokens out separately.
 export const ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS =
   "gen_ai.usage.reasoning.output_tokens";
 
@@ -104,6 +104,16 @@ export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
 export const ATTR_ARCHESTRA_AGENT_LABEL_PREFIX = "archestra.agent.label.";
+// Subagent failover provenance on chat spans when in-place runtime failover
+// switches a detached run from its initially claimed primary subagent to a
+// fallback subagent. The OTEL semantic-convention registry has no failover
+// provenance attributes, so these live under `archestra.subagent.*`.
+export const ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_ID =
+  "archestra.subagent.initial_agent_id";
+export const ATTR_ARCHESTRA_SUBAGENT_INITIAL_AGENT_NAME =
+  "archestra.subagent.initial_agent_name";
+export const ATTR_ARCHESTRA_SUBAGENT_FAILOVER_COUNT =
+  "archestra.subagent.failover_count";
 // Team metadata. Teams are an Archestra concept with no OTEL semantic-convention
 // registry equivalent, so the custom `archestra.<scope>.team.*` namespace is
 // used, where scope is the principal the teams belong to (`agent` or `user`). A
@@ -168,6 +178,10 @@ export function setAgentAttributes(span: Span, agent: SpanAgentInfo): void {
   }
 }
 
+export function teamLabelKeyPrefix(scope: TeamScope): string {
+  return `archestra.${scope}.team.label.`;
+}
+
 /**
  * Set team span attributes for a principal under `archestra.<scope>.team.*`:
  * `.ids` and `.names` (array-valued, since a principal can belong to multiple
@@ -178,10 +192,17 @@ export function setTeamAttributes(
   span: Span,
   teams: SpanTeamInfo[] | null | undefined,
   scope: TeamScope,
+  options?: { writeEmpty?: boolean },
 ): void {
-  if (!teams || teams.length === 0) return;
-
   const base = `archestra.${scope}.team`;
+  if (!teams || teams.length === 0) {
+    if (options?.writeEmpty) {
+      span.setAttribute(`${base}.ids`, []);
+      span.setAttribute(`${base}.names`, []);
+    }
+    return;
+  }
+
   span.setAttribute(
     `${base}.ids`,
     teams.map((team) => team.id),
@@ -201,8 +222,9 @@ export function setTeamAttributes(
       valuesByKey.set(label.key, values);
     }
   }
+  const labelPrefix = teamLabelKeyPrefix(scope);
   for (const [key, values] of valuesByKey) {
-    span.setAttribute(`${base}.label.${key}`, [...values]);
+    span.setAttribute(`${labelPrefix}${key}`, [...values]);
   }
 }
 

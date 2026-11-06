@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -421,7 +422,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Who is using it");
+    await view("Tokens by person");
     await within(await screen.findByRole("table")).findByText("Example User A");
     await split("Model");
     fireEvent.click(
@@ -511,7 +512,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Who is using it");
+    await view("Tokens by person");
     const identity = await within(await screen.findByRole("table")).findByText(
       "Example User C with a long identity",
     );
@@ -622,7 +623,9 @@ describe("OrganizationCostsPage", () => {
         ?.searchParams.get("groupBy"),
     ).toBe("day,teamId,model");
 
-    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "CSV" }));
     expect(files[0]?.name).toMatch(
       /^costs-by-team-and-model-last-hour-\d{4}-\d{2}-\d{2}\.csv$/,
     );
@@ -632,6 +635,71 @@ describe("OrganizationCostsPage", () => {
       "Platform,model-small,4,400,40,0,0,440,1,0",
       "Research,model-small,2,200,20,0,0,220,0.5000,0",
     ]);
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "JSON" }));
+    expect(files[1]?.name).toMatch(
+      /^costs-by-team-and-model-last-hour-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+    expect(JSON.parse((await files[1]?.blob.text()) ?? "")).toEqual([
+      expect.objectContaining({
+        Team: "Research",
+        Model: "model-large",
+        Requests: 4,
+        "Billed spend (USD)": 8,
+      }),
+      expect.objectContaining({ Team: "Platform", Model: "model-small" }),
+      expect.objectContaining({
+        Team: "Research",
+        Model: "model-small",
+        "Billed spend (USD)": 0.5,
+      }),
+    ]);
+  });
+
+  it("breaks each agent's usage down by person, keeping requests without a person", async () => {
+    llmUsage = [
+      {
+        day: "2026-01-01",
+        agentId: "agent-triage",
+        agentName: "Support triage",
+        userId: "user-ada",
+        userName: "Ada Lovelace",
+        ...usage({ requests: 3 }),
+      },
+      {
+        day: "2026-01-01",
+        agentId: "agent-triage",
+        agentName: "Support triage",
+        userId: null,
+        userName: null,
+        ...usage({ requests: 1 }),
+      },
+      {
+        day: "2026-01-01",
+        agentId: "agent-review",
+        agentName: "Code review",
+        userId: "user-ada",
+        userName: "Ada Lovelace",
+        ...usage({ requests: 2 }),
+      },
+    ];
+    search = new URLSearchParams({ chart: "table" });
+    show();
+    await view("Tokens by agent and person");
+    await waitFor(() =>
+      expect(
+        requests
+          .find((url) => url.pathname.endsWith("/llm-usage"))
+          ?.searchParams.get("groupBy"),
+      ).toBe("day,agentId,userId"),
+    );
+    expect(
+      screen.getByRole("button", { name: /^split by Person/ }),
+    ).toBeInTheDocument();
+    expect(await screen.findAllByText("Ada Lovelace")).not.toHaveLength(0);
+    expect(screen.getAllByText("No person recorded")).not.toHaveLength(0);
+    expect(screen.getAllByText("Support triage")).not.toHaveLength(0);
   });
 
   it("renders each selected entity in one reusable table", async () => {
@@ -756,7 +824,7 @@ describe("OrganizationCostsPage", () => {
     ];
     show();
     await screen.findAllByText("$8.25");
-    await view("Skills by reach");
+    await view("Skill activations by skill");
     expect(
       await within(await screen.findByRole("table")).findByText(
         "PDF Extraction",
@@ -841,6 +909,17 @@ describe("OrganizationCostsPage", () => {
           url.searchParams.get("timeframe") === "24h",
       ),
     ).toBe(true);
+    // The drill-down cannot split, so presets with a split are not offered.
+    fireEvent.keyDown(screen.getByRole("button", { name: /^View / }), {
+      key: "Enter",
+    });
+    expect(
+      await screen.findByRole("menuitem", { name: "Tokens by person" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Tokens by agent and person" }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Clear model filter" }));
     expect(
       await screen.findByRole("button", { name: "Explore example/model+a" }),

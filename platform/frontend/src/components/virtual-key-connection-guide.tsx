@@ -4,6 +4,7 @@ import {
   E2eTestId,
   isModelRouterSupportedProvider,
   PROVIDER_MODEL_TIERS,
+  PROVIDERS_REQUIRING_BASE_URL,
   providerSupportsChat,
   requiresPerplexityAgentApi,
   type SupportedProvider,
@@ -23,6 +24,12 @@ import {
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
+import {
+  AutoModelField,
+  AutoRoutingLabelAction,
+  AutoRoutingUnavailableHint,
+} from "@/components/auto-routing-model-control";
+import { ProviderGroupedModelSelect } from "@/components/provider-grouped-model-select";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   terminalActionClass,
@@ -39,13 +46,15 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  AUTO_MODEL,
+  useAutoRoutingOffer,
+} from "@/components/use-auto-routing-offer";
 import {
   buildCurlExample,
   getImageExampleOperations,
@@ -99,7 +108,7 @@ export function VirtualKeyConnectionGuide({
   const isPassthrough = keyType === "passthrough";
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
-  // that provider's shared primary key.
+  // that provider's shared primary key, if that key is usable.
   const mappedProviderKeys = useMemo(() => {
     if (!includeFutureProviders) return explicitKeys;
     const mapped = new Set(explicitKeys.map((mapping) => mapping.provider));
@@ -108,7 +117,13 @@ export function VirtualKeyConnectionGuide({
       ...providerApiKeys
         .filter(
           (key) =>
-            key.isPrimary && key.userId === null && !mapped.has(key.provider),
+            key.isPrimary &&
+            key.userId === null &&
+            !key.subscriptionKind &&
+            !key.requiresReauthentication &&
+            (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+              !!key.baseUrl?.trim()) &&
+            !mapped.has(key.provider),
         )
         .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
     ];
@@ -419,6 +434,7 @@ export function RequestExample({
   initialModel,
   onModelChange,
   fixedModel,
+  offerAutoModel = false,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -454,6 +470,11 @@ export function RequestExample({
    * picker. It has no listed endpoints, so the request uses chat completions.
    */
   fixedModel?: string;
+  /**
+   * Offers auto routing's `auto` model beside the picker, or a link to set it
+   * up. Only the Unified Model API accepts `auto`.
+   */
+  offerAutoModel?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -522,6 +543,8 @@ export function RequestExample({
     supportedEndpoints: string[] | null | undefined;
     isImage: boolean;
     pool?: string;
+    provider?: SupportedProvider;
+    modelId?: string;
   }> = candidates
     .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
@@ -542,6 +565,8 @@ export function RequestExample({
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
       isImage: model.isImage,
+      provider: model.provider as SupportedProvider,
+      modelId: model.id,
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
@@ -562,6 +587,7 @@ export function RequestExample({
       value: defaultModel,
       supportedEndpoints: null,
       isImage: false,
+      provider: target.kind === "provider" ? target.provider : undefined,
     });
   }
 
@@ -582,14 +608,22 @@ export function RequestExample({
       ? pickedModel
       : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
   const selectedModel = allOptions.find((option) => option.value === model);
+  const autoRouting = useAutoRoutingOffer({
+    enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
+    routableModels: modelOptions,
+    modelsPending: isPending,
+  });
+  const [autoPicked, setAutoPicked] = useState(initialModel === AUTO_MODEL);
+  const isAuto = autoPicked && autoRouting.kind === "available";
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
-  const selectedImageOperation = selectedModel?.isImage
-    ? (imageOperations.find((operation) => operation === imageOperation) ??
-      imageOperations[0])
-    : undefined;
+  const selectedImageOperation =
+    !isAuto && selectedModel?.isImage
+      ? (imageOperations.find((operation) => operation === imageOperation) ??
+        imageOperations[0])
+      : undefined;
   const showImageOperationPicker =
-    selectedModel?.isImage && imageOperations.length > 1;
+    !isAuto && selectedModel?.isImage && imageOperations.length > 1;
 
   const example =
     model &&
@@ -598,8 +632,12 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model: selectedModel?.pool ?? model,
+      model: isAuto ? AUTO_MODEL : (selectedModel?.pool ?? model),
       isPool: !!selectedModel?.pool,
+      routerEndpoint:
+        isAuto && autoRouting.kind === "available"
+          ? autoRouting.endpoint
+          : undefined,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
@@ -668,52 +706,45 @@ export function RequestExample({
           )}
         >
           <div className="space-y-1.5">
-            <Label htmlFor="virtual-key-example-model">Model</Label>
-            <Select
-              value={model ?? ""}
-              onValueChange={(value) => {
-                setPickedModel(value);
-                onModelChange?.(value);
-              }}
-              disabled={isPending || allOptions.length === 0}
-            >
-              <SelectTrigger id="virtual-key-example-model" className="w-full">
-                <SelectValue
-                  placeholder={
-                    isPending
-                      ? "Loading models…"
-                      : "No models found for this key"
-                  }
+            {autoRouting.kind === "none" ? (
+              <Label htmlFor="virtual-key-example-model">Model</Label>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="virtual-key-example-model">Model</Label>
+                <AutoRoutingLabelAction
+                  offer={autoRouting}
+                  checked={isAuto}
+                  onCheckedChange={(checked) => {
+                    setAutoPicked(checked);
+                    if (checked) onModelChange?.(AUTO_MODEL);
+                    else if (model) onModelChange?.(model);
+                  }}
                 />
-              </SelectTrigger>
-              <SelectContent>
-                {pools.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>Model pools</SelectLabel>
-                    {pools.map((pool) => (
-                      <SelectItem
-                        key={pool.name}
-                        value={POOL_VALUE_PREFIX + pool.name}
-                        description={pool.description}
-                      >
-                        {pool.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-                <SelectGroup>
-                  {pools.length > 0 && modelOptions.length > 0 && (
-                    <SelectLabel>Models</SelectLabel>
-                  )}
-                  {modelOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.value}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            {usesCatalog && (
+              </div>
+            )}
+            {isAuto ? (
+              <AutoModelField id="virtual-key-example-model" />
+            ) : (
+              <ProviderGroupedModelSelect
+                id="virtual-key-example-model"
+                value={model ?? ""}
+                onValueChange={(value) => {
+                  setPickedModel(value);
+                  onModelChange?.(value);
+                }}
+                models={modelOptions}
+                pools={pools.map((pool) => ({
+                  value: POOL_VALUE_PREFIX + pool.name,
+                  name: pool.name,
+                  description: pool.description,
+                }))}
+                disabled={isPending || allOptions.length === 0}
+                placeholder={
+                  isPending ? "Loading models…" : "No models found for this key"
+                }
+              />
+            )}
+            {usesCatalog && !isAuto && (
               <p className="text-xs text-muted-foreground">
                 From your organization&apos;s model catalog. Your own key may
                 have access to different models.
@@ -751,6 +782,7 @@ export function RequestExample({
           )}
         </div>
       )}
+      {!fixedModel && <AutoRoutingUnavailableHint offer={autoRouting} />}
       {selectedImageOperation === "edit" && (
         <p className="text-xs text-muted-foreground">
           Save your input image as <InlineCode>edit.png</InlineCode> in the

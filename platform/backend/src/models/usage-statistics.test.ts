@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import McpToolCallModel from "./mcp-tool-call";
 import StatisticsModel from "./statistics";
 import UsageStatisticsModel from "./usage-statistics";
@@ -557,6 +558,111 @@ describe("UsageStatisticsModel.getLlmUsage", () => {
     expect(oneTeam.data.map((row) => [row.model, row.billedCost])).toEqual([
       ["gemini-pro", 0.5],
     ]);
+  });
+
+  test("splits each agent's usage by person, matching the Agents view", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    const grace = await makeUser({ name: "Grace Hopper" });
+    const alpha = await makeTeam(org.id, ada.id, { name: "Alpha" });
+    const beta = await makeTeam(org.id, ada.id, { name: "Beta" });
+    const llmProxy = await AgentModel.getOrgLlmProxy(org.id);
+    const legacyProfile = await makeAgent({
+      organizationId: org.id,
+      agentType: "profile",
+      name: "Legacy Profile",
+    });
+    // Shared with two teams: each request still counts once for the agent.
+    const triage = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      name: "Triage",
+      access: { teams: [alpha.id, beta.id] },
+    });
+    const call = (agentId: string, userId: string | null, cost: string) =>
+      makeInteraction(agentId, {
+        userId,
+        type: "anthropic:messages",
+        model: "claude-sonnet",
+        cost,
+        inputTokens: 10,
+        createdAt: DAY_1,
+      });
+    await call(triage.id, ada.id, "3");
+    await call(triage.id, ada.id, "1");
+    await call(triage.id, grace.id, "2");
+    await call(triage.id, null, "0.5");
+    // Legacy proxy traffic reports under the organization's LLM proxy.
+    await call(llmProxy.id, grace.id, "5");
+    await call(legacyProfile.id, grace.id, "7");
+
+    const [split, agents] = await Promise.all([
+      UsageStatisticsModel.getLlmUsage({
+        timeframe: RANGE,
+        organizationId: org.id,
+        pagination: PAGE,
+        groupBy: ["agentId", "userId"],
+      }),
+      StatisticsModel.getAgentStatistics({
+        timeframe: RANGE,
+        organizationId: org.id,
+      }),
+    ]);
+    expect(
+      split.data.map((row) => [
+        row.agentName,
+        row.userName ?? null,
+        row.requests,
+        row.billedCost,
+      ]),
+    ).toEqual([
+      [llmProxy.name, "Grace Hopper", 2, 12],
+      ["Triage", "Ada Lovelace", 2, 4],
+      ["Triage", "Grace Hopper", 1, 2],
+      ["Triage", null, 1, 0.5],
+    ]);
+    expect(split.data.map((row) => row.agentId)).not.toContain(
+      legacyProfile.id,
+    );
+
+    const splitByAgent = new Map<string, [number, number, number]>();
+    for (const row of split.data) {
+      const [requests, tokens, cost] = splitByAgent.get(row.agentId ?? "") ?? [
+        0, 0, 0,
+      ];
+      splitByAgent.set(row.agentId ?? "", [
+        requests + row.requests,
+        tokens + row.totalTokens,
+        cost + row.billedCost,
+      ]);
+    }
+    expect(Object.fromEntries(splitByAgent)).toEqual(
+      Object.fromEntries(
+        agents.map((agent) => [
+          agent.agentId,
+          [agent.requests, agent.totalTokens, agent.cost],
+        ]),
+      ),
+    );
+    expect(agents.find((agent) => agent.agentId === triage.id)).toMatchObject({
+      requests: 4,
+      teamName: "Alpha, Beta",
+    });
+
+    const ownUsage = await UsageStatisticsModel.getLlmUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: PAGE,
+      groupBy: ["agentId", "userId"],
+      userId: ada.id,
+    });
+    expect(ownUsage.data.map((row) => row.userId)).toEqual([ada.id]);
   });
 
   test("team rows add up to the Teams view", async ({

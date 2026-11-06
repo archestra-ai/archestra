@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  isClaudeCodeRuntimeCommand,
   isDefaultBrandedAppName,
   providerDisplayNames,
   type ResolvedAgentRuntimeTiers,
@@ -24,7 +25,6 @@ import {
   AgentWorkspaceModel,
   LimitModel,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -37,7 +37,6 @@ import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identit
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
-import { modelSyncService } from "@/services/model-sync";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
@@ -58,6 +57,7 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { ensureProviderApiKeySupportsSelectedModel } from "./preflight";
 import { agentRunUrl } from "./run-handle";
 import {
   AGENT_RUNTIME_CPU_LIMIT_ENV,
@@ -250,9 +250,9 @@ export async function buildAgentRunLaunchSpec(params: {
     provider: llm.selectedProvider,
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
-  const isClaudeCodeRuntime =
-    params.runtime.command?.[0] === "archestra-claude-code" ||
-    params.runtime.command?.[0] === "archestra-claude-code-runtime";
+  const isClaudeCodeRuntime = isClaudeCodeRuntimeCommand(
+    params.runtime.command?.[0],
+  );
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
@@ -266,17 +266,17 @@ export async function buildAgentRunLaunchSpec(params: {
       "A personal Claude subscription requires a run acting as a signed-in user.",
     );
   }
-  const claudeCodeToken =
-    usesClaudeCodeSubscription && actorUserId
-      ? await claudeCodeAccountManager.requireConnection({
-          runtime: params.runtime,
-          userId: actorUserId,
-          runtimeScope: params.runtimeScope,
-        })
-      : undefined;
-  // Claude Code supplies its own OAuth token. A personal passthrough key
-  // authenticates the actor to the proxy without storing that token as a
-  // provider key, so subscription requests retain usage and run attribution.
+  if (usesClaudeCodeSubscription && actorUserId) {
+    await claudeCodeAccountManager.requireConnection({
+      runtime: params.runtime,
+      userId: actorUserId,
+      runtimeScope: params.runtimeScope,
+    });
+  }
+  // Claude Code subscription runs receive a one-off per-run passthrough virtual
+  // key in CLAUDE_CODE_OAUTH_TOKEN (and X-Archestra-Virtual-Key); the proxy
+  // swaps it for the user's connected Claude subscription token server-side so
+  // the raw OAuth token never enters the runtime pod.
   const virtualKey = usesClaudeCodeSubscription
     ? await VirtualApiKeyModel.create({
         organizationId: params.organizationId,
@@ -504,7 +504,9 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
-    ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
+    ...(usesClaudeCodeSubscription
+      ? { CLAUDE_CODE_OAUTH_TOKEN: virtualKeyValue }
+      : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
@@ -721,35 +723,18 @@ async function createProviderBackedVirtualKey(params: {
     );
   }
 
-  if (requiredSubscription && params.requiredSubscriptionKind) {
-    // The runtime uses the actor's subscription, which may have been synced
-    // before the selected model was released (or before another user's key).
-    // Refresh that connection rather than bypassing the router's model links.
-    const hasSelectedModel = async () => {
-      const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-        providerApiKey.id,
-      );
-      return models.some(
-        (model) =>
-          model.provider === params.provider &&
-          model.modelId === params.model &&
-          ModelModel.supportsTextChat(model),
-      );
-    };
-    if (!(await hasSelectedModel())) {
-      await modelSyncService.syncModelsForApiKey({
-        apiKeyId: providerApiKey.id,
-        provider: providerApiKey.provider,
-        apiKeyValue: requiredSubscription.apiKeyValue,
-      });
-      if (!(await hasSelectedModel())) {
-        throw new ApiError(
-          409,
-          `The selected model "${params.model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label}. Choose a model supported by that connection.`,
-        );
-      }
-    }
-  }
+  await ensureProviderApiKeySupportsSelectedModel({
+    providerApiKey,
+    provider: params.provider,
+    model: params.model,
+    subscriptionCredential:
+      requiredSubscription && params.requiredSubscriptionKind
+        ? {
+            kind: params.requiredSubscriptionKind,
+            apiKeyValue: requiredSubscription.apiKeyValue,
+          }
+        : null,
+  });
 
   return VirtualApiKeyModel.create({
     organizationId: params.organizationId,

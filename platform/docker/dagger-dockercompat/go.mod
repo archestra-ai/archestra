@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/containerd/log v0.1.0 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/mount v0.3.5 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect

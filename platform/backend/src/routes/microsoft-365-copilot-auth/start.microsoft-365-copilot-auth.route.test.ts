@@ -3,28 +3,27 @@ import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
-vi.mock("@/cache-manager");
+// The rate limiter uses cacheManager: start the real cache on this file's
+// test database, whose per-test reset clears its entries.
+setupTestCacheManager();
 
 // There is no community client id for the Entra device flow, so the config
 // default is empty; the routes 400 without one. Give the tests a configured id,
 // and pin the tenant/auth host so a developer's local .env (which the test
 // setup loads) can't leak into the asserted Entra URLs.
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      "microsoft-365-copilot": {
-        clientId: "test-entra-client-id",
-        tenantId: "organizations",
-        authBaseUrl: "https://login.microsoftonline.com",
-      },
+overrideConfig({
+  llm: {
+    "microsoft-365-copilot": {
+      clientId: "test-entra-client-id",
+      tenantId: "organizations",
+      authBaseUrl: "https://login.microsoftonline.com",
     },
-  }),
-);
+  },
+});
 
 describe("POST /api/microsoft-365-copilot-auth/device/start", () => {
   let app: FastifyInstanceWithZod;

@@ -516,6 +516,7 @@ export class A2AManager {
           runtime,
           agent,
           actor,
+          ephemeralCredentials: systemParams?.ephemeralCredentials,
         });
       }
 
@@ -688,6 +689,7 @@ export class A2AManager {
           agentId,
           agentType: agent.agentType ?? undefined,
           sessionId,
+          labels: agent.labels,
           teams,
           userTeams,
           routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,

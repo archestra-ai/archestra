@@ -681,7 +681,7 @@ export default class ResourcePermissionPolicyModel {
       SELECT CASE
         WHEN bool_or(audience_entry->'subject'->>'type' IN ('organization', 'role')) THEN 'organization'
         WHEN bool_or(audience_entry->'subject'->>'type' = 'team') THEN 'team'
-        WHEN bool_or(audience_entry->'subject'->>'type' = 'serviceAccount'
+        WHEN bool_or(audience_entry->'subject'->>'type' IN ('serviceAccount', 'oauthClient')
           OR (audience_entry->'subject'->>'type' = 'user'
             AND audience_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)) THEN 'user'
       END

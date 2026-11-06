@@ -30,4 +30,5 @@ const GROUPS: Array<{ label: string; types: PermissionSubject["type"][] }> = [
   { label: "Teams", types: ["team"] },
   { label: "People", types: ["user"] },
   { label: "Service accounts", types: ["serviceAccount"] },
+  { label: "OAuth clients", types: ["oauthClient"] },
 ];

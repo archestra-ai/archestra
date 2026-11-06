@@ -1,58 +1,51 @@
 import type { InteractionSummary } from "./session-timeline";
 
 /**
- * The time range a page of the session trace covers, in epoch ms: from its
- * oldest request's start to the next page's oldest request's start. Adjacent
- * pages share that boundary exactly, so a record made while the boundary
- * request ran lands on one page, not neither. Null ends are open: the first
- * page has no start, the last no end.
+ * Where a page's records end, in epoch ms: the next page's oldest request's
+ * start, or without it this page's last request. Null on the last page.
  */
-export function pageWindow({
-  offset,
+export function pageEndsAt({
   requests,
   nextRequest,
   hasNextPage,
 }: {
-  offset: number;
   /** This page's requests, oldest first. */
   requests: InteractionSummary[];
   /** The next page's oldest request, once read. */
   nextRequest: InteractionSummary | null;
   hasNextPage: boolean;
-}): { startsAt: number | null; endsAt: number | null } {
-  const first = requests[0];
-  return {
-    startsAt: offset > 0 && first ? requestStart(first) : null,
-    endsAt: nextRequest
-      ? requestStart(nextRequest)
-      : // Without the next page's head, this page's last request bounds it.
-        hasNextPage && requests.length > 0
-        ? Math.max(...requests.map((row) => Date.parse(row.createdAt)))
-        : null,
-  };
+}): number | null {
+  if (nextRequest) {
+    return (
+      Date.parse(nextRequest.createdAt) -
+      Math.max(0, nextRequest.durationMs ?? 0)
+    );
+  }
+  return hasNextPage && requests.length > 0
+    ? Math.max(...requests.map((row) => Date.parse(row.createdAt)))
+    : null;
 }
 
 /**
- * A window as the logs APIs take it. They include both ends, so the end
- * stops a millisecond (their precision) short of the shared boundary, which
- * belongs to the next page.
+ * The range of another session's records (a handed-off run's) that join a
+ * page, as the logs APIs take it. Pages split the session's requests by
+ * `createdAt`, so the range does too: from this page's oldest request to the
+ * next page's, which never runs backwards however requests overlap. Adjacent
+ * pages share the boundary; the APIs include both ends, so only a record
+ * stored at that exact instant shows on both.
  */
-export function windowQuery(window: {
-  startsAt: number | null;
-  endsAt: number | null;
+export function mergedRecordsQuery({
+  offset,
+  requests,
+  nextRequest,
+}: {
+  offset: number;
+  requests: InteractionSummary[];
+  nextRequest: InteractionSummary | null;
 }): { startDate?: string; endDate?: string } {
+  const first = requests[0];
   return {
-    ...(window.startsAt !== null
-      ? { startDate: new Date(window.startsAt).toISOString() }
-      : {}),
-    ...(window.endsAt !== null
-      ? { endDate: new Date(window.endsAt - 1).toISOString() }
-      : {}),
+    ...(offset > 0 && first ? { startDate: first.createdAt } : {}),
+    ...(nextRequest ? { endDate: nextRequest.createdAt } : {}),
   };
-}
-
-// ===
-
-function requestStart(row: InteractionSummary): number {
-  return Date.parse(row.createdAt) - Math.max(0, row.durationMs ?? 0);
 }

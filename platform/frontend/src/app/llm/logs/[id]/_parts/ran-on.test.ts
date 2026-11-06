@@ -178,6 +178,8 @@ describe("buildRanOn", () => {
         request("c1", 5, CLIENT),
         request("a1", 15, RUN),
         request("a2", 25, RUN),
+        // The client checks on the runs meanwhile.
+        request("c-poll", 25.5, CLIENT),
         request("b1", 26, "agent-run-2"),
         request("b2", 35, "agent-run-2"),
         request("c2", 50, CLIENT),
@@ -219,11 +221,20 @@ describe("buildRanOn", () => {
       [
         ["client", [], 1],
         ["runtime", [RUN_ID], 1],
-        ["runtime", [RUN_ID, "run-b"], 2],
+        ["runtime", [RUN_ID, "run-b"], 3],
         ["runtime", ["run-b"], 1],
         ["client", [], 1],
       ],
     );
+    // Every request counts in exactly one stretch.
+    expect(view?.segments.reduce((n, s) => n + s.requests, 0)).toBe(7);
+    // Each knob sits on its own run's rows.
+    expect(Object.fromEntries(view?.knobs ?? [])).toEqual({
+      "request:a1": { kind: "push", edge: "top" },
+      "request:b1": { kind: "push", edge: "top" },
+      "request:a2": { kind: "pull", edge: "bottom" },
+      "request:b2": { kind: "pull", edge: "bottom" },
+    });
   });
 
   it("ends a run's own strip at a final pull without a client placeholder", () => {

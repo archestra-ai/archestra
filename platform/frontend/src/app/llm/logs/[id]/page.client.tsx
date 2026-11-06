@@ -52,7 +52,7 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
-import { pageWindow, windowQuery } from "./_parts/page-window";
+import { mergedRecordsQuery, pageEndsAt } from "./_parts/page-window";
 import { buildRanOn, type SessionHandoffs } from "./_parts/ran-on";
 import type { RanOnParties } from "./_parts/ran-on-strip";
 import { SessionFacts } from "./_parts/session-facts";
@@ -145,13 +145,11 @@ export default function SessionDetailPage({
     [interactionsResponse],
   );
   const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
-  const pageRange = pageWindow({
-    offset,
+  const pageEnd = pageEndsAt({
     requests: interactions,
     nextRequest,
     hasNextPage,
   });
-  const pageEndsAt = pageRange.endsAt;
   const requestsReady =
     interactionsResponse !== undefined &&
     !interactionsLoading &&
@@ -242,7 +240,7 @@ export default function SessionDetailPage({
   const mergedRuns = handoffs?.handedTo ?? [];
   const handedOff = useHandedOffRecords({
     sessionIds: mergedRuns.map((run) => run.llmSessionId),
-    ...windowQuery(pageRange),
+    ...mergedRecordsQuery({ offset, requests: interactions, nextRequest }),
   });
   const failedRuns = mergedRuns.filter((run) =>
     handedOff.failedSessionIds.includes(run.llmSessionId),
@@ -522,7 +520,7 @@ export default function SessionDetailPage({
           >
             <GuardrailsProvider
               timeline={timeline}
-              pageEndsAt={pageEndsAt}
+              pageEndsAt={pageEnd}
               sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >

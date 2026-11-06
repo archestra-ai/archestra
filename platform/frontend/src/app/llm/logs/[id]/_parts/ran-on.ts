@@ -180,17 +180,9 @@ function clientView({
   const segments = edges.map((edge, i): RanOnSegment => {
     const next = edges[i + 1];
     const until = next ? next.t : Number.POSITIVE_INFINITY;
-    const sessions = new Set(
-      edge.runIds.flatMap((runId) => sessionOfRun.get(runId) ?? []),
-    );
-    const rows = requests.filter(
-      (s) =>
-        s.start >= edge.t &&
-        s.start < until &&
-        (sessions.size > 0
-          ? s.row.sessionId !== null && sessions.has(s.row.sessionId)
-          : !runtimeKeys.has(s.key)),
-    );
+    // Every request of the stretch, the client's checks on a run included,
+    // so each request and its cost counts in exactly one stretch.
+    const rows = requests.filter((s) => s.start >= edge.t && s.start < until);
     return {
       key: `segment-${i}`,
       holder: edge.runIds.length > 0 ? "runtime" : "client",
@@ -217,7 +209,11 @@ function clientView({
     clientRequests: requests.length - runtimeRows.length,
     runtimeRequests: runtimeRows.length,
     runtimeKeys,
-    knobs: knobsFor({ moves, runtimeSpans: runtimeRows }),
+    knobs: knobsFor({
+      moves,
+      runtimeSpans: runtimeRows,
+      sessionOfRun: (runId) => sessionOfRun.get(runId),
+    }),
   };
 }
 
@@ -322,7 +318,11 @@ function runtimeView({
     clientRequests: 0,
     runtimeRequests: requests.length,
     runtimeKeys: new Set(spans.map((s) => s.key)),
-    knobs: knobsFor({ moves, runtimeSpans: requests }),
+    knobs: knobsFor({
+      moves,
+      runtimeSpans: requests,
+      sessionOfRun: () => undefined,
+    }),
   };
 }
 
@@ -333,16 +333,23 @@ function runtimeView({
 function knobsFor({
   moves,
   runtimeSpans,
+  sessionOfRun,
 }: {
   moves: RanOnMove[];
   runtimeSpans: RequestSpan[];
+  /** A run's own session, when several runs share the trace. */
+  sessionOfRun: (runId: string) => string | undefined;
 }): RanOnView["knobs"] {
   const knobs: RanOnView["knobs"] = new Map();
   for (const move of moves) {
+    const session = sessionOfRun(move.runId);
+    const own = session
+      ? runtimeSpans.filter((s) => s.row.sessionId === session)
+      : runtimeSpans;
     const span =
       move.kind === "pull"
-        ? runtimeSpans.filter((s) => s.end <= move.at).at(-1)
-        : runtimeSpans.find((s) => s.start >= move.at);
+        ? own.filter((s) => s.end <= move.at).at(-1)
+        : own.find((s) => s.start >= move.at);
     if (span && !knobs.has(span.key)) {
       knobs.set(span.key, {
         kind: move.kind,

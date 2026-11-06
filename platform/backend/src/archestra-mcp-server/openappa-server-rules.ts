@@ -43,7 +43,7 @@ const registry = defineArchestraTools([
     title: "Read an MCP server's Guardrails rules",
     annotations: { readOnlyHint: true },
     description:
-      "Read one MCP server's own Guardrails rules: its file in the Git sync policy repository (`path`, e.g. mcp/<tool prefix>.toml), as merged at the accepted commit, or null when it has none yet, whether appa.toml includes it, the server's tools, and the rules the organization's own policy keeps for those tools (`rootRules`), which win over the file's. Anyone who may open the server in the MCP registry may read them; `canEdit` says whether the caller may propose a change, which takes edit access to the server in the registry, not a Guardrails permission. Use this, not get_guardrails_policy, when the user asks to change one server's rules.",
+      "Read one MCP server's own Guardrails rules: its file in the Git sync policy repository (`path`, e.g. mcp/<tool prefix>.toml), as merged at the accepted commit, or null when it has none yet, whether appa.toml includes it (by name or through mcp/*.toml), the server's tools, the rules the organization's own policy keeps for those tools (`rootRules`), which win over the file's, and the organization's authorities and sanitizers the file can use but not declare (`organizationHelpers`: names, tags and permits). Anyone who may open the server in the MCP registry may read them; `canEdit` says whether the caller may propose a change, which takes edit access to the server in the registry, not a Guardrails permission. Use this, not get_guardrails_policy, when the user asks to change one server's rules.",
     schema: z.strictObject({ mcpServerId: ServerSchema }),
     handler: ({ args, context }) =>
       answered(async () => {
@@ -58,7 +58,7 @@ const registry = defineArchestraTools([
     title: "Preview an MCP server's Guardrails rules change",
     annotations: { readOnlyHint: true },
     description:
-      "Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml must also include the file for the first time. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only this server's tools, and the file holds no authority or sanitizer; root rules for the same tool keep priority. Explain what the change does to agents, then ask the user before proposing it.",
+      "Check a proposed rules file for one MCP server and return its `diff`, plus `rootChange` when appa.toml does not include server files yet and gains `mcp/*.toml`, once for every server. The whole organization policy is validated with the file folded in, as Git sync will compose it after the merge. This saves and opens nothing. Pass the complete file and `expectedCommit` from get_guardrails_server_rules. Rules may name only this server's tools, annotators are named `<tool prefix>.<name>`, and the file declares no authority or sanitizer: it reaches the organization's through an attention mark an authority permits, or a tag, and a tool_output sanitizer also needs the tool under [policy.deployment] confined_results. Git sync refuses any other file, whoever merged it. Root rules for the same tool keep priority. Explain what the change does to agents, then ask the user before proposing it.",
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       content: FileSchema,
@@ -81,7 +81,7 @@ const registry = defineArchestraTools([
     shortName: "propose_guardrails_server_rules_change",
     title: "Propose an MCP server's Guardrails rules change",
     description:
-      "Open a pull request (a merge request on GitLab) on the policy repository that changes this one MCP server's rules file, and adds it to appa.toml's include list the first time. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until a reviewer merges the request and Git sync pulls it; the repository's reviews and code owners decide. Give the user the link from `url`.",
+      "Open a pull request (a merge request on GitLab) on the policy repository that changes this one MCP server's rules file, and adds `mcp/*.toml` to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until a reviewer merges the request and Git sync pulls it; the repository's reviews and code owners decide. Give the user the link from `url`.",
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       content: FileSchema,

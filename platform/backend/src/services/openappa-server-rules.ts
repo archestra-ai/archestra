@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  isBuiltInCatalogId,
-  parseFullToolName,
-  slugifyMcpServerName,
-} from "@archestra/shared";
+import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
@@ -11,11 +7,12 @@ import UserModel from "@/models/user";
 import { catalogToolPrefixes } from "@/openappa/batteries";
 import {
   asRecord,
+  governsServerTool,
   includedFileErrors,
+  includesServerRules,
   parsePolicyToml,
-  repositoryIncludePaths,
+  SERVER_RULES_INCLUDE,
   serverRulesPath,
-  toolEntries,
 } from "@/openappa/policy-text";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -32,7 +29,8 @@ import { ApiError } from "@/types";
 
 /**
  * An MCP server's own Guardrails rules, kept in its file in the Git sync
- * repository (`mcp/<tool prefix>.toml`) and included by `appa.toml`.
+ * repository (`mcp/<tool prefix>.toml`) and included by `appa.toml`, by name
+ * or with every server's through `mcp/*.toml`.
  *
  * Archestra decides only who may propose a change: whoever may edit the
  * server in the MCP registry, by the same rule as the registry's own edit.
@@ -64,7 +62,7 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     guardrailsPolicyService.get(params.organizationId),
     OpenAppaGithubSyncModel.find(params.organizationId),
   ]);
-  const included = repositoryIncludePaths(root.content).includes(server.path);
+  const included = includesServerRules(root.content, server.path);
   const accepted = await acceptedFile({
     organizationId: params.organizationId,
     path: server.path,
@@ -82,9 +80,10 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     repository: repositoryView(source),
     tools: server.tools,
     // The organization's own rules for these tools come first, so they win.
-    rootRules: toolEntries(root.content)
-      .filter((entry) => governs(server.prefix, entry.name))
-      .map((entry) => entry.name),
+    rootRules: rootToolRules(root.content)
+      .filter((rule) => governsServerTool(server.prefix, rule))
+      .map((rule) => rule.name),
+    organizationHelpers: organizationHelpers(root.content),
     instruction: !repositoryView(source)
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
@@ -126,7 +125,7 @@ export async function proposeServerRulesChange(
     params.summary.trim(),
     "",
     `Requested in Archestra by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
-    `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds it to \`${change.source.path}\`'s include list` : ""}. It applies once merged and pulled by Git sync.`,
+    `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${SERVER_RULES_INCLUDE}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [
     {
@@ -313,20 +312,15 @@ async function checkedChange(
       409,
       "The policy repository moved on since these rules were read. Read them again.",
     );
+  // The same check Git sync makes on every commit, scope included.
   const shape = includedFileErrors(server.path, params.content);
   if (shape.length > 0) throw new ApiError(400, shape.join("\n"));
-  const outside = outOfScope(server.prefix, params.content);
-  if (outside.length > 0)
-    throw new ApiError(
-      400,
-      `${server.path} may hold only rules for ${server.name}'s tools, ${server.prefix}__*, and the annotators they use, named ${server.prefix}.<name>. Rename or remove: ${outside.join(", ")}`,
-    );
   const root = await guardrailsPolicyService.get(params.organizationId);
-  const rootChanged = !repositoryIncludePaths(root.content).includes(
-    server.path,
-  );
+  // A root that folds in no server's file gets them all at once: one review
+  // of `appa.toml`, and no server's later file needs another.
+  const rootChanged = !includesServerRules(root.content, server.path);
   const rootAfter = rootChanged
-    ? await withInclude(root.content, server.path)
+    ? await withInclude(root.content, SERVER_RULES_INCLUDE)
     : root.content;
   const before =
     (await acceptedFile({
@@ -363,36 +357,49 @@ async function checkedChange(
   };
 }
 
-/** Rule and helper names the file sets outside the server's own. */
-function outOfScope(prefix: string, content: string): string[] {
-  const policy = asRecord(parsePolicyToml(content)?.policy) ?? {};
-  const names = (kind: string) =>
+/** The root's own `[[policy.tool]]` entries, `server` qualifier included. */
+function rootToolRules(root: string): Array<Record<string, unknown>> {
+  const tools = asRecord(parsePolicyToml(root)?.policy)?.tool;
+  return (Array.isArray(tools) ? tools : []).flatMap((entry) => {
+    const rule = asRecord(entry);
+    return rule ? [rule] : [];
+  });
+}
+
+/**
+ * The organization's authorities and sanitizers, which a server's rules use
+ * but never declare: a rule reaches an authority through an attention mark
+ * it permits (`requires = { attention = [...] }`), or by its tags, and a
+ * sanitizer by its tags. A `tool_output` sanitizer also needs the tool under
+ * `[policy.deployment] confined_results`. Names, tags and permits only; the
+ * rest of the policy stays with those who may read it.
+ */
+function organizationHelpers(root: string) {
+  const policy = asRecord(parsePolicyToml(root)?.policy) ?? {};
+  const helpers = (kind: string) =>
     (Array.isArray(policy[kind]) ? policy[kind] : []).flatMap((entry) => {
-      const name = asRecord(entry)?.name;
-      return typeof name === "string" ? [name] : [];
+      const helper = asRecord(entry);
+      return helper && typeof helper.name === "string"
+        ? [
+            {
+              name: helper.name,
+              ...(helper.on !== undefined ? { on: helper.on } : {}),
+              tags: Array.isArray(helper.tags) ? helper.tags : [],
+              permits: helper.permits ?? {},
+            },
+          ]
+        : [];
     });
-  return [
-    ...names("tool").filter((name) => !governs(prefix, name)),
-    ...names("annotator").filter((name) => !name.startsWith(`${prefix}.`)),
-    // An authority or a sanitizer applies to every call its scope covers, not
-    // only to this server's, so a server's own file holds neither.
-    ...["authority", "sanitizer"].flatMap((kind) =>
-      names(kind).map((name) => `[[policy.${kind}]] ${name}`),
-    ),
-  ];
+  return {
+    authorities: helpers("authority"),
+    sanitizers: helpers("sanitizer"),
+  };
 }
 
-/** Whether a rule name governs one of this prefix's tools. */
-function governs(prefix: string, name: string): boolean {
-  const bare = name.split("(", 1)[0] ?? name;
-  // Split as the runtime splits a tool name: at its last separator.
-  return parseFullToolName(bare).serverName === prefix;
-}
-
-async function withInclude(root: string, path: string): Promise<string> {
+async function withInclude(root: string, entry: string): Promise<string> {
   const native = await import("@archestra/openappa-rs");
   const edited = await native.editOpenappaPolicy(root, [
-    { kind: "addInclude", entry: path },
+    { kind: "addInclude", entry },
   ]);
   if (edited.content === undefined || edited.content === null)
     throw new ApiError(400, edited.errors.join("\n"));

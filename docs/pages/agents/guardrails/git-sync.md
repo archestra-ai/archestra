@@ -49,25 +49,26 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Let Each Server's Team Own Its Rules
 
-The people who can edit an MCP server can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. The server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`, and `appa.toml` includes it:
+The people who can edit an MCP server can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
 
 ```toml
 include = [
   "batteries/archestra/appa.toml",
-  "mcp/payments_api.toml",
+  "mcp/*.toml",
 ]
 ```
 
 1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. **Configure Guardrails with agent**, on the last step of editing the server, opens the same chat for anyone without a Guardrails permission.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
-3. Click **Approve**. The Keeper opens a pull request that changes only that file, and adds it to `appa.toml` the first time.
+3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
 4. A reviewer merges it, and Git sync applies it at the next sync.
 
 What to know:
 
 - Your repository decides who reviews: give each file its owners in `CODEOWNERS`, such as `/mcp/payments_api.toml @example/payments`, and require code owner reviews on the branch.
 - A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
-- A server file starts with `[policy]` and `version = 2`, like `appa.toml`. The Keeper writes only rules for that server's tools and the annotators they use.
+- A server file starts with `[policy]` and `version = 2`, like `appa.toml`. It holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. Git sync refuses a commit whose server file names another server's tool, `*`, or a tool without its server, whoever approved it, and the last accepted policy stays in force.
+- A server file uses the organization's authorities and sanitizers but does not declare its own. To have a person approve a call, require an attention mark that an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
 
 ## Validations in Git
 

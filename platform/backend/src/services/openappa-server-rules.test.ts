@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -27,6 +28,7 @@ const REPO = "https://api.github.com/repos/example/policies";
 const FIRST = "1".repeat(40);
 const SECOND = "2".repeat(40);
 const TREE = "3".repeat(40);
+const THIRD = "7".repeat(40);
 
 const RULES = `[policy]
 version = 2
@@ -53,20 +55,47 @@ name = "payments_api__get_invoice"
 delta = { trust = "suspicious" }
 `;
 
-/** A repository whose branch head and files the test moves. */
+/**
+ * A repository whose branch head and files the test moves. `reads` counts
+ * each file's reads, and the `mcp` folder lists its files with blob ids.
+ */
 function serveRepository(state: {
   head: string;
   files: Record<string, Record<string, string>>;
+  reads?: Record<string, number>;
 }) {
-  const paths = ["appa.toml", "mcp/payments_api.toml"];
+  const paths = [
+    "appa.toml",
+    "mcp/payments_api.toml",
+    "mcp/helpdesk.toml",
+    "mcp/README.toml",
+  ];
+  const at = (request: Request) =>
+    state.files[new URL(request.url).searchParams.get("ref") ?? ""];
   server.use(
     http.get(`${REPO}/commits/:ref`, () =>
       HttpResponse.json({ sha: state.head }),
     ),
+    http.get(`${REPO}/contents/mcp`, ({ request }) => {
+      const listed = Object.entries(at(request) ?? {}).filter(([path]) =>
+        path.startsWith("mcp/"),
+      );
+      return listed.length === 0
+        ? new HttpResponse(null, { status: 404 })
+        : HttpResponse.json([
+            ...listed.map(([path, text]) => ({
+              type: "file",
+              name: path.slice("mcp/".length),
+              path,
+              sha: createHash("sha1").update(text).digest("hex"),
+            })),
+            { type: "dir", name: "drafts", path: "mcp/drafts", sha: TREE },
+          ]);
+    }),
     ...paths.map((path) =>
       http.get(`${REPO}/contents/${path}`, ({ request }) => {
-        const ref = new URL(request.url).searchParams.get("ref") ?? "";
-        const text = state.files[ref]?.[path];
+        if (state.reads) state.reads[path] = (state.reads[path] ?? 0) + 1;
+        const text = at(request)?.[path];
         return text === undefined
           ? new HttpResponse(null, { status: 404 })
           : HttpResponse.text(text);
@@ -185,7 +214,9 @@ test("a pull whose policy includes a missing or invalid server file is refused a
   );
   expect(await GuardrailsPolicyModel.findLatest(org.id)).toBeNull();
 
-  state.files[FIRST] = {
+  // Commits never change, so the fixed file arrives in a new one.
+  state.head = SECOND;
+  state.files[SECOND] = {
     "appa.toml": INCLUDING,
     "mcp/payments_api.toml": "[externals]\ntimeout_ms = 1\n",
   };
@@ -194,6 +225,153 @@ test("a pull whose policy includes a missing or invalid server file is refused a
     /^mcp\/payments_api\.toml: an included file may set only .*it sets externals$/,
   );
   expect(await GuardrailsPolicyModel.findLatest(org.id)).toBeNull();
+});
+
+test("Git sync refuses a merged server file that reaches beyond its own server, whoever approved it", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connect({ organizationId: org.id });
+  const state = {
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": INCLUDING,
+        "mcp/payments_api.toml": `${REFUNDS}
+[[policy.tool]]
+name = "helpdesk__reply_to_customer"
+delta = {}
+
+[[policy.tool]]
+name = "*"
+delta = {}
+
+[[policy.sanitizer]]
+name = "payments_api.clean"
+on = ["tool_output"]
+`,
+      },
+    } as Record<string, Record<string, string>>,
+  };
+  serveRepository(state);
+
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toBe(
+    "mcp/payments_api.toml may hold only rules for the tools of the MCP server it is named for (payments_api__<tool>) and annotators named payments_api.<name>, and declares no authority or sanitizer; it sets helpdesk__reply_to_customer, *, [[policy.sanitizer]] payments_api.clean",
+  );
+  expect(await GuardrailsPolicyModel.findLatest(org.id)).toBeNull();
+});
+
+test("mcp/*.toml folds in every server's file, which reaches the organization's reviewers and sanitizers, and a new commit reads only the files it changed", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connect({ organizationId: org.id });
+  const root = `include = ["mcp/*.toml"]
+[policy]
+version = 2
+
+[[policy.tool]]
+name = "payments_api__export_ledger"
+delta = {}
+
+[[policy.authority]]
+name = "human-approval"
+
+[policy.authority.permits]
+attention = ["*"]
+
+[[policy.sanitizer]]
+name = "clean-invoice"
+on = ["tool_output"]
+tags = ["payments"]
+
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
+
+[externals.sanitizers.clean-invoice]
+url = "https://sanitizer.example.com/clean"
+`;
+  // Human approval through an attention mark the organization's authority
+  // permits, and its sanitizer through a tag and a confined result.
+  const payments = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "payments_api__refund_payment"
+requires = { attention = ["payments-refund"] }
+delta = {}
+
+[[policy.tool]]
+name = "mcp/payments_api/get_invoice"
+tags = ["payments"]
+delta = { trust = "suspicious" }
+
+[policy.deployment]
+confined_results = ["mcp/payments_api/get_invoice"]
+`;
+  const helpdesk = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "read_ticket"
+server = "helpdesk"
+delta = { trust = "suspicious" }
+`;
+  const state = {
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": payments,
+        "mcp/helpdesk.toml": helpdesk,
+      },
+      [SECOND]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": payments,
+        "mcp/helpdesk.toml": `${helpdesk}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
+      },
+      [THIRD]: {
+        "appa.toml": root,
+        "mcp/payments_api.toml": payments,
+        "mcp/helpdesk.toml": helpdesk,
+        "mcp/README.toml": "[policy]\nversion = 2\n",
+      },
+    } as Record<string, Record<string, string>>,
+    reads: {} as Record<string, number>,
+  };
+  serveRepository(state);
+
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toBe(
+    null,
+  );
+  const first = await openappaBatteriesService.getEffectivePolicy(org.id);
+  expect(first.lastError).toBeNull();
+  expect(first.content).toContain("payments-refund");
+  expect(first.content).toContain("read_ticket");
+  expect(first.content).toMatch(
+    /confined_results = \[\s*"mcp\/payments_api\/get_invoice"\s*\]/,
+  );
+
+  state.head = SECOND;
+  await syncAppaGithubPolicy(org.id);
+  const second = await openappaBatteriesService.getEffectivePolicy(org.id);
+  expect(second.content).toContain("helpdesk__close_ticket");
+  // Payments' file did not change, so it was read once, for the first commit.
+  expect(state.reads).toMatchObject({
+    "mcp/payments_api.toml": 1,
+    "mcp/helpdesk.toml": 2,
+  });
+
+  // A file in mcp/ is one server's rules file, named by its tools' prefix.
+  state.head = THIRD;
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toBe(
+    'mcp/README.toml: mcp/ holds one file per MCP server, named by its tools\' prefix; "README" is not one Archestra gives a server',
+  );
 });
 
 test("a server's editors propose its rules as a pull request; readers and outsiders cannot", async ({
@@ -299,6 +477,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     content: null,
     expectedCommit: FIRST,
     tools: ["payments_api__get_invoice", "payments_api__refund_payment"],
+    organizationHelpers: { authorities: [], sanitizers: [] },
   });
   // Sam may use the server, and read its rules, but not edit it.
   expect(
@@ -330,7 +509,9 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       userId: pat.id,
       content: `${REFUNDS}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
     }),
-  ).rejects.toThrow(/Rename or remove: helpdesk__close_ticket$/);
+  ).rejects.toThrow(
+    /^mcp\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for .*; it sets helpdesk__close_ticket$/,
+  );
 
   await expect(
     getServerRules({
@@ -345,9 +526,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       userId: pat.id,
       content: `${REFUNDS}\n[[policy.authority]]\nname = "payments_api.anyone"\n`,
     }),
-  ).rejects.toThrow(
-    /Rename or remove: \[\[policy\.authority\]\] payments_api\.anyone$/,
-  );
+  ).rejects.toThrow(/it sets \[\[policy\.authority\]\] payments_api\.anyone$/);
 
   const preview = await previewServerRulesChange({ ...change, userId: pat.id });
   expect(preview).toMatchObject({
@@ -357,7 +536,9 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     before: "",
     after: REFUNDS,
   });
-  expect(preview.rootChange).toContain('+include = ["mcp/payments_api.toml"]');
+  // The first server file brings every server's in, so no later one needs
+  // its own line in appa.toml.
+  expect(preview.rootChange).toContain('+include = ["mcp/*.toml"]');
 
   const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
   const refs: Array<{ ref: string }> = [];
@@ -404,13 +585,13 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     number: 7,
     url: "https://github.com/example/policies/pull/7",
   });
-  // One commit: the server's file, and appa.toml including it the first time.
+  // One commit: the server's file, and appa.toml including every server's.
   expect(trees[0]?.tree.map((file) => file.path)).toEqual([
     "mcp/payments_api.toml",
     "appa.toml",
   ]);
   expect(trees[0]?.tree[0]?.content).toBe(REFUNDS);
-  expect(trees[0]?.tree[1]?.content).toContain('"mcp/payments_api.toml"');
+  expect(trees[0]?.tree[1]?.content).toContain('"mcp/*.toml"');
   expect(refs[0]?.ref).toMatch(
     /^refs\/heads\/archestra\/openappa-server-payments_api-/,
   );

@@ -81,6 +81,7 @@ export async function ensureProviderApiKeySupportsSelectedModel(params: {
 
   let subscriptionKind = params.subscriptionCredential?.kind ?? null;
   let apiKeyValue = params.subscriptionCredential?.apiKeyValue;
+  let secretReadFailed = false;
 
   if (
     !subscriptionKind &&
@@ -96,14 +97,17 @@ export async function ensureProviderApiKeySupportsSelectedModel(params: {
         : null;
     } catch {
       subscriptionKind = null;
+      secretReadFailed = true;
     }
   }
 
   if (!subscriptionKind || !apiKeyValue) {
-    lazySubscriptionSyncCache.set(cacheKey, {
-      subscriptionKind: null,
-      expiresAt: now + LAZY_SUBSCRIPTION_SYNC_COOLDOWN_MS,
-    });
+    if (!secretReadFailed) {
+      lazySubscriptionSyncCache.set(cacheKey, {
+        subscriptionKind: null,
+        expiresAt: now + LAZY_SUBSCRIPTION_SYNC_COOLDOWN_MS,
+      });
+    }
     return;
   }
 

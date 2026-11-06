@@ -32,10 +32,12 @@ export interface SubagentLoadBalancerState {
    */
   weightedCurrent?: Record<string, number>;
   /**
-   * Previous smooth weighted round-robin counters before the most recent primary
-   * claim, used by `releaseUnlaunchedClaim` to roll back refused dispatches.
+   * Last smooth weighted round-robin counter delta applied when each subagent
+   * was claimed (`{ [claimedAgentId]: { [subagentId]: delta } }`), so
+   * `releaseUnlaunchedClaim` can subtract the refused claim's own step even if
+   * another plan in the same scope ran concurrently afterwards.
    */
-  previousWeightedCurrent?: Record<string, number>;
+  weightedDeltaByAgent?: Record<string, Record<string, number>>;
 }
 
 export interface PlannedSubagentCandidates {
@@ -45,6 +47,8 @@ export interface PlannedSubagentCandidates {
 }
 
 class SubagentLoadBalancer {
+  private readonly knownScopeExpiresAt = new Map<string, number>();
+
   /**
    * Plans the ordered candidate subagent list for a delegation request.
    * Atomically advances the caller's per-scope (`user` / `team` / `org`)
@@ -106,7 +110,9 @@ class SubagentLoadBalancer {
     try {
       await ensureKeyvCacheTable();
 
+      const knownExpiry = this.knownScopeExpiresAt.get(keyvKey) ?? 0;
       const scopeOffset =
+        knownExpiry <= now &&
         effectiveScopeKey !== DEFAULT_SUBAGENT_LOAD_BALANCER_SCOPE_KEY &&
         normalizedConfig.algorithm !== "random"
           ? await claimInitialScopeOffset({
@@ -128,7 +134,9 @@ class SubagentLoadBalancer {
         ? moveAgentToBack(seededAssignedList, initialPrimaryId)
         : seededAssignedList;
       let initialWeightedCurrent: Record<string, number> | undefined;
-      let initialPreviousWeightedCurrent: Record<string, number> | undefined;
+      let initialWeightedDeltaByAgent:
+        | Record<string, Record<string, number>>
+        | undefined;
 
       if (normalizedConfig.algorithm === "weighted") {
         const totalWeight = assignedList.reduce(
@@ -161,7 +169,15 @@ class SubagentLoadBalancer {
         });
         initialPrimaryId = initialStep.chosenId ?? initialPrimaryId;
         initialWeightedCurrent = initialStep.nextCurrentWeights;
-        initialPreviousWeightedCurrent = startingCurrentWeights;
+        const initialDelta: Record<string, number> = {};
+        for (const id of assignedList) {
+          initialDelta[id] =
+            (initialWeightedCurrent[id] ?? 0) -
+            (startingCurrentWeights[id] ?? 0);
+        }
+        initialWeightedDeltaByAgent = initialPrimaryId
+          ? { [initialPrimaryId]: initialDelta }
+          : {};
         initialQueue = initialPrimaryId
           ? moveAgentToBack(startingTieBreakOrder, initialPrimaryId)
           : startingTieBreakOrder;
@@ -174,7 +190,7 @@ class SubagentLoadBalancer {
           ...(initialWeightedCurrent
             ? {
                 weightedCurrent: initialWeightedCurrent,
-                previousWeightedCurrent: initialPreviousWeightedCurrent ?? {},
+                weightedDeltaByAgent: initialWeightedDeltaByAgent ?? {},
               }
             : {}),
         } satisfies SubagentLoadBalancerState,
@@ -221,6 +237,16 @@ class SubagentLoadBalancer {
                       '{}'::jsonb
                     ) AS cw
                   ),
+                  existing_deltas AS (
+                    SELECT COALESCE(
+                      CASE
+                        WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}') = 'object'
+                        THEN keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}'
+                        ELSE '{}'::jsonb
+                      END,
+                      '{}'::jsonb
+                    ) AS deltas
+                  ),
                   avail_scored AS (
                     SELECT
                       r.elem,
@@ -262,6 +288,20 @@ class SubagentLoadBalancer {
                     ) AS cw_map
                     FROM avail_scored s
                   ),
+                  claim_delta AS (
+                    SELECT COALESCE(
+                      jsonb_object_agg(
+                        s.elem,
+                        CASE
+                          WHEN s.elem = (SELECT primary_id FROM chosen)
+                          THEN (s.next_cw - (SELECT total_w FROM total_avail_weight)) - s.prev_cw
+                          ELSE s.next_cw - s.prev_cw
+                        END
+                      ),
+                      '{}'::jsonb
+                    ) AS delta_map
+                    FROM avail_scored s
+                  ),
                   rotated AS (
                     SELECT COALESCE(
                       jsonb_agg(
@@ -277,7 +317,11 @@ class SubagentLoadBalancer {
                       'queue', (SELECT next_queue FROM rotated),
                       'dispatchCount', COALESCE((keyv_cache.value::jsonb #>> '{value,dispatchCount}')::bigint, 0) + 1,
                       'weightedCurrent', (SELECT cw_map FROM updated_cw),
-                      'previousWeightedCurrent', (SELECT cw FROM existing_cw)
+                      'weightedDeltaByAgent', CASE
+                        WHEN (SELECT primary_id FROM chosen) IS NOT NULL
+                        THEN (SELECT deltas FROM existing_deltas) || jsonb_build_object((SELECT primary_id FROM chosen), (SELECT delta_map FROM claim_delta))
+                        ELSE (SELECT deltas FROM existing_deltas)
+                      END
                     ),
                     'expires', ${expires}::bigint
                   )::text
@@ -457,6 +501,7 @@ class SubagentLoadBalancer {
               `);
 
       const state = parseKeyvState(result.rows[0]?.value, now);
+      this.knownScopeExpiresAt.set(keyvKey, expires);
       const nextQueue = state?.queue ?? initialQueue;
       const dispatchCount = state?.dispatchCount ?? 1;
       const availableSet = new Set(availableIds);
@@ -690,6 +735,14 @@ class SubagentLoadBalancer {
                     ELSE '{}'::jsonb
                   END,
                   '{}'::jsonb
+                ),
+                'weightedDeltaByAgent', COALESCE(
+                  CASE
+                    WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}') = 'object'
+                    THEN keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}'
+                    ELSE '{}'::jsonb
+                  END,
+                  '{}'::jsonb
                 )
               ),
               'expires', ${expires}::bigint
@@ -701,6 +754,7 @@ class SubagentLoadBalancer {
       `);
 
       const state = parseKeyvState(result.rows[0]?.value, now);
+      this.knownScopeExpiresAt.set(keyvKey, expires);
       const nextQueue = state?.queue ?? initialQueue;
       const nextDispatchCount = state?.dispatchCount ?? 1;
       const remainingSet = new Set(remaining);
@@ -798,21 +852,53 @@ class SubagentLoadBalancer {
               '[]'::jsonb
             ) AS next_queue
             FROM existing_queue e
+          ),
+          existing_cw AS (
+            SELECT COALESCE(
+              CASE
+                WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedCurrent}') = 'object'
+                THEN keyv_cache.value::jsonb #> '{value,weightedCurrent}'
+                ELSE '{}'::jsonb
+              END,
+              '{}'::jsonb
+            ) AS cw
+          ),
+          existing_deltas AS (
+            SELECT COALESCE(
+              CASE
+                WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}') = 'object'
+                THEN keyv_cache.value::jsonb #> '{value,weightedDeltaByAgent}'
+                ELSE '{}'::jsonb
+              END,
+              '{}'::jsonb
+            ) AS deltas
+          ),
+          agent_delta AS (
+            SELECT COALESCE(
+              CASE
+                WHEN jsonb_typeof((SELECT deltas FROM existing_deltas) -> ${claimedAgentId}::text) = 'object'
+                THEN (SELECT deltas FROM existing_deltas) -> ${claimedAgentId}::text
+                ELSE '{}'::jsonb
+              END,
+              '{}'::jsonb
+            ) AS delta
+          ),
+          restored_cw AS (
+            SELECT COALESCE(
+              jsonb_object_agg(
+                e.key,
+                (e.value #>> '{}')::bigint - COALESCE(((SELECT delta FROM agent_delta) ->> e.key)::bigint, 0)
+              ),
+              '{}'::jsonb
+            ) AS cw_map
+            FROM jsonb_each((SELECT cw FROM existing_cw)) AS e(key, value)
           )
           SELECT jsonb_build_object(
             'value', jsonb_build_object(
               'queue', (SELECT next_queue FROM restored),
               'dispatchCount', GREATEST(0, COALESCE((keyv_cache.value::jsonb #>> '{value,dispatchCount}')::bigint, 1) - 1),
-              'weightedCurrent', COALESCE(
-                CASE
-                  WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,previousWeightedCurrent}') = 'object'
-                  THEN keyv_cache.value::jsonb #> '{value,previousWeightedCurrent}'
-                  WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedCurrent}') = 'object'
-                  THEN keyv_cache.value::jsonb #> '{value,weightedCurrent}'
-                  ELSE '{}'::jsonb
-                END,
-                '{}'::jsonb
-              )
+              'weightedCurrent', (SELECT cw_map FROM restored_cw),
+              'weightedDeltaByAgent', (SELECT deltas FROM existing_deltas) - ${claimedAgentId}::text
             ),
             'expires', ${expires}::bigint
           )::text

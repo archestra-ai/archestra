@@ -34,6 +34,7 @@ import {
 } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { secretManager } from "@/secrets-manager";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
@@ -41,6 +42,7 @@ import {
   resolveAgentRuntime,
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
+import { ensureProviderApiKeySupportsSelectedModel } from "@/services/agent-runtime/preflight";
 import {
   agentRunFailure,
   tagAgentRunFailure,
@@ -1974,9 +1976,8 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     // Org scope (scopeOffset=1) is phase-shifted by 1 SWRR step so its first 3 runs are [b, c, a]
     expect(orgPrimaries).toEqual([b, c, a]);
 
-    // Verify releaseUnlaunchedClaim restores `weightedCurrent` (not just `queue`)
-    // so a rolled-back weighted claim re-selects `b` (step 4 of [b, c, a, b, a, a])
-    // instead of advancing to `a` (step 5).
+    // Verify releaseUnlaunchedClaim subtracts the refused claim's own SWRR delta:
+    // - Sequential rollback: re-selects `b` (step 4 of [b, c, a, b, a, a]) instead of advancing to `a`.
     const orgUnlaunchedPlan = await subagentLoadBalancer.planCandidates({
       callerAgentId: gateway.id,
       assignedAgentIds: threePool,
@@ -1999,6 +2000,37 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(orgRetryPlan.dispatchCount).toBe(4);
     expect(orgRetryPlan.claimedPrimaryAgentId).toBe(b);
 
+    // - Concurrent rollback in the same scope: Plan 1 claims `a` and Plan 2 claims `b`
+    //   before Plan 1 is refused and calls releaseUnlaunchedClaim(a). Releasing `a`
+    //   subtracts `a`'s delta while preserving `b`'s launched step, so Plan 3 claims `a`
+    //   (not `b` again).
+    const concurrentPlan1 = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: threePool,
+      config: weightedConfig,
+      scopeKey: teamScope,
+    });
+    const concurrentPlan2 = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: threePool,
+      config: weightedConfig,
+      scopeKey: teamScope,
+    });
+    expect(concurrentPlan1.claimedPrimaryAgentId).toBe(a);
+    expect(concurrentPlan2.claimedPrimaryAgentId).toBe(b);
+    await subagentLoadBalancer.releaseUnlaunchedClaim({
+      callerAgentId: gateway.id,
+      claimedAgentId: concurrentPlan1.claimedPrimaryAgentId,
+      scopeKey: teamScope,
+    });
+    const postReleasePlan = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: threePool,
+      config: weightedConfig,
+      scopeKey: teamScope,
+    });
+    expect(postReleasePlan.claimedPrimaryAgentId).toBe(a);
+
     // 3. Per-scope random queues/seeds in keyv_cache produce deterministic,
     //    distinct per-scope candidate sequences.
     const randomConfig = {
@@ -2007,30 +2039,37 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       retries: 0,
       fallbackEnabled: true,
     };
+    const fixedRandomCallerId = "00000000-0000-0000-0000-000000000042";
+    const randomUser1Primaries: string[] = [];
     const randomUser1Orders: string[][] = [];
     const randomUser2Orders: string[][] = [];
     for (let i = 0; i < 4; i++) {
       const planned1 = await subagentLoadBalancer.planCandidates({
-        callerAgentId: gateway.id,
+        callerAgentId: fixedRandomCallerId,
         assignedAgentIds: assigned,
         config: randomConfig,
         scopeKey: { userId: "random-user-1" },
       });
       const planned2 = await subagentLoadBalancer.planCandidates({
-        callerAgentId: gateway.id,
+        callerAgentId: fixedRandomCallerId,
         assignedAgentIds: assigned,
         config: randomConfig,
         scopeKey: { userId: "random-user-2" },
       });
       expect([...planned1.candidateIds].sort()).toEqual([...assigned].sort());
       expect([...planned2.candidateIds].sort()).toEqual([...assigned].sort());
+      randomUser1Primaries.push(planned1.claimedPrimaryAgentId ?? "");
       randomUser1Orders.push(planned1.candidateIds);
       randomUser2Orders.push(planned2.candidateIds);
     }
-    const randomUser1State = await subagentLoadBalancer.getState(gateway.id, {
-      userId: "random-user-1",
-    });
+    const randomUser1State = await subagentLoadBalancer.getState(
+      fixedRandomCallerId,
+      {
+        userId: "random-user-1",
+      },
+    );
     expect(randomUser1State?.dispatchCount).toBe(4);
+    expect(randomUser1Primaries).toEqual([c, b, d, a]);
     expect(randomUser1Orders).not.toEqual(randomUser2Orders);
     expect(
       new Set(randomUser1Orders.map((o) => o.join(","))).size,
@@ -2140,11 +2179,15 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const chatgptSecret = await makeSecret({
       secret: { apiKey: "chatgpt-oauth:user-token" },
     });
-    await makeLlmProviderApiKey(organizationId, chatgptSecret.id, {
-      provider: "openai",
-      name: "ChatGPT Subscription",
-      userId: actorId,
-    });
+    const actorChatgptKey = await makeLlmProviderApiKey(
+      organizationId,
+      chatgptSecret.id,
+      {
+        provider: "openai",
+        name: "ChatGPT Subscription",
+        userId: actorId,
+      },
+    );
     const codexSubagent = await makeAgent({
       organizationId,
       name: "Lobster Code Review Codex Runtime",
@@ -2246,6 +2289,27 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       inspectFlow: false,
     });
     expect(claudeStatus.state).toBe("connected");
+
+    // Verify a transient secret-read failure does NOT cache `{ subscriptionKind: null }`
+    // for 5 minutes: if `getSecret` throws once, the subsequent runs still read the secret
+    // and enforce the subscription model-link check instead of bypassing it.
+    const sm = secretManager();
+    const originalGetSecret = sm.getSecret.bind(sm);
+    const getSecretSpy = vi
+      .spyOn(sm, "getSecret")
+      .mockImplementationOnce(async () => {
+        throw new Error("Transient secrets manager timeout");
+      });
+    await ensureProviderApiKeySupportsSelectedModel({
+      providerApiKey: {
+        id: actorChatgptKey.id,
+        provider: "openai",
+        secretId: chatgptSecret.id,
+      },
+      provider: "openai",
+      model: "gpt-5.4",
+    });
+    getSecretSpy.mockImplementation(originalGetSecret);
 
     // Mock modelSyncService.syncModelsForApiKey so that:
     // - SuperGrok key lazily links grokModel on run 1 (1 call)

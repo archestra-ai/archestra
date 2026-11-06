@@ -257,7 +257,7 @@ beforeEach(() => {
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
   vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-    data: [],
+    data: { agents: [], hiddenBlockingCount: 0 },
   } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 });
 
@@ -377,16 +377,19 @@ describe("Default model blocked by Agent Runtime agents", () => {
       },
     ];
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Release Notes Writer",
-          canUpdate: true,
-          runtimeCommand: ["archestra-claude-code"],
-          inferenceProtocol: "anthropic",
-          claudeCodeAuthentication: "provider",
-        },
-      ],
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            canUpdate: true,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     renderPage();
@@ -433,14 +436,17 @@ describe("Default model blocked by Agent Runtime agents", () => {
       },
     ];
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Chat Completions Agent",
-          runtimeCommand: null,
-          inferenceProtocol: "openai_chat",
-        },
-      ],
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Chat Completions Agent",
+            runtimeCommand: null,
+            inferenceProtocol: "openai_chat",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     const user = userEvent.setup();
@@ -454,14 +460,17 @@ describe("Default model blocked by Agent Runtime agents", () => {
 
   it("does not count a Claude Code agent on subscription authentication, which runs on the person's Claude account instead", () => {
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Release Notes Writer",
-          runtimeCommand: ["archestra-claude-code"],
-          inferenceProtocol: "anthropic",
-        },
-      ],
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     renderPage();
@@ -471,19 +480,37 @@ describe("Default model blocked by Agent Runtime agents", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts blocking agents the viewer can't read, without saying anything about them", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: { agents: [], hiddenBlockingCount: 2 },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "2 agents can't run this" }),
+    );
+    expect(screen.getByText("2 agents you can't view")).toBeVisible();
+    expect(screen.queryByText(/Claude Code/)).not.toBeInTheDocument();
+  });
+
   it("offers no Set model action for an agent the viewer can't update", async () => {
     const user = userEvent.setup();
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-read-only",
-          name: "Read-only agent",
-          canUpdate: false,
-          runtimeCommand: ["archestra-claude-code"],
-          inferenceProtocol: "anthropic",
-          claudeCodeAuthentication: "provider",
-        },
-      ],
+      data: {
+        hiddenBlockingCount: 0,
+        agents: [
+          {
+            id: "agent-read-only",
+            name: "Read-only agent",
+            canUpdate: false,
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     renderPage();

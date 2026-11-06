@@ -126172,7 +126172,9 @@ export type GetAgentRuntimeTiersResponse = GetAgentRuntimeTiersResponses[keyof G
 export type GetDefaultModelRuntimeDependentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        modelId?: string;
+    };
     url: '/api/organization/agent-settings/default-model-dependents';
 };
 
@@ -126257,6 +126259,7 @@ export type GetDefaultModelRuntimeDependentsResponses = {
             name: string;
             canUpdate: boolean;
         }>;
+        hiddenBlockingCount: number;
     };
 };
 

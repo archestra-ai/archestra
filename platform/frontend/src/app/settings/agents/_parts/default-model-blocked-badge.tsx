@@ -19,12 +19,15 @@ import { UpdateAgentModelsDialog } from "./update-agent-models-dialog";
  */
 export function DefaultModelBlockedBadge({
   agents,
+  hiddenCount,
   reason,
   allClaudeCode,
   modelName,
 }: {
   /** The blocking agents the viewer can read. */
   agents: RuntimeAgent[];
+  /** Blocking agents the viewer can't read: counted, never named. */
+  hiddenCount: number;
   /** Why they can't run the model, in one sentence. */
   reason: string;
   allClaudeCode: boolean;
@@ -32,10 +35,10 @@ export function DefaultModelBlockedBadge({
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dialogAgents, setDialogAgents] = useState<RuntimeAgent[] | null>(null);
-  const count = agents.length;
+  const count = agents.length + hiddenCount;
   const one = count === 1;
   const shown = agents.slice(0, PREVIEW_LIMIT);
-  const more = count - shown.length;
+  const more = agents.length - shown.length;
   // Only agents the viewer may update can be given a model from here.
   const editable = agents.filter((agent) => agent.canUpdate);
 
@@ -107,6 +110,13 @@ export function DefaultModelBlockedBadge({
                 and {more} more
               </li>
             )}
+            {hiddenCount > 0 && (
+              <li className="px-3.5 py-1.5 text-xs text-muted-foreground">
+                {hiddenCount === 1
+                  ? "1 agent you can't view"
+                  : `${hiddenCount} agents you can't view`}
+              </li>
+            )}
           </ul>
 
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs">
@@ -118,8 +128,8 @@ export function DefaultModelBlockedBadge({
                 onClick={() => openDialog(editable)}
                 className="shrink-0 font-medium underline decoration-foreground/30 underline-offset-2 transition-colors hover:decoration-foreground"
               >
-                {editable.length === count
-                  ? `Set models for all ${count}`
+                {editable.length === agents.length
+                  ? `Set models for all ${editable.length}`
                   : `Set models for ${editable.length}`}
               </UnstyledButton>
             )}

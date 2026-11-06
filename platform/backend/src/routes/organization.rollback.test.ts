@@ -551,6 +551,7 @@ describe("organization routes", () => {
         inferenceProtocol: "anthropic",
       });
       expect(response.json()).toEqual({
+        hiddenBlockingCount: 0,
         agents: expect.arrayContaining([
           dependent(noPair.id, "No model of its own"),
           dependent(halfPair.id, "Model without a key"),
@@ -679,14 +680,29 @@ describe("organization routes", () => {
         expect(asMember.statusCode).toBe(409);
         const message = asMember.json().error.message;
         expect(message).toContain("4 Agent Runtime agents you can't view");
+        expect(message).toContain("Their runtimes can't use it.");
         for (const name of names) expect(message).not.toContain(name);
+        // Nothing about their runtimes either.
+        expect(message).not.toMatch(/Claude|Anthropic|protocol|endpoint/i);
 
         const dependents = await app.inject({
           method: "GET",
           url: "/api/organization/agent-settings/default-model-dependents",
         });
         // Nothing about agents the caller can't read: not even their runtimes.
-        expect(dependents.json()).toEqual({ agents: [] });
+        expect(dependents.json()).toEqual({
+          agents: [],
+          hiddenBlockingCount: 0,
+        });
+        // Only a count, for a candidate default the settings page checks.
+        const forCandidate = await app.inject({
+          method: "GET",
+          url: `/api/organization/agent-settings/default-model-dependents?modelId=${model.id}`,
+        });
+        expect(forCandidate.json()).toEqual({
+          agents: [],
+          hiddenBlockingCount: 4,
+        });
       } finally {
         user = admin;
       }

@@ -203,7 +203,13 @@ export default function AgentSettingsPage() {
   // Agent Runtime agents with no model of their own run on this default, so
   // a model their runtime can't serve would break them. Check every option
   // up front, with the same rule the server applies on save.
-  const { data: runtimeDependents } = useDefaultModelRuntimeDependents();
+  const { data: runtimeDependents, isPlaceholderData: dependentsLoading } =
+    useDefaultModelRuntimeDependents({ modelId: defaultModel || null });
+  // Agents the viewer can't read: the server counts them for the selected
+  // model only, and never says more.
+  const hiddenBlockingCount = dependentsLoading
+    ? 0
+    : (runtimeDependents?.hiddenBlockingCount ?? 0);
   const blockedBy = useCallback(
     (model: {
       provider: SupportedProvider;
@@ -219,15 +225,18 @@ export default function AgentSettingsPage() {
         });
         return result.compatible ? null : result.message;
       };
-      const agents = (runtimeDependents ?? []).filter(
+      const agents = (runtimeDependents?.agents ?? []).filter(
         (agent) => reasonFor(agent) !== null,
       );
       return {
         agents,
         reason: agents[0] ? reasonFor(agents[0]) : null,
-        allClaudeCode: agents.every((agent) =>
-          isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
-        ),
+        // Only agents the viewer can read say anything about their runtime.
+        allClaudeCode:
+          agents.length > 0 &&
+          agents.every((agent) =>
+            isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
+          ),
       };
     },
     [runtimeDependents],
@@ -360,10 +369,12 @@ export default function AgentSettingsPage() {
                   {selectedModel && (
                     <DefaultModelBlockedBadge
                       agents={blocked?.agents ?? []}
+                      hiddenCount={hiddenBlockingCount}
                       reason={
                         blocked?.allClaudeCode
                           ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
-                          : (blocked?.reason ?? "")
+                          : (blocked?.reason ??
+                            "Their Agent Runtime can't use this model.")
                       }
                       allClaudeCode={blocked?.allClaudeCode ?? false}
                       modelName={selectedModel.displayName ?? selectedModel.id}
@@ -508,7 +519,8 @@ export default function AgentSettingsPage() {
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={
           (selectedApiKeyId !== "" && defaultModel === "") ||
-          (changes.hasModelChanges && (blocked?.agents.length ?? 0) > 0)
+          (changes.hasModelChanges &&
+            (blocked?.agents.length ?? 0) + hiddenBlockingCount > 0)
         }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}

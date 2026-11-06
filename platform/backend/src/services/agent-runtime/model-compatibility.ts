@@ -15,7 +15,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import type { Agent, ResolvedAgentRuntime } from "@/types";
+import type { Agent, Model, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
 import {
   type ConversationLlmSelection,
@@ -232,42 +232,72 @@ export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   if (!model) {
     throw new ApiError(404, "Default model not found");
   }
-  const reasonFor = (agent: RuntimeDependent) => {
-    const result = getAgentRuntimeDefaultModelCompatibility({
-      ...agent,
-      provider: model.provider,
-      modelId: model.modelId,
-      supportedEndpoints: model.supportedEndpoints,
-    });
-    return result.compatible ? null : result.message;
-  };
-  const named = dependents.agents.flatMap((agent) => {
-    const reason = reasonFor(agent);
-    return reason ? [{ name: agent.name, reason }] : [];
-  });
-  const hiddenReasons = dependents.hidden.flatMap((agent) => {
-    const reason = reasonFor(agent);
-    return reason ? [reason] : [];
-  });
-  const total = named.length + hiddenReasons.length;
+  const { named, hiddenCount } = blockersOf({ model, dependents });
+  const total = named.length + hiddenCount;
   if (total === 0) return;
   const one = total === 1;
   const who = [
     named.length > 0 &&
       `Agent Runtime ${named.length === 1 ? "agent" : "agents"} ${named.map(({ name }) => `"${name}"`).join(", ")}`,
-    hiddenReasons.length > 0 &&
-      `${hiddenReasons.length} Agent Runtime ${hiddenReasons.length === 1 ? "agent" : "agents"} you can't view`,
+    hiddenCount > 0 &&
+      `${hiddenCount} Agent Runtime ${hiddenCount === 1 ? "agent" : "agents"} you can't view`,
   ]
     .filter(Boolean)
     .join(" and ");
-  const reason = named[0]?.reason ?? hiddenReasons[0];
+  // A specific reason only ever comes from an agent the caller can read.
+  const reason =
+    named[0]?.reason ??
+    `${one ? "Its runtime" : "Their runtimes"} can't use it.`;
   throw new ApiError(
     409,
     `Can't use "${model.modelId}" as the default model. ${who} ${one ? "runs" : "run"} on the default model and can't run this one: ${reason} Give ${one ? "that agent a model of its own" : "those agents models of their own"}, or choose a compatible default model.`,
   );
 }
 
+/**
+ * How many inheriting Agent Runtime agents `userId` can't read would be
+ * unable to run `modelId` (models.id) as the default: a count, nothing more.
+ */
+export async function countHiddenAgentsBlockingDefault(params: {
+  organizationId: string;
+  userId: string;
+  modelId: string;
+}): Promise<number> {
+  const [model, dependents] = await Promise.all([
+    ModelModel.findById(params.modelId),
+    listRuntimeAgentsInheritingOrganizationDefault(params),
+  ]);
+  return model ? blockersOf({ model, dependents }).hiddenCount : 0;
+}
+
 // === Internal helpers ===
+
+/** The inheriting agents that can't run `model`: readable ones named, the rest counted. */
+function blockersOf(params: {
+  model: Pick<Model, "provider" | "modelId" | "supportedEndpoints">;
+  dependents: Awaited<
+    ReturnType<typeof listRuntimeAgentsInheritingOrganizationDefault>
+  >;
+}) {
+  const reasonFor = (agent: RuntimeDependent) => {
+    const result = getAgentRuntimeDefaultModelCompatibility({
+      ...agent,
+      provider: params.model.provider,
+      modelId: params.model.modelId,
+      supportedEndpoints: params.model.supportedEndpoints,
+    });
+    return result.compatible ? null : result.message;
+  };
+  return {
+    named: params.dependents.agents.flatMap((agent) => {
+      const reason = reasonFor(agent);
+      return reason ? [{ name: agent.name, reason }] : [];
+    }),
+    hiddenCount: params.dependents.hidden.filter(
+      (agent) => reasonFor(agent) !== null,
+    ).length,
+  };
+}
 
 /** What decides whether an inheriting agent's runtime can run a default. */
 type RuntimeDependent = {

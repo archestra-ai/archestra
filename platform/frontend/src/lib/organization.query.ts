@@ -6,6 +6,7 @@ import {
   PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
 import {
+  keepPreviousData,
   QueryClientContext,
   useMutation,
   useQuery,
@@ -66,8 +67,14 @@ export function useAppearanceSettings(enabled = true) {
 export const organizationKeys = {
   agentRuntimeTiers: () =>
     [...organizationKeys.all, "agent-runtime-tiers"] as const,
-  defaultModelRuntimeDependents: () =>
-    [...organizationKeys.all, "default-model-runtime-dependents"] as const,
+  defaultModelRuntimeDependents: (modelId?: string | null) =>
+    modelId === undefined
+      ? ([...organizationKeys.all, "default-model-runtime-dependents"] as const)
+      : ([
+          ...organizationKeys.all,
+          "default-model-runtime-dependents",
+          modelId,
+        ] as const),
   all: ["organization"] as const,
   invitations: () => [...organizationKeys.all, "invitations"] as const,
   invitation: (id: string) => [...organizationKeys.invitations(), id] as const,
@@ -597,16 +604,24 @@ export function useAgentRuntimeTiers(enabled = true) {
  * Agent Runtime agents with no model of their own: they run on the
  * organization's default model, so a new default must suit their runtimes.
  */
-export function useDefaultModelRuntimeDependents(enabled = true) {
+export function useDefaultModelRuntimeDependents(params: {
+  /** The candidate default (models.id), to count blockers the viewer can't read. */
+  modelId: string | null;
+  enabled?: boolean;
+}) {
   return useQuery({
-    queryKey: organizationKeys.defaultModelRuntimeDependents(),
+    queryKey: organizationKeys.defaultModelRuntimeDependents(params.modelId),
     queryFn: async () => {
       const { data, error } =
-        await archestraApiSdk.getDefaultModelRuntimeDependents();
+        await archestraApiSdk.getDefaultModelRuntimeDependents({
+          query: params.modelId ? { modelId: params.modelId } : undefined,
+        });
       throwOnApiError(error);
-      return data?.agents ?? [];
+      return data ?? { agents: [], hiddenBlockingCount: 0 };
     },
-    enabled,
+    // Keep the agents on screen while the next candidate's count loads.
+    placeholderData: keepPreviousData,
+    enabled: params.enabled ?? true,
   });
 }
 

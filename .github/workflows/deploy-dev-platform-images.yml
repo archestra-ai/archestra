@@ -19,20 +19,16 @@ on:
       TURBOREPO_REMOTE_CACHING_TEAM:
         required: false
   workflow_dispatch:
-  pull_request:
-    types:
-      - labeled
 
 permissions: {}
 
 concurrency:
-  group: deploy-dev-platform-images-${{ github.event.pull_request.number || inputs.version || github.ref }}
+  group: deploy-dev-platform-images-${{ inputs.version || github.ref }}
   cancel-in-progress: true
 
 jobs:
   resolve-previous-platform-image:
     name: Resolve previous platform image
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to resolve the currently deployed platform image from staging.
@@ -96,13 +92,12 @@ jobs:
             echo "previous-image=" >> "$GITHUB_OUTPUT"
           fi
         env:
-          IMAGE_VERSION: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          IMAGE_VERSION: ${{ inputs.version || github.sha }}
 
   publish-dev-platform-image:
     name: Build Platform Dev Docker Image
     needs:
       - resolve-previous-platform-image
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
       packages: write # Publish development images and build caches to GHCR.
@@ -112,25 +107,19 @@ jobs:
       image_directory: ./platform
       image_name: platform
       image_registry: ghcr.io/archestra-ai/ci
-      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ inputs.version || github.sha }}
       push_image: true
       auth_provider: ghcr
       # amd64-only ONLY for the automated staging deploy (push to main, via
       # on-commits-to-main): staging runs amd64 nodes, so the arm64 leg (~9-10
-      # min, the long pole) produced an image nothing schedules. The
-      # `deploy-dev-platform-images` label and workflow_dispatch stay multi-arch
-      # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
+      # min, the long pole) produced an image nothing schedules.
+      # workflow_dispatch stays multi-arch so a dev build handed to a tester
+      # runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
       amd64_runner: ubuntu-24.04-16core
       arm64_runner: ubuntu-24.04-arm-32core
-      # PRs consume publisher caches read-only instead of spending over a minute
-      # rewriting mode=max. Push and manual multi-arch builds still refresh them.
-      export_cache: ${{ github.event_name != 'pull_request' }}
-      # PR images use the faster E2E-proven output; staging/manual stay unchanged.
-      zstd_compression: ${{ github.event_name == 'pull_request' }}
-      checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -141,7 +130,6 @@ jobs:
 
   publish-dev-mcp-server-base-image:
     name: Build MCP Server Base Dev Image
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     uses: $/.github/workflows/build-base-mcp-server-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable MCP server base image workflow.
@@ -150,7 +138,7 @@ jobs:
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
-      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -158,7 +146,6 @@ jobs:
 
   publish-dev-agent-catalog-images:
     name: Build Agent Catalog Dev Images
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     uses: $/.github/workflows/build-agent-catalog-images.yml
     permissions:
       contents: read # Required to invoke the reusable Agent image workflow.
@@ -167,8 +154,7 @@ jobs:
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
-      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
-      checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -176,7 +162,6 @@ jobs:
 
   publish-dev-p4-shim-image:
     name: Build p4 Shim Dev Image
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     uses: $/.github/workflows/build-p4-shim-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable p4 shim image workflow.
@@ -185,7 +170,7 @@ jobs:
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
-      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ inputs.version || github.sha }}
       # Main publishes p4 under each commit SHA. If its Docker context did not
       # change, retag the previous main image instead of rebuilding both arches.
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
@@ -195,7 +180,6 @@ jobs:
 
   publish-dev-sandbox-base-image:
     name: Build Sandbox Base Dev Image
-    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     uses: $/.github/workflows/build-sandbox-base-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable sandbox base image workflow.
@@ -204,7 +188,7 @@ jobs:
     with:
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
-      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ inputs.version || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME || vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}

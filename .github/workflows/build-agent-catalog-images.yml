@@ -65,8 +65,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Reusable callers pass a version, including PRs with the deploy label.
-  # The caller's event can be pull_request, so the version selects publication.
+  # Reusable callers pass a version; direct pull_request and merge_group runs
+  # do not, so the version selects publication.
   build:
     name: Build ${{ matrix.image }}
     if: ${{ inputs.version != '' }}

@@ -77,21 +77,11 @@ on:
         required: false
         type: string
         default: "ubuntu-24.04-arm-32core"
-      export_cache:
-        description: "Whether this build may update the shared registry cache"
-        required: false
-        type: boolean
-        default: true
       cache_compression:
         description: "Registry cache compression: gzip (default) or zstd"
         required: false
         type: string
         default: gzip
-      zstd_compression:
-        description: "Use fast zstd compression for pushed image layers"
-        required: false
-        type: boolean
-        default: false
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -216,7 +206,7 @@ jobs:
         env:
           CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
           USE_REGISTRY_CACHE: ${{ inputs.auth_provider != 'dockerhub' }}
-          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && inputs.export_cache }}
+          CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' }}
           CACHE_COMPRESSION: ${{ inputs.cache_compression }}
         run: |
           if [ "${USE_REGISTRY_CACHE}" != "true" ]; then
@@ -281,7 +271,7 @@ jobs:
           target: ${{ inputs.target }}
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
-          outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true{2}', inputs.image_registry, inputs.image_name, inputs.zstd_compression && ',compression=zstd,compression-level=1,force-compression=true,oci-mediatypes=true' || '') || '' }}
+          outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', inputs.image_registry, inputs.image_name) || '' }}
           version: ${{ inputs.version }}
           previous-image: ${{ inputs.previous_image }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

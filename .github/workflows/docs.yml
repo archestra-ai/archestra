@@ -118,7 +118,7 @@ jobs:
   docs-screenshot-capture:
     name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 25
     permissions:
       contents: read
@@ -141,7 +141,7 @@ jobs:
        github.event.pull_request.user.login == 'archestra-ci[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.

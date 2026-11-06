@@ -71,9 +71,9 @@ jobs:
       # The published image retains its existing gzip output format.
       cache_compression: zstd
       checkout_ref: ${{ inputs.checkout_ref }}
-      # Match the 16-CPU Blacksmith E2E builder; use native Blacksmith ARM.
-      amd64_runner: blacksmith-16vcpu-ubuntu-2404
-      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
+      # Match the 16-core E2E builder; build arm64 natively.
+      amd64_runner: ubuntu-24.04-16core
+      arm64_runner: ubuntu-24.04-arm-32core
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}

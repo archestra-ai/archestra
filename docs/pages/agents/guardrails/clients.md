@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,8 @@ These clients work without extra configuration:
 - **Claude Code**
 - **Claude Desktop** (Code and Cowork tabs)
 - **Codex CLI**
+- **ChatGPT** desktop app (Work and Codex tabs, see [ChatGPT](#chatgpt))
+- **Copilot CLI** (see [Copilot CLI](#copilot-cli) for the providers it works with)
 - **Pi**
 - **OpenCode**
 - **Kilo Code**
@@ -30,7 +32,7 @@ Connect the client to the LLM Proxy and the MCP Gateway on the [connection page]
 
 ### Use Guardrails in Kimi Code
 
-Kimi Code shows a review in its own question form: choose **Allow**, **Deny**, or **Inspect**. **Inspect** shows the complete review, and you then choose **Allow** or **Deny**. Escape closes the form without approving or denying.
+Kimi Code shows a review in its own question form: choose **Inspect**, **Allow**, or **Deny**. **Inspect** shows the complete review, and you then choose **Allow** or **Deny**. Escape closes the form without approving or denying.
 
 - Subagents run under Guardrails only as new foreground `Agent` calls. A background, resumed, or swarm subagent is refused before it starts.
 - Setup starts Kimi Code in Ask When Needed mode, so the guardrail helpers run without a prompt. Kimi Code 2.3.3 cannot approve single gateway tools, so this mode also runs your other gateway calls and routine commands without asking. It still asks before dangerous commands and shows reviews.
@@ -52,6 +54,25 @@ Reconnect through the connection page and restart the client to install the ques
 - Multi-question and multi-select forms, small terminals, and forms with many or long option labels use the native UI.
 - An existing `tui.jsonc` is preserved without automatic registration. The native question remains available.
 
+<a id="chatgpt"></a>
+
+### ChatGPT
+
+Guardrails follow the desktop app's Work and Codex tabs. Both run on your computer and read the Codex settings there. On **Connect**, select **ChatGPT** and run its terminal setup command to route model requests through the LLM Proxy. See [Use Guardrails in the Desktop App](/docs/integrations/ai-clients/chatgpt#use-guardrails-in-the-desktop-app).
+
+- **Not covered:** chats and dots run on OpenAI's servers, so their tool calls never reach the proxy.
+- **Approvals:** a review shows as a form from the MCP gateway in the task, as in Codex CLI.
+
+<a id="copilot-cli"></a>
+
+### Copilot CLI
+
+Guardrails follow a Copilot CLI session when its model requests use the OpenAI Responses API. Copilot names its conversation only there. Setup selects that API when the proxy serves it for your provider: OpenAI, Azure, GitHub Copilot, or xAI. On other providers Copilot keeps the Chat Completions API, and the proxy treats it as an unrecognized client.
+
+- **Reconnect to turn it on:** a Copilot CLI connected before this support stays on the Chat Completions API. Connect it again from the [connection page](/docs/get-started/connect).
+- **Subagents:** Guardrails follow a subagent that the `task` tool starts. Signed in to GitHub, Copilot would otherwise run a subagent on its own default model, whose requests go to GitHub directly, so the proxy runs it on your session's model instead. A `task` call that names a model outside your Archestra provider is refused, with the models you can use. A background subagent's result reaches your session when Copilot reads it with `read_agent`, also after you send a new prompt while the subagent runs. Subagents from fleet mode or dynamic workflows have no governed parent, and the proxy refuses their model requests.
+- **Approvals:** a review shows as Copilot's own question in an interactive session. Copilot loads most MCP tools only when the model searches for them, so the proxy loads the remedy, question, and report tools up front. Copilot's MCP client declines the gateway's form, so a one-shot (`-p`) session cannot answer a review. Setup lets Copilot run the guardrail helpers, such as [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans), without asking each time.
+
 <a id="session-headers"></a>
 
 ## Configure Other Clients
@@ -60,6 +81,7 @@ Any other client, such as [n8n](/docs/integrations/web-ui-and-automation#configu
 
 - **`X-Appa-Session-ID`**: your app's conversation ID or workflow run ID. If you do not have one, generate a UUID when the conversation starts and reuse it.
 - **`X-Appa-Parent-ID`**: the parent's session ID, when a subagent or child workflow makes the call. Leave it out otherwise.
+- **`X-Archestra-Unattended`**: `1` when no person can answer approvals in the session, so the [Break the glass](/docs/agents/guardrails/policies#yells) settings can let a call that waits for human approval through. Leave it out otherwise.
 
 ```bash
 export SESSION_ID="$(uuidgen)"

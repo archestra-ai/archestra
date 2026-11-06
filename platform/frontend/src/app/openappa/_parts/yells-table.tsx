@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessagesSquare,
   RotateCcw,
+  ShieldAlert,
   ShieldOff,
   UserRound,
 } from "lucide-react";
@@ -55,6 +56,7 @@ import {
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { useYellInvestigation } from "./use-yell-investigation";
+import { yellSummary } from "./yell-summary";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
@@ -133,7 +135,7 @@ export function YellsTable() {
                     <span aria-hidden="true">·</span>
                     <YellCaller yell={yell} />
                   </Faded>
-                  <BrokeTheGlassMark yell={yell} />
+                  <YellGuardrailsMark yell={yell} />
                   <YellSignals yell={yell} />
                 </div>
               </div>
@@ -477,13 +479,49 @@ function TimeCell({ yell }: { yell: OpenAppaYell }) {
       <Faded yell={yell} className="flex">
         <LogTime showTooltip={false} timestamp={yell.createdAt} />
       </Faded>
-      <BrokeTheGlassMark yell={yell} />
+      <YellGuardrailsMark yell={yell} />
     </div>
   );
 }
 
+/** The same guardrails marker on desktop/mobile rows and the detail page. */
+export function YellGuardrailsMark({ yell }: { yell: OpenAppaYell }) {
+  return yell.kind === "agent" ? (
+    <BrokeTheGlassMark yell={yell} />
+  ) : (
+    <WaivedCallMark yell={yell} />
+  );
+}
+
+/**
+ * For a yell the platform raised under the Break the glass settings: which
+ * kind of blocked call it let through, and how many times.
+ */
+function WaivedCallMark({ yell }: { yell: OpenAppaYell }) {
+  if (yell.kind === "agent") return null;
+  const hint = `${WAIVED_CALL_HINT[yell.kind]}${yell.count > 1 ? ` (${yell.count} calls)` : ""}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex shrink-0 cursor-default items-center gap-0.5 text-xs text-muted-foreground">
+          <ShieldAlert className="size-3.5" aria-label={hint} />
+          {yell.count > 1 && (
+            <span className="tabular-nums">×{yell.count}</span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const WAIVED_CALL_HINT = {
+  approval_waived: "Break the glass waived human approval",
+  block_waived: "Other blocked calls: a blocked call was let through",
+} as const;
+
 /** A shield-off icon with its explanation on hover; nothing for a plain yell. */
-export function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {
+function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {
   if (!yell.superyell) return null;
   return (
     <Tooltip>
@@ -509,7 +547,7 @@ function MessageLine({ yell }: { yell: OpenAppaYell }) {
         }
       >
         <p className="min-w-0 flex-1 truncate text-[13px]">
-          {yell.message.replace(/\s+/g, " ").trim()}
+          {yellSummary(yell)}
         </p>
       </TruncatedTooltip>
     </Faded>

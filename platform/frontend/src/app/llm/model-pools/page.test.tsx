@@ -132,7 +132,7 @@ describe("ModelPoolsPage", () => {
 
   it("asks for a provider a pool can serve when the only shared key is on another", async () => {
     providerKeys = [
-      { id: "key-0", name: "Gemini", provider: "gemini", userId: null },
+      { id: "key-0", name: "Cohere", provider: "cohere", userId: null },
     ];
     renderPage();
     expect(
@@ -140,6 +140,29 @@ describe("ModelPoolsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Create pool" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "Gemini API key",
+    "Vertex AI (Gemini)",
+  ])("allows pool creation with the existing shared %s credential", async (name) => {
+    providerKeys = [
+      {
+        id: "gemini-key",
+        name,
+        provider: "gemini",
+        userId: null,
+        secretId: name.startsWith("Vertex") ? null : "secret",
+        isSystem: name.startsWith("Vertex"),
+      },
+    ];
+    renderPage();
+    expect(
+      await screen.findByRole("button", { name: "Create pool" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText("Connect your first model provider"),
     ).not.toBeInTheDocument();
   });
 

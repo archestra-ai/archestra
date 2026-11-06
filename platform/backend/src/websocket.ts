@@ -1,5 +1,5 @@
 import type { IncomingMessage, Server } from "node:http";
-import { PassThrough } from "node:stream";
+import { type Duplex, PassThrough } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import {
   type ClientWebSocketMessage,
@@ -16,7 +16,8 @@ import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { z } from "zod";
-import { betterAuth, userHasPermission } from "@/auth";
+import { userHasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
@@ -39,6 +40,12 @@ import {
   RETAINED_LOG_BYTES,
 } from "@/services/agent-runtime/output-capture";
 import { mayAttachAgentRun } from "@/services/agent-runtime/run-access";
+import {
+  auditTerminal,
+  countInterrupts,
+  INTERRUPT_AUDIT_WINDOW_MS,
+  type TerminalAttachment,
+} from "@/services/agent-runtime/terminal-audit";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { projectMcpDeploymentStatuses } from "@/services/mcp-deployment-statuses";
@@ -50,6 +57,10 @@ import {
 } from "@/services/pg-notify-hub";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AgentRunRecord } from "@/types";
+
+/** `/v1/unified-model/realtime`, the legacy `/v1/model-router/realtime`, and `/v1/openai/realtime`, with or without an agent id. */
+const REALTIME_UPGRADE_PATH =
+  /^\/v1\/(?:unified-model|model-router|openai)(?:\/[0-9a-f-]{36})?\/realtime$/i;
 
 interface McpLogsSubscription {
   serverId: string;
@@ -68,6 +79,8 @@ interface AgentRunAttachSubscription {
     close: () => void;
     send: (data: Buffer) => void;
   } | null;
+  /** Set once the terminal is live; the audit trail's subject. */
+  attachment: TerminalAttachment | null;
 }
 
 type PausableWebSocket = WebSocket & {
@@ -117,6 +130,10 @@ type MessageHandler = (
 /** @public — exported for testability (one instance per simulated replica) */
 export class WebSocketService {
   private wss: WebSocketServer | null = null;
+  private httpServer: Server | null = null;
+  private upgradeListener:
+    | ((request: IncomingMessage, socket: Duplex, head: Buffer) => void)
+    | null = null;
   /**
    * Relays MCP status events to every replica. A browser holds its socket on
    * whichever pod the load balancer picked, which is rarely the pod doing the
@@ -246,6 +263,22 @@ export class WebSocketService {
       const subscription = this.agentRunAttachSubscriptions.get(ws);
       if (subscription?.runId !== message.payload.runId || !subscription.socket)
         return;
+      const { attachment } = subscription;
+      const interrupts = attachment ? countInterrupts(message.payload.data) : 0;
+      if (attachment && interrupts > 0) {
+        // Ctrl+C reaches the agent's own input loop, where it stops the
+        // running turn. Record it once per burst so a held key is one event;
+        // the detach row carries the full count.
+        attachment.interruptCount += interrupts;
+        const now = Date.now();
+        if (
+          attachment.lastInterruptAt === null ||
+          now - attachment.lastInterruptAt >= INTERRUPT_AUDIT_WINDOW_MS
+        ) {
+          attachment.lastInterruptAt = now;
+          auditTerminal("agentRun.terminal_interrupted", attachment);
+        }
+      }
       const accepted = subscription.stdin.write(message.payload.data);
       if (!accepted && !subscription.inputPaused) {
         subscription.inputPaused = true;
@@ -300,10 +333,38 @@ export class WebSocketService {
   start(httpServer: Server) {
     const { path } = config.websocket;
 
-    this.wss = new WSS({
-      server: httpServer,
-      path,
-    });
+    // One listener dispatches upgrades by path: this server's own path and the
+    // LLM proxy's realtime sessions. Bound to the HTTP server with `path`, ws
+    // would answer every other path with 400 itself.
+    const wss = new WSS({ noServer: true });
+    this.wss = wss;
+    this.httpServer = httpServer;
+    this.upgradeListener = (request, socket, head) => {
+      const pathname = (request.url ?? "").split("?")[0];
+      if (pathname === path) {
+        wss.handleUpgrade(request, socket, head, (ws) =>
+          wss.emit("connection", ws, request),
+        );
+        return;
+      }
+      if (REALTIME_UPGRADE_PATH.test(pathname)) {
+        // Loaded on first use: the proxy routes import this service.
+        import("@/routes/proxy/realtime/openai-realtime-proxy").then(
+          ({ handleRealtimeUpgrade }) =>
+            handleRealtimeUpgrade(request, socket, head),
+          (error) => {
+            logger.error({ error }, "Realtime proxy failed to load");
+            socket.destroy();
+          },
+        );
+        return;
+      }
+      socket.write(
+        "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+      );
+      socket.destroy();
+    };
+    httpServer.on("upgrade", this.upgradeListener);
     if (BrowserStreamSocketClientContext.isBrowserStreamEnabled()) {
       this.browserStreamContext = new BrowserStreamSocketClientContext({
         wss: this.wss,
@@ -590,6 +651,7 @@ export class WebSocketService {
       stderr: new PassThrough(),
       inputPaused: false,
       socket: null,
+      attachment: null,
     };
     // Claim ownership before awaiting lookup or attachment so unsubscribe and
     // a newer subscribe also invalidate work that is still connecting.
@@ -678,6 +740,16 @@ export class WebSocketService {
       }
       subscription.socket =
         socket as unknown as AgentRunAttachSubscription["socket"];
+      subscription.attachment = {
+        session,
+        requestedRunId: runId,
+        actorUserId: clientContext.userId,
+        podName: resourceName,
+        attachedAt: Date.now(),
+        lastInterruptAt: null,
+        interruptCount: 0,
+      };
+      auditTerminal("agentRun.terminal_attached", subscription.attachment);
 
       for (const stream of [stdout, stderr]) {
         stream.on("data", (chunk: Buffer) => {
@@ -719,6 +791,15 @@ export class WebSocketService {
     const subscription = this.agentRunAttachSubscriptions.get(ws);
     if (!subscription) return;
     this.agentRunAttachSubscriptions.delete(ws);
+    if (subscription.attachment) {
+      auditTerminal("agentRun.terminal_detached", subscription.attachment, {
+        durationSeconds: Math.round(
+          (Date.now() - subscription.attachment.attachedAt) / 1000,
+        ),
+        interruptCount: subscription.attachment.interruptCount,
+      });
+      subscription.attachment = null;
+    }
     subscription.stdin.destroy();
     subscription.stdout.destroy();
     subscription.stderr.destroy();
@@ -1833,7 +1914,18 @@ export class WebSocketService {
     for (const [ws] of this.mcpDeploymentStatusSubscriptions) {
       this.unsubscribeMcpDeploymentStatuses(ws);
     }
+    // End live terminals here, not from each socket's later close event, so
+    // their detach audit rows are tracked before shutdown drains and closes
+    // the database.
+    for (const [ws] of this.agentRunAttachSubscriptions) {
+      this.unsubscribeAgentRunAttach(ws);
+    }
     this.clientContexts.clear();
+
+    if (this.httpServer && this.upgradeListener)
+      this.httpServer.off("upgrade", this.upgradeListener);
+    this.httpServer = null;
+    this.upgradeListener = null;
 
     if (this.wss) {
       this.wss.clients.forEach((client) => {

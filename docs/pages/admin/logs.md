@@ -2,12 +2,14 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 7
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Know what every agent did, as whom, and what it cost. Archestra logs every model request, tool call, and admin change, from Chat, messaging channels, and connected clients. You do not turn anything on.
+
+To forward events from the **Audit** tab to your SIEM, configure [audit log export](/docs/admin/observability/audit-logs).
 
 ![An incident investigation with model requests and parallel MCP tool calls on a shared waterfall timeline, including timing, tokens, cost, and conversation details](/docs/automated_screenshots/admin-logs_session-waterfall.webp)
 
@@ -23,6 +25,8 @@ Know what every agent did, as whom, and what it cost. Archestra logs every model
 
 Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
 
+If a model response stream ends cleanly before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
+
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 
 ## Keep Prompts Out of the Logs
@@ -32,6 +36,14 @@ Keep the cost and audit trail without storing what people sent. Set [`ARCHESTRA_
 - Rows already stored keep their content.
 - Traces leave the content out too, even when content capture is on.
 - Chat history is not affected.
+
+## Keep Media in the Logs
+
+By default, logs keep the conversation text but not the images, audio, and files in it. Each row shows **Not kept: media logging is off** where media was. To let Logs show and play media, go to **Settings → LLM**, turn on **Keep media in logs**, and click **Save**.
+
+- The setting covers model requests and responses and MCP tool calls, from Chat, agents, and connected clients.
+- Changing it needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and applies to new rows only.
+- Traces never carry media, whatever the setting.
 
 ## Who Can Read Them
 

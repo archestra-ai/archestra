@@ -1,0 +1,63 @@
+{
+  // The models-upper layer (layers.mjs): what builds on the agent models, and
+  // the models barrel. Every file is pinned.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/models-upper",
+    "tsBuildInfoFile": "./.tsbuild/models-upper.tsbuildinfo"
+  },
+  "files": [
+    "src/auth/agent-type-permissions.ts",
+    "src/auth/idp.ee.ts",
+    "src/auth/index.ts",
+    "src/auth/linked-idp.ts",
+    "src/auth/mcp-catalog-permissions.ts",
+    "src/auth/oauth-client-permissions.ts",
+    "src/auth/request-lookups.ts",
+    "src/auth/skill-permissions.ts",
+    "src/models/app.ts",
+    "src/models/conversation-enabled-tool.ts",
+    "src/models/conversation.ts",
+    "src/models/environment.ts",
+    "src/models/external-mcp-skill-usage-event.ts",
+    "src/models/hook-file.ts",
+    "src/models/index.ts",
+    "src/models/interaction.ts",
+    "src/models/invitation.ts",
+    "src/models/llm-oauth-client.ts",
+    "src/models/llm-provider-api-key.ts",
+    "src/models/managed-oauth-client.ts",
+    "src/models/mcp-oauth-client.ts",
+    "src/models/mcp-tool-call.ts",
+    "src/models/playwright-runtime.ts",
+    "src/models/plugin-skill-usage-event.ts",
+    "src/models/plugin.ts",
+    "src/models/project.ts",
+    "src/models/schedule-trigger.ts",
+    "src/models/skill-usage-actors.ts",
+    "src/models/skill-usage-event.ts",
+    "src/models/statistics.ts",
+    "src/models/usage-statistics.ts",
+    "src/models/virtual-api-key.ts",
+    "src/observability/index.ts",
+    "src/observability/metrics/active-users.ts",
+    "src/routes/proxy/utils/model-team-access.ts",
+    "src/services/apps/app-mcp-backing.ts",
+    "src/services/credential-resource-permissions.ts",
+    "src/services/identity-providers/linked-idp-auth.ts",
+    "src/services/mcp-advanced-settings.ts",
+    "src/services/mcp-server-assignability.ts",
+    "src/services/member-removal.ts",
+    "src/services/resource-permissions.ts",
+    "src/utils/llm-api-key-resolution.ts",
+    "src/utils/llm-resolution.ts"
+  ],
+  "include": ["src/ambient/*.d.ts"],
+  "references": [
+    { "path": "../shared/tsconfig.lib.json" },
+    { "path": "./tsconfig.schema.json" },
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.models.json" },
+    { "path": "./tsconfig.models-agents.json" }
+  ]
+}

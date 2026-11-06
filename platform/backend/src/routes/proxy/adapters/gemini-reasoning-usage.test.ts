@@ -52,11 +52,11 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
         expect(result).toMatchObject({
           usage: transport === "chat" ? chatUsage : responsesUsage,
         });
-        // Reporting wire totals must not change the provider-domain counters
-        // used for logging and cost calculation.
+        // The counters used for logging and cost carry the same output as the
+        // wire: thinking included once, not added again on the way out.
         expect(adapter.getUsage()).toMatchObject({
           inputTokens: 200,
-          outputTokens: 100,
+          outputTokens: 600,
           reasoningTokens: 500,
         });
       });
@@ -77,6 +77,7 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
           .join("");
         const events = text
           .split("\n\n")
+          .map((part) => part.replace(/^event: .*\n/, ""))
           .filter((part) => part.startsWith("data: {"))
           .map((part) => JSON.parse(part.slice(6)));
         const usage =
@@ -118,6 +119,7 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
     const wire = [...frames, adapter.formatEndSSE()].join("");
     const events = wire
       .split("\n\n")
+      .map((part) => part.replace(/^event: .*\n/, ""))
       .filter((part) => part.startsWith("data: {"))
       .map((part) => JSON.parse(part.slice(6)));
     const completions = events.filter(

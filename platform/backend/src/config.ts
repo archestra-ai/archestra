@@ -25,6 +25,7 @@ import {
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
+  gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
@@ -74,7 +75,16 @@ export type FileStorageS3Config = {
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+// Tests read .env.example, as CI does (it copies .env.example to .env): a
+// developer's own settings, such as API keys, URLs or a kubeconfig, would
+// make tests behave differently locally than in CI.
+dotenv.config({
+  path: path.resolve(
+    __dirname,
+    process.env.VITEST ? "../../.env.example" : "../../.env",
+  ),
+  quiet: true,
+});
 
 const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
@@ -1883,8 +1893,34 @@ export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
 };
 
 /**
+ * The default workspace volume of Agent Runtime runs, read once: the
+ * Kubernetes quantity a volume claim takes, and the same size in GiB.
+ *
+ * @public — exported for testability
+ */
+export function agentRuntimeWorkspaceStorage(value: string | undefined): {
+  workspaceStorageSize: string;
+  workspaceStorageGiB: number;
+} {
+  const workspaceStorageSize = parseK8sResourceQuantity({
+    envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
+    value,
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "20Gi",
+  });
+  // The validator and the parser accept the same suffixes, so a validated
+  // quantity always has a byte count.
+  const bytes = k8sMemoryQuantityToBytes(workspaceStorageSize) ?? 0;
+  return {
+    workspaceStorageSize,
+    workspaceStorageGiB: gibFromMiB(bytes / 1024 ** 2),
+  };
+}
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
- * undefined when it is not one.
+ * undefined when it is not one. Reads every suffix `isValidK8sMemoryQuantity`
+ * accepts, so a validated setting always has a byte count.
  *
  * @public — exported for testability
  */
@@ -1893,17 +1929,22 @@ export const k8sMemoryQuantityToBytes = (
 ): number | undefined => {
   const match = quantity
     .trim()
-    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/);
   if (!match) return undefined;
   const multipliers: Record<string, number> = {
     Ki: 1024,
     Mi: 1024 ** 2,
     Gi: 1024 ** 3,
     Ti: 1024 ** 4,
+    Pi: 1024 ** 5,
+    Ei: 1024 ** 6,
     k: 1000,
+    K: 1000,
     M: 1000 ** 2,
     G: 1000 ** 3,
     T: 1000 ** 4,
+    P: 1000 ** 5,
+    E: 1000 ** 6,
   };
   // Floored because the only consumers are a cgroup limit and a byte
   // comparison, neither of which takes a fraction.
@@ -2095,7 +2136,11 @@ export function parseOpenAppaConfig({
   reviewSummaryProvider,
   reviewSummaryModel,
   authSecret,
+  humanApprovalMode,
+  softBlockMode,
 }: {
+  humanApprovalMode?: string;
+  softBlockMode?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2127,6 +2172,23 @@ export function parseOpenAppaConfig({
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
+  // Release 1.4 sets these two Break the glass settings only here. While one
+  // is set it overrides the stored setting, so a cluster upgraded from 1.4
+  // keeps the behaviour it was configured for.
+  const breakTheGlassOverrides = {
+    ...optionalChoice(
+      "humanApprovalMode",
+      "ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE",
+      humanApprovalMode,
+      ["block", "unattended", "everywhere"] as const,
+    ),
+    ...optionalChoice(
+      "unapprovableBlockMode",
+      "ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE",
+      softBlockMode,
+      ["refuse", "allow"] as const,
+    ),
+  };
   const reviewSummary = parseOpenAppaReviewSummary({
     provider: reviewSummaryProvider,
     model: reviewSummaryModel,
@@ -2143,7 +2205,28 @@ export function parseOpenAppaConfig({
     // Omitted (not `undefined`) when disabled so exact-shape consumers and
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
+    ...(Object.keys(breakTheGlassOverrides).length > 0
+      ? { breakTheGlassOverrides }
+      : {}),
   };
+}
+
+/** An unset or empty variable sets nothing; any other value must be a choice. */
+function optionalChoice<
+  K extends string,
+  const T extends readonly [string, ...string[]],
+>(
+  key: K,
+  name: string,
+  value: string | undefined,
+  choices: T,
+): { [P in K]?: T[number] } {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed === "") return {};
+  if (!choices.includes(trimmed)) {
+    throw new Error(`${name} must be one of: ${choices.join(", ")}`);
+  }
+  return { [key]: trimmed } as { [P in K]?: T[number] };
 }
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
@@ -2262,6 +2345,8 @@ const authSessionSecret =
 
 const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
+  softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -2503,10 +2588,18 @@ const config = {
         process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
         getAgentCatalogImageTag(appVersion),
     }),
+    /**
+     * Pre-pull the whole catalog onto every runtime node at startup and on
+     * each platform version, so a cold-started Agent does not wait on a
+     * multi-GB pull. Off in local development (Tilt), where it would pull
+     * every image for every release onto a laptop.
+     */
+    imagePrefetchEnabled:
+      process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED !== "false",
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
-      72,
+      24,
     ),
     /**
      * Fallback idle stop for Agent Runtime runs whose agent sets none. An idle run is
@@ -2515,28 +2608,14 @@ const config = {
      */
     defaultIdleTimeoutMinutes: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
-      180,
+      60,
     ),
-    resources: {
-      cpuRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST?.trim() || "500m",
-      memoryRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST?.trim() || "1Gi",
-      /**
-       * No CPU limit by default, matching the MCP server runtime: throttling
-       * an agent mid-turn surfaces as confusing timeouts rather than
-       * back-pressure. Memory is limited because a runaway agent process
-       * should die rather than take the node with it.
-       */
-      memoryLimit:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
-    },
-    workspaceStorageSize: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
-      validator: isValidK8sMemoryQuantity,
-      defaultValue: "20Gi",
-    }),
+    // `workspaceStorageSize` (the quantity a volume claim takes) and
+    // `workspaceStorageGiB` (the same size in GiB, which runs and the tier
+    // settings are told): the volume of a run whose tier sets none.
+    ...agentRuntimeWorkspaceStorage(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
+    ),
     workspaceStorageClass:
       process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS?.trim() ||
       undefined,
@@ -3575,7 +3654,7 @@ const config = {
   environment,
   llmProxy: {
     // BETA gate for model pools: hides the page and its API, and keeps the
-    // proxy and the Model Router from resolving a model name to a pool. Off
+    // proxy and the Unified Model API from resolving a model name to a pool. Off
     // by default; a blank value falls back to the ARCHESTRA_BETA master switch
     // (see betaFeatureEnabled).
     modelPoolsEnabled: betaFeatureEnabled(
@@ -3601,7 +3680,7 @@ const config = {
     ),
   },
   autoRouting: {
-    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    /** ALPHA gate for the Unified Model API's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
     enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(

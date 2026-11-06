@@ -16,10 +16,15 @@ describe("callOpenAIEmbedding vector decoding", () => {
 
   let responseEmbedding: string | number[] = [];
   const requestedFormats: unknown[] = [];
+  const requestedDimensions: unknown[] = [];
   useMswServer(
     http.post(`${BASE_URL}/embeddings`, async ({ request }) => {
-      const body = (await request.json()) as { encoding_format?: unknown };
+      const body = (await request.json()) as {
+        encoding_format?: unknown;
+        dimensions?: unknown;
+      };
       requestedFormats.push(body.encoding_format);
+      requestedDimensions.push(body.dimensions);
       return HttpResponse.json({
         object: "list",
         data: [{ object: "embedding", embedding: responseEmbedding, index: 0 }],
@@ -46,6 +51,22 @@ describe("callOpenAIEmbedding vector decoding", () => {
 
     expect(response.data[0].embedding).toHaveLength(DIMENSIONS);
     expect(response.data[0].embedding).toEqual(vector);
+  });
+
+  test("omits dimensions for a model that rejects the parameter", async () => {
+    responseEmbedding = vector;
+
+    await callOpenAIEmbedding({
+      inputs: ["hello"],
+      model: "text-embedding-ada-002",
+      apiKey: "k",
+      baseUrl: BASE_URL,
+      dimensions: DIMENSIONS,
+    });
+    expect(requestedDimensions.at(-1)).toBeUndefined();
+
+    await embed();
+    expect(requestedDimensions.at(-1)).toBe(DIMENSIONS);
   });
 });
 

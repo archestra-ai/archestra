@@ -10,7 +10,9 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_MAX_SKILLS,
+  CONNECTION_SETUP_TOKEN_TTL_MS,
   type ConnectSetupPart,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
@@ -18,7 +20,14 @@ import {
   PLUGIN_DELIVERY_MAX_COUNT,
 } from "@archestra/shared/connection-setup";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  KeyRound,
+  Loader2,
+  RotateCcw,
+  TimerOff,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -37,7 +46,6 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
@@ -56,9 +64,11 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -76,12 +86,16 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import {
+  useLlmModelsByProvider,
+  useSyncLlmModels,
+} from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { organizationSubscriptionSubtitle } from "@/lib/organization-subscription";
 import {
   isDeliverablePlugin,
   type PluginListItem,
@@ -101,6 +115,12 @@ import {
   type InstallerClientId,
 } from "./clients";
 import {
+  ScriptBlock,
+  SetupActionArea,
+  SetupActionRow,
+  useCopy,
+} from "./connect-page-parts";
+import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
 } from "./connection-consent-options";
@@ -108,8 +128,14 @@ import {
   connectionSetupBody,
   connectionSetupInputsKey,
   connectionSetupKeyDigest,
+  defaultPerUserKeyId,
+  initialConnectProvider,
   kimiCodeDefaultModel,
 } from "./connection-setup-payload";
+import {
+  CopilotAccountCards,
+  copilotAccountMissing,
+} from "./copilot-account-cards";
 import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
@@ -129,6 +155,8 @@ import {
 import { TerminalBlock } from "./terminal-block";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
+/** How often an empty per-user catalog is re-read while its sync is pending. */
+const PER_USER_CATALOG_POLL_MS = 15_000;
 type EditableRow =
   | "gateway"
   | "proxy"
@@ -203,6 +231,49 @@ interface ConnectCommandPanelProps {
    * page's band. The full review flow is what the approval page shows.
    */
   variant?: "full" | "download";
+  /** The download band's installer started downloading, or its command was copied. */
+  onStarted?: () => void;
+  /** The download band shows its terminal command instead of the installer. */
+  terminal?: boolean;
+  /** The Connect page's OS choice; overrides the OS detected here. */
+  platform?: ConnectPlatformOption;
+  /** The download band's setups, kept by the page across remounts. */
+  setupCache?: DesktopSetupCache;
+}
+
+/** Setups the download band made, to reuse each until it expires. */
+export interface DesktopSetupCache {
+  /** The latest setup for each payload. */
+  byKey: Map<string, CreateConnectionSetupResult>;
+  /** When the band asked for each setup, by setup id. */
+  requestedAt: Map<string, number>;
+  /**
+   * Setups still on their way, by payload, with the server's reason if it
+   * refuses. A panel the page remounts waits for these too.
+   */
+  pending: Map<
+    string,
+    Promise<{
+      setup: CreateConnectionSetupResult | null;
+      refusal: string | null;
+    }>
+  >;
+}
+
+function newDesktopSetupCache(): DesktopSetupCache {
+  return { byKey: new Map(), requestedAt: new Map(), pending: new Map() };
+}
+
+/**
+ * Timed from the request on this computer's clock, which may differ from the
+ * server's. The server makes the setup after the request starts, so a slow
+ * response never shows a command the server has expired.
+ */
+function setupExpired(cache: DesktopSetupCache, id: string): boolean {
+  return (
+    (cache.requestedAt.get(id) ?? 0) + CONNECTION_SETUP_TOKEN_TTL_MS <=
+    Date.now()
+  );
 }
 
 /**
@@ -228,6 +299,10 @@ export function ConnectCommandPanel({
   exclude,
   pluginSlugs,
   variant = "full",
+  onStarted,
+  terminal = false,
+  platform: platformChoice,
+  setupCache,
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
@@ -236,7 +311,14 @@ export function ConnectCommandPanel({
   // the options to change it go away.
   const [connectRequestDecided, setConnectRequestDecided] = useState(false);
   const [downloadRequested, setDownloadRequested] = useState(false);
-  const preparationEnabled = variant !== "download" || downloadRequested;
+  // A download click still waiting for its setup.
+  const [downloadPending, setDownloadPending] = useState(false);
+  // The terminal command needs a prepared setup too, but no download. Once
+  // shown, its setup stays prepared across switches until it expires.
+  const [terminalRequested, setTerminalRequested] = useState(terminal);
+  if (terminal && !terminalRequested) setTerminalRequested(true);
+  const requested = downloadRequested || terminalRequested;
+  const preparationEnabled = variant !== "download" || requested;
   // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
@@ -331,7 +413,7 @@ export function ConnectCommandPanel({
   // user can override it in the review step.
   // A platform the URL names (the installer's request) is known on the
   // server too, so it starts selected and the first render already matches.
-  const [platform, setPlatform] = useState<ConnectPlatformOption>(() =>
+  const [detectedPlatform, setPlatform] = useState<ConnectPlatformOption>(() =>
     requestedPlatform === "windows" ||
     requestedPlatform === "linux" ||
     requestedPlatform === "macos"
@@ -347,6 +429,7 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
+  const platform = platformChoice ?? detectedPlatform;
   // Exclusions seed the optional choices; they do not restrict customization.
   // Legacy tools exclusions cannot remove the required gateway.
   const { data: connection } = useClientConnection(connectRequest ?? "");
@@ -492,10 +575,15 @@ export function ConnectCommandPanel({
     usableOpenCodeKeys,
     adminMappedProviders,
   ]);
-  const provider =
-    urlProvider && providers.includes(urlProvider)
-      ? urlProvider
-      : (providers[0] ?? null);
+  // The provider the setup starts on: with the person's own account routing
+  // the models, the client's own comes first (Copilot CLI → GitHub Copilot);
+  // a key an admin mapped for the client keeps its place.
+  const provider = initialConnectProvider({
+    client,
+    offered: providers,
+    urlProvider,
+    ownAccountRoutes: proxyAuth === "provider-key",
+  });
 
   // GitHub Copilot is per-user: it can only run through a personal virtual key,
   // never the passthrough device flow, and the user must connect their own
@@ -508,6 +596,42 @@ export function ConnectCommandPanel({
     !!activeLlmProxyId &&
     providerIsPerUser &&
     !configuredProviders.has(provider);
+  // On the command page the accounts of a per-user provider are connected in
+  // the proxy editor, so it opens by itself while one is still to connect.
+  useEffect(() => {
+    if (needsPerUserConnect && !connectRequest) setEditing("proxy");
+  }, [needsPerUserConnect, connectRequest]);
+
+  // A per-user provider can have more than one account the user may use: their
+  // own sign-in and organization plans shared with them (GitHub Copilot paid by
+  // a GitHub organization). Nothing picked binds the user's own sign-in, as the
+  // server does; without one, the first plan.
+  const perUserKeys = useMemo(
+    () =>
+      providerIsPerUser
+        ? (availableKeys ?? []).filter((key) => key.provider === provider)
+        : [],
+    [providerIsPerUser, availableKeys, provider],
+  );
+  const [perUserKeyChoice, setPerUserKeyChoice] = useState<string | null>(null);
+  const providerKeyId =
+    perUserKeyChoice && perUserKeys.some((key) => key.id === perUserKeyChoice)
+      ? perUserKeyChoice
+      : provider
+        ? defaultPerUserKeyId(perUserKeys, provider)
+        : null;
+  const ownSignIns = perUserKeys.filter((key) => !key.isGithubAppKey);
+  const boundPerUserKey =
+    perUserKeys.find((key) => key.id === providerKeyId) ??
+    ownSignIns.find((key) => key.isPrimary) ??
+    ownSignIns[0] ??
+    null;
+  const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
+    key.isGithubAppKey
+      ? `Enterprise plan · ${key.githubOrganization ?? key.name}`
+      : ownSignIns.length > 1
+        ? `Personal subscription · ${key.name}`
+        : "Personal subscription";
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -531,15 +655,109 @@ export function ConnectCommandPanel({
           (key) => key.provider === provider && key.isPrimary,
         )?.id)
       : undefined;
+  // A per-user provider lists the models of the account the setup binds: a
+  // person's own sign-in and an enterprise plan can serve different ones.
+  const perUserModelKeyId = providerIsPerUser
+    ? (boundPerUserKey?.id ?? null)
+    : null;
+  // While that account's catalog is empty the list is polled: the server
+  // syncs a new key's models as the key is created and again on its schedule
+  // when the provider refused that first fetch.
+  const [pollPerUserCatalog, setPollPerUserCatalog] = useState(false);
   const modelCatalog = useLlmModelsByProvider({
-    apiKeyId: piModelKeyId,
-    enabled: client.id !== "pi" || !!piModelKeyId,
+    apiKeyId: piModelKeyId ?? perUserModelKeyId ?? undefined,
+    enabled:
+      client.id === "pi"
+        ? !!piModelKeyId
+        : !providerIsPerUser || !!boundPerUserKey,
+    refetchInterval: pollPerUserCatalog ? PER_USER_CATALOG_POLL_MS : false,
   });
-  // Never seed Pi from another key's models, including previous-key placeholder data.
+  // Never seed Pi or a per-user account from another key's models, including
+  // previous-key placeholder data.
+  const boundCatalogPending =
+    client.id === "pi"
+      ? !piModelKeyId || modelCatalog.isPlaceholderData
+      : !!perUserModelKeyId &&
+        (modelCatalog.isPending || modelCatalog.isPlaceholderData);
   const modelsByProvider: Partial<typeof modelCatalog.modelsByProvider> =
-    client.id === "pi" && (!piModelKeyId || modelCatalog.isPlaceholderData)
-      ? {}
-      : modelCatalog.modelsByProvider;
+    boundCatalogPending ? {} : modelCatalog.modelsByProvider;
+  // The provider's models this client can run over the API its setup uses:
+  // Copilot CLI's Responses setups leave out models served only on Chat
+  // Completions, such as Claude on GitHub Copilot.
+  const providerModels = useMemo(
+    () =>
+      provider
+        ? (modelsByProvider[provider] ?? []).filter((model) =>
+            connectionModelServesClient({
+              clientId: client.id,
+              provider,
+              supportedEndpoints: model.capabilities?.supportedEndpoints,
+            }),
+          )
+        : [],
+    [provider, modelsByProvider, client.id],
+  );
+  const unservedModelIds = useMemo(() => {
+    const served = new Set(providerModels.map((model) => model.id));
+    return new Set(
+      (provider ? (modelsByProvider[provider] ?? []) : [])
+        .map((model) => model.id)
+        .filter((id) => !served.has(id)),
+    );
+  }, [provider, modelsByProvider, providerModels]);
+  // Where the model list comes from: a per-user provider's connected account,
+  // or a key for the provider (a synced catalog shows one exists). Without
+  // either there is nothing to choose from yet, so the model control is off.
+  const modelSourceConnected =
+    !!provider &&
+    (providerIsPerUser
+      ? !!boundPerUserKey
+      : configuredProviders.has(provider) ||
+        (modelsByProvider[provider] ?? []).length > 0);
+  // The bound account's catalog: still loading, or synced but empty. An empty
+  // one is refreshed once from here (quietly; the outcome shows inline) and
+  // polled meanwhile, so the person never types a model id by hand.
+  const perUserCatalogLoading =
+    providerIsPerUser && !!perUserModelKeyId && boundCatalogPending;
+  const perUserCatalogEmpty =
+    providerIsPerUser &&
+    !!perUserModelKeyId &&
+    !boundCatalogPending &&
+    !!provider &&
+    (modelsByProvider[provider] ?? []).length === 0;
+  const syncModels = useSyncLlmModels({ silent: true });
+  const { mutate: runModelSync, isPending: modelSyncPending } = syncModels;
+  const syncedCatalogKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    setPollPerUserCatalog(perUserCatalogEmpty);
+    if (!perUserCatalogEmpty || !perUserModelKeyId) return;
+    if (syncedCatalogKeyRef.current === perUserModelKeyId) return;
+    syncedCatalogKeyRef.current = perUserModelKeyId;
+    runModelSync();
+  }, [perUserCatalogEmpty, perUserModelKeyId, runModelSync]);
+  // Why the bound account still lists no models, once a refresh has settled;
+  // null while one is still to come or the list is being fetched again.
+  const modelSyncOutcome = (() => {
+    if (!perUserCatalogEmpty || !boundPerUserKey) return null;
+    if (modelSyncPending || modelCatalog.isFetching) return null;
+    const account = perUserKeyLabel(boundPerUserKey);
+    if (syncModels.isError) {
+      return `The model list of your ${account} could not be refreshed.`;
+    }
+    if (!syncModels.isSuccess) return null;
+    const failure = syncModels.data?.failures.find(
+      (item) => item.apiKeyId === boundPerUserKey.id,
+    );
+    if (failure?.requiresReauthentication) {
+      return `GitHub refused the sign-in of your ${account}. Reconnect it on the Model Providers page.`;
+    }
+    if (failure) {
+      return `GitHub Copilot did not answer the model request for your ${account}.`;
+    }
+    return `GitHub Copilot lists no models for your ${account}.`;
+  })();
+  const modelCatalogWaiting =
+    perUserCatalogLoading || (perUserCatalogEmpty && modelSyncOutcome === null);
   const effectiveModel =
     supportsModelChoice && provider
       ? (modelChoice ??
@@ -547,17 +765,15 @@ export function ConnectCommandPanel({
           ? "claude-haiku-4-5-20251001"
           : (defaultConnectionModel({
               provider,
-              modelIds: (modelsByProvider[provider] ?? []).map(
-                (model) => model.id,
-              ),
+              modelIds: providerModels.map((model) => model.id),
             }) ?? kimiCodeDefaultModel(client.id, provider))))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
-    const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
+    const ids = providerModels.map((m) => m.id);
     // the current value stays selectable even when it's not in the synced list
     return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
-  }, [supportsModelChoice, provider, modelsByProvider, effectiveModel]);
+  }, [supportsModelChoice, provider, providerModels, effectiveModel]);
 
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
@@ -637,17 +853,39 @@ export function ConnectCommandPanel({
   // either limit is explained here instead of sent: the backend would refuse
   // it, and the approval page would wait for a setup that never arrives.
   const optionsPlace = connectRequest ? " in Setup options" : "";
+  // The approval page's reason while the person has no account for a per-user
+  // provider: the cards that connect one are in Setup options.
+  const accountProblem =
+    needsPerUserConnect && provider
+      ? `Connect ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} account${optionsPlace} to approve.`
+      : null;
   const selectionProblem =
     [
       supportsModelChoice &&
       proxyActive &&
+      // Without an account, the connect gate names the next step.
+      !needsPerUserConnect &&
+      !modelCatalogWaiting &&
       (!effectiveModel ||
         (client.id === "pi" &&
           (!provider ||
             !(modelsByProvider[provider] ?? []).some(
               (item) => item.id === effectiveModel,
             ))))
-        ? "Choose a model served by your provider, or sync its model catalog before connecting."
+        ? providerIsPerUser && boundPerUserKey
+          ? perUserCatalogEmpty
+            ? `${modelSyncOutcome} Retry the refresh in Setup options.`
+            : `None of the models your ${perUserKeyLabel(boundPerUserKey)} serves is available through the Responses API, which ${client.label} connects through. Choose another account.`
+          : provider && !modelSourceConnected
+            ? `Add ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} key to list the models ${client.label} can run, or choose a provider with one${optionsPlace}.`
+            : "Choose a model served by your provider, or sync its model catalog before connecting."
+        : null,
+      supportsModelChoice &&
+      proxyActive &&
+      provider &&
+      effectiveModel &&
+      unservedModelIds.has(effectiveModel)
+        ? `${effectiveModel} is served only through Chat Completions on ${providerCatalog.label(provider)}, and ${client.label} connects through the Responses API. Choose another model.`
         : null,
       client.id === "pi" && (!gateway || !proxyActive)
         ? "Pi requires both an MCP gateway and an LLM proxy. Keep tools and model routing enabled."
@@ -661,12 +899,28 @@ export function ConnectCommandPanel({
     ]
       .filter(Boolean)
       .join(" ") || null;
+  // What the approval page reports above the card and on the Approve button.
+  const approvalProblem = accountProblem ?? selectionProblem;
   useEffect(() => {
     // The download band prepares nothing until asked, so it stays quiet too.
     if (selectionProblem && preparationEnabled) {
       toast.error(selectionProblem, { id: SETUP_LIMIT_TOAST_ID });
     }
   }, [selectionProblem, preparationEnabled]);
+  // The approval page can't approve until the problem is fixed in Setup
+  // options, so they open by themselves and stay open once the user has
+  // something to change there; an account still to connect counts, its cards
+  // are there. Judged only after the lists that decide it load: the model
+  // default is unknown until the catalog arrives.
+  const optionsRequired =
+    !!connectRequest &&
+    (selectionProblem !== null || needsPerUserConnect) &&
+    !availableKeysPending &&
+    !modelCatalog.isLoading &&
+    !modelCatalogWaiting;
+  useEffect(() => {
+    if (optionsRequired) setCustomizing(true);
+  }, [optionsRequired]);
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
   // gateway authenticates over OAuth, so the user still finishes the handshake
@@ -707,23 +961,38 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      ((client.id === "codex" || client.id === "pi") &&
+      ((client.id === "codex" ||
+        client.id === "chatgpt" ||
+        client.id === "pi") &&
         provider === "openai") ||
       (client.id === "kimi-code" &&
         (provider === "kimi-code" || provider === "kimi")) ||
       openCodeFamily);
 
-  // The backend's reason for refusing the latest setup request, read once the
-  // request settles.
-  const refusalRef = useRef<string | null>(null);
+  // The backend's reason for refusing each setup request, by its body, so a
+  // request's reason cannot be mixed up with another's.
+  const refusalsRef = useRef(new WeakMap<object, string>());
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup({
-    onRefused: (message) => {
-      refusalRef.current = message;
+    onRefused: (message, body) => {
+      refusalsRef.current.set(body, message);
     },
   });
   // Creating the personal key invalidates the available-keys query, so once the
   // user connects, `configuredProviders` updates and the command auto-generates.
   const createPerUserKey = useCreateLlmProviderApiKey();
+  const connectOwnCopilot = async (token: string) => {
+    if (!provider) return;
+    try {
+      await createPerUserKey.mutateAsync({
+        name: providerCatalog.label(provider),
+        provider,
+        apiKey: token,
+      });
+      // availableKeys invalidates → the command auto-generates.
+    } catch {
+      // handleApiError already surfaced the failure (e.g. no seat)
+    }
+  };
   // Virtual keys are minted from a provider key. When none of the client's
   // providers has one, offer to add it inline (gated on the create permission);
   // the create mutation invalidates the available-keys query, so this section
@@ -764,6 +1033,7 @@ export function ConnectCommandPanel({
           .map((key) => key.id)
           .sort()
       : null,
+    providerKeyId: proxyActive && providerIsPerUser ? providerKeyId : null,
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
@@ -822,20 +1092,43 @@ export function ConnectCommandPanel({
       ? seededSetupId
       : null;
 
+  // Every setup made here, by payload, and when each was requested. A setup
+  // works for a fixed time from its creation, so switching back to earlier
+  // choices (another OS, say) reuses its setup until then.
+  const setupCacheRef = useRef(setupCache ?? newDesktopSetupCache());
+
   const runGeneration = useCallback(
     async (key: string) => {
       const body = connectionSetupBody(key);
       if (!body) return;
       setResult(null);
       setFailure(null);
-      refusalRef.current = null;
-      const created = await createSetup(body);
+      const cache = setupCacheRef.current;
+      // A setup for these choices may already be on its way, asked for before
+      // a mode or OS switch or a remount: wait for it instead of another.
+      let request = cache.pending.get(key);
+      if (!request) {
+        const requestedAt = Date.now();
+        request = createSetup(body)
+          .then((setup) => {
+            if (setup) {
+              cache.requestedAt.set(setup.id, requestedAt);
+              cache.byKey.set(key, setup);
+            }
+            return {
+              setup,
+              refusal: setup ? null : (refusalsRef.current.get(body) ?? null),
+            };
+          })
+          .finally(() => cache.pending.delete(key));
+        cache.pending.set(key, request);
+      }
+      const { setup: created, refusal } = await request;
       if (latestKeyRef.current !== key) return; // stale response
+      setDownloadPending(false);
       preparedKeyRef.current = created ? key : null;
       setResult(created);
-      setFailure(
-        created ? null : (refusalRef.current ?? "the server gave no reason"),
-      );
+      setFailure(created ? null : (refusal ?? "the server gave no reason"));
     },
     [createSetup],
   );
@@ -852,6 +1145,7 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
+      modelCatalogWaiting ||
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
     ) {
@@ -868,6 +1162,24 @@ export function ConnectCommandPanel({
       preparedKeyRef.current = inputsKey;
       return;
     }
+    // Back to choices made earlier on the download band: their setup is
+    // still good until it expires. A download always gets a new one.
+    const earlier = setupCacheRef.current.byKey.get(inputsKey);
+    if (
+      variant === "download" &&
+      !downloadPending &&
+      earlier &&
+      !setupExpired(setupCacheRef.current, earlier.id)
+    ) {
+      preparationStartedRef.current = true;
+      preparedKeyRef.current = inputsKey;
+      setResult(earlier);
+      setFailure(null);
+      return;
+    }
+    // The download band prepares a setup only for what it shows: the
+    // terminal command, or an installer someone clicked for.
+    if (variant === "download" && !terminal && !downloadPending) return;
     preparedKeyRef.current = null;
     setResult(null);
     setFailure(null);
@@ -880,6 +1192,9 @@ export function ConnectCommandPanel({
     );
     return () => clearTimeout(timer);
   }, [
+    variant,
+    terminal,
+    downloadPending,
     seededApproval,
     inputsKey,
     preparationEnabled,
@@ -887,12 +1202,65 @@ export function ConnectCommandPanel({
     skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
+    modelCatalogWaiting,
     selectionProblem,
     primaryRoutingBlocked,
     canAttribute,
     runGeneration,
     seededSetupId,
   ]);
+
+  // A setup works for a fixed time, so the band marks it expired on time
+  // instead of offering a command that would fail. The time runs from when
+  // the band asked for the setup (see setupExpired).
+  const [expiredSetupId, setExpiredSetupId] = useState<string | null>(null);
+  useEffect(() => {
+    if (variant !== "download" || !result) return;
+    const id = result.id;
+    const expiresAt =
+      (setupCacheRef.current.requestedAt.get(id) ?? Date.now()) +
+      CONNECTION_SETUP_TOKEN_TTL_MS;
+    const expire = () => setExpiredSetupId(id);
+    const timer = setTimeout(expire, Math.max(0, expiresAt - Date.now()));
+    // A timer can pause while the computer sleeps, and background tabs slow
+    // it down, so the clock is checked again whenever the page comes back.
+    const recheck = () => {
+      if (Date.now() >= expiresAt) expire();
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [variant, result]);
+  const expired = !!result && expiredSetupId === result.id;
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  // Each download makes a new setup: installing one uses it up, so a second
+  // download must not hand back the same one.
+  const prepareFresh = () => {
+    setDownloadPending(true);
+    if (preparedKeyRef.current === inputsKey) void runGeneration(inputsKey);
+    else setDownloadRequested(true);
+  };
+  // Switching to the terminal command keeps the current setup until it
+  // expires. The clock decides: the expiry timer may not have fired yet.
+  const wasTerminalRef = useRef(terminal);
+  useEffect(() => {
+    const shown = resultRef.current;
+    if (
+      terminal &&
+      !wasTerminalRef.current &&
+      shown &&
+      setupExpired(setupCacheRef.current, shown.id) &&
+      preparedKeyRef.current === latestKeyRef.current
+    ) {
+      void runGeneration(latestKeyRef.current);
+    }
+    wasTerminalRef.current = terminal;
+  }, [terminal, runGeneration]);
 
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
@@ -971,7 +1339,7 @@ export function ConnectCommandPanel({
           </span>
         ) : providers.length ? (
           <span>
-            {`Cursor's models go through the ${appName} Model Router with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
+            {`Cursor's models go through the ${appName} Unified Model API with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
           </span>
         ) : (
           <span>{CURSOR_NO_KEYS_MESSAGE}</span>
@@ -979,6 +1347,48 @@ export function ConnectCommandPanel({
       </p>
     </EditorField>
   );
+
+  // Which of the user's accounts the provider bills, when there is a choice.
+  const accountPicker =
+    proxyActive && provider && perUserKeys.length > 1 && boundPerUserKey ? (
+      <Select value={boundPerUserKey.id} onValueChange={setPerUserKeyChoice}>
+        <SelectTrigger
+          aria-label={`${providerCatalog.label(provider)} account`}
+          size="sm"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {perUserKeys.map((key) => (
+            <SelectItem
+              key={key.id}
+              value={key.id}
+              description={
+                key.isGithubAppKey
+                  ? organizationSubscriptionSubtitle(key)
+                  : `Your own ${providerCatalog.label(provider)} sign-in`
+              }
+            >
+              {perUserKeyLabel(key)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : null;
+  // The GitHub Copilot accounts still to connect, as on the Model Providers
+  // page: both before any is connected, then the one not in use. They have one
+  // place, under the provider, on the command page and the approval page alike.
+  const accountCards =
+    proxyActive &&
+    provider === "github-copilot" &&
+    providerIsPerUser &&
+    copilotAccountMissing(perUserKeys) ? (
+      <CopilotAccountCards
+        keys={perUserKeys}
+        pending={createPerUserKey.isPending}
+        onToken={connectOwnCopilot}
+      />
+    ) : null;
 
   const proxyEditor = !hasProxy ? null : client.id === "cursor" ? (
     cursorProxyEditor
@@ -1005,6 +1415,14 @@ export function ConnectCommandPanel({
               />
             </SelectContent>
           </Select>
+        </EditorField>
+      )}
+      {accountPicker && (
+        <EditorField label="Account">{accountPicker}</EditorField>
+      )}
+      {accountCards && (
+        <EditorField label={perUserKeys.length ? "Other accounts" : "Accounts"}>
+          {accountCards}
         </EditorField>
       )}
       <EditorField label="Model routing">
@@ -1036,7 +1454,7 @@ export function ConnectCommandPanel({
               )
             ) : providerIsPerUser && provider ? (
               <span>
-                {`${providerCatalog.label(provider)} runs through a personal virtual key — connect your own account below.`}
+                {`${providerCatalog.label(provider)} runs through a personal virtual key for the account you connect.`}
               </span>
             ) : providers.length === 0 ? (
               canCreateProviderKey ? (
@@ -1068,11 +1486,71 @@ export function ConnectCommandPanel({
     </div>
   );
 
+  // What gets a model list, while there is none to choose from.
+  const modelSourceHint =
+    !provider || modelSourceConnected ? null : providerIsPerUser ? (
+      <span>
+        {`Connect your ${providerCatalog.label(provider)} account above to list the models it serves.`}
+      </span>
+    ) : (
+      <>
+        <span>
+          {`Add ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} key to list the models ${client.label} can run.`}
+        </span>
+        {canCreateProviderKey ? (
+          <>
+            <span> </span>
+            <UnstyledButton
+              type="button"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              onClick={() => setShowAddProviderKey(true)}
+              data-testid="connect-model-add-provider-key"
+            >
+              Add a key
+            </UnstyledButton>
+          </>
+        ) : (
+          <span> Ask an admin to add one.</span>
+        )}
+      </>
+    );
   const modelEditor =
     supportsModelChoice && provider ? (
       <div className="grid gap-1.5">
         <EditorField label="Model">
-          {modelOptions.length > 1 ? (
+          {modelCatalogWaiting ? (
+            <div className="grid gap-1.5" data-testid="connect-model-loading">
+              <Skeleton className="h-9 w-full" />
+              <p className="text-xs text-muted-foreground">
+                {`Loading the models your ${boundPerUserKey ? perUserKeyLabel(boundPerUserKey) : "account"} serves…`}
+              </p>
+            </div>
+          ) : perUserCatalogEmpty ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{modelSyncOutcome}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={modelSyncPending}
+                onClick={() => runModelSync()}
+                data-testid="connect-model-retry"
+              >
+                <RotateCcw />
+                <span>Retry</span>
+              </Button>
+            </div>
+          ) : modelSourceHint ? (
+            <SearchableSelect
+              value=""
+              onValueChange={() => {}}
+              items={[]}
+              ariaLabel="Model"
+              placeholder="Select model"
+              className="w-full"
+              disabled
+            />
+          ) : modelOptions.length > 1 || providerIsPerUser ? (
             <SearchableSelect
               value={effectiveModel ?? ""}
               onValueChange={setModelChoice}
@@ -1092,14 +1570,25 @@ export function ConnectCommandPanel({
           )}
         </EditorField>
         <p className="text-xs text-muted-foreground">
-          <span>
-            {client.id === "claude-desktop"
-              ? "Selected by default in Claude Desktop after setup"
-              : client.id === "pi"
-                ? "Selected by the printed Pi launch command"
-                : "Applied as COPILOT_MODEL by the setup script"}
-            {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
-          </span>
+          {modelSourceHint ?? (
+            <>
+              <span>
+                {client.id === "claude-desktop"
+                  ? "Selected by default in Claude Desktop after setup"
+                  : client.id === "pi"
+                    ? "Selected by the printed Pi launch command"
+                    : "Saved as Copilot CLI's model by the setup script"}
+                {providerIsPerUser && boundPerUserKey
+                  ? ` — the models your ${perUserKeyLabel(boundPerUserKey)} serves.`
+                  : ` — pick a model your ${providerCatalog.label(provider)} access serves.`}
+              </span>
+              {unservedModelIds.size > 0 && (
+                <span>
+                  {` Models served only through Chat Completions are not listed: ${client.label} connects through the Responses API.`}
+                </span>
+              )}
+            </>
+          )}
         </p>
       </div>
     ) : null;
@@ -1196,15 +1685,17 @@ export function ConnectCommandPanel({
     ? "Loading plugins"
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
-      : selectionProblem
-        ? selectionProblem
-        : failed
-          ? "Setup command generation failed"
-          : result || adoptedSetupId
-            ? "Setup command ready"
-            : hasRunnableAnything
-              ? "Generating setup command"
-              : "No setup command selected";
+      : modelCatalogWaiting
+        ? "Loading the models your account serves"
+        : selectionProblem
+          ? selectionProblem
+          : failed
+            ? "Setup command generation failed"
+            : result || adoptedSetupId
+              ? "Setup command ready"
+              : hasRunnableAnything
+                ? "Generating setup command"
+                : "No setup command selected";
 
   // The approval page's setup options: how models authenticate is shown, not
   // chosen — an admin's per-client key mapping decides it.
@@ -1243,14 +1734,16 @@ export function ConnectCommandPanel({
       <DesktopDownload
         installerUrl={result?.installerUrl ?? null}
         command={result?.command ?? null}
-        pending={downloadRequested && !result && !failed}
+        pending={downloadPending}
         failed={failed}
-        requested={downloadRequested}
-        onPrepare={() => setDownloadRequested(true)}
+        expired={expired}
+        onPrepare={prepareFresh}
         onRetry={() => runGeneration(inputsKey)}
-        proxyActive={proxyActive}
+        onStarted={onStarted}
+        terminal={terminal}
+        sizingCommand={desktopSizingCommand(baseUrl, platform)}
         gate={
-          !downloadRequested || skillsLoading
+          !requested || skillsLoading
             ? null
             : !hasRunnableAnything
               ? "Everything is left out. Choose at least one thing to include."
@@ -1325,7 +1818,7 @@ export function ConnectCommandPanel({
                 {client.id === "cursor" ? (
                   <span>
                     {!cursorRoutingUnavailable
-                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Model Router using a virtual key`
+                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Unified Model API using a virtual key`
                       : "Cursor keeps its own models"}
                   </span>
                 ) : allPrimaryProviders ? (
@@ -1342,6 +1835,9 @@ export function ConnectCommandPanel({
                     <span className="font-medium text-foreground">
                       {providerCatalog.label(provider)}
                     </span>{" "}
+                    {providerIsPerUser && boundPerUserKey && (
+                      <span>({perUserKeyLabel(boundPerUserKey)}) </span>
+                    )}
                     through{" "}
                     <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                     using{" "}
@@ -1435,10 +1931,7 @@ export function ConnectCommandPanel({
               >
                 {compatiblePlugins.length === 0 ? (
                   <span>
-                    No compatible plugins for{" "}
-                    {client.id === "claude-desktop"
-                      ? "macOS"
-                      : platformLabels[platform]}
+                    No compatible plugins for {platformLabels[platform]}
                   </span>
                 ) : selectedPlugins.length === 0 ? (
                   <span>Plugins not installed</span>
@@ -1491,8 +1984,9 @@ export function ConnectCommandPanel({
       >
         {!showSetupSummary && connectRequest && !connectRequestDecided && (
           <ConnectionConsentOptions
-            open={customizing}
-            onOpenChange={setCustomizing}
+            open={customizing || optionsRequired}
+            onOpenChange={(next) => setCustomizing(next || optionsRequired)}
+            required={optionsRequired}
             clientLabel={client.label}
             tools={
               mcpGatewayId && mcpGateways !== null
@@ -1514,10 +2008,18 @@ export function ConnectCommandPanel({
                     setInclude: setIncludeProxy,
                     mode: consentProxyMode,
                     providerLabels:
-                      effectiveProxyAuth === "provider-key" && provider
+                      (effectiveProxyAuth === "provider-key" ||
+                        providerIsPerUser) &&
+                      provider
                         ? [providerCatalog.label(provider)]
                         : providers.map((p) => providerCatalog.label(p)),
+                    accountLabel:
+                      providerIsPerUser && boundPerUserKey
+                        ? perUserKeyLabel(boundPerUserKey)
+                        : null,
                     providerPicker: consentProviderPicker,
+                    accountPicker,
+                    accountCards,
                     modelPicker: proxyActive ? modelEditor : null,
                   }
                 : null
@@ -1671,10 +2173,10 @@ export function ConnectCommandPanel({
                 />
               </div>
             ) : null)}
-          {selectionProblem ? (
+          {approvalProblem ? (
             <InlineNotice variant="error" role="alert">
               <TriangleAlert aria-hidden />
-              <InlineNoticeText>{selectionProblem}</InlineNoticeText>
+              <InlineNoticeText>{approvalProblem}</InlineNoticeText>
             </InlineNotice>
           ) : connectRequest && failureMessage ? (
             <InlineNotice variant="error" role="alert">
@@ -1704,22 +2206,9 @@ export function ConnectCommandPanel({
                 operating system. Choose another platform or add a connection
                 resource.
               </div>
-            ) : needsPerUserConnect && provider ? (
-              <PerUserConnectGate
+            ) : needsPerUserConnect && provider && !connectRequest ? (
+              <PerUserConnectNotice
                 providerLabel={providerCatalog.label(provider)}
-                pending={createPerUserKey.isPending}
-                onToken={async (token) => {
-                  try {
-                    await createPerUserKey.mutateAsync({
-                      name: providerCatalog.label(provider),
-                      provider,
-                      apiKey: token,
-                    });
-                    // availableKeys invalidates → the command auto-generates.
-                  } catch {
-                    // handleApiError already surfaced the failure (e.g. no seat)
-                  }
-                }}
               />
             ) : connectRequest ? (
               <ClientConnectionApproval
@@ -1727,7 +2216,7 @@ export function ConnectCommandPanel({
                 requestId={connectRequest}
                 setupId={result?.id ?? adoptedSetupId ?? undefined}
                 setupProblem={
-                  selectionProblem ??
+                  approvalProblem ??
                   (failureMessage
                     ? `${failureMessage} Adjust Setup options, then select Retry setup.`
                     : null)
@@ -1751,13 +2240,14 @@ export function ConnectCommandPanel({
                   </a>
                 </Button>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Open in Claude Desktop and confirm Install. Your browser
-                  guides you through subscription sign-in and restarting
-                  Desktop.
+                  Open Claude Desktop Settings → Extensions and install the
+                  downloaded .MCPB file. Your browser guides you through
+                  sign-in, then setup closes and reopens Desktop.
                 </p>
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
-                    Advanced: terminal setup
+                    Terminal setup, for Claude Desktop already in third-party
+                    mode
                   </summary>
                   <p className="mt-2">
                     The terminal option requires Python 3.9+ and Claude Code for
@@ -1798,12 +2288,10 @@ export function ConnectCommandPanel({
                     The command downloads a one-time setup script (expires in 15
                     minutes) and pipes it straight to{" "}
                     {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
-                    {client.id === "claude-desktop"
-                      ? "macOS"
-                      : platformLabels[platform]}
-                    . The script applies the setup reviewed above by editing
-                    your client config in place — it isn&apos;t undone
-                    automatically, so revert manually if you need to.
+                    {platformLabels[platform]}. The script applies the setup
+                    reviewed above by editing your client config in place — it
+                    isn&apos;t undone automatically, so revert manually if you
+                    need to.
                   </span>
                 )}
               </span>
@@ -1864,9 +2352,11 @@ export function ConnectCommandPanel({
         title={`Add ${addKeyPhrase}`}
         description={providerKeyDialogDescription}
         defaultValues={
-          supportedProviders[0]
-            ? { provider: supportedProviders[0] }
-            : undefined
+          provider && !providerIsPerUser
+            ? { provider }
+            : supportedProviders[0]
+              ? { provider: supportedProviders[0] }
+              : undefined
         }
         allowedProviders={supportedProviders}
         onSuccess={() => setShowAddProviderKey(false)}
@@ -1879,59 +2369,120 @@ export function ConnectCommandPanel({
 // Internal pieces
 // ===================================================================
 
-/** The Connect page's Claude Desktop band: one installer download. */
+/**
+ * The Connect page's Claude Desktop band action: one installer download, or
+ * the terminal command for a Desktop in third-party mode. The page around it
+ * says what to do before and after.
+ */
 function DesktopDownload({
   installerUrl,
   command,
   pending,
   failed,
+  expired,
   onRetry,
-  requested,
   onPrepare,
-  proxyActive,
+  onStarted,
+  terminal,
+  sizingCommand,
   gate,
 }: {
   installerUrl: string | null;
   command: string | null;
   pending: boolean;
   failed: boolean;
+  /** The shown setup's ticket has expired. */
+  expired: boolean;
   onRetry: () => void;
-  requested: boolean;
+  /** Prepare a new setup; a download follows when it was asked for. */
   onPrepare: () => void;
-  proxyActive: boolean;
+  onStarted?: () => void;
+  /** Show the terminal command instead of the installer download. */
+  terminal: boolean;
+  /** A command as long as this setup's, to size the box before one exists. */
+  sizingCommand: string;
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
 }) {
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
   const downloadOnReadyRef = useRef(false);
+  const [downloadedUrl, setDownloadedUrl] = useState<string | null>(null);
+  const { copied, copy } = useCopy();
   useEffect(() => {
-    if (failed) downloadOnReadyRef.current = false;
+    // Switching to the terminal command cancels a download still preparing.
+    if (failed || terminal) downloadOnReadyRef.current = false;
     if (!installerUrl || !downloadOnReadyRef.current) return;
-    // Only the explicit download (or retry) click starts a download. Later
-    // setup changes may prepare a new ticket without downloading it again.
+    // Only a download click starts a download; the terminal command prepares
+    // setups too.
     downloadOnReadyRef.current = false;
     downloadLinkRef.current?.click();
-  }, [installerUrl, failed]);
+  }, [installerUrl, failed, terminal]);
 
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
-  // Same shape as the Connect page's prompt row, so picking Claude Desktop
-  // doesn't make the page taller.
+  if (terminal && command && !failed && !expired) {
+    const shown = wrappedCommand(command);
+    return (
+      // The command box every agent uses.
+      <SetupActionArea sizingCommand={shown}>
+        <ScriptBlock
+          command={shown}
+          copied={copied}
+          disabled={false}
+          onCopy={async () => {
+            if (await copy(shown)) onStarted?.();
+          }}
+          onSelectionCopy={onStarted}
+          // Copy sits beside the short first line, so the lines below,
+          // with the link, may use the full width.
+          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+        />
+      </SetupActionArea>
+    );
+  }
+  if (terminal)
+    return (
+      <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+        <SetupActionRow>
+          {failed ? (
+            <>
+              <span role="alert" className="min-w-0 flex-1 truncate text-sm">
+                Could not prepare the command.
+              </span>
+              <Button variant="outline" size="lg" onClick={onRetry}>
+                <span>Try again</span>
+              </Button>
+            </>
+          ) : expired ? (
+            <>
+              <TimerOff className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                This command expired. Each command works for 15 minutes.
+              </span>
+              <Button
+                size="lg"
+                onClick={onRetry}
+                className="h-12 rounded-xl px-6"
+              >
+                <RotateCcw />
+                <span>Regenerate</span>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                Generating command…
+              </span>
+            </>
+          )}
+        </SetupActionRow>
+      </SetupActionArea>
+    );
+  const downloaded = !!installerUrl && downloadedUrl === installerUrl;
   return (
-    <div className="mt-2">
-      <p className="px-1 text-xs text-muted-foreground">
-        Open it in Claude Desktop and confirm Install; your browser guides you
-        through sign-in and the restart. Finish active Desktop tasks first.
-        {proxyActive && (
-          <span>
-            {" "}
-            With the LLM proxy, Desktop switches to third-party mode with its
-            own history; Settings, Import brings your Claude.ai conversations
-            over.
-          </span>
-        )}
-      </p>
-      <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+    <SetupActionArea sizingCommand={wrappedCommand(sizingCommand)}>
+      <SetupActionRow>
         <Download className="size-4 shrink-0 text-muted-foreground" />
         {failed ? (
           <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -1941,10 +2492,25 @@ function DesktopDownload({
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {pending
               ? "Preparing your installer"
-              : requested
-                ? "Your installer, ready for 15 minutes"
+              : downloaded && !expired
+                ? "Downloaded. Install it within 15 minutes."
                 : "Download an installer for this setup"}
           </span>
+        )}
+        {installerUrl && (
+          // Each click downloads a new setup, through this link once it is ready.
+          <a
+            ref={downloadLinkRef}
+            href={installerUrl}
+            download
+            hidden
+            onClick={() => {
+              setDownloadedUrl(installerUrl);
+              onStarted?.();
+            }}
+          >
+            Installer download
+          </a>
         )}
         {failed ? (
           <Button
@@ -1952,22 +2518,15 @@ function DesktopDownload({
             size="lg"
             onClick={() => {
               downloadOnReadyRef.current = true;
-              onRetry();
+              onPrepare();
             }}
           >
             <span>Try again</span>
           </Button>
-        ) : installerUrl ? (
-          <Button asChild size="lg" className="h-12 rounded-xl px-6">
-            <a ref={downloadLinkRef} href={installerUrl} download>
-              <Download />
-              <span>Download installer</span>
-            </a>
-          </Button>
         ) : (
           <Button
             size="lg"
-            disabled={requested}
+            disabled={pending}
             onClick={() => {
               downloadOnReadyRef.current = true;
               onPrepare();
@@ -1980,56 +2539,50 @@ function DesktopDownload({
             </span>
           </Button>
         )}
-      </div>
-      {command && (
-        <details className="mt-2 px-1 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">
-            Advanced: terminal setup, for a Desktop already on a third-party
-            profile
-          </summary>
-          <p className="mt-2">
-            The terminal option requires Python 3.9+ and Claude Code for
-            subscription sign-in.
-          </p>
-          <TerminalCard className="mt-2">
-            <SetupCommandLine
-              command={command}
-              pending={false}
-              failed={false}
-              onRetry={onRetry}
-            />
-          </TerminalCard>
-        </details>
-      )}
-    </div>
+      </SetupActionRow>
+    </SetupActionArea>
   );
 }
 
 /**
- * Shown in place of the command when a per-user provider (GitHub Copilot) is
- * selected but the user hasn't connected their own account yet. Connecting
- * creates their personal key; the command then auto-generates.
+ * A command shaped like the server's Desktop setup command, for sizing: the
+ * same origin, path and token length, before a setup exists.
  */
-function PerUserConnectGate({
-  providerLabel,
-  pending,
-  onToken,
-}: {
-  providerLabel: string;
-  pending: boolean;
-  onToken: (token: string) => void | Promise<void>;
-}) {
+function desktopSizingCommand(
+  baseUrl: string,
+  platform: ConnectPlatformOption,
+): string {
+  // As the server builds it: the base URL without its /v1.
+  const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = `'${origin}/api/connection-setups/script/archestra_con_${"x".repeat(32)}'`;
+  return platform === "windows"
+    ? `irm ${url} | iex`
+    : `curl -fsSL ${url} | bash`;
+}
+
+/**
+ * A setup command on two lines, broken at a shell continuation (a backtick
+ * in PowerShell): the download command, then its link and the pipe. The link
+ * starts a line of its own, and the pasted text stays one command.
+ */
+function wrappedCommand(command: string): string {
+  const quote = command.indexOf(" '");
+  if (quote < 0) return command;
+  const fetch = command.slice(0, quote);
+  const next = fetch.startsWith("irm") ? "`" : "\\";
+  return `${fetch} ${next}\n  ${command.slice(quote + 1)}`;
+}
+
+/**
+ * Shown in place of the command while a per-user provider (GitHub Copilot) is
+ * selected and the person has no account for it yet. The accounts are
+ * connected in the setup review, under the provider; this names that step.
+ */
+function PerUserConnectNotice({ providerLabel }: { providerLabel: string }) {
   return (
-    <div className="flex flex-col gap-3 px-5 py-4">
-      <p className="text-[13px] text-foreground">
-        Connect your {providerLabel} account to generate the command — it runs
-        through your own personal virtual key, so your token never leaves the
-        server.
-      </p>
-      <div>
-        <GithubCopilotSignIn disabled={pending} onToken={onToken} />
-      </div>
-    </div>
+    <p className="px-5 py-4 text-[13px] text-foreground">
+      {`Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
+    </p>
   );
 }
 
@@ -2152,8 +2705,7 @@ function PluginsDetail({
       )}
       {incompatiblePlugins.length > 0 && (
         <p>
-          Not compatible with{" "}
-          {clientId === "claude-desktop" ? "macOS" : platformLabels[platform]}:{" "}
+          Not compatible with {platformLabels[platform]}:{" "}
           {incompatiblePlugins.map((plugin) => plugin.displayName).join(", ")}.
         </p>
       )}

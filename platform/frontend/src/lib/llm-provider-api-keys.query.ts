@@ -374,10 +374,12 @@ export function useDeleteLlmProviderApiKey() {
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
       // The backend also deletes the virtual keys and OAuth clients that
-      // mapped only the deleted key.
+      // mapped only the deleted key, and the pool members that used it.
       queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
     },
   });
 }
@@ -405,10 +407,12 @@ export function useBulkDeleteLlmProviderApiKeys() {
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
       // The backend also deletes the virtual keys and OAuth clients that
-      // mapped only the deleted key.
+      // mapped only the deleted key, and the pool members that used it.
       queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["oauth-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
     },
   });
 }

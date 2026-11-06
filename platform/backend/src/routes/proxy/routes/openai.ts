@@ -5,9 +5,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import {
+  fetchOpenAiModels,
+  isChatModelId,
+} from "@/routes/chat/model-fetchers/openai";
 import {
   ApiError,
+  Azure,
   constructResponseSchema,
   OpenAi,
   UuidIdSchema,
@@ -19,6 +23,11 @@ import {
   openaiAdapterFactory,
 } from "../adapters";
 import {
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
+import { openaiImagesAdapterFactory } from "../adapters/openai-images";
+import {
   CHAT_COMPLETIONS_SUFFIX,
   EMBEDDINGS_SUFFIX,
   OPENAI_HANDLED_ENDPOINT_SUFFIXES,
@@ -28,6 +37,11 @@ import {
   RESPONSES_SUFFIX,
 } from "../common";
 import {
+  handleImageEdit,
+  ImageEditMultipartBodySchema,
+  parseImageEditRequest,
+} from "../image-edit-handler";
+import {
   createPassthroughAuthenticator,
   isJwtLike,
   resolveAgent,
@@ -35,6 +49,7 @@ import {
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { passthroughReplyOptions } from "../passthrough-log";
 import { registerAudioRoutes } from "./audio";
 import {
   extractBearerToken,
@@ -61,6 +76,7 @@ const CodexModelsSchema = z.object({
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
+  const IMAGES_SUFFIX = "/images/generations";
   await registerAudioRoutes(fastify, "openai");
 
   logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
@@ -69,14 +85,76 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.openai.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
+    replyOptions: passthroughReplyOptions(),
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
       authenticate: createPassthroughAuthenticator("openai"),
+      logProvider: "openai",
     }),
   });
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${IMAGES_SUFFIX}`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.OpenAiImagesWithAgent
+            : RouteId.OpenAiImagesWithDefaultAgent,
+          description: "Generate images with OpenAI",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.ImageGenerationRequestSchema,
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(
+          request.body,
+          request,
+          reply,
+          openaiImagesAdapterFactory,
+        ),
+    );
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.OpenAiImageEditsWithAgent
+            : RouteId.OpenAiImageEditsWithDefaultAgent,
+          description:
+            "Edit images with OpenAI using bounded multipart image inputs and an optional PNG mask. Returns a complete image response; streaming is unsupported.",
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleImageEdit({
+          parsed: await parseImageEditRequest(request),
+          provider: "openai",
+          request,
+          reply,
+        }),
+    );
+  }
 
   fastify.post(
     `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,
@@ -88,7 +166,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -100,7 +178,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        openAiEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          openAiEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );
@@ -118,7 +199,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -130,7 +211,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        openAiEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          openAiEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );
@@ -400,7 +484,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       token: extractBearerToken(request.headers.authorization),
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
-    const models = await fetchOpenAiModels(apiKey, baseUrl, extraHeaders);
+    // Clients fill their model pickers from this list, so it keeps the chat
+    // filter. The fetcher also returns image and audio models for sync.
+    const models = (
+      await fetchOpenAiModels(apiKey, baseUrl, extraHeaders)
+    ).filter((model) => isChatModelId(model.id));
     const list = toOpenAiModelsList(models, "openai");
     return isCodex
       ? {

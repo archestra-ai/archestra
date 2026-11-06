@@ -1,5 +1,4 @@
 import {
-  findTierDefault,
   isCompleteModelSelection,
   isSubscriptionCredential,
   type ModelInputModality,
@@ -8,24 +7,22 @@ import {
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   resolveModelSelection,
-  type SubagentModelTier,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import {
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-  ModelModel,
-  OrganizationModel,
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel, {
   selectionKey,
-  TeamModel,
-} from "@/models";
+} from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
+import TeamModel from "@/models/team";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { ApiError, type Model } from "@/types";
+import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -52,8 +49,6 @@ interface ResolvedLlmSelection {
  * only when no model is configured anywhere and no provider has a synced
  * model (the env/Vertex/config fallback path). `selectedModel` /
  * `selectedProvider` are the dereferenced values for the LLM proxy.
- *
- * @public — exercised by llm-resolution.subagent-tier.test.ts
  */
 export interface ConversationLlmSelection {
   modelId: string | null;
@@ -236,145 +231,6 @@ async function isParentKeyUsable(params: {
   return (
     key !== null && (await LlmProviderApiKeyModel.canUseKey(key, userId, []))
   );
-}
-
-/** The optional `fast` / `smart` halves of a trio (agent or organization). */
-export interface ModelTrioTiers {
-  fastModelId: string | null;
-  smartModelId: string | null;
-}
-
-const TRIO_TIER_FIELD = {
-  fast: "fastModelId",
-  smart: "smartModelId",
-} as const satisfies Record<
-  Exclude<SubagentModelTier, "normal">,
-  keyof ModelTrioTiers
->;
-
-/**
- * The model a forked subagent runs on for `tier`: the agent's trio, then the
- * organization's, then the provider's default trio — whichever the parent's
- * credential serves first. A fork never reaches a credential its parent was not
- * already using: candidates are the parent key's models, or for a per-user
- * provider (Copilot) that provider's catalog, re-resolved per user at request
- * time. Falls back to the parent's own model.
- */
-export async function resolveSubagentTierSelection(params: {
-  tier: SubagentModelTier;
-  parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
-  organizationId: string;
-}): Promise<ConversationLlmSelection> {
-  const { tier, parent } = params;
-  if (tier === "normal" || !parent.modelId) return parent;
-  const tierModel = (await findTierModels(params))[tier];
-  return tierModel
-    ? {
-        modelId: tierModel.id,
-        chatApiKeyId: parent.chatApiKeyId,
-        selectedModel: tierModel.modelId,
-        selectedProvider: tierModel.provider,
-      }
-    : parent;
-}
-
-/**
- * The tiers a fork of `parent` can run on: every tier that resolves to a model
- * its key serves. A tier that lands on the parent's own model is still offered —
- * what counts as fast or smart is the trio's owner's call.
- */
-export async function availableSubagentTiers(params: {
-  parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
-  organizationId: string;
-}): Promise<Exclude<SubagentModelTier, "normal">[]> {
-  const { parent } = params;
-  if (!parent.modelId) return [];
-  const tierModels = await findTierModels(params);
-  return (["fast", "smart"] as const).filter(
-    (tier) => tierModels[tier] !== undefined,
-  );
-}
-
-async function findTierModels(params: {
-  parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
-  organizationId: string;
-}): Promise<Record<Exclude<SubagentModelTier, "normal">, Model | undefined>> {
-  const { parent } = params;
-  const [organization, keyModels] = await Promise.all([
-    OrganizationModel.getById(params.organizationId),
-    parent.chatApiKeyId
-      ? LlmProviderApiKeyModelLinkModel.getModelsForApiKey(parent.chatApiKeyId)
-      : providerRequiresPerUserCredential(parent.selectedProvider)
-        ? ModelModel.findAll({ provider: parent.selectedProvider })
-        : Promise.resolve([]),
-  ]);
-  const candidates = keyModels.filter(isSubagentTierCandidate);
-  const orgTrio = organization ? toTrioTiers(organization) : null;
-  const pick = (tier: Exclude<SubagentModelTier, "normal">) => {
-    const field = TRIO_TIER_FIELD[tier];
-    return (
-      [params.agentTrio[field], orgTrio?.[field]]
-        .map((id) => candidates.find((model) => model.id === id))
-        .find(Boolean) ??
-      findTierDefault(candidates, parent.selectedProvider, tier)
-    );
-  };
-  return { fast: pick("fast"), smart: pick("smart") };
-}
-
-function toTrioTiers(organization: {
-  defaultFastModelId: string | null;
-  defaultSmartModelId: string | null;
-}): ModelTrioTiers {
-  return {
-    fastModelId: organization.defaultFastModelId,
-    smartModelId: organization.defaultSmartModelId,
-  };
-}
-
-/** A fork runs the parent's tools, so its model must chat and call tools. */
-function isSubagentTierCandidate(model: Model): boolean {
-  return (
-    ModelModel.supportsTextChat(model) && model.supportsToolCalling !== false
-  );
-}
-
-/**
- * A trio's `fast` / `smart` tiers run on its key, so each must be a tool-capable
- * chat model linked to that key.
- */
-export async function assertModelTrioTiers(
-  params: {
-    apiKeyId: string | null;
-  } & ModelTrioTiers,
-): Promise<void> {
-  const tierIds = [params.fastModelId, params.smartModelId].filter(
-    (id): id is string => Boolean(id),
-  );
-  if (tierIds.length === 0) return;
-  if (!params.apiKeyId) {
-    throw new ApiError(400, "Fast and smart models require an API key");
-  }
-  // A per-user provider's tiers come from its catalog, as at fork time.
-  const key = await LlmProviderApiKeyModel.findById(params.apiKeyId);
-  const keyModels =
-    key && providerRequiresPerUserCredential(key.provider)
-      ? await ModelModel.findAll({ provider: key.provider })
-      : await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-          params.apiKeyId,
-        );
-  for (const id of tierIds) {
-    const model = keyModels.find((m) => m.id === id);
-    if (!model || !isSubagentTierCandidate(model)) {
-      throw new ApiError(
-        400,
-        `Model ${id} is not a tool-capable chat model on the selected API key`,
-      );
-    }
-  }
 }
 
 /**
@@ -648,12 +504,18 @@ export async function resolveModelOutputBudget(params: {
   provider: SupportedProvider;
   modelName: string;
   unknownOutputLength?: number;
+  chatApiKeyId?: string | null;
 }): Promise<ModelOutputBudget> {
+  const model = await ModelModel.findByProviderAndModelId(
+    params.provider,
+    params.modelName,
+  );
   return modelOutputBudget({
     provider: params.provider,
-    model: await ModelModel.findByProviderAndModelId(
-      params.provider,
-      params.modelName,
+    model,
+    outputLength: await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+      model,
+      params.chatApiKeyId,
     ),
     unknownOutputLength: params.unknownOutputLength,
   });
@@ -668,13 +530,12 @@ export async function resolveModelOutputBudget(params: {
 function modelOutputBudget(params: {
   provider: SupportedProvider;
   model: Model | null;
+  outputLength: number | null;
   /** Output cap to assume when the catalog has none for the model. */
   unknownOutputLength?: number;
 }): ModelOutputBudget {
   const { model } = params;
-  const outputLength = model
-    ? ModelModel.resolveEffectiveOutputLength(model)
-    : null;
+  const outputLength = params.outputLength;
   const contextLength = model
     ? ModelModel.resolveEffectiveContextLength(model)
     : null;

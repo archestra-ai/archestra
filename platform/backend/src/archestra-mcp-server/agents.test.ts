@@ -9,8 +9,10 @@ import {
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
+  TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
@@ -48,6 +50,213 @@ describe("agent tool execution", () => {
     };
   });
 
+  test("a revisioned skill policy limits activation and rejects stale changes", async ({
+    makeSkill,
+    makeInternalAgent,
+  }) => {
+    const organizationId = mockContext.organizationId as string;
+    const target = await makeInternalAgent({ organizationId });
+    const runtimeContext = {
+      ...mockContext,
+      agent: { id: target.id, name: target.name },
+    };
+    const allowed = await makeSkill(organizationId, { access: "org" });
+    const excluded = await makeSkill(organizationId, { access: "org" });
+    const initial = await executeArchestraTool(
+      `archestra__${TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id },
+      mockContext,
+    );
+    expect(initial.isError).toBe(false);
+    expect(initial.structuredContent).toMatchObject({
+      mode: "all",
+      revision: 0,
+    });
+
+    const reference = { source: "native", skillId: allowed.id };
+    const updated = await executeArchestraTool(
+      `archestra__${TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      {
+        id: target.id,
+        patch: {
+          expectedRevision: 0,
+          mode: "manual",
+          operations: [{ op: "add", disposition: "allow", reference }],
+        },
+      },
+      mockContext,
+    );
+    expect(updated.isError, JSON.stringify(updated.content)).toBe(false);
+    expect(updated.structuredContent).toMatchObject({
+      mode: "manual",
+      revision: 1,
+      allowedReferences: [reference],
+    });
+    const activated = await executeArchestraTool(
+      "archestra__load_skill",
+      { name: allowed.name },
+      runtimeContext,
+    );
+    expect(activated.isError).toBe(false);
+    const refused = await executeArchestraTool(
+      "archestra__load_skill",
+      { name: excluded.name },
+      runtimeContext,
+    );
+    expect(refused.isError).toBe(true);
+
+    const stale = await executeArchestraTool(
+      `archestra__${TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id, patch: { expectedRevision: 0, mode: "all" } },
+      mockContext,
+    );
+    expect(stale.isError).toBe(true);
+    expect(JSON.stringify(stale.content)).toContain("policy was modified");
+    const current = await executeArchestraTool(
+      `archestra__${TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id },
+      mockContext,
+    );
+    expect(current.structuredContent).toMatchObject({
+      mode: "manual",
+      revision: 1,
+    });
+  });
+
+  test.for([
+    TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
+    TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
+  ])("%s requires skill read permission even for an agent editor", async (tool, {
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId as string;
+    const user = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read", "update"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const result = await executeArchestraTool(
+      `archestra__${tool}`,
+      {
+        id: agent.id,
+        ...(tool === TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME
+          ? { patch: { expectedRevision: 0, mode: "manual" } }
+          : {}),
+      },
+      { ...mockContext, userId: user.id },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "Permission to read skills",
+    );
+  });
+
+  test.for([
+    TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME,
+    TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME,
+  ])("%s refuses agents outside the caller's organization", async (tool, {
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const other = await makeOrganization();
+    const target = await makeAgent({
+      organizationId: other.id,
+      agentType: "agent",
+    });
+    const result = await executeArchestraTool(
+      `archestra__${tool}`,
+      {
+        id: target.id,
+        ...(tool === TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME
+          ? { patch: { expectedRevision: 0, mode: "manual" } }
+          : {}),
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("Agent not found");
+  });
+
+  test("skill policy updates cannot add a skill from another organization", async ({
+    makeOrganization,
+    makeInternalAgent,
+    makeSkill,
+  }) => {
+    const target = await makeInternalAgent({
+      organizationId: mockContext.organizationId as string,
+    });
+    const other = await makeOrganization();
+    const skill = await makeSkill(other.id, { access: "org" });
+    const result = await executeArchestraTool(
+      `archestra__${TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      {
+        id: target.id,
+        patch: {
+          expectedRevision: 0,
+          mode: "manual",
+          operations: [
+            {
+              op: "add",
+              disposition: "allow",
+              reference: { source: "native", skillId: skill.id },
+            },
+          ],
+        },
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("not currently available");
+    const current = await executeArchestraTool(
+      `archestra__${TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id },
+      mockContext,
+    );
+    expect(current.structuredContent).toMatchObject({
+      mode: "all",
+      revision: 0,
+      allowedReferences: [],
+    });
+  });
+
+  test("skill policy updates require an update grant on the target agent", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeInternalAgent,
+  }) => {
+    const organizationId = mockContext.organizationId as string;
+    const user = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read", "update"], skill: ["read"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    const target = await makeInternalAgent({ organizationId, access: "org" });
+    const result = await executeArchestraTool(
+      `archestra__${TOOL_PATCH_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id, patch: { expectedRevision: 0, mode: "manual" } },
+      { ...mockContext, userId: user.id },
+    );
+    expect(result.isError).toBe(true);
+    const current = await executeArchestraTool(
+      `archestra__${TOOL_GET_AGENT_SKILL_POLICY_SHORT_NAME}`,
+      { id: target.id },
+      mockContext,
+    );
+    expect(current.structuredContent).toMatchObject({
+      mode: "all",
+      revision: 0,
+    });
+  });
+
   test("create_agent requires name", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
@@ -74,6 +283,79 @@ describe("agent tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       `/agents/${extractCreatedId(result)}/edit`,
     );
+  });
+
+  test("create_agent stores the agent's own network policy and edit_agent clears it", async () => {
+    const created = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Locked Agent",
+        networkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "package_managers",
+          allowedDomains: ["api.example.com"],
+        },
+      },
+      mockContext,
+    );
+    expect(created.isError).toBe(false);
+    const id = extractCreatedId(created);
+    expect((await AgentModel.findById(id))?.networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "package_managers",
+      allowedDomains: ["api.example.com"],
+      allowedCidrs: [],
+    });
+
+    const edited = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_SHORT_NAME}`,
+      { id, networkPolicy: null },
+      mockContext,
+    );
+    expect(edited.isError).toBe(false);
+    expect((await AgentModel.findById(id))?.networkPolicy).toBeNull();
+  });
+
+  test("create_agent refuses an invalid network policy", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      {
+        name: "Bad Policy Agent",
+        networkPolicy: { egressMode: "restricted", allowedCidrs: ["nope"] },
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Invalid networkPolicy");
+  });
+
+  test("edit_agent refuses a network policy from a member who cannot update environments", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, mockContext.organizationId as string, {
+      role: "member",
+    });
+    const memberContext = { ...mockContext, userId: member.id };
+    const created = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      { name: "Member Agent" },
+      memberContext,
+    );
+    expect(created.isError).toBe(false);
+    const id = extractCreatedId(created);
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_EDIT_AGENT_SHORT_NAME}`,
+      { id, networkPolicy: { egressMode: "unrestricted" } },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "requires permission to update environments",
+    );
+    expect((await AgentModel.findById(id))?.networkPolicy).toBeNull();
   });
 
   test("create_agent defaults Manual agents to progressive loading", async () => {
@@ -602,7 +884,6 @@ describe("agent tool execution", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: null,
         ttlHours: null,
@@ -1194,6 +1475,50 @@ describe("agent runtime and model tools", () => {
     return model;
   }
 
+  test("MCP templates and runtime edits require Configure runtime while ordinary edits work", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read", "create"] },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    mockContext.userId = user.id;
+    const refused = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Template worker",
+      runtime: { template: "codex" },
+    });
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused)).toContain("Configure runtime permission");
+    const runtime = buildCustomAgentRuntime({
+      image: "example.test/worker:v1",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      runtime,
+    });
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      name: "Renamed worker",
+    });
+    expect(edited.isError).not.toBe(true);
+    expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+    for (const next of [null, { image: "example.test/worker:v2" }]) {
+      const denied = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+        id: agent.id,
+        runtime: next,
+      });
+      expect(denied.isError).toBe(true);
+      expect(JSON.stringify(denied)).toContain("Configure runtime permission");
+    }
+    expect((await AgentModel.findById(agent.id))?.runtime).toEqual(runtime);
+  });
+
   test("create_agent builds a Claude Code agent the way the catalog card does", async () => {
     const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
       name: "Claude Code",
@@ -1262,6 +1587,7 @@ describe("agent runtime and model tools", () => {
   test("create_agent refuses to read a saved credential the caller cannot use", async ({
     makeUser,
     makeMember,
+    makeCustomRole,
   }) => {
     const define = (key: string, initialGrants?: []) =>
       createRuntimeCredentialDefinition({
@@ -1283,7 +1609,12 @@ describe("agent runtime and model tools", () => {
     // Kept to admins: its value would reach every run of the new Agent.
     await define("restricted", []);
     const member = await makeUser();
-    await makeMember(member.id, organizationId, { role: "member" });
+    const runtimeRole = await makeCustomRole(organizationId, {
+      permission: { agent: ["configure-runtime"] },
+    });
+    await makeMember(member.id, organizationId, {
+      role: `member,${runtimeRole.role}`,
+    });
     mockContext = { ...mockContext, userId: member.id };
     const create = (credentialId: string) =>
       call(TOOL_CREATE_AGENT_SHORT_NAME, {
@@ -1521,6 +1852,78 @@ describe("agent runtime and model tools", () => {
       "Codex runtime requires an OpenAI",
     );
     expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
+  });
+
+  test("edit_agent moves the image of an agent whose key the caller cannot use", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const stranger = await makeUser();
+    const privateKey = await makeLlmProviderApiKey(
+      organizationId,
+      await secretId(),
+      { provider: "anthropic", userId: stranger.id },
+    );
+    const model = await linkModel({
+      keyId: privateKey.id,
+      provider: "anthropic",
+      modelId: "runtime-only-edit-test",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: {
+        ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
+        inferenceProtocol: "anthropic",
+      },
+    });
+
+    // Only the runtime changes: the agent keeps its pair, and the new runtime
+    // is checked against that pair, as the agent's runs use it.
+    const moved = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:2",
+        inferenceProtocol: "anthropic",
+      },
+    });
+    expect(moved.isError, JSON.stringify(moved.content)).toBe(false);
+    expect(await AgentModel.findById(agent.id)).toMatchObject({
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: { image: "example.test/agent:2" },
+    });
+
+    const incompatible = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { template: "codex" },
+    });
+    expect(incompatible.isError).toBe(true);
+    expect((incompatible.content[0] as any).text).toContain(
+      "Codex runtime requires an OpenAI",
+    );
+
+    // Naming the pair is choosing it, and the caller cannot use that key.
+    const reselected = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:3",
+        inferenceProtocol: "anthropic",
+      },
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+    });
+    expect(reselected.isError).toBe(true);
+    expect((reselected.content[0] as any).text).toContain(
+      "must be linked and available to you",
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime).toMatchObject({
+      image: "example.test/agent:2",
+    });
   });
 
   test("get_agent returns the runtime and pinned model", async ({

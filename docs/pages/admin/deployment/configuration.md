@@ -1,8 +1,8 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 6
-lastUpdated: 2026-10-30
+order: 7
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -206,10 +206,11 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `0` or more. `0` treats every replay as reuse.
   - The window lets a client retry after a lost token response.
 
-- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
+- **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in, auth, and MCP gateway endpoints. Credentials and permissions are still checked.
   - Default: `false`
   - Values: `true`, `false`
   - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY).
+  - If the MCP gateway returns HTTP `429` or `503`, wait before retrying and follow `Retry-After` when provided.
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.
@@ -536,7 +537,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
-- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Model Router.
+- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Unified Model API.
   - Default: unset (off)
   - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
 
@@ -609,6 +610,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `0` turns it off
   - Keep it below the shortest stall timeout of your clients. Claude Code reports a stall after 20 seconds.
   - Bedrock and Ollama native streams get no keep-alive.
+  - OpenAI Chat Completions and Responses, OpenAI-compatible chat providers using the shared transport, and Anthropic Messages also receive comments before the first event, once the upstream has accepted the HTTP request. No additional setting is needed.
+  - Comments cannot cover a provider or ingress that delays its HTTP response headers. They do not extend upstream timeouts or absolute request deadlines; intervening proxies must forward streaming bytes without buffering.
+  - [Model pools](/docs/llm-proxy/model-pools) wait until a member is selected so failover and final pool headers remain accurate. Buffered policy responses keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
@@ -800,9 +804,9 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Values: comma-separated namespaces, for example `staging,production`
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
-  - Default: unset (Archestra reads the `kube-system/kube-dns` Service, which the Helm chart grants access to)
-  - Values: comma-separated IP addresses, for example `172.20.0.10`
-  - Set it when the resolver is not the `kube-dns` Service, such as NodeLocal DNSCache, or when Archestra cannot read that Service.
+  - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`. Helm also accepts a list under `archestra.orchestrator.kubernetes.clusterDnsIps`.
+  - Set verified resolver addresses when discovery fails or workloads use a different resolver from the platform pod, such as custom or NodeLocal DNS. Explicit addresses bypass discovery.
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`
@@ -1020,26 +1024,16 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
   - When neither is set, runs fail to start.
 
-- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum lifetime of a run, in hours.
-  - Default: `72`
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum duration of a run, in hours. A run's files are kept for the same time.
+  - Default: `24`
 
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - Default time an idle run waits for the next instruction before it stops, in minutes.
-  - Default: `180`
+  - Default: `60`
   - Custom images must implement the wait, using the `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` variable passed to the pod.
 
-- **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`** - Default CPU request for a run's pod. Runs have no CPU limit.
-  - Default: `500m`
-  - Values: Kubernetes quantity
+- **Runtime tiers** - A run's pod gets the CPU and memory of its [runtime tier](/docs/agents/runtime/setup#runtime-tiers). The tiers are stored with the organization, not in environment variables. The pod sees its tier in `ARCHESTRA_AGENT_RUNTIME_TIER`, the agent's scaleup tier in `ARCHESTRA_AGENT_RUNTIME_MAX_TIER`, the tiers it may move to with their sizes as JSON in `ARCHESTRA_AGENT_RUNTIME_TIERS`, and its size in `ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_POD_CPU_LIMIT` (set only when the tier has a CPU limit), `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT`. `ARCHESTRA_AGENT_RUNTIME_POD_CPUS` is the number of whole CPUs to work in parallel: the CPU limit, else the request, rounded up. A pod with no CPU limit sees every CPU of its node, so the pod also gets `GOMAXPROCS`, `CARGO_BUILD_JOBS` and `RAYON_NUM_THREADS` set to that number, for Go programs such as the TypeScript 7 compiler, and for Cargo and Rayon. An agent's own environment can set these three to other values; `ARCHESTRA_AGENT_RUNTIME_SIZED_ENV` lists the ones the platform set. When a run is served from a larger tier's warm pool, the pod's values and the listed toolchain values follow the larger tier, and the agent's own values stay. The former `ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT` variables are no longer read.
 
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`** - Default memory request for a run's pod.
-  - Default: `1Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Default memory limit for a run's pod.
-  - Default: `4Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of each run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`.
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of a run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`. A [runtime tier](/docs/agents/runtime/setup#runtime-tiers) with a **Workspace** size of its own overrides it for that tier's runs.
   - Default: `20Gi`
   - Values: Kubernetes quantity
 
@@ -1053,6 +1047,9 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`** - Maximum number of warm pools. Agents outside them start containers on demand.
   - Default: `4`
+
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_PREFETCH_ENABLED`** - Pulls every catalog Agent image onto each runtime node at startup and after each upgrade, so the first run of an Agent does not wait for its image. Turn it off when node disk or registry bandwidth is tight; each run then pulls only its own image.
+  - Default: `true`
 
 - **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Schedules runtime pods onto a dedicated node pool.
   - Default: unset (scheduled like any other pod)
@@ -1512,9 +1509,20 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
+- **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
+  - Default: unset (the saved setting applies, `block` unless changed)
+  - Values: `block`, `unattended`, `everywhere`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
+- **`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`** - Sets **Other blocked calls** under [Break the glass](/docs/agents/guardrails/policies#yells): an emergency override for soft refusals across tool calls and results, child returns, runtime exports, peer messages, failed helpers, and fork or compaction admission. `allow` releases the operation and turns Guardrails off for the session, even at its first refusal and even if yell reporting is disabled or fails. Platform authentication and access checks remain enforced. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. An explicit `blocked` refusal cannot trigger a waiver. After a soft refusal turns Guardrails off, subsequent operations bypass all policy checks, including explicit `blocked` marks.
+  - Default: unset (the saved setting applies, `refuse` unless changed)
+  - Values: `refuse`, `allow`. Other values stop startup.
+  - Release 1.4 configures this setting only with this variable. Keep it set when you upgrade from 1.4 to keep the same behaviour.
+
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
+  - With reports off, no yell is recorded. [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE=allow`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE) still waives soft refusals and turns session enforcement off.
 
 - **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
   - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.

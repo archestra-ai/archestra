@@ -36,6 +36,8 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** Token endpoint requests, before verifying client credentials. */
   OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** Gateway authentication attempts and recent validated-pair exemptions. */
+  McpGatewayRateLimit: "mcp-gateway-rate-limit",
   /** GitHub Actions OIDC token ids already exchanged, until they expire. */
   GitHubActionsTokenJti: "github-actions-token-jti",
   /** GitHub Actions token exchange requests, before verifying the OIDC token. */
@@ -62,8 +64,14 @@ export const CacheKey = {
   ChatMcpElicitationPending: "chat-mcp-elicitation-pending",
   /** Native OpenAPPA questions issued by this proxy and not answered yet */
   OpenAppaNativeQuestion: "openappa-native-question",
+  /** Original choices behind an ordinary native question, retained for replay. */
+  NativeUserQuestion: "native-user-question",
+  /** Single-card choices and provenance, isolated from older grouped-only decoders. */
+  NativeUserQuestionPresentation: "native-question-presentation",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
+  OpenAppaUnattendedSession: "openappa-unattended-session",
   OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
@@ -191,6 +199,15 @@ export const CacheKey = {
    * or API call, redeemed by whichever one the public content URL reaches.
    */
   AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
+  /**
+   * Short-lived one-time credential grants minted by transfer_credential({ ephemeral: true })
+   * and redeemed by start_agent_run on whichever replica handles the request.
+   */
+  EphemeralCredentialGrant: "ephemeral-credential-grant-v1",
+  /**
+   * Distributed per-caller subagent load-balancer rotation state shared across backend pods.
+   */
+  SubagentLoadBalancer: "subagent-load-balancer-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

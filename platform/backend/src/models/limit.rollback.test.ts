@@ -7,6 +7,576 @@ import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
 import ModelModel from "./model";
 
+describe("Selected model budget applicability", () => {
+  const cases: {
+    name: string;
+    scope: string[] | null;
+    model?: string;
+    modelAliases?: string[];
+    deferModelScopedLimits?: boolean;
+    allowed: boolean;
+  }[] = [
+    {
+      name: "selected scoped model",
+      scope: ["model-a"],
+      model: "model-a",
+      allowed: false,
+    },
+    {
+      name: "verified alias blocks an explicit zero cap",
+      scope: ["glm-5p3-flash"],
+      model: "accounts/fireworks/models/glm-5p3-flash",
+      modelAliases: ["glm-5p3-flash"],
+      allowed: false,
+    },
+    {
+      name: "unverified similar model does not match alias cap",
+      scope: ["glm-5p3-flash"],
+      model: "accounts/fireworks/models/glm-5p3-flash",
+      allowed: true,
+    },
+    {
+      name: "unrelated selected model",
+      scope: ["model-a"],
+      model: "model-b",
+      allowed: true,
+    },
+    {
+      name: "shared scope",
+      scope: ["model-a", "model-b"],
+      model: "model-b",
+      allowed: false,
+    },
+    { name: "null scope", scope: null, model: "model-b", allowed: false },
+    { name: "empty scope", scope: [], model: "model-b", allowed: false },
+    { name: "unknown model", scope: ["model-a"], allowed: false },
+    {
+      name: "pending selection",
+      scope: ["model-a"],
+      deferModelScopedLimits: true,
+      allowed: true,
+    },
+    {
+      name: "aggregate before selection",
+      scope: null,
+      deferModelScopedLimits: true,
+      allowed: false,
+    },
+  ];
+
+  for (const {
+    name,
+    scope,
+    model,
+    modelAliases,
+    deferModelScopedLimits,
+    allowed,
+  } of cases) {
+    test(name, async ({ makeAgent }) => {
+      const agent = await makeAgent();
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: scope,
+        lastCleanup: new Date(),
+      });
+      if (scope?.length === 0) {
+        await db
+          .update(schema.limitsTable)
+          .set({ model: [] })
+          .where(eq(schema.limitsTable.id, limit.id));
+      }
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        model,
+        modelAliases,
+        deferModelScopedLimits,
+      });
+
+      expect(result === null).toBe(allowed);
+    });
+  }
+
+  test("a shared cap compares combined spend rather than only the selected model", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    for (const modelId of ["model-a", "model-b"]) {
+      await ModelModel.create({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        customPricePerMillionInput: "1",
+        customPricePerMillionOutput: "1",
+      });
+    }
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["model-a", "model-b"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "model-a",
+      600_000,
+      0,
+    );
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        model: "model-b",
+      }),
+    ).toBeNull();
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "model-b",
+      600_000,
+      0,
+    );
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        model: "model-b",
+      }),
+    ).not.toBeNull();
+  });
+
+  test("an unrelated custom user cap still suppresses the default", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: null,
+      cleanupInterval: "1w",
+    });
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "model-b",
+      cost: "2",
+    });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: ["model-a"],
+      lastCleanup: new Date(),
+    });
+
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: user.id,
+        model: "model-b",
+      }),
+    ).toBeNull();
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: user.id,
+        model: "model-a",
+      }),
+    ).not.toBeNull();
+  });
+
+  test("a default user cap applies only to its models without dropping combined spend", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["model-a", "model-b"],
+      cleanupInterval: "1w",
+    });
+    for (const model of ["model-a", "model-b"]) {
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        model,
+        cost: "0.6",
+      });
+    }
+
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: user.id,
+        model: "model-c",
+      }),
+    ).toBeNull();
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+      model: "model-b",
+    });
+    expect(result?.[2]).toMatchObject({ source: "default_user" });
+  });
+
+  test("the billing team replaces personal caps and scopes only that team's models", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: ["model-a"],
+      lastCleanup: new Date(),
+    });
+    const context = {
+      agentId: agent.id,
+      userId: user.id,
+      billingTeamId: team.id,
+    };
+
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        model: "model-b",
+      }),
+    ).toBeNull();
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      ...context,
+      model: "model-a",
+    });
+    expect(result?.[2]).toMatchObject({ entityType: "team" });
+  });
+
+  test("applicable scoped caps retain entity priority over aggregate caps", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: ["model-a"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
+
+    for (const model of ["model-a", "model-b"]) {
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: user.id,
+        model,
+      });
+      expect(result?.[2]).toMatchObject({
+        entityType: model === "model-a" ? "user" : "organization",
+      });
+    }
+  });
+
+  test.for([
+    "organization",
+    "agent",
+    "user",
+    "team",
+    "virtual_key",
+  ] as const)("unpriced token models respect %s budget scope", async (entityType, {
+    makeAgent,
+    makeUser,
+    makeTeam,
+    makeVirtualApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    const team = await makeTeam(agent.organizationId, user.id);
+    const key = await makeVirtualApiKey(agent.organizationId);
+    const ids = {
+      organization: agent.organizationId,
+      agent: agent.id,
+      user: user.id,
+      team: team.id,
+      virtual_key: key.id,
+    };
+    await LimitModel.create({
+      entityType,
+      entityId: ids[entityType],
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["unpriced-vllm"],
+      lastCleanup: new Date(),
+    });
+    const context = {
+      agentId: agent.id,
+      userId: user.id,
+      virtualKeyId: key.id,
+      ...(entityType === "team" ? { billingTeamId: team.id } : {}),
+    };
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        unpricedModel: "unpriced-vllm",
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        unpricedModel: "other-model",
+      }),
+    ).toBeNull();
+  });
+
+  test("unpriced media remains fail-closed for an applicable budget during routing", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["model-a"],
+      lastCleanup: new Date(),
+    });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        unpricedMediaModel: "model-a",
+        deferModelScopedLimits: true,
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+  });
+
+  test("an unmetered operation is refused by every hard budget, whatever models it lists", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const refusal = {
+      statusCode: 422,
+      message:
+        "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies.",
+    };
+    const budget = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["model-a"],
+      behavior: "soft",
+      lastCleanup: new Date(),
+    });
+    const context = { agentId: agent.id, unmeteredOperation: true };
+
+    // A soft budget only reports, so the operation runs.
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    await LimitModel.patch(budget.id, { behavior: "hard" });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest(context),
+    ).rejects.toMatchObject(refusal);
+    // Unpriced media still answers only to budgets that list its model.
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        unpricedMediaModel: "model-b",
+      }),
+    ).toBeNull();
+
+    // The default user limit applies too.
+    await LimitModel.delete(budget.id);
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 100,
+      model: ["model-a"],
+      cleanupInterval: "1w",
+    });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...context,
+        userId: user.id,
+      }),
+    ).rejects.toMatchObject(refusal);
+  });
+});
+
+describe("Legacy vLLM budget usage", () => {
+  test.for([
+    { rate: null, estimated: true, legacyCost: 0 },
+    { rate: "0", estimated: false, legacyCost: 0 },
+    { rate: "2", estimated: false, legacyCost: 0.003 },
+  ])("keeps shared budgets readable with legacy rate $rate", async ({
+    rate,
+    estimated,
+    legacyCost,
+  }, { makeAgent, makeUser, makeInteraction }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    for (const [modelId, price] of [
+      ["legacy-vllm", rate],
+      ["priced-vllm", "1"],
+    ] as const) {
+      await ModelModel.create({
+        externalId: `vllm/${modelId}`,
+        provider: "vllm",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        customPricePerMillionInput: price,
+        customPricePerMillionOutput: price,
+      });
+    }
+    const models = ["legacy-vllm", "priced-vllm"];
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 3,
+      model: models,
+      cleanupInterval: "1w",
+      lastCleanup: new Date(),
+    });
+    // No billing receipt: these tokens came from an older release.
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "legacy-vllm",
+      1000,
+      500,
+    );
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "priced-vllm",
+      2_000_000,
+      0,
+    );
+    const context = {
+      agentId: agent.id,
+      userId: user.id,
+      model: "priced-vllm",
+    };
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    expect(
+      (await LimitModel.getTokenCostTotals([limit.id])).get(limit.id),
+    ).toEqual({
+      cost: 2 + legacyCost,
+      estimated,
+    });
+    expect(
+      (await LimitModel.getSpendUsage([limit.id])).get(limit.id),
+    ).toMatchObject({
+      estimatedUsage: estimated,
+      modelUsage: expect.arrayContaining([
+        {
+          model: "legacy-vllm",
+          tokensIn: 1000,
+          tokensOut: 500,
+          cost: legacyCost,
+        },
+      ]),
+    });
+    await LimitModel.patch(limit.id, { limitValue: 1 });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).not.toBeNull();
+    await LimitModel.delete(limit.id);
+
+    const inherited = await EnvironmentDefaultUserLimitModel.create({
+      organizationId: agent.organizationId,
+      environmentId: null,
+      limitValue: 3,
+      model: models,
+      cleanupInterval: "1w",
+    });
+    const legacy = await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "legacy-vllm",
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ cost: null })
+      .where(eq(schema.interactionsTable.id, legacy.id));
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      model: "priced-vllm",
+      cost: "2",
+    });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).toBeNull();
+    expect(
+      (
+        await LimitModel.getDefaultUserLimitUsageByUser({
+          organizationId: agent.organizationId,
+          models,
+          cleanupInterval: "1w",
+        })
+      ).get(user.id),
+    ).toEqual({ cost: 2 + legacyCost, estimated });
+    await EnvironmentDefaultUserLimitModel.patch(inherited.id, {
+      limitValue: 1,
+    });
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest(context),
+    ).not.toBeNull();
+  });
+});
+
 describe("CreateLimitSchema", () => {
   test("normalizes empty array to null for token_cost", () => {
     const result = CreateLimitSchema.parse({

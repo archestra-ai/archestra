@@ -80,6 +80,10 @@ export interface ArchestraContext {
   parentLlm?: import("@archestra/shared").ModelSelection;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
+  /** The calling agent run's task ID or run ID, when dispatched from a runtime container. */
+  runId?: string;
+  /** Explicit runtime tier of the calling instance, when available. */
+  agentRuntimeTier?: string;
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /**

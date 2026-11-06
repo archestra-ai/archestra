@@ -182,7 +182,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode, response.body).toBe(200);
     expect(response.body).toContain(
-      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/model-router'",
+      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/unified-model'",
     );
     expect(response.body).toContain(`ARCHESTRA_CURSOR_API_KEY='${virtualKey}'`);
     expect(response.body).not.toContain("/connection-setup/");
@@ -677,7 +677,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       );
       expect(response.body).toContain("archestra_skl_");
     } else {
-      expect(response.body).not.toContain("archestra_skl_");
+      expect(response.body).not.toMatch(/archestra_skl_[A-Za-z0-9_-]{32}/);
     }
     // Pi uses a share link, so it must not create a shared-marketplace repo
     // row with a name the client never registers.
@@ -689,6 +689,68 @@ describe("GET /api/connection-setups/script/:token", () => {
     ).toBeNull();
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
+
+  for (const [platform, withSkills] of [
+    ["linux", false],
+    ["linux", true],
+    ["windows", false],
+    ["windows", true],
+  ] as const) {
+    test(`ChatGPT combines routing, gateway and native plugin installation on ${platform}, with shared skills: ${withSkills}`, async ({
+      makeAgent,
+    }) => {
+      const gateway = await makeAgent({
+        organizationId,
+        agentType: "mcp_gateway",
+        name: "Desktop Gateway",
+      });
+      const proxy = await makeAgent({
+        organizationId,
+        agentType: "llm_proxy",
+        name: "Desktop Proxy",
+      });
+      const skill = withSkills
+        ? await seedSkill({ organizationId, name: "desktop-guide" })
+        : null;
+      const { rawToken } = await createSetup({
+        clientId: "chatgpt",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        llmProxyId: proxy.id,
+        provider: "openai",
+        proxyAuth: "provider-key",
+        ...(skill ? { skills: { skillIds: [skill.id], ttlDays: null } } : {}),
+      });
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      const repo = await SkillMarketplaceRepoModel.findForViewer({
+        organizationId,
+        userId: user.id,
+      });
+      expect(repo).toBeNull();
+      const links = await SkillShareLinkModel.listByOrganization({
+        organizationId,
+      });
+      expect(links).toHaveLength(1);
+      const marketplace = links[0].marketplaceName;
+      expect(response.body).toContain(
+        `codex plugin add '${marketplace}@${marketplace}'`,
+      );
+      expect(response.body).toContain("archestra_skl_");
+      expect(response.body).not.toContain("codex mcp add");
+      expect(response.body).not.toContain("[mcp_servers.desktop_gateway]");
+      expect(response.body).toContain(
+        `[plugins."${marketplace}@${marketplace}".mcp_servers."desktop_gateway"`,
+      );
+      expect(response.body).toContain("codex mcp get 'desktop_gateway' --json");
+      expect(response.body).toMatch(/\[model_providers\.[a-z_]+\]/);
+      expect(response.body).toContain('wire_api = "responses"');
+      expect(response.body).toContain("Restart ChatGPT");
+      expect(response.body).toContain("Plugin installation failed");
+      expect((await fetchScript(rawToken)).statusCode).toBe(410);
+    });
+  }
 
   test("404s an unknown token", async () => {
     const response = await fetchScript("archestra_con_does-not-exist-at-all");
@@ -829,7 +891,7 @@ describe("GET /api/connection-setups/script/:token", () => {
         clientId: "codex",
         platform,
         baseUrl: "http://localhost:9000/v1",
-        skills: { skillIds: [skill.id], ttlDays: null },
+        ...(skill ? { skills: { skillIds: [skill.id], ttlDays: null } } : {}),
       });
       const response = await fetchScript(rawToken);
       expect(response.statusCode).toBe(200);

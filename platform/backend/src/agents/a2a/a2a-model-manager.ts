@@ -8,6 +8,7 @@ import {
   A2ATaskModel,
 } from "@/models";
 import { A2AMessageIdExistsError } from "@/models/a2a/message";
+import { redactCredentials } from "@/openappa/review-display";
 import type {
   A2AArtifact,
   A2AContext,
@@ -453,7 +454,7 @@ export function toApprovalRequest(
       row.expiresAt && {
         openappaReview: {
           offerId: row.openappaOfferId,
-          text: row.openappaReviewText,
+          text: redactCredentials(row.openappaReviewText),
           expiresAt: row.expiresAt.toISOString(),
         },
       }),

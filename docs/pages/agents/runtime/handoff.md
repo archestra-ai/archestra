@@ -3,7 +3,7 @@ title: Remote Agents
 description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -58,7 +58,7 @@ If a request is refused:
 
 - **"OpenAPPA does not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 - **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
-- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a model's runtime tool calls. A script or a client whose model requests skip the LLM Proxy gets this. Make the call as a tool call from the run's own conversation or from the one that started it. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client). Once a [yell with **Break the glass** on](/docs/agents/guardrails/policies#yells) turns Guardrails off for the run's session or the session that started it, its calls need no proof.
+- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a model's runtime tool calls. A script or a client whose model requests skip the LLM Proxy gets this. Make the call as a tool call from the run's own conversation or from the one that started it. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client). Once a [yell](/docs/agents/guardrails/policies#yells) turns Guardrails off for the run's session or the session that started it (the **Yell tool** setting under **Break the glass**), its calls need no proof.
 - **"The protected file could not be admitted":** Guardrails held the file's bytes from your session. The ruling after the message says why and names any plan that lets them through.
 
 ## Pass a Credential
@@ -69,4 +69,4 @@ What to know:
 
 - The value passes through your agent's model and transcript. A secret that must never reach a model belongs in the agent's **Environment variables** instead.
 - To refuse transfers, turn off **Accept credentials from a connected client** on the agent.
-- Claude Code's auto mode can block the transfer before it reaches Archestra. [Connect](/docs/integrations/claude-code#gateway-tool-permissions) adds the allow rule that prevents this. If you added the gateway another way, add the rule in `/permissions`.
+- Claude Code's auto mode can block the transfer before it reaches Archestra. [Connect](/docs/integrations/ai-clients/claude-code#gateway-tool-permissions) adds the allow rule that prevents this. If you added the gateway another way, add the rule in `/permissions`.

@@ -50,7 +50,6 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -70,9 +69,15 @@ import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
+import {
+  agentNetworkRuntimeChanged,
+  assertCanWriteAgentNetworkPolicy,
+  syncAgentNetworkRuntimes,
+} from "@/services/agent-network-policy";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -110,7 +115,6 @@ import {
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
-  BuiltInAgentConfigSchema,
   ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
@@ -132,7 +136,6 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -282,7 +285,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+                "Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.",
               ),
             includeTotal: z
               .preprocess(
@@ -507,7 +510,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatAgentRosterPage,
         description:
-          "Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.",
+          "Fetch bounded authorized chat choices with literal name or description search.",
         tags: ["Agents"],
         querystring: CursorQuerySchema.extend({
           search: z.string().max(512).optional(),
@@ -680,7 +683,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .preprocess((val) => val !== "false" && val !== false, z.boolean())
             .optional()
             .describe(
-              "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.",
+              "Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need the gateway or its counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned. `sandboxAvailable` is omitted too.",
             ),
         }),
         response: constructResponseSchema(
@@ -789,10 +792,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
+        userId: user.id,
+        organizationId,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,
@@ -846,11 +855,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
-      await assertModelTrioTiers({
-        apiKeyId: body.llmApiKeyId ?? null,
-        fastModelId: body.fastModelId ?? null,
-        smartModelId: body.smartModelId ?? null,
-      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -859,6 +863,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         organizationId,
         userId: user.id,
+        selectsModel: true,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -873,6 +878,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         environmentId,
+      });
+      await assertCanWriteAgentNetworkPolicy({
+        userId: user.id,
+        organizationId,
+        before: null,
+        after: body.networkPolicy,
       });
       if (body.activationSkillPolicy) {
         await agentActivationSkillPolicyService.validatePolicyForDraft({
@@ -934,6 +945,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agent.activationSkillPolicyRevision = 1;
         const fork = await AgentVersionModel.forkIfChangedBestEffort(agent.id);
         if (fork) agent.latestVersion = fork.version;
+      }
+      if (agent.networkPolicy) {
+        syncAgentNetworkRuntimes({ agentId: agent.id, organizationId });
       }
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
@@ -1156,15 +1170,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be restored");
       }
 
-      return reply.send(
-        await restoreAgentVersion({
+      const restored = await restoreAgentVersion({
+        agentId: id,
+        version,
+        baseVersion: body?.baseVersion,
+        userId: user.id,
+        organizationId,
+      });
+      if (
+        agentNetworkRuntimeChanged({ before: existingAgent, after: restored })
+      ) {
+        syncAgentNetworkRuntimes({
           agentId: id,
-          version,
-          baseVersion: body?.baseVersion,
-          userId: user.id,
           organizationId,
-        }),
-      );
+          engine: !!(existingAgent.networkPolicy || restored.networkPolicy),
+        });
+      }
+      return reply.send(restored);
     },
   );
 
@@ -1281,6 +1303,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       }
+
+      await requireAgentRuntimePermission({
+        agentType: sourceAgent.agentType,
+        runtime: sourceAgent.runtime,
+        isAdmin: checker.isAdmin(sourceAgent.agentType),
+        userId: user.id,
+        organizationId,
+      });
 
       // The copy is the caller's own Agent, so the credentials it reads are
       // checked as if they had attached them.
@@ -2174,10 +2204,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
+        userId: user.id,
+        organizationId,
+        previous: existingAgent.runtime,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,
@@ -2239,21 +2276,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
-        // Validate builtInAgentConfig if provided
-        if (body.builtInAgentConfig) {
-          const parsed = BuiltInAgentConfigSchema.safeParse(
-            body.builtInAgentConfig,
-          );
-          if (!parsed.success) {
-            throw new ApiError(400, "Invalid built-in agent configuration");
-          }
-        }
-
         // Only allow specific fields for built-in agents.
         updateData = {
-          ...(body.builtInAgentConfig !== undefined && {
-            builtInAgentConfig: body.builtInAgentConfig,
-          }),
           ...(body.systemPrompt !== undefined && {
             systemPrompt: body.systemPrompt,
           }),
@@ -2263,12 +2287,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelId !== undefined && { modelId: body.modelId }),
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
-          }),
-          ...(body.fastModelId !== undefined && {
-            fastModelId: body.fastModelId,
-          }),
-          ...(body.smartModelId !== undefined && {
-            smartModelId: body.smartModelId,
           }),
         };
       } else {
@@ -2304,27 +2322,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        body.llmApiKeyId !== undefined ||
-        body.fastModelId !== undefined ||
-        body.smartModelId !== undefined
-      ) {
-        await assertModelTrioTiers({
-          apiKeyId:
-            body.llmApiKeyId !== undefined
-              ? body.llmApiKeyId
-              : existingAgent.llmApiKeyId,
-          fastModelId:
-            body.fastModelId !== undefined
-              ? body.fastModelId
-              : existingAgent.fastModelId,
-          smartModelId:
-            body.smartModelId !== undefined
-              ? body.smartModelId
-              : existingAgent.smartModelId,
-        });
-      }
-
-      if (
         body.runtime !== undefined ||
         body.modelId !== undefined ||
         body.llmApiKeyId !== undefined
@@ -2342,6 +2339,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           userId: user.id,
+          // A body that names neither keeps the agent's pair: an image or
+          // limits change does not choose a model.
+          selectsModel:
+            body.modelId !== undefined || body.llmApiKeyId !== undefined,
         });
       }
 
@@ -2352,6 +2353,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: body.environmentId,
         });
       }
+      await assertCanWriteAgentNetworkPolicy({
+        userId: user.id,
+        organizationId,
+        before: existingAgent.networkPolicy,
+        after: updateData.networkPolicy,
+      });
 
       const agent = await AgentModel.update(id, updateData);
 
@@ -2361,6 +2368,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // A Slack bot of this agent follows its name and icon (best effort).
       void slackAppFactory.syncAgentIdentity(id);
+
+      if (agentNetworkRuntimeChanged({ before: existingAgent, after: agent })) {
+        syncAgentNetworkRuntimes({
+          agentId: id,
+          organizationId,
+          engine: !!(existingAgent.networkPolicy || agent.networkPolicy),
+        });
+      }
 
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
@@ -2441,6 +2456,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!deleted) {
             throw new ApiError(404, "Agent not found");
           }
+          if (_agent.networkPolicy) {
+            syncAgentNetworkRuntimes({ agentId: id, organizationId });
+          }
           await MemberModel.clearDefaultAgent(id);
           await ProjectModel.clearDefaultAgent(id);
         },
@@ -2519,6 +2537,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Agent not found");
       }
+      if (agent.networkPolicy) {
+        syncAgentNetworkRuntimes({ agentId: id, organizationId });
+      }
 
       // Members who chose this agent as their personal default, and projects
       // pinning it, are shown "no default" from here on, so clear both sets of
@@ -2591,6 +2612,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!restored) {
         throw new ApiError(404, "Agent not found");
       }
+      if (restored.networkPolicy) {
+        syncAgentNetworkRuntimes({ agentId: id, organizationId });
+      }
 
       return reply.send(restored);
     },
@@ -2639,6 +2663,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const purged = await AgentModel.purge(id, organizationId);
       if (!purged) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      if (deletedAgent?.networkPolicy) {
+        syncAgentNetworkRuntimes({ agentId: id, organizationId });
       }
 
       return reply.send({ success: true });
@@ -3255,7 +3283,7 @@ type AgentRosterRequest = {
   ids?: string[];
 };
 
-/** The chat roster's filter: internal, non-built-in agents, no tools. */
+/** The chat roster includes internal agents and user-facing built-ins, without tools. */
 const CHAT_ROSTER_QUERY = {
   agentType: "agent",
   excludeBuiltIn: true,

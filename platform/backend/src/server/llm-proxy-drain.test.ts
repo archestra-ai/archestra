@@ -1,11 +1,17 @@
 import { setImmediate } from "node:timers/promises";
 import { expect, test } from "vitest";
 import { createFastifyInstance } from "@/fastify-instance";
+import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import healthRoutes from "@/routes/health";
 import { beginLlmProxyDrain } from "./llm-proxy-drain";
 
 test("production hooks preserve a nested proxy stream and return readiness 503", async () => {
   const app = createFastifyInstance();
+  const reported: boolean[] = [];
+  app.addHook("onError", (_request, _reply, error, done) => {
+    reported.push(classifyErrorForTracking(error).report);
+    done();
+  });
   let finish = () => {};
   const finishStream = new Promise<void>((resolve) => {
     finish = resolve;
@@ -39,6 +45,7 @@ test("production hooks preserve a nested proxy stream and return readiness 503",
     });
     const rejected = await fetch(`${url}/v1/openai/stream`);
     expect(rejected.status).toBe(503);
+    expect(reported).toEqual([false, false]);
     const close = app.close();
     finish();
     expect(await body).toBe("data: first\n\ndata: done\n\n");

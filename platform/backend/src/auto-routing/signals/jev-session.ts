@@ -18,15 +18,21 @@ export interface JevSessionReading {
   tierNeeded: [number, number, number];
   /** Probability that the session's context grows past the long-context threshold. */
   pLong: number;
-  /** Upstream-reported cost of the scoring call, when the endpoint reports one. */
+  /** Reported cost, or token-priced cost on the first-party endpoint; null if unknown. */
   costUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
-// State template v2 (spec.stateTemplateVersion): ported from the router PoC rubric.
+// State template v5: full sorted tool names, without descriptions or a first-N cutoff.
 const PROMPT_HEAD = 3000;
 const PROMPT_TAIL = 1000;
-const SECRET =
-  /(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9-]{10,}|[Bb][Ee][Aa][Rr][Ee][Rr]\s+[A-Za-z0-9._-]{20,}|[A-Za-z0-9+/=_-]{40,})/g;
+const SYSTEM_HEAD = 1500;
+const SYSTEM_TAIL = 500;
+const MAX_TOOL_NAMES_BYTES = 64 * 1024;
+const CREDENTIAL =
+  /(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9-]{10,}|[Bb][Ee][Aa][Rr][Ee][Rr]\s+[A-Za-z0-9._-]{20,})/g;
+const SECRET = new RegExp(`${CREDENTIAL.source}|[A-Za-z0-9+/=_-]{40,}`, "g");
 /** Jev's probabilities are rounded; anything further from 1 is a broken answer. */
 const PROBABILITY_SUM_TOLERANCE = 0.01;
 
@@ -111,10 +117,28 @@ export class JevSessionSource
       );
     }
     const { tier_needed, long_context } = parsed.data.answers;
+    const inputTokens = parsed.data.usage?.input_tokens ?? null;
+    const outputTokens = parsed.data.usage?.output_tokens ?? null;
+    // A custom endpoint may charge a different rate. Only the first-party
+    // endpoint can use TypeSafe's published rate when no cost is reported.
+    // TypeSafe: https://help.typesafe.ai/articles/5187202169-how-much-does-jev-cost
+    // Output tokens are free. Keep this rate out of endpoint-agnostic model sync.
+    const inputPricePerMillion =
+      (baseUrl ?? config.llm.jev.baseUrl) ===
+        "https://api.typesafe.ai/v1/systemone" &&
+      this.spec.model === "jev-1.13.0"
+        ? 0.042
+        : null;
+    const calculatedCost =
+      inputTokens !== null && inputPricePerMillion !== null
+        ? (inputTokens * inputPricePerMillion) / 1_000_000
+        : null;
     return {
       tierNeeded: tierDistribution(tier_needed.probabilities),
       pLong: long_context.noul,
-      costUsd: parsed.data.usage?.cost ?? null,
+      costUsd: parsed.data.usage?.cost ?? calculatedCost,
+      inputTokens,
+      outputTokens,
     };
   }
 }
@@ -186,12 +210,52 @@ function tierDistribution(
 }
 
 function sessionState(input: PreRunInput): Record<string, string> {
-  return { prompt: clip(input.firstUserText.replace(SECRET, "<redacted>")) };
+  const state: Record<string, string> = {
+    prompt: clip(redact(input.firstUserText), {
+      head: PROMPT_HEAD,
+      tail: PROMPT_TAIL,
+    }),
+  };
+  if (input.systemPrompt?.trim()) {
+    state.system_prompt = clip(redact(input.systemPrompt), {
+      head: SYSTEM_HEAD,
+      tail: SYSTEM_TAIL,
+    });
+  }
+  if (input.tools?.length) {
+    const names = input.tools
+      .map((tool) => redactToolName(tool.name))
+      .sort()
+      .join("\n");
+    // Reject pathological input rather than silently hide capabilities from the scorer.
+    if (Buffer.byteLength(names, "utf8") > MAX_TOOL_NAMES_BYTES) {
+      throw new SignalSourceError(
+        "input_too_large",
+        "Tool names exceed the scorer's 64 KiB context limit",
+      );
+    }
+    state.tools = `Available tools: ${input.tools.length}\n${names}`;
+  }
+  return state;
 }
 
-function clip(text: string): string {
+function redact(text: string): string {
+  return text.replace(SECRET, "<redacted>");
+}
+
+function redactToolName(name: string): string {
+  // Recognized MCP identifiers often exceed 40 characters; opaque names still need redaction.
+  return /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/.test(name)
+    ? name.replace(CREDENTIAL, "<redacted>")
+    : redact(name);
+}
+
+function clip(
+  text: string,
+  { head, tail }: { head: number; tail: number },
+): string {
   const chars = Array.from(text);
-  if (chars.length <= PROMPT_HEAD + PROMPT_TAIL) return text;
-  const omitted = chars.length - PROMPT_HEAD - PROMPT_TAIL;
-  return `${chars.slice(0, PROMPT_HEAD).join("")}\n…[${omitted} chars omitted]…\n${chars.slice(-PROMPT_TAIL).join("")}`;
+  if (chars.length <= head + tail) return text;
+  const omitted = chars.length - head - tail;
+  return `${chars.slice(0, head).join("")}\n…[${omitted} chars omitted]…\n${tail ? chars.slice(-tail).join("") : ""}`;
 }

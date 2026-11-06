@@ -1,4 +1,5 @@
 import {
+  COPILOT_ENV_HANDLED_MARKER,
   isDefaultBrandedAppName,
   STARTUP_GUARD_FORMAT_VERSION,
 } from "@archestra/shared";
@@ -11,11 +12,13 @@ import {
   archestraMarkWithText,
 } from "@/services/archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { COPILOT_LEGACY_ENV_PS_ARRAY } from "../payloads/copilot-provider-config";
 import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instructions-refresh.windows";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
 import {
+  gatewayLaunchArgsFor,
   type StartupGuardClient,
   type StartupGuardContext,
   startupGuardRefreshInstall,
@@ -138,9 +141,44 @@ $GuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 # Remotes this guard's own disconnect action already removed from ${client.label},
 # one kind per line. They are skipped below; connect clears the file.
 $SkipFile = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+# Proof that a removal landed. The vendor CLI is invoked with its output
+# silenced and its exit status is not a reliable signal — \`mcp remove\` of a
+# missing server exits 0 — so the check reads the config back instead. Clients
+# that ship no verifier keep the previous assume-success behaviour.
+function Test-ArchDisconnected([string]$Kind) {${
+    ctx.proxy && client.windows.proxyDisconnectVerify
+      ? `
+  if ($Kind -eq 'proxy') { ${client.windows.proxyDisconnectVerify} }`
+      : ""
+  }${
+    ctx.mcp && client.windows.mcpDisconnectVerify
+      ? `
+  if ($Kind -eq 'mcp') {
+${client.windows.mcpDisconnectVerify}
+  }`
+      : ""
+  }${
+    ctx.skills && client.windows.skillsDisconnectVerify
+      ? `
+  if ($Kind -eq 'skills') {
+${client.windows.skillsDisconnectVerify}
+  }`
+      : ""
+  }
+  return $true
+}
+
 $DisconnectedKinds = @()
 if (Test-Path $SkipFile) { $DisconnectedKinds = @(Get-Content -Path $SkipFile | Where-Object { $_ }) }
-${client.atomicDisconnect ? "$DisconnectedKinds = @()" : ""}
+${client.atomicDisconnect ? "$DisconnectedKinds = @()" : ""}${
+  ctx.mcp && ctx.skills?.connectionPlugin
+    ? `
+# Recheck skips saved by older launchers that could restore a removed plugin.
+if ($DisconnectedKinds -contains 'mcp' -and -not (Test-ArchDisconnected 'mcp')) {
+  $DisconnectedKinds = @($DisconnectedKinds | Where-Object { $_ -ne 'mcp' })
+}`
+    : ""
+}
 $ActiveRemotes = @($Remotes | Where-Object { $DisconnectedKinds -notcontains $_.Kind })
 
 function Add-ArchDisconnected([string]$Kind) { ${client.atomicDisconnect ? "return;" : ""} try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
@@ -203,6 +241,41 @@ function Remove-ArchGuard {
 
 if ($ArchDisconnectAll -and $ActiveRemotes.Count -eq 0) { Write-Output 'Nothing left to disconnect. Removing the ${client.label} startup check.' }
 if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; return }
+${
+  client.clientId === "copilot-cli" && ctx.proxy
+    ? `
+# Copilot CLI uses its provider environment variables instead of providers.json
+# (with only COPILOT_MODEL set it refuses to start the saved model). The values
+# an earlier setup persisted are removed here as well as at setup, so a
+# refreshed guard repairs older installs; this session's are dropped unless the
+# wrapper already does that for the launch.
+function Repair-ArchCopilotEnv {
+  if ($ArchDisconnectAll -or ($DisconnectedKinds -contains 'proxy')) { return }
+  $archNames = ${COPILOT_LEGACY_ENV_PS_ARRAY}
+  foreach ($archScope in @('User', 'Process')) {
+    $archOurs = (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', $archScope)) -like '*/v1/connection-setup/*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', $archScope)) -like '*X-Archestra-*') -or (([Environment]::GetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $archScope)) -like 'arch_*') -or (([Environment]::GetEnvironmentVariable('COPILOT_MODEL', $archScope)) -like 'archestra/*')
+    if (-not $archOurs) { continue }
+    $archRemoved = @()
+    foreach ($archName in $archNames) {
+      if ([Environment]::GetEnvironmentVariable($archName, $archScope)) {
+        [Environment]::SetEnvironmentVariable($archName, $null, $archScope)
+        $archRemoved += $archName
+      }
+    }
+    if ($archRemoved.Count -gt 0) { Write-Warning ($AppName + ': removed ' + ($archRemoved -join ', ') + ' (' + $archScope + ' scope) left by an earlier setup; Copilot CLI would use them instead of providers.json.') }
+  }
+  if ($env:${COPILOT_ENV_HANDLED_MARKER} -eq '1') { return }
+  $archSet = @($archNames | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') })
+  if ($archSet.Count -gt 0) {
+    foreach ($archName in $archSet) { Remove-Item -Path ('Env:' + $archName) -ErrorAction SilentlyContinue }
+    $archThose = if ($archSet.Count -eq 1) { @('that variable', 'it') } else { @('those variables', 'them') }
+    Write-Warning ($AppName + ': ignoring ' + ($archSet -join ', ') + ' for this session. The LLM proxy connection is active, and Copilot CLI would use ' + $archThose[0] + ' instead of providers.json. Remove ' + $archThose[1] + ', or reconnect from the ' + $AppName + ' /connection page to refresh the launcher.')
+  }
+}
+try { Repair-ArchCopilotEnv } catch { }
+`
+    : ""
+}
 
 # Retry budget for the single health request when the platform is
 # unreachable: capped exponential backoff (1,2,4,4...s) + 0-1s jitter, 15s
@@ -342,6 +415,22 @@ function Invoke-ArchVersionRefresh {
   }
 }
 
+${
+  ctx.mcp && client.windows.toolPrefixSync
+    ? `# Client config keyed by full tool names follows the tool prefix the instance
+# reports now: white-labeling can change it after connect. Never blocks a launch.
+function Sync-ArchToolPrefix {
+  if ($Script:HealthState -eq 'down') { return }
+  if ($DisconnectedKinds -contains 'mcp') { return }
+  # A gateway the instance reports down is gone: its rules are left for the disconnect prompt.
+  if ($Script:HealthBody -clike '*"mcp":"down"*') { return }
+  if ($Script:HealthBody -cnotmatch '"mcpToolPrefix":"([^"]*)"') { return }
+  $archToolPrefix = $Matches[1]
+${client.windows.toolPrefixSync}
+}`
+    : "function Sync-ArchToolPrefix { }"
+}
+
 function Start-ArchRefreshedGuard {
   $Script:GuardHandedOff = $false
   if (-not (Test-ArchVersionStale)) { return }
@@ -372,6 +461,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
   }
   Start-ArchRefreshedGuard
   if ($Script:GuardHandedOff) { return }
+  Sync-ArchToolPrefix
   Write-ArchUnreachableWarning
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
@@ -486,33 +576,6 @@ ${client.windows.skillsDisconnect}
   }
   }
   return (Test-ArchDisconnected $Kind)
-}
-
-# Proof that a removal landed. The vendor CLI is invoked with its output
-# silenced and its exit status is not a reliable signal — \`mcp remove\` of a
-# missing server exits 0 — so the check reads the config back instead. Clients
-# that ship no verifier keep the previous assume-success behaviour.
-function Test-ArchDisconnected([string]$Kind) {${
-    ctx.proxy && client.windows.proxyDisconnectVerify
-      ? `
-  if ($Kind -eq 'proxy') { ${client.windows.proxyDisconnectVerify} }`
-      : ""
-  }${
-    ctx.mcp && client.windows.mcpDisconnectVerify
-      ? `
-  if ($Kind -eq 'mcp') {
-${client.windows.mcpDisconnectVerify}
-  }`
-      : ""
-  }${
-    ctx.skills && client.windows.skillsDisconnectVerify
-      ? `
-  if ($Kind -eq 'skills') {
-${client.windows.skillsDisconnectVerify}
-  }`
-      : ""
-  }
-  return $true
 }
 
 # Reversing a connect step animates the same way the probes do: the dots
@@ -972,6 +1035,7 @@ if ($Script:SkipAll) {
 if (-not $ArchDisconnectAll) {
   Start-ArchRefreshedGuard
   if ($Script:GuardHandedOff) { return }
+  Sync-ArchToolPrefix
 }
 $DownRemotes = @()
 foreach ($r in $ActiveRemotes) {
@@ -1050,6 +1114,18 @@ export function buildWindowsStartupGuardInstallSection(
             ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.mjs'), [Convert]::FromBase64String('${Buffer.from(OPENCODE_HANDOFF_PLUGIN).toString("base64")}'))`
             : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.mjs')`
           : "";
+  const gatewayLaunchArgs = gatewayLaunchArgsFor(ctx, client);
+  // Splatted before the user's arguments on a conversation launch while the
+  // gateway is connected; an empty array splats nothing.
+  const gatewayArgsBlock =
+    gatewayLaunchArgs.length > 0
+      ? `$archGatewayArgs = @()
+    $archGatewaySkip = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+    if ((Test-Path $archGuard) -and -not ((Test-Path $archGatewaySkip) -and (Select-String -Path $archGatewaySkip -Pattern '^mcp$' -Quiet))) {
+      $archGatewayArgs = @(${gatewayLaunchArgs.map(psq).join(", ")})
+    }`
+      : "";
+  const gatewaySplat = gatewayLaunchArgs.length > 0 ? "@archGatewayArgs " : "";
   const launchArgs =
     client.clientId === "codex"
       ? `try {
@@ -1161,7 +1237,28 @@ function ${client.binary} {
   }`
       : ""
   }
-  if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }
+  ${
+    client.clientId === "copilot-cli" && ctx.proxy
+      ? `# Copilot CLI uses its provider environment variables instead of providers.json
+  # (and with only COPILOT_MODEL set refuses to start the saved model). While
+  # the LLM proxy is connected, launch without them and put them back after;
+  # the guard is told so it does not report them again.
+  $archCopilotSaved = @{}
+  $archCopilotSkippedProxy = 'proxy' -in @(Get-Content -Path (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}) -ErrorAction SilentlyContinue)
+  if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not $archCopilotSkippedProxy) {
+    foreach ($archName in ${COPILOT_LEGACY_ENV_PS_ARRAY}) {
+      $archValue = [Environment]::GetEnvironmentVariable($archName, 'Process')
+      if ($archValue) { $archCopilotSaved[$archName] = $archValue; Remove-Item -Path ('Env:' + $archName) -ErrorAction SilentlyContinue }
+    }
+    if ($archCopilotSaved.Count -gt 0) {
+      $archThose = if ($archCopilotSaved.Count -eq 1) { @('that variable', 'it') } else { @('those variables', 'them') }
+      Write-Warning ('Ignoring ' + (@($archCopilotSaved.Keys | Sort-Object) -join ', ') + ' for this launch: the LLM proxy connection is active, and Copilot CLI would use ' + $archThose[0] + ' instead of providers.json. Remove ' + $archThose[1] + ' to silence this notice.')
+    }
+  }
+  try {
+  if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { $env:${COPILOT_ENV_HANDLED_MARKER} = '1'; & $archGuard @args } catch { } finally { Remove-Item Env:${COPILOT_ENV_HANDLED_MARKER} -ErrorAction SilentlyContinue } }`
+      : `if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }`
+  }
   $archReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $archReal) {
     $archReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
@@ -1171,6 +1268,7 @@ function ${client.binary} {
   if ($archReal) {
     if ($archUtilityCommand) { & $archReal.Source @args; return }
     ${promptArgs}
+    ${gatewayArgsBlock}
     ${client.clientId === "codex" ? "$archDirectReady = $false" : ""}
     ${
       client.clientId === "codex" && ctx.proxy
@@ -1233,12 +1331,19 @@ function ${client.binary} {
     } else {
       & $archReal.Source @args
     }`
-        : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
+        : `& $archReal.Source ${gatewaySplat}${handoffEnabled ? "@archLaunchArgs" : "@args"}`
     }
     ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.inlineConfigEnv ? `} finally { $env:${client.inlineConfigEnv} = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }
+  ${
+    client.clientId === "copilot-cli" && ctx.proxy
+      ? `} finally {
+    foreach ($archName in @($archCopilotSaved.Keys)) { [Environment]::SetEnvironmentVariable($archName, $archCopilotSaved[$archName], 'Process') }
+  }`
+      : ""
+  }
 }
 ${client.markerEnd}
 '@
@@ -1292,6 +1397,9 @@ function renderWindowsMarketplaceRefreshProfileBlock(
   // white-label-ok: PowerShell function and cache names are stable wire identifiers.
   return `function Invoke-Archestra${client.binary}MarketplaceRefresh {
   param([object[]]$ClientArgs)
+  if (-not (Test-Path (Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}))) { return $true }
+  $archRefreshSkip = Join-Path $env:USERPROFILE ${psq(client.skipRelpath)}
+  if ((Test-Path $archRefreshSkip) -and ${psq(ctx.mcp && ctx.skills.connectionPlugin ? "mcp" : "skills")} -in @(Get-Content -Path $archRefreshSkip)) { return $true }
   foreach ($archArg in $ClientArgs) {
     if (@(${nonInteractiveArgs}) -contains [string]$archArg) { return $true } # white-label-ok: generated PowerShell uses stable wire identifiers
   }
@@ -1442,15 +1550,19 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   if (ctx.mcp) {
+    const label = ctx.skills?.connectionPlugin
+      ? "Connection plugin"
+      : "MCP gateway";
     resources.push({
-      label: `MCP gateway (${ctx.mcp.serverName})`,
+      label: `${label} (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
-      failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
+      failName: `${label} (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
   }
-  if (ctx.skills) {
+  // One verified disconnect records the entire connection plugin as removed.
+  if (ctx.skills && !(ctx.mcp && ctx.skills.connectionPlugin)) {
     const label = `${describeMarketplaceContents(ctx.skills).label} (${ctx.skills.marketplaceName})`;
     resources.push({
       label,

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { ConnectionSetup, InsertConnectionSetup } from "@/types";
 
@@ -15,9 +15,6 @@ const TOKEN_RANDOM_BYTES = 24;
 
 /** Display prefix length: prefix (14) + 8 random chars for UI distinguishability. */
 const TOKEN_START_LENGTH = 22;
-
-/** Setup tokens are render tickets, not credentials — keep them short-lived. */
-export const CONNECTION_SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 interface CreateConnectionSetupParams
   extends Omit<InsertConnectionSetup, "tokenHash" | "tokenStart"> {
@@ -74,6 +71,38 @@ class ConnectionSetupModel {
       .from(schema.connectionSetupsTable)
       .where(eq(schema.connectionSetupsTable.id, id));
     return setup ?? null;
+  }
+
+  static async hasManagedPrimaryInstallation(params: {
+    organizationId: string;
+    userId: string;
+    virtualApiKeyId: string;
+  }): Promise<boolean> {
+    const table = schema.connectionSetupsTable;
+    const [installation] = await db
+      .select({ id: table.id })
+      .from(table)
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.organizationId, table.organizationId),
+          eq(schema.membersTable.userId, table.userId),
+        ),
+      )
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.userId, params.userId),
+          eq(table.virtualApiKeyId, params.virtualApiKeyId),
+          inArray(table.clientId, ["opencode", "kilo"]),
+          eq(table.proxyAuth, "primary-providers"),
+          isNotNull(table.llmProxyId),
+          isNotNull(table.consumedAt),
+          isNull(table.revokedAt),
+        ),
+      )
+      .limit(1);
+    return Boolean(installation);
   }
 
   /** Transfers an owned, unused render ticket to a browser-approved installer. */
@@ -205,6 +234,17 @@ class ConnectionSetupModel {
         ),
       );
     return rows.map((row) => row.pluginId);
+  }
+
+  static async findBySkillShareLinkId(
+    id: string,
+  ): Promise<ConnectionSetup | null> {
+    const [row] = await db
+      .select()
+      .from(schema.connectionSetupsTable)
+      .where(eq(schema.connectionSetupsTable.skillShareLinkId, id))
+      .limit(1);
+    return row ?? null;
   }
 
   /** Records the lazily-created share link on the setup row (audit/revocation). */

@@ -10,6 +10,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
+import { LlmProviderApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
@@ -89,7 +90,7 @@ export type ModelRouterCredential =
   | { kind: "denied"; error: ApiError };
 
 /**
- * The user a Model Router credential proves: an OAuth user, or the author of a
+ * The user a Unified Model API credential proves: an OAuth user, or the author of a
  * personal virtual key. Organization keys, OAuth clients and service accounts
  * identify no user.
  */
@@ -108,7 +109,7 @@ export function modelRouterAuthenticatedUserId(
   }
 }
 
-/** The agent a Model Router request is served by, as usage limits scope it. */
+/** The agent a Unified Model API request is served by, as usage limits scope it. */
 export type ModelRouterLimitAgent = {
   id: string;
   organizationId: string;
@@ -116,7 +117,7 @@ export type ModelRouterLimitAgent = {
 };
 
 /**
- * The identity the proxy checks usage limits for on a Model Router request,
+ * The identity the proxy checks usage limits for on a Unified Model API request,
  * matching what `applyModelRouterAuthOverride` hands the proxy.
  */
 export function modelRouterLimitScope(
@@ -124,6 +125,7 @@ export function modelRouterLimitScope(
   agent: ModelRouterLimitAgent,
 ) {
   return {
+    allowUnattributed: !!auth.serviceAccountId,
     agentId: agent.id,
     agent,
     userId: modelRouterAuthenticatedUserId(auth),
@@ -138,7 +140,7 @@ export function modelRouterLimitScope(
 }
 
 /**
- * The provider credential a Model Router request for `resolution` would be
+ * The provider credential a Unified Model API request for `resolution` would be
  * sent with, or why it may not be sent. Reads only.
  */
 export async function selectModelRouterCredential(params: {
@@ -156,7 +158,7 @@ export async function selectModelRouterCredential(params: {
       kind: "denied",
       error: new ApiError(
         400,
-        `Model Router credential is not mapped to provider "${provider}".`,
+        `Unified Model API credential is not mapped to provider "${provider}".`,
       ),
     };
   }
@@ -184,6 +186,27 @@ export async function selectModelRouterCredential(params: {
     };
   }
   return { kind: "selected", mappedApiKey, apiKey };
+}
+
+/**
+ * Every provider key `userId` may use, as Unified Model API mappings in preference
+ * order; a request takes the first one linked to its model
+ * (`selectMappedProviderKey`).
+ */
+export async function userProviderKeyMappings(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<ModelRouterMappedProviderKey[]> {
+  const { keys } = await LlmProviderApiKeyModel.findUsableKeys(params);
+  return [...keys].sort(compareModelRouterUserProviderKeys).map((apiKey) => ({
+    provider: apiKey.provider,
+    providerApiKeyId: apiKey.id,
+    providerApiKeyName: apiKey.name,
+    secretId: apiKey.secretId,
+    baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+    scope: apiKey.scope,
+    userId: apiKey.userId,
+  }));
 }
 
 /**
@@ -224,7 +247,10 @@ function isOwnedPersonalCredential(
 }
 
 export function modelRequiresResponses(
-  resolution: ModelRouterResolution,
+  resolution: Pick<
+    ModelRouterResolution,
+    "provider" | "modelId" | "supportedEndpoints"
+  >,
 ): boolean {
   return (
     requiresResponsesApi(resolution.supportedEndpoints) ||
@@ -274,5 +300,45 @@ export function modelRouterServesEndpoint(
         nativeResponsesProvider(resolution) !== null ||
         !isChatCompletionsOnlyRouterProvider(resolution.provider)
       );
+  }
+}
+
+type ModelRouterUserProviderKey = Awaited<
+  ReturnType<typeof LlmProviderApiKeyModel.findUsableKeys>
+>["keys"][number];
+
+function compareModelRouterUserProviderKeys(
+  left: ModelRouterUserProviderKey,
+  right: ModelRouterUserProviderKey,
+) {
+  if (left.provider !== right.provider) {
+    return left.provider.localeCompare(right.provider);
+  }
+
+  const leftScopePriority = getModelRouterUserProviderKeyScopePriority(left);
+  const rightScopePriority = getModelRouterUserProviderKeyScopePriority(right);
+  if (leftScopePriority !== rightScopePriority) {
+    return leftScopePriority - rightScopePriority;
+  }
+
+  if (left.isPrimary !== right.isPrimary) {
+    return left.isPrimary ? -1 : 1;
+  }
+
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+function getModelRouterUserProviderKeyScopePriority(
+  apiKey: ModelRouterUserProviderKey,
+) {
+  switch (apiKey.scope) {
+    case "personal":
+      return 0;
+    case "team":
+      return 1;
+    case "org":
+      return 2;
+    default:
+      return 3;
   }
 }

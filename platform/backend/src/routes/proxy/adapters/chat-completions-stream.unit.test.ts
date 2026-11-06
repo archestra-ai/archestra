@@ -106,9 +106,17 @@ describe("streamChatCompletionChunks", () => {
       yield { id: "a" };
     }
 
-    const stream = await streamChatCompletionChunks(Promise.resolve(chunks()));
+    let accepted = false;
+    const stream = await streamChatCompletionChunks(
+      Promise.resolve(chunks()),
+      () => {
+        accepted = true;
+      },
+    );
 
+    expect(accepted).toBe(false);
     expect(await collect(stream)).toEqual([{ id: "a" }]);
+    expect(accepted).toBe(false);
   });
 });
 

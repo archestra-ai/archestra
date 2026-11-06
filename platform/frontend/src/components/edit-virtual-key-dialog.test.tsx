@@ -98,7 +98,7 @@ describe("EditVirtualKeyDialog", () => {
       screen.getByText(/Authorization: Bearer \$ARCHESTRA_LLM_VIRTUAL_KEY/),
     ).toBeVisible();
     expect(
-      screen.getByText("https://proxy.example.com/model-router"),
+      screen.getByText("https://proxy.example.com/unified-model"),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Save Changes" }),

@@ -16,6 +16,7 @@ import {
   SESSION_ID_HEADER,
   SOURCE_HEADER,
 } from "@archestra/shared";
+import { logs } from "@opentelemetry/api-logs";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -207,6 +208,109 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
     });
 
     test.each([
+      {
+        stream: false,
+        failure: "none",
+        outcome: "success",
+        origin: "none",
+        status: 200,
+      },
+      {
+        stream: true,
+        failure: "none",
+        outcome: "success",
+        origin: "none",
+        status: 200,
+      },
+      {
+        stream: false,
+        failure: "provider",
+        outcome: "throttled",
+        origin: "provider",
+        status: 429,
+      },
+      {
+        stream: true,
+        failure: "provider",
+        outcome: "throttled",
+        origin: "provider",
+        status: 200,
+      },
+      {
+        stream: true,
+        failure: "internal",
+        outcome: "throttled",
+        origin: "archestra",
+        status: 429,
+      },
+    ])("exports one final outcome ($failure, stream=$stream)", async ({
+      stream,
+      failure,
+      outcome,
+      origin,
+      status,
+    }) => {
+      const emit = vi.fn();
+      vi.spyOn(logs, "getLogger").mockReturnValue({
+        emit,
+        enabled: () => true,
+      });
+      const error = Object.assign(new Error("private provider error detail"), {
+        status: 429,
+        headers: new Headers(),
+        error: { type: "rate_limit_error" },
+      });
+      if (failure === "internal") {
+        vi.spyOn(virtualKeyRateLimiter, "check").mockRejectedValue(
+          new ApiError(429, "private throttle detail"),
+        );
+      } else if (failure === "provider") {
+        const client = createOpenAiTestClient();
+        const create = client.chat.completions.create;
+        client.chat.completions.create = async (params) => {
+          if (!params.stream) throw error;
+          const chunks = (await create(params)) as AsyncIterable<unknown>;
+          return {
+            async *[Symbol.asyncIterator]() {
+              for await (const chunk of chunks) {
+                yield chunk;
+                throw error;
+              }
+            },
+          } as never;
+        };
+        vi.mocked(openaiAdapterFactory.createClient).mockReturnValue(
+          client as never,
+        );
+      }
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "private prompt" }],
+          stream,
+        },
+      });
+      expect(response.statusCode).toBe(status);
+      const events = emit.mock.calls
+        .map(([record]) => record)
+        .filter((record) => record.eventName === "archestra.llm_proxy.request");
+      expect(events).toHaveLength(1);
+      expect(events[0].attributes).toMatchObject({
+        "archestra.proxy.outcome": outcome,
+        "archestra.proxy.error_origin": origin,
+        "http.response.status_code": status,
+        "gen_ai.request.streaming": stream,
+      });
+      expect(JSON.stringify(events[0])).not.toMatch(/private|test-key/);
+    });
+
+    test.each([
       { stream: false, fail: false },
       { stream: true, fail: false },
       { stream: false, fail: true },
@@ -260,8 +364,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         testAgent.id,
       );
       expect(rows).toHaveLength(1);
-      // A streaming response keeps accruing time after its first chunk.
-      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 550) : 250);
+      // Four streamed chunks each add 100 ms after yielding; normal EOF
+      // includes the final interval while a failure stops after the first.
+      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 650) : 250);
     });
 
     test("streaming request increments token and cost metrics", async () => {
@@ -557,8 +662,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("maximum context length"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("streaming failure after SSE headers and content persists an error interaction", async () => {
@@ -597,8 +702,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("Simulated OpenAI stream failure"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("stream ending early without usage persists a partial interaction", async () => {
@@ -631,6 +736,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, testAgent.id));
       expect(rows).toHaveLength(1);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
+      expect(JSON.stringify(rows[0].response)).toContain("How can");
     });
 
     test("a Slack ChatOps stream without usage keeps its source and shows up in the sessions listing", async () => {

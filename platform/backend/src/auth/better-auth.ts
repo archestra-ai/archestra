@@ -41,6 +41,7 @@ import { LOG_LEVEL } from "@/logging/log-level";
 // Import directly from files to avoid circular dependency through barrel export
 import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
@@ -69,6 +70,8 @@ import { linkedIdentityProviderPlugin } from "./linked-idp";
 import { hashOauthClientSecret } from "./oauth-client-secret";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
 import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoSubjectBinding } from "./sso-subject-binding.ee";
 
 // SPDX-SnippetEnd
 
@@ -194,6 +197,12 @@ export const auth = betterAuth({
       organizationHooks: {
         afterAddMember: recomposeOrganizationOf,
         afterAcceptInvitation: recomposeOrganizationOf,
+        // Once the row is gone, concurrent template saves cannot recreate its settings.
+        afterDeleteOrganization: async ({ organization }) => {
+          await AgentRuntimeTemplateModel.deleteForOrganization(
+            organization.id,
+          );
+        },
       },
       ac,
       dynamicAccessControl: {
@@ -628,7 +637,12 @@ export const auth = betterAuth({
           return session?.user.id;
         },
       });
-      const internalAdapter = withSsoEmailReconciliation(ctx);
+      const emailReconciliation = withSsoEmailReconciliation(ctx);
+      const internalAdapter =
+        withSsoSubjectBinding(
+          ctx,
+          emailReconciliation ?? ctx.context.internalAdapter,
+        ) ?? emailReconciliation;
       if (adapter || internalAdapter)
         return {
           context: {
@@ -1123,8 +1137,6 @@ function getBetterAuthLogLevel(
 
   return undefined;
 }
-
-export type BetterAuth = typeof auth;
 
 /**
  * Better Auth applies `trustedOrigins` to OIDC discovery during SSO provider

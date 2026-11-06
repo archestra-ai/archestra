@@ -42,6 +42,7 @@ import {
 } from "@/utils/billable-usage";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "../common";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
@@ -251,7 +252,9 @@ class AnthropicRequestAdapter
   // Build Modified Request
   // ---------------------------------------------------------------------------
 
-  toProviderRequest(): AnthropicRequest {
+  toProviderRequest(options?: {
+    preserveToolCallIds?: boolean;
+  }): AnthropicRequest {
     let messages = this.request.messages;
 
     // Apply tool result updates if any
@@ -262,7 +265,9 @@ class AnthropicRequestAdapter
     messages = this.convertToolResultContent(messages);
     messages = stripEmptyTextBlocks(messages);
     // After the result updates above, which look up the client's call ids.
-    messages = withAnthropicToolCallIds(messages);
+    if (!options?.preserveToolCallIds) {
+      messages = withAnthropicToolCallIds(messages);
+    }
 
     return {
       ...this.request,
@@ -1336,7 +1341,7 @@ class AnthropicStreamAdapter
    * The cache counts belong here for the same reason they belong on the wire:
    * without them the stored body reports a prompt of only the tokens that missed
    * the cache, contradicting the row's own `cache_read_tokens` column and making
-   * any usage re-derived from the stored response (`getUsageTokens`) silently
+   * any usage re-derived from the stored response (`anthropicUsageTokens`) silently
    * cache-free.
    */
   private responseUsage(): AnthropicResponse["usage"] {
@@ -1408,20 +1413,6 @@ class AnthropicStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
-// =============================================================================
-// USAGE TOKEN HELPERS
-// =============================================================================
-
-export function getUsageTokens(usage: Anthropic.Types.Usage) {
-  return {
-    input: usage.input_tokens,
-    output: usage.output_tokens,
-    cacheRead: usage.cache_read_input_tokens ?? 0,
-    cacheWrite: usage.cache_creation_input_tokens ?? 0,
-    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-  };
-}
-
 // Same value as the SDK default, but passing it explicitly opts out of the
 // SDK's client-side guard that throws "Streaming is required for operations
 // that may take longer than 10 minutes" on non-streaming requests with large
@@ -1429,6 +1420,26 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
 // must forward such requests — the upstream API is the authority on whether
 // they need streaming.
 const ANTHROPIC_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
+const CLAUDE_OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
+function withClaudeOAuthBetaHeader(
+  defaultHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  const existing = defaultHeaders?.["anthropic-beta"]
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (existing?.includes(CLAUDE_OAUTH_BETA_HEADER)) {
+    return { ...defaultHeaders };
+  }
+  return {
+    ...defaultHeaders,
+    "anthropic-beta":
+      existing && existing.length > 0
+        ? `${existing.join(",")},${CLAUDE_OAUTH_BETA_HEADER}`
+        : CLAUDE_OAUTH_BETA_HEADER,
+  };
+}
 
 export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,
@@ -1568,6 +1579,10 @@ export const anthropicAdapterFactory: LLMProvider<
       });
     }
 
+    const defaultHeaders = isClaudeSubscriptionToken
+      ? withClaudeOAuthBetaHeader(options.defaultHeaders)
+      : options.defaultHeaders;
+
     return new AnthropicProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
@@ -1575,11 +1590,11 @@ export const anthropicAdapterFactory: LLMProvider<
       // A personal OAuth token must never be forwarded to a deployment's
       // configured custom Anthropic upstream.
       baseURL: isClaudeSubscriptionToken
-        ? "https://api.anthropic.com"
+        ? ANTHROPIC_SUBSCRIPTION_UPSTREAM
         : options.baseUrl,
       fetch: customFetch,
       timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
-      defaultHeaders: options.defaultHeaders,
+      defaultHeaders,
     });
   },
 
@@ -1669,6 +1684,7 @@ export const anthropicAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: AnthropicRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<AnthropicStreamChunk>> {
     const anthropicClient = client as AnthropicProvider;
     return withSamplingParamFallback({
@@ -1692,7 +1708,9 @@ export const anthropicAdapterFactory: LLMProvider<
           stream: true,
         } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
         if (typeof pending.asResponse !== "function") return pending;
-        return iterateAnthropicStreamEvents(await pending.asResponse());
+        const response = await pending.asResponse();
+        onAccepted?.();
+        return iterateAnthropicStreamEvents(response);
       },
     });
   },
@@ -1834,7 +1852,7 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
 }
 
 /** Tool-use ids Anthropic accepts; see `wordToolCallId`. */
-function withAnthropicToolCallIds(
+export function withAnthropicToolCallIds(
   messages: AnthropicMessages,
 ): AnthropicMessages {
   return messages.map((message) => {

@@ -37,6 +37,7 @@ import {
   canonicalJson,
   declaredToolEntries,
   sessionReceiptEvidence,
+  stripAppaTools,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "./wire";
@@ -3033,6 +3034,119 @@ describe("APPA request preflight", () => {
     ]);
   });
 
+  test("governs Copilot CLI's deferred gateway tools: the loaded copy a server-side search echoes keeps the remedy pair, and the remedy tools load up front", async () => {
+    // Copilot declares every gateway tool deferred inside an `archestra`
+    // namespace. When the model's server-side search loads one, the provider
+    // repeats it in a `tool_search_output` item with `output_schema: null`,
+    // and Copilot echoes that item on every later request. That search can
+    // come back empty for a tool, so the remedy, question, and report tools
+    // are loaded up front; the rest of the namespace stays deferred.
+    const control = "archestra-archestra__execute_remedy_plan";
+    const notice = "archestra-archestra__get_remedy_plans";
+    const askUser = "archestra-archestra__ask_user";
+    const yell = "archestra-archestra__yell";
+    const other = "archestra-archestra__whoami";
+    const deferred = (name: string, advertisedName: string) => ({
+      ...attestedTool({ name, advertisedName, type: "function" }),
+      strict: false,
+      parameters: { type: "object", properties: {} },
+      defer_loading: true,
+    });
+    const body = {
+      tools: [
+        { type: "function", name: "view", parameters: { type: "object" } },
+        {
+          type: "namespace",
+          name: "archestra",
+          description: 'MCP server "archestra".',
+          tools: [
+            deferred(control, ADVERTISED_CONTROL),
+            deferred(notice, ADVERTISED_NOTICE),
+            deferred(askUser, "archestra__ask_user"),
+            deferred(yell, "archestra__yell"),
+            deferred(other, "archestra__whoami"),
+          ],
+        },
+        { type: "tool_search" },
+      ],
+      input: [
+        { type: "message", role: "user", content: "read the secret" },
+        {
+          type: "tool_search_call",
+          call_id: "ts_1",
+          execution: "server",
+          arguments: { paths: ["archestra"], query: "execute_remedy_plan" },
+        },
+        {
+          type: "tool_search_output",
+          call_id: "ts_1",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              // The provider echoes what the proxy forwarded: no marker.
+              tools: [
+                {
+                  type: "function",
+                  name: control,
+                  strict: false,
+                  parameters: { type: "object", properties: {} },
+                  defer_loading: true,
+                  output_schema: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "openai:responses",
+      identity: await attestedIdentity(body),
+    });
+
+    expect(prepared.tools).toMatchObject({
+      control: { name: control, namespace: "archestra" },
+      notice: { name: notice, namespace: "archestra" },
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.heldTools ?? []).toEqual([]);
+    // Only the notice leaves; the loaded copy stays where the provider put it.
+    const names = (group: unknown) =>
+      (group as { tools: { name: string }[] }).tools.map((tool) => tool.name);
+    expect(names(body.tools[1])).toEqual([control, askUser, yell, other]);
+    expect(
+      Object.fromEntries(
+        (
+          body.tools[1] as {
+            tools: { name: string; defer_loading?: boolean }[];
+          }
+        ).tools.map((tool) => [tool.name, tool.defer_loading ?? false]),
+      ),
+    ).toEqual({
+      [control]: false,
+      [askUser]: false,
+      [yell]: false,
+      [other]: true,
+    });
+    expect(body.input.map((item) => item.type)).toEqual([
+      "message",
+      "tool_search_call",
+      "tool_search_output",
+    ]);
+    expect(names((body.input[2] as { tools: unknown[] }).tools[0])).toEqual([
+      control,
+    ]);
+    // History stays as the client sent it.
+    expect(
+      (body.input[2] as { tools: { tools: { defer_loading?: boolean }[] }[] })
+        .tools[0].tools[0].defer_loading,
+    ).toBe(true);
+  });
+
   test("governs Claude Code's deferred tools: only a placeholder is declared, and ToolSearch is an ordinary client tool", () => {
     // Shape of the first request of a Claude Code 2.1.285 session with tool
     // search on: the deferred tools are named in a system reminder, not in
@@ -4169,6 +4283,97 @@ describe("APPA request preflight", () => {
     });
 
     expect(reordered).toEqual(first);
+  });
+});
+
+describe("stripAppaTools", () => {
+  test("drops a namespace it empties, and an emptied tool search output with its call", () => {
+    const member = (name: string) => ({
+      type: "function",
+      name,
+      parameters: { type: "object" },
+    });
+    const body = {
+      tools: [
+        {
+          type: "namespace",
+          name: "archestra",
+          tools: [member("gw__execute_remedy_plan"), member("gw__whoami")],
+        },
+        { type: "namespace", name: "only", tools: [member("gw__ask_user")] },
+        { type: "tool_search" },
+      ],
+      input: [
+        { type: "message", role: "user", content: "hi" },
+        {
+          type: "tool_search_call",
+          call_id: "ts_1",
+          execution: "server",
+          arguments: { query: "execute_remedy_plan" },
+        },
+        {
+          type: "tool_search_output",
+          call_id: "ts_1",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              tools: [member("gw__execute_remedy_plan")],
+            },
+          ],
+        },
+        {
+          type: "tool_search_call",
+          call_id: "ts_2",
+          execution: "server",
+          arguments: { query: "whoami" },
+        },
+        {
+          type: "tool_search_output",
+          call_id: "ts_2",
+          execution: "server",
+          tools: [
+            {
+              type: "namespace",
+              name: "archestra",
+              tools: [member("gw__execute_remedy_plan"), member("gw__whoami")],
+            },
+          ],
+        },
+        {
+          type: "function_call",
+          name: "gw__execute_remedy_plan",
+          namespace: "archestra",
+          call_id: "c1",
+          arguments: "{}",
+        },
+      ],
+    };
+
+    stripAppaTools({
+      body,
+      tools: [
+        { name: "gw__execute_remedy_plan", namespace: "archestra" },
+        { name: "gw__ask_user", namespace: "only" },
+      ],
+    });
+
+    expect(body.tools).toEqual([
+      { type: "namespace", name: "archestra", tools: [member("gw__whoami")] },
+      { type: "tool_search" },
+    ]);
+    expect(
+      body.input.map((item) => `${item.type}:${item.call_id ?? ""}`),
+    ).toEqual([
+      "message:",
+      "tool_search_call:ts_2",
+      "tool_search_output:ts_2",
+      "function_call:c1",
+    ]);
+    expect(
+      (body.input[2] as { tools: { tools: unknown[] }[] }).tools[0].tools,
+    ).toEqual([member("gw__whoami")]);
   });
 });
 

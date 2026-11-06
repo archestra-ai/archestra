@@ -259,6 +259,7 @@ export async function handleSkillDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       chatOpsPinnedAgentId: context.chatOpsPinnedAgentId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
+      runId: context.runId,
       abortSignal: context.abortSignal,
       subagentToolStream: context.subagentToolStream,
       delegationToolCallId: context.currentToolCallId,
@@ -377,6 +378,7 @@ async function findDelegationTargetsBySlug(params: {
     excludeAgentId: agentId,
     environmentId,
     lookups,
+    includeDetails: false,
   });
 
   const bySlug = new Map<string, { id: string; name: string }>();

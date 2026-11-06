@@ -3,7 +3,7 @@
  *
  * xAI uses an OpenAI-compatible API at https://api.x.ai/v1.
  *
- * `/responses` is served over xAI's chat completions, as the model router
+ * `/responses` is served over xAI's chat completions, as the unified model API
  * serves it: OpenAI-compatible clients (the AI SDK's xAI provider, Kilo Code's
  * SuperGrok sign-in) send Responses requests, and the xAI SuperGrok
  * subscription upstream speaks chat completions only.
@@ -19,7 +19,7 @@ import logger from "@/logging";
 import { collectDelegationMarkers } from "@/openappa/delegation";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { constructResponseSchema, UuidIdSchema, Xai } from "@/types";
-import { xaiAdapterFactory } from "../adapters";
+import { xaiAdapterFactory, xaiOpenAiUsageAdapterFactory } from "../adapters";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import { responsesToOpenaiChat } from "../adapters/openai-responses-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
@@ -42,7 +42,12 @@ function handleXaiResponses(request: FastifyRequest, reply: FastifyReply) {
     chatBody,
     request,
     reply,
-    makeResponsesFromChatAdapterFactory(xaiAdapterFactory, responsesContext),
+    // Responses' output_tokens counts reasoning, so the turn is read in
+    // OpenAI's usage dialect, not xAI's.
+    makeResponsesFromChatAdapterFactory(
+      xaiOpenAiUsageAdapterFactory,
+      responsesContext,
+    ),
   );
 }
 

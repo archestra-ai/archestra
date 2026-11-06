@@ -11,6 +11,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_YELL_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
@@ -39,6 +40,7 @@ import {
   type HistoryWire,
   historyWire,
   isClientRunToolType,
+  loadDeclarationsUpFront,
   type ProviderToolCall,
   type ProviderWire,
   providerHostedTool,
@@ -145,14 +147,14 @@ export function prepareAppaRequest(params: {
   releasedSpawnCalls?: string[];
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
-   * The client's own wire, when a Model Router route translated it to this
+   * The client's own wire, when a Unified Model API route translated it to this
    * one. Turns are counted on it.
    */
   clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
   // A wire outside the APPA families — Gemini, Bedrock, Cohere, native
   // Ollama — is governed in part rather than refused: calls and results are
-  // still ruled on, but no turn accounting runs unless a Model Router route
+  // still ruled on, but no turn accounting runs unless a Unified Model API route
   // kept the client's own wire to count turns on. Bedrock Converse still
   // restores notices; on the others a notice stays in the history as the
   // notice call the client ran.
@@ -272,7 +274,7 @@ export function prepareAppaRequest(params: {
       }),
     ];
   } else if (params.delegationMarkers) {
-    // A Model Router route collected these from the client's own wire, and
+    // A Unified Model API route collected these from the client's own wire, and
     // stripped them there, before translating it to this one.
     delegation = { markers: params.delegationMarkers };
     childTrajectoryReceipts = params.childTrajectoryReceipts;
@@ -495,6 +497,25 @@ export function prepareAppaRequest(params: {
   const notices = noticeAliases.length > 0 ? noticeAliases : [notice];
   stripAppaTools({ body: params.body, tools: notices });
   stripToolReferences({ body: params.body, tools: notices });
+  // A client that defers its MCP tools behind the provider's own tool search
+  // (Copilot CLI) reaches these only through that search, which can come
+  // back empty for them; then no plan, review, or report can run. They are
+  // few and small, so they are loaded up front.
+  if (defersTools) {
+    loadDeclarationsUpFront({
+      body: params.body,
+      tools: [
+        ...(controlAliases.length > 0 ? controlAliases : [control]),
+        ...askUserDeclarations,
+        ...platformDeclarationsOf(
+          TOOL_YELL_SHORT_NAME,
+          clientEntries,
+          params.identity,
+          params.trustBarePlatformTools === true,
+        ),
+      ],
+    });
+  }
   return {
     tools: {
       control,

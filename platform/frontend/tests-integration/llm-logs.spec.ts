@@ -5,7 +5,7 @@ import {
 } from "../src/mocks/data/interactions";
 import { expect, test } from "./fixtures";
 
-// Titles seeded by the query-aware `/api/interactions/sessions` handler in
+// Titles seeded by the query-aware `/api/llm-proxy-logs/sessions` handler in
 // src/mocks/handlers.ts (one session per client/session source).
 const CLAUDE_CODE_TITLE = "Claude Code session title";
 const CLAUDE_DESKTOP_TITLE = "Claude Desktop session title";
@@ -45,7 +45,7 @@ function qa(
 }
 
 test.describe("LLM logs — Client filter", () => {
-  // These tests rely on the query-aware `/api/interactions/sessions` handler:
+  // These tests rely on the query-aware `/api/llm-proxy-logs/sessions` handler:
   // selecting a Client option narrows the list only because the frontend sends
   // `?client=...` and the handler filters the seed by external_agent_id. A
   // frontend that fails to send the param would show all sessions and fail these.
@@ -78,6 +78,7 @@ test.describe("LLM logs — Client filter", () => {
       "Claude Desktop",
       "Cursor",
       "Codex",
+      "ChatGPT",
       "OpenCode",
       "Kilo Code",
       "Pi",
@@ -207,19 +208,19 @@ test.describe("LLM logs — session detail inline conversation", () => {
     const interaction = makeInteraction({ id: "i1", sessionId: "s1" });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/summaries",
+      url: "/api/llm-proxy-logs/summaries",
       body: paginated([interaction]),
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/sessions",
+      url: "/api/llm-proxy-logs/sessions",
       body: paginated([
         makeSessionSummary({ sessionId: "s1", lastInteractionId: "i1" }),
       ]),
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/i1",
+      url: "/api/llm-proxy-logs/i1",
       body: interaction,
     });
 
@@ -263,12 +264,12 @@ test.describe("LLM logs — session detail inline conversation", () => {
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/summaries",
+      url: "/api/llm-proxy-logs/summaries",
       body: paginated([subagentInteraction, mainInteraction]),
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/sessions",
+      url: "/api/llm-proxy-logs/sessions",
       body: paginated([
         makeSessionSummary({
           sessionId: "s2",
@@ -278,7 +279,7 @@ test.describe("LLM logs — session detail inline conversation", () => {
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/main",
+      url: "/api/llm-proxy-logs/main",
       body: mainInteraction,
     });
 
@@ -305,12 +306,12 @@ test.describe("LLM logs — session detail inline conversation", () => {
   }) => {
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/summaries",
+      url: "/api/llm-proxy-logs/summaries",
       body: paginated([]),
     });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions/sessions",
+      url: "/api/llm-proxy-logs/sessions",
       body: paginated([makeSessionSummary({ sessionId: "s3" })]),
     });
 

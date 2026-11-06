@@ -44,14 +44,6 @@ vi.mock("./auth-surface-frame", () => ({
 
 // Mock shared module
 // Keep shared exports while substituting the permissions used by this suite.
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  requiredPagePermissionsMap: {
-    "/protected": { "organization:read": ["read"] },
-    "/admin": { "organization:write": ["write"] },
-  },
-}));
-
 const mockRouterPush = vi.fn();
 const mockLocationReload = vi.fn();
 const MockChild = () => (

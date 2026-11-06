@@ -29,7 +29,10 @@ import {
 import { UserTokenModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 const CATALOG_NAME = "auth-calltime-test";
 const FULL_TOOL_NAME = `${CATALOG_NAME}__test_auth_tool`;

@@ -184,6 +184,7 @@ class KnowledgeSettingsService {
         apiKey: resolved.apiKey ?? undefined,
         modelName: model,
         baseUrl: resolved.baseUrl,
+        chatApiKeyId: keyId,
       });
       const result = await generateObject({
         model: llmModel,
@@ -285,6 +286,7 @@ class KnowledgeSettingsService {
         apiKey: resolved.apiKey ?? undefined,
         modelName: model,
         baseUrl: resolved.baseUrl,
+        chatApiKeyId: keyId,
       });
       // Success is the call being accepted end to end (transport serialized
       // the file part, the endpoint took it, the model answered) — the reply's

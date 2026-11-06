@@ -2,8 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { resolveAgentRuntimeTiers } from "@archestra/shared";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
+import { AGENT_RUNTIME_DIR } from "@/services/agent-runtime/runtime-contract";
+import { resolveRunResources } from "@/services/agent-runtime/runtime-tiers";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -27,6 +30,8 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   privileged: false,
   nodeSelector: {},
   resources: { cpuRequest: "500m", memoryRequest: "1Gi", memoryLimit: "4Gi" },
+  tier: null,
+  warmTiers: [],
   env: {
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: "11111111-2222-3333-4444-555555555555",
   },
@@ -40,6 +45,31 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it("renders independent memory requests and limits for a fractional-CPU tier", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            cpuLimit: null,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Memory",
+      },
+      { defaultWarmSpares: 0 },
+    );
+    const sandbox = buildAgentRuntimeSandbox({
+      ...SPEC,
+      resources: resolveRunResources("Memory", tiers),
+    });
+    expect(sandbox.spec.podTemplate.spec?.containers[0].resources).toEqual({
+      requests: { cpu: "500m", memory: "8Gi" },
+      limits: { memory: "8Gi" },
+    });
+  });
   it("pulls a floating image for each new workspace while leaving fixed tags cacheable", () => {
     const floating = buildAgentRuntimeSandbox({
       ...SPEC,
@@ -318,6 +348,27 @@ describe("buildAgentRuntimeSandbox", () => {
     });
   });
 
+  it("keeps the runtime directory on the claim that home and Docker data fill", () => {
+    // The startup's exit trap probes and measures only the runtime directory;
+    // a full home or Docker subpath reaches it only through a shared claim.
+    const sandbox = buildAgentRuntimeSandbox({ ...SPEC, privileged: true });
+    const mounts =
+      sandbox.spec?.podTemplate.spec?.containers[0]?.volumeMounts ?? [];
+    const volumeAt = (mountPath: string) =>
+      mounts.find((mount) => mount.mountPath === mountPath)?.name;
+    expect(volumeAt(AGENT_RUNTIME_DIR)).toBe("workspace");
+    expect(volumeAt("/home/node")).toBe("workspace");
+    expect(volumeAt("/var/lib/docker")).toBe("workspace");
+    expect(
+      sandbox.spec?.volumeClaimTemplates.map((claim) => claim.metadata.name),
+    ).toEqual(["workspace"]);
+    expect(
+      sandbox.spec?.podTemplate.spec?.volumes?.some(
+        (volume) => volume.name === "workspace",
+      ),
+    ).toBe(false);
+  });
+
   it("quotes a configured command so arguments cannot break out", () => {
     const job = buildAgentRuntimeSandbox({
       ...SPEC,
@@ -367,6 +418,19 @@ describe("the container bootstrap", () => {
     // has no tmux" never reads as "your agent failed".
     expect(script()).toContain("command -v tmux");
     expect(script()).toContain("exit 78");
+  });
+
+  it("traps PID 1's exit before its first write to the workspace volume", () => {
+    // A full volume ends PID 1 at its first refused write; the trap turns
+    // that into the full-volume status, so it must come before any write.
+    const lines = script().split("\n");
+    expect(lines[0]).toBe("set -eu");
+    const trap = lines.indexOf("trap archestra_workspace_exit EXIT");
+    const firstWrite = lines.findIndex((line) =>
+      line.startsWith(`mkdir -p ${AGENT_RUNTIME_DIR}`),
+    );
+    expect(trap).toBeGreaterThan(0);
+    expect(trap).toBeLessThan(firstWrite);
   });
 
   it("creates the steer FIFO and retains the workspace supervisor", () => {

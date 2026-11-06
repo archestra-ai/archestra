@@ -73,6 +73,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:images",
   "azure:audio",
   "openai:audio",
+  "openai:images",
+  "openai:passthrough",
+  "anthropic:passthrough",
+  "openai:realtime",
   "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
@@ -108,8 +112,8 @@ export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 /**
  * Providers whose shared keys can be model pool members. Per-user providers
  * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Gemini and Cohere have no translator to or from the wires
- * pooled clients speak.
+ * to one user. Cohere has no translator to or from the wires pooled clients
+ * speak.
  */
 export const MODEL_POOL_PROVIDERS = [
   "anthropic",
@@ -118,6 +122,7 @@ export const MODEL_POOL_PROVIDERS = [
   "azure",
   "cerebras",
   "deepseek",
+  "gemini",
   "groq",
   "minimax",
   "mistral",
@@ -366,9 +371,9 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 /**
- * Providers that charge no per-token rate, so their real price is zero rather
- * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
- * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ * Providers without a published per-token rate: the operator runs the server
+ * (vLLM, self-hosted Ollama), or the vendor bills a flat subscription metered on
+ * compute time (Ollama's cloud). vLLM rates remain unknown until configured.
  *
  * Listed explicitly rather than derived from the self-hosted-provider set it
  * currently matches, so that adding a keyless provider that does bill per token
@@ -583,13 +588,23 @@ export function isChatCompletionsOnlyRouterProvider(
   );
 }
 
+/** Whether a runtime command invokes the maintained Claude Code runtime or wrapper. */
+export function isClaudeCodeRuntimeCommand(command?: string | null): boolean {
+  return (
+    command === "archestra-claude-code" ||
+    command === "archestra-claude-code-runtime"
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
 ): readonly ("openai_responses" | "openai_chat" | "anthropic")[] {
-  switch (runtimeCommand?.[0]) {
-    case "archestra-claude-code":
-      return ["anthropic"];
+  const command = runtimeCommand?.[0];
+  if (isClaudeCodeRuntimeCommand(command)) {
+    return ["anthropic"];
+  }
+  switch (command) {
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
     // These wrappers use Chat Completions on a custom model endpoint.
@@ -614,7 +629,7 @@ export function getAgentRuntimeProviderCompatibility(params: {
   provider: SupportedProvider;
 }): { compatible: true } | { compatible: false; message: string } {
   const runtimeCommand = params.runtimeCommand?.[0];
-  if (runtimeCommand === "archestra-claude-code") {
+  if (isClaudeCodeRuntimeCommand(runtimeCommand)) {
     if (
       !getAgentRuntimeAllowedProtocols(params.runtimeCommand).includes(
         params.inferenceProtocol,
@@ -693,7 +708,7 @@ export function getAgentRuntimeModelCompatibility(params: {
   if (!providerCompatibility.compatible) return providerCompatibility;
 
   if (
-    params.runtimeCommand?.[0] === "archestra-claude-code" &&
+    isClaudeCodeRuntimeCommand(params.runtimeCommand?.[0]) &&
     params.provider === "bedrock" &&
     params.modelId &&
     !isClaudeOnBedrock(params.modelId)
@@ -1129,9 +1144,8 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  * (`/v1/responses`), so the chat client must route them to the Responses
  * transport instead of `/v1/chat/completions`:
  *
- * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
- *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
- *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - models without a chat-completions endpoint at all, see
+ *   `lacksOpenAiChatCompletions`.
  * - every gpt-5.6 and gpt-6 model (sol/terra/luna/astra and any other
  *   variant): reasoning is on by default and `/chat/completions` rejects
  *   function tools with any reasoning effort (400 api_validation_error: "use
@@ -1140,14 +1154,32 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  *   including calls without tools. "gpt-5.6" and "gpt-6" are matched up to a
  *   `-`/`.`/end boundary so tiers, point releases (`gpt-6.1-sol`) and dated
  *   snapshots are covered without matching e.g. `gpt-5.61` or `gpt-60`.
- * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
- *   through Responses rather than Chat Completions. The suffix boundary also
- *   covers variants such as `-mini`, `-max`, and dated snapshots.
  */
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
+    lacksOpenAiChatCompletions(modelId) ||
+    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId)
+  );
+}
+
+/**
+ * True for OpenAI models that `/v1/chat/completions` does not serve at all
+ * (OpenAI answers 404), so a client that sends one there can only be told to
+ * use `/v1/responses`:
+ *
+ * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
+ *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
+ *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
+ *   through Responses rather than Chat Completions. The suffix boundary also
+ *   covers variants such as `-mini`, `-max`, and dated snapshots.
+ *
+ * gpt-5.6 and gpt-6 are not here: OpenAI answers their chat completions and
+ * rejects only function tools, with its own error naming the fix.
+ */
+export function lacksOpenAiChatCompletions(modelId: string): boolean {
+  return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId) ||
     /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }

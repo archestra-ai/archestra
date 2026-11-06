@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { EmptyListState } from "@/components/empty-list-state";
 import { EnvPasteDialog } from "@/components/env-paste-dialog";
@@ -12,6 +12,12 @@ import {
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils/tailwind";
 
 interface DeploymentEnvironmentVariablesEditorProps {
@@ -159,11 +165,11 @@ export function DeploymentEnvironmentVariablesEditor({
                 {credentials.map(({ entry, index }) => (
                   <li
                     key={`${entry.key}-${index}`}
-                    className="grid items-center gap-x-4 gap-y-2 py-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 text-[13px] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
                   >
                     <span className="min-w-0">
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono font-medium">
+                        <span className="min-w-0 max-w-full break-all font-mono font-medium">
                           {entry.key}
                         </span>
                         {!entry.required && (
@@ -221,10 +227,12 @@ export function DeploymentEnvironmentVariablesEditor({
                 {settings.map(({ entry, index }) => (
                   <li
                     key={`${entry.key}-${index}`}
-                    className="grid items-center gap-x-3 gap-y-0.5 py-1.5 text-xs sm:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)_auto]"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-2.5 text-xs sm:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)_auto]"
                   >
-                    <span className="truncate font-mono">{entry.key}</span>
-                    <span className="truncate font-mono text-muted-foreground">
+                    <span className="min-w-0 truncate font-mono">
+                      {entry.key}
+                    </span>
+                    <span className="col-start-1 min-w-0 truncate font-mono text-muted-foreground sm:col-start-auto">
                       {settingValueLabel(entry, promptedValueLabel)}
                     </span>
                     <RowActions
@@ -327,7 +335,7 @@ function CredentialSource({
   const perPerson = entry.scope === "installation";
   const github = option?.icon === "logo:github";
   return (
-    <span className="flex min-w-0 items-center gap-2.5">
+    <span className="col-start-1 flex min-w-0 items-center gap-2.5 sm:col-start-auto">
       <span
         aria-hidden="true"
         className={cn(
@@ -392,25 +400,45 @@ function RowActions({
   onRemove: () => void;
 }) {
   return (
-    <span className="flex justify-end gap-0.5">
-      <Button
-        type="button"
-        size="xs"
-        variant="ghost"
-        aria-label={`Edit ${label}`}
-        onClick={onEdit}
-      >
-        Edit
-      </Button>
-      <Button
-        type="button"
-        size="xs"
-        variant="ghost"
-        aria-label={`Remove ${label}`}
-        onClick={onRemove}
-      >
-        Remove
-      </Button>
+    <span className="col-start-2 row-span-2 row-start-1 self-start sm:col-start-3 sm:row-span-1 sm:row-start-auto sm:self-center">
+      <span className="sm:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={`Actions for ${label}`}
+            >
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onRemove}>Remove</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
+      <span className="hidden justify-end gap-0.5 sm:flex">
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          aria-label={`Edit ${label}`}
+          onClick={onEdit}
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          aria-label={`Remove ${label}`}
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </span>
     </span>
   );
 }

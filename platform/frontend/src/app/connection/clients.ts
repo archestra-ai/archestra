@@ -1,7 +1,9 @@
 import {
+  CHATGPT_MARK,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   type ClientMark,
+  COPILOT_CLI_MARK,
   EXTERNAL_AGENT_ID_HEADER,
   KIMI_MARK,
   OPENCODE_FAMILY,
@@ -18,10 +20,9 @@ import {
 } from "@archestra/shared/connection-setup";
 import {
   CLAUDE_MARK,
-  COPILOT_MARK,
+  CODEX_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
-  OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";
 
@@ -180,6 +181,12 @@ export type ProxySupport =
       kind: "custom";
       /** Providers this client can speak to. Others render as "not compatible". */
       supportedProviders: SupportedProvider[];
+      /**
+       * The provider selected first when the person's own account routes the
+       * models and the URL names none: the one the client is made for. Else
+       * the first of `supportedProviders`.
+       */
+      defaultProvider?: SupportedProvider;
       build: (params: ProxyBuildParams) => ProxyInstruction;
     };
 
@@ -188,6 +195,8 @@ export interface ConnectClient {
   label: string;
   sub: string;
   svg?: string;
+  /** Official product artwork when a flat vector mark is insufficient. */
+  iconSrc?: string;
   /**
    * Second-tone shape drawn beneath `svg`, for two-tone marks a single path
    * can't carry (e.g. OpenCode's lighter inner block).
@@ -215,6 +224,7 @@ const N8N_PATH =
  */
 function markFields(mark: ClientMark) {
   return {
+    iconSrc: mark.imageSrc,
     svg: mark.path,
     svgAccent: mark.accent,
     svgViewBox: mark.viewBox,
@@ -543,10 +553,56 @@ claude`,
     },
   },
   {
+    id: "chatgpt",
+    label: "ChatGPT",
+    sub: "Desktop, Chat and Work",
+    ...markFields(CHATGPT_MARK),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "MCP server URL",
+      language: "json",
+      steps: [
+        {
+          title: "Add a custom MCP server in ChatGPT",
+          body: 'Open Plugins, select the plus button, then "Add custom MCP server". Your account and workspace must permit custom MCP servers. If this option is missing, ask your workspace administrator.',
+        },
+        {
+          title: "Enter the gateway URL",
+          body: "Give the plugin a name. Under Connection, use the public HTTPS URL below, including its full path. For a private gateway, use Secure MCP Tunnel with your administrator's help; localhost and private network URLs cannot be reached directly by ChatGPT.",
+          buildCommand: ({ url }) => url,
+        },
+        {
+          title: "Connect with OAuth",
+          body: 'Choose OAuth, review the requested access, then select "I understand and want to continue" and "Create as a plugin". Sign in to the gateway and approve access. Client registration is automatic by default; if your deployment disables it, ask your administrator for a registered MCP OAuth client.',
+        },
+        {
+          title: "Install the plugin and try a tool",
+          body: "Review the discovered tools and install the resulting plugin. Start a new Chat or Work conversation in ChatGPT desktop, type @ and select the plugin, then ask which tools are available. For a dot, enable the plugin in that dot's configuration if available. A dot's access depends on its plugin settings and workspace policy.",
+        },
+      ],
+    },
+    // The desktop app's Work and Codex tabs read Codex's config.toml, so the
+    // Codex setup routes them; chats and dots run on OpenAI's servers.
+    proxy: {
+      kind: "custom",
+      supportedProviders: ["openai"],
+      build: ({ appName }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: `Run the ${appName} setup command for Codex`,
+            body: "The ChatGPT desktop app's Work and Codex tabs use the Codex settings on your computer, so the Codex setup routes them too. Restart ChatGPT when it is done.",
+          },
+        ],
+      }),
+    },
+  },
+  {
     id: "codex",
-    label: NATIVE_SESSION_CLIENT_LABELS.codex,
+    label: "Codex CLI",
     sub: "OpenAI CLI",
-    ...markFields(OPENAI_MARK),
+    ...markFields(CODEX_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -586,9 +642,7 @@ claude`,
     id: "copilot-cli",
     label: "Copilot CLI",
     sub: "GitHub coding CLI",
-    svg: COPILOT_MARK.path,
-    iconColor: COPILOT_MARK.color,
-    tileBg: COPILOT_MARK.background,
+    ...markFields(COPILOT_CLI_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "both",
@@ -630,6 +684,7 @@ claude`,
         "cerebras",
         "github-copilot",
       ],
+      defaultProvider: "github-copilot",
       build: ({ provider, providerLabel, url, appName }) => ({
         kind: "steps",
         steps: [

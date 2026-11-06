@@ -3,9 +3,140 @@ import { drainBackgroundWork } from "@/utils/background-work";
 import InteractionModel from "./interaction";
 import LimitModel, { LimitValidationService } from "./limit";
 import LlmOauthClientModel from "./llm-oauth-client";
+import ProxyRequestContextModel from "./proxy-request-context";
 import StatisticsModel from "./statistics";
 
 describe("credential billing team", () => {
+  test("ancestor budgets retain model scopes and independent reset periods", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const parent = await makeTeam(org.id, user.id);
+    const child = await makeTeam(org.id, user.id, { parentId: parent.id });
+    const agent = await makeAgent({ organizationId: org.id });
+    const monthly = await LimitModel.create({
+      entityType: "team",
+      entityId: parent.id,
+      limitType: "token_cost",
+      limitValue: 1000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+    const otherModel = await LimitModel.create({
+      entityType: "team",
+      entityId: parent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["other-model"],
+      cleanupInterval: "calendar_month",
+    });
+    const daily = await LimitModel.create({
+      entityType: "team",
+      entityId: child.id,
+      limitType: "token_cost",
+      limitValue: 1000,
+      cleanupInterval: "calendar_day",
+    });
+    await createInteraction({ agentId: agent.id, billingTeamId: child.id });
+    await drainBackgroundWork();
+    expect(await tokensIn(monthly.id)).toBe(100);
+    expect(await tokensIn(daily.id)).toBe(100);
+    expect(await tokensIn(otherModel.id)).toBe(0);
+    await LimitModel.resetLimitsUsage([daily.id]);
+    await createInteraction({ agentId: agent.id, billingTeamId: child.id });
+    await drainBackgroundWork();
+    expect(await tokensIn(monthly.id)).toBe(200);
+    expect(await tokensIn(daily.id)).toBe(100);
+    expect(await tokensIn(otherModel.id)).toBe(0);
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        billingTeamId: child.id,
+        model: "gpt-4o",
+      }),
+    ).toBeNull();
+  });
+
+  test("child spend rolls up once, parent exhaustion blocks descendants and child resets preserve parent usage", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const parent = await makeTeam(org.id, user.id);
+    const child = await makeTeam(org.id, user.id, { parentId: parent.id });
+    const grandchild = await makeTeam(org.id, user.id, { parentId: child.id });
+    const sibling = await makeTeam(org.id, user.id, { parentId: parent.id });
+    const unrelated = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const limits = await Promise.all(
+      [parent, child, grandchild, sibling, unrelated].map((team) =>
+        LimitModel.create({
+          entityType: "team",
+          entityId: team.id,
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+        }),
+      ),
+    );
+    await createInteraction({
+      agentId: agent.id,
+      billingTeamId: grandchild.id,
+    });
+    await drainBackgroundWork();
+    expect(
+      await Promise.all(limits.map((limit) => tokensIn(limit.id))),
+    ).toEqual([100, 100, 100, 0, 0]);
+    await createInteraction({ agentId: agent.id, billingTeamId: parent.id });
+    await drainBackgroundWork();
+    expect(
+      await Promise.all(limits.map((limit) => tokensIn(limit.id))),
+    ).toEqual([200, 100, 100, 0, 0]);
+    await LimitModel.resetLimitsUsage([limits[1].id]);
+    expect(
+      await Promise.all(limits.map((limit) => tokensIn(limit.id))),
+    ).toEqual([200, 0, 100, 0, 0]);
+    await exhaustLimit({ entityType: "team", entityId: parent.id });
+    for (const team of [grandchild, sibling]) {
+      const snapshot = await ProxyRequestContextModel.readForProxy({
+        organizationId: org.id,
+        provider: "openai",
+        modelId: "gpt-4o",
+        agentId: agent.id,
+        environmentId: agent.environmentId,
+        billingTeamId: team.id,
+      });
+      expect(new Set(snapshot.limitTeamIds).size).toBe(
+        snapshot.limitTeamIds.length,
+      );
+      expect(snapshot.limitTeamIds).toContain(parent.id);
+      for (const state of [undefined, snapshot])
+        expect(
+          await LimitValidationService.checkLimitsBeforeRequest({
+            agentId: agent.id,
+            agent,
+            billingTeamId: team.id,
+            model: "gpt-4o",
+            snapshot: state,
+          }),
+        ).not.toBeNull();
+    }
+    expect(
+      await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        billingTeamId: unrelated.id,
+        model: "gpt-4o",
+      }),
+    ).toBeNull();
+  });
+
   test("a billing team's limit replaces the proxy's team limits", async ({
     makeAgent,
     makeOrganization,

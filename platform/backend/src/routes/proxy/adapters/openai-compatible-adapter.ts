@@ -97,11 +97,13 @@ export function createOpenAiCompatibleAdapterFactory(
     },
 
     createResponseAdapter(response: Response): LLMResponseAdapter<Response> {
-      return new OpenAIResponseAdapter(response, provider);
+      return new OpenAIResponseAdapter(response, { provider });
     },
 
-    createStreamAdapter(): LLMStreamAdapter<StreamChunk, Response> {
-      return new OpenAIStreamAdapter(provider);
+    createStreamAdapter(
+      request?: Request,
+    ): LLMStreamAdapter<StreamChunk, Response> {
+      return new OpenAIStreamAdapter({ provider, clientRequest: request });
     },
 
     extractApiKey(headers: Headers): string | undefined {
@@ -128,6 +130,7 @@ export function createOpenAiCompatibleAdapterFactory(
     async executeStream(
       client: unknown,
       request: Request,
+      onAccepted?: () => void,
     ): Promise<AsyncIterable<StreamChunk>> {
       const openaiClient = client as OpenAIProvider;
       const params = {
@@ -137,6 +140,7 @@ export function createOpenAiCompatibleAdapterFactory(
       } as unknown as ChatCompletionCreateParamsStreaming;
       return streamChatCompletionChunks<StreamChunk>(
         openaiClient.chat.completions.create(params),
+        onAccepted,
       );
     },
 

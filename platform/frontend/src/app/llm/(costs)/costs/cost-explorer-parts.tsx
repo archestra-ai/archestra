@@ -1,4 +1,5 @@
 "use client";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import {
   ArrowDown,
   ArrowUp,
@@ -11,7 +12,7 @@ import {
   Table2,
   TerminalSquare,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, type SetStateAction, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -20,6 +21,7 @@ import {
   LineChart,
   XAxis,
   YAxis,
+  type YAxisTickContentProps,
 } from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils/tailwind";
 import {
   bucketFormatter,
@@ -46,9 +49,19 @@ import {
   formatCell,
   formatValue,
   type MetricId,
+  TIMEFRAME_LABEL,
 } from "./cost-explorer-data";
 
 // ===== palette =====
+import {
+  decodeExplorerTable,
+  EXPLORER_TABLE_URL_KEYS,
+  type ExplorerSortKey,
+  encodeExplorerTable,
+} from "./explorer-url-state";
+
+import { useExplorerUrlState } from "./use-explorer-url-state";
+
 export const PALETTE = [
   "var(--chart-1)",
   "var(--chart-2)",
@@ -235,13 +248,17 @@ export function PivotChart({
   kind,
   split,
   focus,
+  onDrilldown,
 }: {
   cube: Cube;
   metric: MetricId;
   kind: Exclude<ChartKind, "table">;
   split: boolean;
   focus: Set<string>;
+  onDrilldown?: (model: string) => void;
 }) {
+  const isMobile = useIsMobile();
+  const [hovered, setHovered] = useState<string | null>(null);
   const fmt = useMemo(() => bucketFormatter(cube.buckets), [cube.buckets]);
   const ranked = cube.rows.map((r, rank) => ({ r, rank }));
   const chosen =
@@ -268,7 +285,7 @@ export function PivotChart({
     config.other = { label: "Other", color: OTHER };
     labelFor.other = "Other";
     const data = top.map(({ r }) => {
-      const d: Record<string, number | string> = { name: r.label };
+      const d: Record<string, number | string> = { name: r.label, id: r.key };
       segs.forEach((s, j) => {
         d[`p${j}`] = r.children.find((c) => c.key === s.key)?.total ?? 0;
       });
@@ -282,12 +299,16 @@ export function PivotChart({
         <ChartContainer
           config={config}
           className="aspect-auto w-full"
-          style={{ height: Math.max(160, top.length * 34 + 30) }}
+          style={{
+            height: Math.max(160, top.length * (isMobile ? 54 : 34) + 30),
+          }}
         >
           <BarChart
+            onMouseLeave={() => setHovered(null)}
             data={data}
             layout="vertical"
             margin={{ left: 4, right: 12, top: 4, bottom: 4 }}
+            barSize={isMobile ? 12 : undefined}
           >
             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
             <XAxis
@@ -299,7 +320,24 @@ export function PivotChart({
             <YAxis
               type="category"
               dataKey="name"
-              width={124}
+              width={isMobile ? 1 : 124}
+              tick={
+                isMobile
+                  ? ({ y, payload }: YAxisTickContentProps) => {
+                      const label = String(payload?.value ?? "");
+                      return (
+                        <text
+                          x={8}
+                          y={Number(y ?? 0) - 14}
+                          textAnchor="start"
+                          className="fill-muted-foreground text-[11px]"
+                        >
+                          {label.length > 38 ? `${label.slice(0, 37)}…` : label}
+                        </text>
+                      );
+                    }
+                  : undefined
+              }
               tickLine={false}
               axisLine={false}
               tickFormatter={(v: string) =>
@@ -313,6 +351,8 @@ export function PivotChart({
                   {...(p as unknown as TipProps)}
                   metric={metric}
                   labelFor={labelFor}
+                  config={config}
+                  activeKey={hovered}
                 />
               )}
             />
@@ -321,14 +361,40 @@ export function PivotChart({
                 // biome-ignore lint/suspicious/noArrayIndexKey: series slot
                 key={j}
                 dataKey={`p${j}`}
+                onMouseEnter={() => setHovered(`p${j}`)}
+                onMouseLeave={() => setHovered(null)}
+                opacity={hovered && hovered !== `p${j}` ? 0.2 : 1}
                 stackId="a"
+                onClick={
+                  onDrilldown
+                    ? (bar) => {
+                        if (typeof bar.payload?.id === "string")
+                          onDrilldown(bar.payload.id);
+                      }
+                    : undefined
+                }
+                cursor={onDrilldown ? "pointer" : undefined}
                 fill={`var(--color-p${j})`}
                 isAnimationActive={false}
               />
             ))}
             <Bar
               dataKey="other"
+              onMouseEnter={() => setHovered("other")}
+              onMouseLeave={() => setHovered(null)}
+              opacity={hovered && hovered !== "other" ? 0.2 : 1}
               stackId="a"
+              onClick={
+                onDrilldown
+                  ? (bar) => {
+                      if (typeof bar.payload?.id === "string") {
+                        setHovered(null);
+                        onDrilldown(bar.payload.id);
+                      }
+                    }
+                  : undefined
+              }
+              cursor={onDrilldown ? "pointer" : undefined}
               fill="var(--color-other)"
               radius={[0, 3, 3, 0]}
               isAnimationActive={false}
@@ -336,11 +402,18 @@ export function PivotChart({
           </BarChart>
         </ChartContainer>
         <Legend
+          activeKey={hovered}
+          onHover={setHovered}
           items={[
-            ...segs.map((s, j) => ({ label: s.label, color: PALETTE[j] })),
+            ...segs.map((s, j) => ({
+              key: `p${j}`,
+              label: s.label,
+              color: PALETTE[j],
+            })),
             ...(cube.splitKeys.length > segs.length
               ? [
                   {
+                    key: "other",
                     label: `${cube.splitKeys.length - segs.length} more`,
                     color: OTHER,
                   },
@@ -372,6 +445,12 @@ export function PivotChart({
   ];
   const noSeries = chosen.length > 0 && chosen.every(({ r }) => !r.hasSeries);
 
+  const openSeries = (key: string) => {
+    setHovered(null);
+    const row = chosen.find(({ rank }) => key === `s${rank}`);
+    if (row) onDrilldown?.(row.r.key);
+  };
+
   const axes = (
     <>
       <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -395,6 +474,8 @@ export function PivotChart({
             {...(p as unknown as TipProps)}
             metric={metric}
             labelFor={labelFor}
+            config={config}
+            activeKey={hovered}
             showTotal
           />
         )}
@@ -414,12 +495,25 @@ export function PivotChart({
           className="aspect-auto h-[260px] w-full"
         >
           {kind === "bars" ? (
-            <BarChart data={data} margin={{ left: 0, right: 4, top: 4 }}>
+            <BarChart
+              onMouseLeave={() => setHovered(null)}
+              data={data}
+              margin={{ left: 0, right: 4, top: 4 }}
+            >
               {axes}
               {keys.map((k, i) => (
                 <Bar
                   key={k}
                   dataKey={k}
+                  onMouseEnter={() => setHovered(k)}
+                  onMouseLeave={() => setHovered(null)}
+                  opacity={hovered && hovered !== k ? 0.2 : 1}
+                  onClick={
+                    onDrilldown && k !== "other"
+                      ? () => openSeries(k)
+                      : undefined
+                  }
+                  cursor={onDrilldown && k !== "other" ? "pointer" : undefined}
                   stackId="a"
                   fill={`var(--color-${k})`}
                   radius={i === keys.length - 1 ? [3, 3, 0, 0] : 0}
@@ -428,14 +522,33 @@ export function PivotChart({
               ))}
             </BarChart>
           ) : (
-            <LineChart data={data} margin={{ left: 0, right: 8, top: 4 }}>
+            <LineChart
+              onMouseLeave={() => setHovered(null)}
+              data={data}
+              margin={{ left: 0, right: 8, top: 4 }}
+            >
               {axes}
               {keys.map((k) => (
                 <Line
                   key={k}
                   dataKey={k}
+                  onMouseEnter={() => setHovered(k)}
+                  onMouseLeave={() => setHovered(null)}
+                  opacity={hovered && hovered !== k ? 0.2 : 1}
+                  onClick={
+                    onDrilldown && k !== "other"
+                      ? () => openSeries(k)
+                      : undefined
+                  }
+                  cursor={onDrilldown && k !== "other" ? "pointer" : undefined}
                   type="monotone"
                   stroke={`var(--color-${k})`}
+                  fill={`var(--color-${k})`}
+                  activeDot={{
+                    fill: `var(--color-${k})`,
+                    stroke: `var(--color-${k})`,
+                    r: 4,
+                  }}
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
@@ -446,13 +559,17 @@ export function PivotChart({
         </ChartContainer>
       )}
       <Legend
+        activeKey={hovered}
+        onHover={setHovered}
+        onSelect={onDrilldown ? openSeries : undefined}
         items={[
           ...chosen.map(({ r, rank }) => ({
+            key: `s${rank}`,
             label: r.label,
             color: colorAt(rank),
           })),
           ...(rest.length
-            ? [{ label: `${rest.length} more`, color: OTHER }]
+            ? [{ key: "other", label: `${rest.length} more`, color: OTHER }]
             : []),
         ]}
       />
@@ -460,7 +577,17 @@ export function PivotChart({
   );
 }
 
-function Legend({ items }: { items: { label: string; color: string }[] }) {
+function Legend({
+  items,
+  activeKey,
+  onHover,
+  onSelect,
+}: {
+  items: { key?: string; label: string; color: string }[];
+  activeKey?: string | null;
+  onHover?: (key: string | null) => void;
+  onSelect?: (key: string) => void;
+}) {
   return (
     <ul
       aria-label="Usage chart legend"
@@ -469,18 +596,29 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
       {items.map((it) => (
         <li
           key={it.label}
-          className="inline-flex min-w-0 max-w-full items-center gap-1.5"
+          onMouseEnter={() => onHover?.(it.key ?? it.label)}
+          onMouseLeave={() => onHover?.(null)}
+          style={{ opacity: activeKey && activeKey !== it.key ? 0.3 : 1 }}
+          className="inline-flex min-w-0 max-w-full items-center gap-1.5 transition-opacity"
         >
           <span
             className="size-2.5 shrink-0 rounded-[3px]"
             style={{ background: it.color }}
           />
-          <span
-            title={it.label}
-            className="min-w-0 break-words text-muted-foreground"
-          >
-            {it.label}
-          </span>
+          {onSelect && it.key !== "other" ? (
+            <UnstyledButton
+              onClick={() => onSelect(it.key ?? it.label)}
+              onFocus={() => onHover?.(it.key ?? it.label)}
+              onBlur={() => onHover?.(null)}
+              className="min-w-0 break-words text-left text-muted-foreground hover:text-foreground"
+            >
+              <span>{it.label}</span>
+            </UnstyledButton>
+          ) : (
+            <span className="min-w-0 break-words text-muted-foreground">
+              {it.label}
+            </span>
+          )}
         </li>
       ))}
     </ul>
@@ -499,17 +637,25 @@ function PivotTooltip({
   payload,
   metric,
   labelFor,
+  config,
+  activeKey,
   showTotal,
 }: TipProps & {
   metric: MetricId;
   labelFor: Record<string, string>;
+  config: ChartConfig;
+  activeKey?: string | null;
   showTotal?: boolean;
 }) {
   if (!active || !payload?.length) return null;
   const items = [...payload]
-    .filter((p) => Number(p.value) !== 0)
+    .filter((p) => Number(p.value) !== 0 || String(p.dataKey) === activeKey)
     .sort((a, b) => Number(b.value) - Number(a.value));
   const total = items.reduce((a, p) => a + Number(p.value), 0);
+  const visible = items.slice(0, 8);
+  const hovered = items.find((item) => String(item.dataKey) === activeKey);
+  if (hovered && !visible.includes(hovered))
+    visible[visible.length - 1] = hovered;
   return (
     <div className="grid min-w-44 gap-1.5 rounded-lg border bg-background px-2.5 py-2 text-xs shadow-xl">
       <div className="flex items-baseline justify-between gap-4 font-medium">
@@ -520,26 +666,47 @@ function PivotTooltip({
           </span>
         )}
       </div>
-      {items.slice(0, 8).map((p) => (
-        <div key={String(p.dataKey)} className="flex items-center gap-2">
-          <span
-            className="size-2 shrink-0 rounded-[2px]"
-            style={{ background: p.fill ?? p.stroke ?? p.color }}
-          />
-          <span className="max-w-40 flex-1 truncate text-muted-foreground">
-            {labelFor[String(p.dataKey)] ?? p.dataKey}
-          </span>
-          <span className="font-mono tabular-nums">
-            {formatValue(metric, Number(p.value))}
-          </span>
-        </div>
-      ))}
+      {visible.map((p) => {
+        const selected = String(p.dataKey) === activeKey;
+        return (
+          <div
+            key={String(p.dataKey)}
+            aria-current={selected ? true : undefined}
+            className={cn(
+              "flex items-center gap-2",
+              selected && "-mx-1.5 rounded bg-muted px-1.5 py-1 font-semibold",
+            )}
+          >
+            <span
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{
+                background:
+                  config[String(p.dataKey)]?.color ??
+                  p.color ??
+                  p.stroke ??
+                  p.fill,
+              }}
+            />
+            <span
+              className={cn(
+                "max-w-40 flex-1 truncate",
+                selected ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {labelFor[String(p.dataKey)] ?? p.dataKey}
+            </span>
+            <span className="font-mono tabular-nums">
+              {formatValue(metric, Number(p.value))}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ===== tables =====
-type SortKey = "label" | "total" | "peak" | `x:${string}`;
+type SortKey = ExplorerSortKey;
 
 export function SummaryTable({
   cube,
@@ -549,21 +716,32 @@ export function SummaryTable({
   focus,
   onToggle,
   showTimeline = true,
+  onDrilldown,
+  timeframe,
 }: {
   cube: Cube;
+  timeframe: StatisticsTimeFrame;
   metric: MetricId;
   dimLabel: string;
   splitLabel: string | null;
   focus: Set<string>;
   onToggle: (key: string) => void;
   showTimeline?: boolean;
+  onDrilldown?: (model: string) => void;
 }) {
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
-    key: "total",
-    dir: -1,
+  const [table, setTable] = useExplorerUrlState({
+    keys: EXPLORER_TABLE_URL_KEYS,
+    decode: decodeExplorerTable,
+    encode: encodeExplorerTable,
+    timeframe,
   });
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const [showAll, setShowAll] = useState(false);
+  const { sort, open, showAll } = table;
+  const setSort = (value: SetStateAction<typeof sort>) =>
+    setTable("sort", value);
+  const setOpen = (value: SetStateAction<Set<string>>) =>
+    setTable("open", value);
+  const setShowAll = (value: SetStateAction<boolean>) =>
+    setTable("showAll", value);
   const fmtBucket = useMemo(
     () => bucketFormatter(cube.buckets),
     [cube.buckets],
@@ -682,12 +860,25 @@ export function SummaryTable({
                         )}
                         style={{ background: colorAt(i) }}
                       />
-                      <span
-                        title={r.label}
-                        className="min-w-0 flex-1 whitespace-normal break-words font-medium"
-                      >
-                        {r.label}
-                      </span>
+                      {onDrilldown ? (
+                        <UnstyledButton
+                          aria-label={`Explore ${r.label}`}
+                          className="min-w-0 flex-1 whitespace-normal break-words text-left font-medium text-primary underline-offset-4 hover:underline"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDrilldown(r.key);
+                          }}
+                        >
+                          <span>{r.label}</span>
+                        </UnstyledButton>
+                      ) : (
+                        <span
+                          title={r.label}
+                          className="min-w-0 flex-1 whitespace-normal break-words font-medium"
+                        >
+                          {r.label}
+                        </span>
+                      )}
                       {r.sub && (
                         <span
                           title={r.sub}
@@ -825,8 +1016,12 @@ export function PivotTable({
   const cols = pivotColumns(cube, bySplit);
   const matrix = cube.rows.map((r) => pivotValues(r, cube, bySplit));
   const max = Math.max(1e-9, ...matrix.flat().map(Math.abs));
+  // Overlapping rows (a team admin's teams) carry their own bucket totals.
+  const bucketTotals = bySplit ? undefined : cube.bucketTotals;
   const colTotals = cols.map((_, j) =>
-    matrix.reduce((a, row) => a + row[j], 0),
+    bucketTotals
+      ? (bucketTotals[j] ?? 0)
+      : matrix.reduce((a, row) => a + row[j], 0),
   );
   return (
     <div className="overflow-x-auto">
@@ -949,7 +1144,109 @@ export function ApiLine({ call }: { call: string }) {
   );
 }
 
-export function copyCsv({
+type ExportParams = {
+  cube: Cube;
+  metric: MetricId;
+  dimLabel: string;
+  view: "summary" | "pivot";
+  bySplit: boolean;
+  filename: string;
+};
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Download the table on screen as a CSV file named after what it shows. */
+export function exportCsv(params: ExportParams) {
+  downloadBlob(
+    new Blob([csvText(params)], { type: "text/csv;charset=utf-8" }),
+    params.filename,
+  );
+}
+
+export function exportJson(params: ExportParams) {
+  const { header, rows } = exportRows(params);
+  const names = uniqueColumnNames(header);
+  const objects = rows.map((row) =>
+    Object.fromEntries(names.map((name, index) => [name, row[index]])),
+  );
+  downloadBlob(
+    new Blob([JSON.stringify(objects, null, 2)], { type: "application/json" }),
+    params.filename.replace(/\.csv$/, ".json"),
+  );
+}
+
+export async function exportParquet(params: ExportParams) {
+  try {
+    const { parquetWriteBuffer } = await import("hyparquet-writer");
+    const buffer = parquetWriteBuffer({ columnData: parquetColumns(params) });
+    downloadBlob(
+      new Blob([buffer], { type: "application/vnd.apache.parquet" }),
+      params.filename.replace(/\.csv$/, ".parquet"),
+    );
+  } catch {
+    toast.error("Could not export Parquet file");
+  }
+}
+
+export function parquetColumns(params: Omit<ExportParams, "filename">) {
+  const { header, rows } = exportRows(params);
+  const names = uniqueColumnNames(header);
+  return names.map((name, index) => {
+    const values = rows.map((row) => row[index]);
+    if (values.every((value) => typeof value === "number")) {
+      return { name, data: values as number[], type: "DOUBLE" as const };
+    }
+    return {
+      name,
+      data: values.map(String),
+      type: "STRING" as const,
+    };
+  });
+}
+
+function uniqueColumnNames(names: string[]) {
+  const seen = new Set<string>();
+  return names.map((name) => {
+    let unique = name;
+    let count = 2;
+    while (seen.has(unique) || (unique !== name && names.includes(unique))) {
+      unique = `${name} (${count++})`;
+    }
+    seen.add(unique);
+    return unique;
+  });
+}
+
+/**
+ * The table as CSV. A summary with every metric available (`exportTable`)
+ * exports all of them, one line per group and split; otherwise the metric on
+ * screen.
+ */
+function csvText(params: Omit<ExportParams, "filename">) {
+  const { header, rows } = exportRows(params);
+  const esc = (s: string | number) => {
+    let t = String(s);
+    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
+    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
+  return [header, ...rows]
+    .map((row) =>
+      row
+        .map((cell) => esc(typeof cell === "number" ? num(cell) : cell))
+        .join(","),
+    )
+    .join("\n");
+}
+
+function exportRows({
   cube,
   metric,
   dimLabel,
@@ -962,21 +1259,17 @@ export function copyCsv({
   view: "summary" | "pivot";
   bySplit: boolean;
 }) {
-  const esc = (s: string | number) => {
-    let t = String(s);
-    if (typeof s === "string" && /^[=+@\-\t\r]/.test(t)) t = `'${t}`;
-    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-  };
-  const num = (v: number) => (Number.isInteger(v) ? v : v.toFixed(4));
   let lines: (string | number)[][];
-  if (view === "summary") {
+  if (view === "summary" && cube.exportTable) {
+    lines = [cube.exportTable.header, ...cube.exportTable.rows];
+  } else if (view === "summary") {
     lines = [
       [dimLabel, ...cube.extraCols.map((c) => c.label), metric, "share"],
       ...cube.rows.map((r) => [
         r.label,
-        ...cube.extraCols.map((c) => num(r.extras[c.id] ?? 0)),
-        num(r.total),
-        num(cube.total ? r.total / cube.total : 0),
+        ...cube.extraCols.map((c) => r.extras[c.id] ?? 0),
+        r.total,
+        cube.total ? r.total / cube.total : 0,
       ]),
     ];
   } else {
@@ -985,19 +1278,49 @@ export function copyCsv({
       [dimLabel, ...cols.map((c) => c.csv), "total"],
       ...cube.rows.map((r) => [
         r.label,
-        ...pivotValues(r, cube, bySplit).map(num),
-        num(r.total),
+        ...pivotValues(r, cube, bySplit),
+        r.total,
       ]),
     ];
   }
-  const text = lines.map((l) => l.map(esc).join(",")).join("\n");
-  void navigator.clipboard
-    ?.writeText(text)
-    .then(() => toast.success(`Copied ${cube.rows.length} rows as CSV`))
-    .catch(() => toast.error("Clipboard is not available"));
+  return { header: lines[0] as string[], rows: lines.slice(1) };
+}
+
+/**
+ * e.g. `costs-billed-spend-by-team-and-model-last-7-days-2026-11-04.csv`.
+ * `today` is the export date; a custom range names its own dates instead.
+ */
+export function csvFilename({
+  scope,
+  parts,
+  timeframe,
+  today = new Date(),
+}: {
+  scope: string;
+  parts: (string | null | undefined)[];
+  timeframe: string;
+  today?: Date;
+}) {
+  const custom = /^custom:(\d{4}-\d{2}-\d{2})[^_]*_(\d{4}-\d{2}-\d{2})/.exec(
+    timeframe,
+  );
+  const range = custom
+    ? `${custom[1]}-to-${custom[2]}`
+    : `${TIMEFRAME_LABEL[timeframe] ?? timeframe}-${localDate(today)}`;
+  const slug = [scope, ...parts.filter(Boolean), range]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug}.csv`;
 }
 
 // ===== helpers =====
+function localDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function pivotColumns(cube: Cube, bySplit: boolean) {
   if (bySplit) {
     const top = cube.splitKeys.slice(0, 12);

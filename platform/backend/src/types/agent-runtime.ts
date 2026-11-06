@@ -1,12 +1,18 @@
-import { AGENT_RUN_ATTACH_PHASES, ApiError } from "@archestra/shared";
+import {
+  AGENT_RUN_ATTACH_PHASES,
+  AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
+  AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
+  ApiError,
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
+import type { NetworkPolicy } from "./environment";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -55,17 +61,82 @@ export type AgentRunAttentionState = z.infer<
 export const AgentRuntimeSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type AgentRuntimeSteerMode = z.infer<typeof AgentRuntimeSteerModeSchema>;
 
+/**
+ * The container resources of one run: its tier's size (see
+ * `services/agent-runtime/runtime-tiers.ts`). No CPU limit by default
+ * (matching the MCP server runtime): throttling an agent loop mid-turn
+ * produces confusing timeouts rather than back-pressure.
+ */
 export const AgentRuntimeResourcesSchema = z.object({
   cpuRequest: z.string().optional(),
   memoryRequest: z.string().optional(),
-  /**
-   * No CPU limit by default (matching the MCP server runtime): throttling an
-   * agent loop mid-turn produces confusing timeouts rather than back-pressure.
-   */
   cpuLimit: z.string().optional(),
   memoryLimit: z.string().optional(),
 });
 export type AgentRuntimeResources = z.infer<typeof AgentRuntimeResourcesSchema>;
+
+/**
+ * Runtime tiers: the container sizes a run can get, as the organization's
+ * administrators define and name them (Settings > Agents > Runtime tiers). An
+ * Agent names the tier its runs get by default and the largest one a run may
+ * ask for. The resolution lives in `services/agent-runtime/runtime-tiers.ts`.
+ */
+export const AgentRuntimeTierSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(AGENT_RUNTIME_TIER_NAME_MAX_LENGTH);
+export type AgentRuntimeTier = z.infer<typeof AgentRuntimeTierSchema>;
+
+/**
+ * Limits a caller asks for one run. Each must stay within the Agent's own. A
+ * tier is chosen by name, or by the CPU and memory the work needs, which gives
+ * the smallest tier that fits and has no smaller workspace than the Agent's
+ * default tier.
+ */
+export const AgentRunLimitsRequestSchema = z.object({
+  tier: AgentRuntimeTierSchema.optional(),
+  minCpu: z
+    .number()
+    .positive()
+    .max(AGENT_RUNTIME_TIER_MAX_CPU_LIMIT)
+    .optional(),
+  minMemoryGib: z.number().positive().max(256).optional(),
+  idleTimeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60)
+    .optional(),
+  maxDurationHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .optional(),
+  maxCostUsd: z.number().int().min(1).max(100_000).optional(),
+});
+export type AgentRunLimitsRequest = z.infer<typeof AgentRunLimitsRequestSchema>;
+
+/**
+ * What a run got: the tier it runs at (null only on a run recorded before
+ * every run had one), its idle, duration and spend limits, and the size of
+ * its workspace volume.
+ */
+export const AgentRunLimitsSchema = z.object({
+  tier: AgentRuntimeTierSchema.nullable(),
+  idleTimeoutMinutes: z.number().int().min(1),
+  maxDurationHours: z.number().int().min(1),
+  maxCostUsd: z.number().int().min(1).nullable(),
+  workspaceGiB: z
+    .number()
+    .nonnegative()
+    .optional()
+    .describe(
+      "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+    ),
+});
+export type AgentRunLimits = z.infer<typeof AgentRunLimitsSchema>;
 
 /** Where a detached run delivers its terminal result. */
 export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
@@ -218,12 +289,23 @@ export type AgentRuntimeEnvironmentEntry = z.infer<
 export const AgentRuntimeSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
-  /** Wire protocol the image uses to reach Archestra's model router. */
+  /** Wire protocol the image uses to reach Archestra's unified model API. */
   inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
   backend: AgentRuntimeBackendSchema,
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
-  resources: AgentRuntimeResourcesSchema.nullable(),
+  /**
+   * The default tier of the Agent's runs, by name. Absent means the
+   * organization's default tier. A tier the organization no longer has reads
+   * as that default too.
+   */
+  tier: AgentRuntimeTierSchema.nullable().optional(),
+  /**
+   * The scaleup tier: the largest tier a caller may ask for when it starts a
+   * run, so a run can move its work to a larger run of the same Agent. Absent
+   * means the Agent's default tier; a smaller tier counts as the default tier.
+   */
+  maxTier: AgentRuntimeTierSchema.nullable().optional(),
   /** Container ports users can forward from an active workspace. */
   ports: z.array(z.number().int().min(1).max(65_535)).max(20).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
@@ -273,6 +355,8 @@ export type ResolvedAgentRuntime = AgentRuntime & {
   organizationId: string;
   environmentId: string | null;
   secretId: string | null;
+  /** The Agent's own egress override; absent or null inherits the environment. */
+  agentNetworkPolicy?: NetworkPolicy | null;
 };
 
 export const SelectAgentRunRecordSchema = createSelectSchema(
@@ -282,6 +366,8 @@ export const SelectAgentRunRecordSchema = createSelectSchema(
   actorKind: AgentRunActorKindSchema,
   attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
   completionTarget: AgentRunCompletionTargetSchema.nullable(),
+  /** Null on runs that started before limits were recorded. */
+  runtimeLimits: AgentRunLimitsSchema.nullable(),
 });
 export const InsertAgentRunRecordSchema = createInsertSchema(
   schema.agentRunsTable,
@@ -293,6 +379,7 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
       .union([AgentRunAttentionStateSchema, z.null()])
       .optional(),
     completionTarget: AgentRunCompletionTargetSchema.nullable().optional(),
+    runtimeLimits: AgentRunLimitsSchema.nullable().optional(),
   })
   .omit({ id: true, startedAt: true, endedAt: true });
 
@@ -327,7 +414,13 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
+  /** The run's stable id across turns: its workspace, or its only task. */
+  sessionId: z.string().uuid(),
   initiatorName: z.string().nullable(),
+  /** The run's saved files; null for a run that never had a workspace. */
+  workspace: z
+    .object({ state: AgentWorkspaceStateSchema, expiresAt: z.date() })
+    .nullable(),
   canAttach: z.boolean().optional(),
   /** Who the run is shared with, derived from its permission policy. */
   shareVisibility: z.union([
@@ -347,6 +440,11 @@ export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
 /** A user's durable run session as rendered in Chat and its sidebar. */
 export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
   sessionId: z.string().uuid(),
+  llmSessionId: z
+    .string()
+    .describe(
+      "Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends",
+    ),
   prompt: z.string(),
   agent: z.object({
     id: z.string().uuid(),
@@ -422,6 +520,8 @@ export const StartAgentRunResponseSchema = z.object({
   prompt: z.string(),
   projectId: z.string().uuid().nullable(),
   createdAt: z.date(),
+  /** The tier and limits the run got, within the Agent's own; null for a continuation of a run that recorded none. */
+  limits: AgentRunLimitsSchema.nullable(),
 });
 
 export type AgentRunRecord = z.infer<typeof SelectAgentRunRecordSchema>;

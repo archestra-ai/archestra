@@ -3,6 +3,8 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   ManagedResourceSchema,
+  type PermissionSubject,
+  permissionSubjectKey,
   type ResourcePermissionGrant,
   type ScopedResource,
 } from "@archestra/shared";
@@ -42,6 +44,7 @@ export function usePermissionRecipients(params: {
   scope?: string;
   query: string;
   enabled: boolean;
+  exclude?: PermissionSubject[];
 }) {
   return useQuery({
     queryKey: [
@@ -49,6 +52,7 @@ export function usePermissionRecipients(params: {
       params.resource,
       params.scope,
       params.query,
+      params.exclude?.map(permissionSubjectKey).sort(),
     ],
     enabled: params.enabled,
     queryFn: async () => {
@@ -56,14 +60,24 @@ export function usePermissionRecipients(params: {
         params.scope === undefined
           ? await archestraApiSdk.searchInitialPermissionSubjects({
               path: { resource: ManagedResourceSchema.parse(params.resource) },
-              query: { query: params.query },
+              query: {
+                query: params.query,
+                exclude: params.exclude?.length
+                  ? params.exclude.map(permissionSubjectKey)
+                  : undefined,
+              },
             })
           : await archestraApiSdk.searchResourcePermissionSubjects({
               path: {
                 resource: ManagedResourceSchema.parse(params.resource),
                 scope: params.scope,
               },
-              query: { query: params.query },
+              query: {
+                query: params.query,
+                exclude: params.exclude?.length
+                  ? params.exclude.map(permissionSubjectKey)
+                  : undefined,
+              },
             });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

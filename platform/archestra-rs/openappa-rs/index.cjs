@@ -7,6 +7,7 @@ module.exports.openappaRootKinds = wrapAsync(binding, "openappaRootKinds");
 module.exports.dispatchHook = wrapAsync(binding, "dispatchHook");
 module.exports.executeRemedyByOffer = wrapAsync(binding, "executeRemedyByOffer");
 module.exports.loadOfferReview = wrapAsync(binding, "loadOfferReview");
+module.exports.retainedOfferRefusal = wrapSync(binding, "retainedOfferRefusal");
 module.exports.loadChildReturns = wrapAsync(binding, "loadChildReturns");
 module.exports.loadChildAddresses = wrapAsync(binding, "loadChildAddresses");
 module.exports.sendPeerMessage = wrapAsync(binding, "sendPeerMessage");
@@ -23,3 +24,5 @@ module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDecl
 module.exports.editOpenappaPolicy = wrapAsync(binding, "editOpenappaPolicy");
 module.exports.listBundledOpenappaBatteries = wrapAsync(binding, "listBundledOpenappaBatteries");
 module.exports.inspectOpenappaBattery = wrapAsync(binding, "inspectOpenappaBattery");
+
+module.exports.collectOpenappaMetrics = wrapSync(binding, "collectOpenappaMetrics");

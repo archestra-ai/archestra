@@ -6,12 +6,8 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import {
-  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
-  TOOL_ASK_USER_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-} from "@archestra/shared/archestra-mcp-server";
 import { CLAUDE_CODE_GUARD_CLIENT } from "../guard/clients";
+import { CLAUDE_APPA_PERMISSION_TOOL_NAMES } from "../guard/clients/claude-code";
 import { starterPrompt } from "../steps/ending";
 import {
   mergeJsonFileBash,
@@ -90,11 +86,9 @@ export function claudeCodeAppaPermissionRules(
       "Claude MCP permission rules require literal server and tool names",
     );
   }
-  return [
-    TOOL_RUN_TOOL_SHORT_NAME,
-    ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
-    TOOL_ASK_USER_SHORT_NAME,
-  ].map((name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`);
+  return CLAUDE_APPA_PERMISSION_TOOL_NAMES.map(
+    (name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`,
+  );
 }
 
 // Runs before the gateway is registered so a missing interpreter leaves the client untouched.

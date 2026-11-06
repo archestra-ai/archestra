@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentTypeSchema } from "./agent";
 import { AttributionLabelsSchema } from "./attribution-label";
 import { AudioAuditRequestSchema, AudioAuditResponseSchema } from "./audio";
@@ -39,6 +39,14 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
+import {
+  PassthroughRequestSchema,
+  PassthroughResponseSchema,
+} from "./passthrough";
+import {
+  RealtimeInteractionRequestSchema,
+  RealtimeInteractionResponseSchema,
+} from "./realtime";
 import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -58,6 +66,14 @@ export const InteractionSessionPreviewSchema = z.object({
    * start of its reply. Rows written before these existed have neither.
    */
   responseToolNames: z.array(z.string()).optional(),
+  /**
+   * The tool calls the response asked for, with the provider's ids: ties a
+   * later tool result (a guardrails label change, say) back to this request.
+   * Rows written before it existed, and wires without ids, have none.
+   */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
 });
 export type InteractionSessionPreview = z.infer<
@@ -209,6 +225,8 @@ export const InteractionRequestSchema = z.union([
   Azure.API.ImageGenerationRequestSchema,
   Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
+  PassthroughRequestSchema,
+  RealtimeInteractionRequestSchema,
 ]);
 
 /**
@@ -266,6 +284,8 @@ export const InteractionResponseSchema = z.union([
   Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
+  PassthroughResponseSchema,
+  RealtimeInteractionResponseSchema,
 ]);
 
 /**
@@ -303,6 +323,29 @@ const BaseSelectInteractionSchema = createSelectSchema(
     attributionLabels: AttributionLabelsSchema.nullable(),
   },
 );
+
+const DescribedSelectInteractionSchema = BaseSelectInteractionSchema.extend({
+  inputTokens: BaseSelectInteractionSchema.shape.inputTokens.describe(
+    "Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.",
+  ),
+  inputTokensEstimated:
+    BaseSelectInteractionSchema.shape.inputTokensEstimated.describe(
+      "True when the input token count was estimated locally rather than reported by the provider.",
+    ),
+  outputTokens: BaseSelectInteractionSchema.shape.outputTokens.describe(
+    "Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.",
+  ),
+  cacheReadTokens: BaseSelectInteractionSchema.shape.cacheReadTokens.describe(
+    "Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+  ),
+  cacheWriteTokens: BaseSelectInteractionSchema.shape.cacheWriteTokens.describe(
+    "Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+  ),
+  cacheWrite1hTokens:
+    BaseSelectInteractionSchema.shape.cacheWrite1hTokens.describe(
+      "Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+    ),
+});
 
 /**
  * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
@@ -350,37 +393,39 @@ export type CopilotCredentialSource = z.infer<
   typeof CopilotCredentialSourceSchema
 >;
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
-  ...DELTA_ENCODING_COLUMNS,
-  ...INTERNAL_ENCRYPTION_COLUMNS,
-}).extend({
-  chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
-  /**
-   * Name of `connectorId`'s knowledge base connector, resolved within the
-   * caller's organization. Null once the connector is gone; absent on endpoints
-   * that do not resolve it.
-   */
-  connectorName: z.string().nullable().optional(),
-  /**
-   * For a GitHub Copilot request: the organization subscription or personal
-   * sign-in that served it. Null when unknown; absent on endpoints that do
-   * not resolve it.
-   */
-  copilotCredentialSource: CopilotCredentialSourceSchema.nullable().optional(),
-  /**
-   * `virtualKeyId` resolved to its key and owner, within the caller's
-   * organization. Null when the request used no standard virtual key (or the
-   * key has since been deleted); absent on endpoints that do not resolve it.
-   */
-  virtualKey: InteractionVirtualKeySchema.nullable().optional(),
-  /**
-   * Same for `passthroughVirtualKeyId` — the key that carried the acting
-   * user's identity. Tracked separately because one request can present a
-   * standard key for the provider credential and a passthrough key for the
-   * user.
-   */
-  passthroughVirtualKey: InteractionVirtualKeySchema.nullable().optional(),
-});
+const BaseSelectInteractionResponseSchema =
+  DescribedSelectInteractionSchema.omit({
+    ...DELTA_ENCODING_COLUMNS,
+    ...INTERNAL_ENCRYPTION_COLUMNS,
+  }).extend({
+    chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
+    /**
+     * Name of `connectorId`'s knowledge base connector, resolved within the
+     * caller's organization. Null once the connector is gone; absent on endpoints
+     * that do not resolve it.
+     */
+    connectorName: z.string().nullable().optional(),
+    /**
+     * For a GitHub Copilot request: the organization subscription or personal
+     * sign-in that served it. Null when unknown; absent on endpoints that do
+     * not resolve it.
+     */
+    copilotCredentialSource:
+      CopilotCredentialSourceSchema.nullable().optional(),
+    /**
+     * `virtualKeyId` resolved to its key and owner, within the caller's
+     * organization. Null when the request used no standard virtual key (or the
+     * key has since been deleted); absent on endpoints that do not resolve it.
+     */
+    virtualKey: InteractionVirtualKeySchema.nullable().optional(),
+    /**
+     * Same for `passthroughVirtualKeyId` — the key that carried the acting
+     * user's identity. Tracked separately because one request can present a
+     * standard key for the provider credential and a passthrough key for the
+     * user.
+     */
+    passthroughVirtualKey: InteractionVirtualKeySchema.nullable().optional(),
+  });
 
 /**
  * Schema for computed request type field
@@ -393,7 +438,7 @@ export const RequestTypeSchema = z.enum(["main", "subagent"]);
  * Scalar fields rendered by an interaction-list row. Large request, response,
  * analysis and guardrail payloads stay behind the individual detail endpoint.
  */
-export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
+export const InteractionSummarySchema = DescribedSelectInteractionSchema.pick({
   id: true,
   profileId: true,
   externalAgentId: true,
@@ -433,6 +478,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
    * requests in an agent loop, so this is what tells them apart.
    */
   responseToolNames: z.array(z.string()).nullable().optional(),
+  /** The tool calls its response asked for, with the provider's ids. */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .nullable()
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
 });
 
@@ -468,6 +518,14 @@ const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
+/**
+ * A Gemini row's request as logged: an image edit's row also names its
+ * reference images, as OpenAI edits do.
+ */
+const GeminiLoggedRequestSchema = Gemini.API.GenerateContentRequestSchema.and(
+  z.object({ input_files: z.record(z.string(), z.unknown()).optional() }),
+);
+
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
@@ -537,7 +595,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
-    request: withReadFallback(Gemini.API.GenerateContentRequestSchema),
+    request: withReadFallback(GeminiLoggedRequestSchema),
     processedRequest: withReadFallback(Gemini.API.GenerateContentRequestSchema)
       .nullable()
       .optional(),
@@ -818,7 +876,8 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
-    type: z.enum(["azure:images"]),
+    type: z.enum(["azure:images", "openai:images"]),
+
     request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
     processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
       .nullable()
@@ -868,6 +927,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:realtime"]),
+    request: withReadFallback(RealtimeInteractionRequestSchema),
+    processedRequest: withReadFallback(RealtimeInteractionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(RealtimeInteractionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:passthrough", "anthropic:passthrough"]),
+    request: withReadFallback(PassthroughRequestSchema),
+    processedRequest: withReadFallback(PassthroughRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(PassthroughResponseSchema),
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

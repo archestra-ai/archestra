@@ -1,5 +1,6 @@
 import { request, test as setup } from "@playwright/test";
 import { ArchestraApi } from "../src/api";
+import { backdateKnowledgeFiles, seedDatabaseRows } from "../src/db-seed";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -7,7 +8,6 @@ import {
   PERSONA_AUTH_FILE,
 } from "../src/env";
 import { ensurePersona, PERSONA } from "../src/persona";
-import { backdateKnowledgeFiles, seedDatabaseRows } from "../src/db-seed";
 import { seedDemoData, seedKnowledgeFiles } from "../src/seed";
 
 setup("seed the demo organization", async () => {

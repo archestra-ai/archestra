@@ -20,19 +20,13 @@ const {
   getMcpServersMock: vi.fn(),
 }));
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      searchMcpRegistry: searchMcpRegistryMock,
-      getMcpRegistryIssueIndex: getIssueIndexMock,
-      getInternalMcpCatalog: getInternalMcpCatalogMock,
-      getMcpServers: getMcpServersMock,
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  searchMcpRegistry: searchMcpRegistryMock,
+  getMcpRegistryIssueIndex: getIssueIndexMock,
+  getInternalMcpCatalog: getInternalMcpCatalogMock,
+  getMcpServers: getMcpServersMock,
+}));
 
 const { requestCookies, requestHeaders } = vi.hoisted(() => ({
   requestCookies: new Map<string, string>(),

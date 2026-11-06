@@ -16,6 +16,8 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
+  CONNECTION_SETUP_TOKEN_TTL_MS,
+  connectionModelServesClient,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
@@ -35,6 +37,7 @@ import {
   AgentModel,
   ConnectionSetupModel,
   MemberModel,
+  ModelModel,
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
@@ -45,7 +48,6 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -124,9 +126,10 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
-  // Cursor routes every model through the Model Router with one key that maps
+  // Cursor routes every model through the Unified Model API with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
   "copilot-cli": [
@@ -177,6 +180,13 @@ const CreateConnectionSetupBodySchema = z.object({
    * silently skipped when the caller lacks llmVirtualKey:create.
    */
   attributePassthrough: z.boolean().default(true),
+  /**
+   * The provider key a virtual-key setup binds for a per-user provider when
+   * the user can use more than one: their own GitHub Copilot sign-in, or an
+   * organization's GitHub Copilot plan shared with them. Omitted, the setup
+   * binds the user's own sign-in.
+   */
+  providerApiKeyId: z.string().uuid().optional(),
   /**
    * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
    * launch a BYOK provider without one, so the wizard's review step picks it.
@@ -291,6 +301,13 @@ const ConnectionHealthResponseSchema = z.object({
    * omits it simply skips the check.
    */
   guardVersion: z.number().int().nonnegative(),
+  /**
+   * The prefix of the gateway's built-in tool names, e.g. `archestra__`.
+   * White-labeling changes it after connect, and the startup guard moves the
+   * client's allow rules for those tools to it. Non-secret: it derives from
+   * the app name the sign-in page already shows.
+   */
+  mcpToolPrefix: z.string(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -409,7 +426,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Health of the remotes a connected client is wired to, one request for all of them. " +
           "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
-          "Reports only ok/down per requested remote.",
+          "Reports only ok/down per requested remote, the launch check's format version, and the gateway's tool prefix.",
         tags: ["Connection Setups"],
         querystring: ConnectionHealthQuerySchema,
         response: constructResponseSchema(ConnectionHealthResponseSchema),
@@ -460,6 +477,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcp: statusOf(mcpExists),
         llm: statusOf(llmExists),
         guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+        mcpToolPrefix: archestraMcpBranding.toolPrefix,
       };
     },
   );
@@ -485,6 +503,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider: requestedProvider,
         proxyAuth,
         attributePassthrough,
+        providerApiKeyId,
         model: requestedModel,
         skills,
         pluginIds: requestedPluginIds,
@@ -524,7 +543,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (clientId === "cursor" && provider && !allPrimary) {
         throw new ApiError(
           400,
-          "Cursor routes its models through the Model Router. Use primary-providers.",
+          "Cursor routes its models through the Unified Model API. Use primary-providers.",
         );
       }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -567,6 +586,27 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
         );
+      }
+      // A model the catalog knows to be served elsewhere would fail every
+      // request; a model the catalog doesn't know is the user's to vouch for.
+      if (model && provider && clientId === "copilot-cli") {
+        const known = await ModelModel.findByProviderAndModelId(
+          provider,
+          model,
+        );
+        if (
+          known &&
+          !connectionModelServesClient({
+            clientId,
+            provider,
+            supportedEndpoints: known.supportedEndpoints,
+          })
+        ) {
+          throw new ApiError(
+            400,
+            `${model} is served only through Chat Completions on ${providerDisplayNames[provider] ?? provider}, and Copilot CLI connects through the Responses API. Choose another model.`,
+          );
+        }
       }
       // Kimi Code names one model in its provider entry. Without a choice,
       // use the provider's default.
@@ -657,6 +697,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 preferredProviderKeyId:
                   mappedKeys?.find((key) => key.provider === provider)
                     ?.providerApiKeyId ?? null,
+                selectedProviderKeyId: providerApiKeyId ?? null,
               }));
           }
           // Fail here, where the Connect page shows the message, rather than
@@ -689,7 +730,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           attributePassthrough &&
           (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            ((clientId === "codex" || clientId === "pi") &&
+            ((clientId === "codex" ||
+              clientId === "chatgpt" ||
+              clientId === "pi") &&
               provider === "openai") ||
             (clientId === "kimi-code" &&
               (provider === "kimi-code" || provider === "kimi")) ||
@@ -829,6 +872,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isOpenCodeFamilyClient(clientId) &&
         clientId !== "pi" &&
         clientId !== "kimi-code" &&
+        clientId !== "chatgpt" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1150,6 +1194,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           marketplaceRender &&
           marketplaceRender.pluginIds.length === 0 &&
           setup.clientId !== "claude-desktop" &&
+          setup.clientId !== "chatgpt" &&
           setup.clientId !== "pi" &&
           setup.clientId !== "kimi-code"
             ? await SkillMarketplaceRepoModel.ensureForViewer({
@@ -1194,6 +1239,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await SkillShareLinkModel.create({
                 organizationId: setup.organizationId,
                 createdByUserId: setup.userId,
+                ...(setup.clientId === "chatgpt"
+                  ? { connectionSetupId: setup.id }
+                  : {}),
                 skillIds: marketplaceRender.skillIds,
                 pluginIds: marketplaceRender.pluginIds,
                 pluginClientType: marketplaceRender.pluginClientType,
@@ -1219,6 +1267,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               marketplaceName: marketplaceRender.marketplaceName,
               hasSkills: marketplaceRender.skillIds.length > 0,
               pluginNames: marketplaceRender.pluginNames,
+              ...(setup.clientId === "chatgpt"
+                ? { connectionPlugin: true }
+                : {}),
             };
           }
 
@@ -1272,7 +1323,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi" | "kimi-code"
+    OpenCodeFamilyClientId | "pi" | "kimi-code" | "chatgpt"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1438,12 +1489,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           }
         : {}),
       // Cursor's requests come from Cursor's own servers, never a running
-      // conversation, so its Model Router URL carries no setup context.
+      // conversation, so its Unified Model API URL carries no setup context.
       url:
         setup.clientId === "cursor"
-          ? `${proxyApiPrefix}/model-router`
+          ? `${proxyApiPrefix}/unified-model`
           : setup.clientId === "pi" && setup.proxyAuth !== "provider-key"
-            ? `${proxyBaseUrl}/model-router`
+            ? `${proxyBaseUrl}/unified-model`
             : `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
@@ -1526,25 +1577,33 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   }
 
   let marketplaceRender: MarketplaceRenderContext | null = null;
-  if (skillIds.length > 0 || pluginIds.length > 0) {
+  if (
+    skillIds.length > 0 ||
+    pluginIds.length > 0 ||
+    setup.clientId === "chatgpt"
+  ) {
     const marketplaceName = await deriveMarketplaceName(
       setup.organizationId,
-      skillIds.length === 0
-        ? "plugins"
-        : pluginIds.length === 0
-          ? "skills"
-          : "extensions",
+      setup.clientId === "chatgpt"
+        ? "extensions"
+        : skillIds.length === 0
+          ? "plugins"
+          : pluginIds.length === 0
+            ? "skills"
+            : "extensions",
     );
     if (isReservedMarketplaceName(marketplaceName)) throw GONE();
     marketplaceRender = {
       skillIds,
       pluginIds,
-      pluginNames,
+      pluginNames:
+        setup.clientId === "chatgpt" ? [marketplaceName] : pluginNames,
       pluginClientType:
         pluginIds.length > 0 &&
         !isOpenCodeFamilyClient(setup.clientId) &&
         setup.clientId !== "pi" &&
-        setup.clientId !== "kimi-code"
+        setup.clientId !== "kimi-code" &&
+        setup.clientId !== "chatgpt"
           ? setup.clientId
           : null,
       pluginPlatform:
@@ -1906,7 +1965,7 @@ function assertConnectPluginsEnabledOrGone(organization: Organization): void {
 }
 
 /**
- * The chat models Cursor's picker should list: what the Model Router's
+ * The chat models Cursor's picker should list: what the Unified Model API's
  * GET /models returns for this virtual key, plus the organization's default
  * model when the key can route it.
  */

@@ -16,6 +16,8 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { isWorker } from "node:cluster";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -46,8 +48,9 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
+import { authPlugin as fastifyAuthPlugin } from "@/auth/fastify-plugin";
+import { applyPendingNormalTiers } from "@/auto-routing/pending-normal-tier";
 import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -75,7 +78,6 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -96,8 +98,9 @@ import { PlaywrightRuntimeModel } from "@/models";
 import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { initializeObservabilityMetrics, metrics } from "@/observability";
+import { initializeObservabilityMetrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { activeUsersMetricCollector } from "@/observability/metrics/active-users";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { rumExporter } from "@/observability/rum/exporter.ee";
@@ -131,6 +134,7 @@ import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { seedRequiredStartingData } from "@/services/seed";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -218,11 +222,16 @@ export {
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
+import { assertPortsBound } from "@/models/ports";
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
 // the small-team threshold even when no enterprise license env var is set.
 // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
 import * as eeRoutes from "./routes/index.ee";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const {
   api: {
@@ -980,6 +989,12 @@ const startWebServer = async () => {
     await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 
+    // Finish the org-trio migration's normal tiers that waited for the Agent
+    // Runtime check; auto routing stays disabled for them meanwhile.
+    void applyPendingNormalTiers().catch((error) => {
+      logger.error({ err: error }, "Failed to apply pending normal tiers");
+    });
+
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms
     const promClient = await import("prom-client");
@@ -997,7 +1012,7 @@ const startWebServer = async () => {
     // Only the API process collects it: the value is derived from the shared
     // database, so extra replicas would repeat the same query for the same
     // answer.
-    metrics.activeUsers.activeUsersMetricCollector.start();
+    activeUsersMetricCollector.start();
 
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
@@ -1334,6 +1349,9 @@ function registerWebServerShutdown(
     if (shuttingDown) return;
     shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    // Socket and polling events do not pass through Fastify's admission hook.
+    // Stop their intake synchronously before the loopback gateway starts draining.
+    const stoppedChatOps = chatOpsManager.beginShutdown();
     beginLlmProxyDrain(fastify);
     if (publicEndpointsServerInstance)
       beginLlmProxyDrain(publicEndpointsServerInstance);
@@ -1388,6 +1406,7 @@ function registerWebServerShutdown(
           ? drainLlmProxyRequests(publicEndpointsServerInstance)
           : Promise.resolve(),
         stoppedWorker,
+        stoppedChatOps,
       ]);
       if (intervalIds.activeChatRunReaperIntervalId) {
         clearInterval(intervalIds.activeChatRunReaperIntervalId);
@@ -1432,7 +1451,7 @@ function registerWebServerShutdown(
       // Flush any buffered RUM events before the process exits.
       await rumExporter.shutdown();
 
-      metrics.activeUsers.activeUsersMetricCollector.stop();
+      activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"

@@ -15,6 +15,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import {
   CreatedByModel,
@@ -306,7 +307,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateVirtualApiKey,
         description:
-          "Create a new virtual API key. Returns the full token value once.",
+          "Create a new virtual API key. Team admins creating a key for another member receive metadata only; the owner can retrieve its value.",
         tags: ["Virtual API Keys"],
         body: CreateVirtualApiKeyBodySchema,
         response: constructResponseSchema(VirtualApiKeyWithValueSchema),
@@ -491,7 +492,15 @@ async function createVirtualApiKey(params: {
     creatorId: user.id,
     organizationId,
     isAdmin: isVirtualKeyAdmin,
+    billingTeamId: body.billingTeamId,
   });
+  const mayRevealValue = isVirtualKeyAdmin || ownerId === user.id;
+  if (!isVirtualKeyAdmin && ownerId !== user.id && body.initialGrants?.length) {
+    throw new ApiError(
+      403,
+      "Team admins cannot share a key created for another member.",
+    );
+  }
   await credentialBilling.assertCanSetBillingTeam({
     organizationId,
     userId: user.id,
@@ -530,7 +539,7 @@ async function createVirtualApiKey(params: {
     return {
       ...created.virtualKey,
       ...(await readBilling(created.virtualKey)),
-      value: created.value,
+      ...(mayRevealValue && { value: created.value }),
       teams: created.teams,
       authorName: created.authorName,
       createdBy: await CreatedByModel.resolveOne(created.virtualKey.authorId),
@@ -543,6 +552,7 @@ async function createVirtualApiKey(params: {
     mappings: body.providerApiKeys,
     organizationId,
     userId: user.id,
+    ownerId,
   });
 
   await validateVirtualKeyInitialGrants({
@@ -589,7 +599,7 @@ async function createVirtualApiKey(params: {
   return {
     ...virtualKey,
     ...(await readBilling(virtualKey)),
-    value,
+    ...(mayRevealValue && { value }),
     teams,
     authorName,
     createdBy: await CreatedByModel.resolveOne(
@@ -689,6 +699,12 @@ async function updateVirtualApiKey(params: {
     organizationId,
     userId: user.id,
     cap: body.spendCap,
+    canManageTeamKey: (
+      await VirtualApiKeyModel.getTeamManagedIds({
+        organizationId,
+        userId: user.id,
+      })
+    ).includes(id),
     current: await credentialBilling.getSpendCap({
       entityType: "virtual_key",
       entityId: id,
@@ -716,9 +732,16 @@ async function updateVirtualApiKey(params: {
       retainedProviderApiKeyIds: (
         await VirtualApiKeyModel.getProviderApiKeys(id)
       ).map((key) => key.providerApiKeyId),
+      canManageTeamKey: (
+        await VirtualApiKeyModel.getTeamManagedIds({
+          organizationId,
+          userId: user.id,
+        })
+      ).includes(id),
       mappings: body.providerApiKeys,
       organizationId,
       userId: user.id,
+      ownerId: accessContext.authorId,
     });
     await assertCanGrantModelPools({
       modelPoolIds: body.modelPoolIds,
@@ -854,6 +877,7 @@ async function resolveKeyOwner(params: {
   creatorId: string;
   organizationId: string;
   isAdmin: boolean;
+  billingTeamId?: string | null;
 }): Promise<string> {
   const { requestedOwnerId, creatorId, organizationId, isAdmin } = params;
 
@@ -861,7 +885,15 @@ async function resolveKeyOwner(params: {
     return creatorId;
   }
 
-  if (!isAdmin) {
+  const canManageTeamOwner =
+    params.billingTeamId &&
+    (
+      await TeamModel.getAdministeredTeamIds(creatorId, organizationId)
+    ).includes(params.billingTeamId) &&
+    (await TeamModel.getUserTeamIds(requestedOwnerId)).includes(
+      params.billingTeamId,
+    );
+  if (!isAdmin && !canManageTeamOwner) {
     throw new ApiError(
       403,
       "You need llmVirtualKey:admin permission to create a virtual key for another user",
@@ -881,9 +913,11 @@ async function resolveKeyOwner(params: {
 
 async function validateProviderApiKeys(params: {
   retainedProviderApiKeyIds?: string[];
+  canManageTeamKey?: boolean;
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
   userId: string;
+  ownerId: string | null;
 }): Promise<void> {
   const { mappings, organizationId, userId } = params;
   if (mappings.length === 0) {
@@ -934,17 +968,43 @@ async function validateProviderApiKeys(params: {
     // other providers in an own model-router key. Ownership is re-checked per
     // mapping at request time in `llm-proxy-auth`.
     const secret = secretsById.get(mapping.providerApiKeyId);
+    let delegatedCopilotMapping = false;
     if (
       credentialRequiresPerUserScope({
         provider: mapping.provider,
         apiKey: secret,
       })
     ) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      delegatedCopilotMapping =
+        mapping.provider === "github-copilot" &&
+        isServiceAccountUserId(userId) &&
+        params.ownerId != null &&
+        apiKey.userId === params.ownerId &&
+        !!(await MemberModel.getByUserId(params.ownerId, organizationId)) &&
+        (await ResourcePermissions.allows({
+          organizationId,
+          userId,
+          resource: "llmVirtualKey",
+          scope: "*",
+          action: "update",
+        }));
+      // SPDX-SnippetEnd
       const label = perUserCredentialLabel({
         provider: mapping.provider,
         apiKey: secret,
       });
-      if (apiKey.userId !== userId) {
+      const retainedOwnerCredential =
+        params.canManageTeamKey &&
+        params.ownerId === apiKey.userId &&
+        params.retainedProviderApiKeyIds?.includes(apiKey.id);
+      if (
+        apiKey.userId !== userId &&
+        !delegatedCopilotMapping &&
+        !retainedOwnerCredential
+      ) {
         throw new ApiError(
           403,
           `You can only map your own personal ${label} key.`,
@@ -952,6 +1012,7 @@ async function validateProviderApiKeys(params: {
       }
     }
     if (
+      !delegatedCopilotMapping &&
       !params.retainedProviderApiKeyIds?.includes(apiKey.id) &&
       !(await LlmProviderApiKeyModel.canUseKey(
         apiKey,
@@ -980,6 +1041,12 @@ async function requireVirtualKeyModifyPermission(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
+  if (
+    (await VirtualApiKeyModel.getTeamManagedIds(params)).includes(
+      params.virtualKey.id,
+    )
+  )
+    return;
   await ResourcePermissions.require({
     organizationId: params.organizationId,
     userId: params.userId,

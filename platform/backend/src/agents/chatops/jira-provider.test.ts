@@ -1,14 +1,14 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
 
-vi.mock("@/cache-manager");
+setupTestCacheManager();
 
 import db, { schema } from "@/database";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import ChatOpsConfigModel from "@/models/chatops-config";
 import { pollJiraChatOps } from "@/services/jira-chatops-poll";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import type { JiraBotConfig, JiraDbConfig } from "@/types/chatops-jira";
 import { muteChannelThread } from "./channel-activation";

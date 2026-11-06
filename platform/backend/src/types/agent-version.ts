@@ -1,11 +1,13 @@
+import { StoredSubagentLoadBalancingConfigSchema } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentActivationSkillReferenceSchema } from "./agent-activation-skill";
 import {
   AgentActivationSkillModeSchema,
   AgentActivationSkillRuleDispositionSchema,
 } from "./agent-activation-skill-policy";
+import { NetworkPolicySchema } from "./environment";
 
 /**
  * Canonical, hashable payload of an agent version — the agent's *config only*.
@@ -60,18 +62,15 @@ export const AgentConfigSnapshotSchema = z.object({
   builtInAgentConfig: z.unknown(),
   /** Resolved model identity (modelId FK + human-readable externalId). */
   model: ModelIdentitySchema.nullable(),
-  /**
-   * Optional `fast` / `smart` trio tiers on `llmApiKey`. Snapshots taken
-   * before tiers existed carry neither, and that agent had no tiers set.
-   */
-  fastModel: ModelIdentitySchema.nullable().default(null),
-  smartModel: ModelIdentitySchema.nullable().default(null),
   /** Redacted key identity — never key material (secret ids are excluded). */
   llmApiKey: z
     .object({ id: z.string(), name: z.string(), provider: z.string() })
     .nullable(),
   identityProviderId: z.string().nullable(),
   environmentId: z.string().nullable(),
+  networkPolicy: NetworkPolicySchema.nullable().default(null),
+  subagentLoadBalancing:
+    StoredSubagentLoadBalancingConfigSchema.nullable().default(null),
   tools: z.array(
     z.object({
       toolId: z.string(),

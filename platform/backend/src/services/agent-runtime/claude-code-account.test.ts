@@ -444,6 +444,26 @@ test("uses provider expiry and keeps model discovery outside sign-in", async ({
     statusCode: 502,
   });
   expect((await manager.status(owner)).state).toBe("connected");
+  expect(
+    (
+      await manager.status({
+        ...owner,
+        runtime: {
+          ...owner.runtime,
+          command: ["archestra-claude-code-runtime"],
+        },
+      })
+    ).state,
+  ).toBe("connected");
+  await expect(
+    manager.status({
+      ...owner,
+      runtime: {
+        ...owner.runtime,
+        command: ["custom-entrypoint"],
+      },
+    }),
+  ).rejects.toMatchObject({ statusCode: 400 });
 });
 
 const TOKEN = `sk-ant-oat01-${"example".repeat(8)}`;
@@ -492,7 +512,6 @@ function runtime(agent: {
     privileged: false,
     environment: [],
     credentials: [],
-    resources: null,
     ttlHours: null,
     idleTimeoutMinutes: null,
     maxCostUsd: null,

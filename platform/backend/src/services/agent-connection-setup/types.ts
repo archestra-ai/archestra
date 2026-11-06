@@ -123,7 +123,9 @@ export interface SetupScriptSkillsSection {
   marketplaceName: string;
   /** Existing skills plugin is present. Defaults true for older callers/tests. */
   hasSkills?: boolean;
-  /** Opaque hook-bearing plugin entries advertised by the same marketplace. */
+  /** The marketplace carries the complete ChatGPT connection plugin. */
+  connectionPlugin?: boolean;
+  /** Plugin entries installed and tracked for refresh and disconnect. */
   pluginNames?: string[];
 }
 
@@ -165,6 +167,8 @@ export interface AgentScriptRenderer {
 export interface AgentEnding {
   /** Replaces the shared "LLM proxy" line when the agent says it better. */
   proxyDetail?: string;
+  /** Replaces the shared skills line, for an agent that installed nothing from the marketplace. */
+  skillsDetail?: string;
   /** Extra "what was set up" lines, e.g. the launch check. */
   parts?: SetupEndingPart[];
   /**

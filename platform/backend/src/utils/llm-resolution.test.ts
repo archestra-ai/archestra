@@ -1,6 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { vi } from "vitest";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -20,7 +20,7 @@ import {
   resolveConversationLlmSelectionForAgent,
 } from "./llm-resolution";
 
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(() => false),
 }));
 

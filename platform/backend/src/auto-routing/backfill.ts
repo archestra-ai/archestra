@@ -31,6 +31,7 @@ import type {
 } from "@/types/auto-routing-api";
 import { firstUserText } from "./first-user-text";
 import { fitReadiness } from "./fit";
+import { scoringContext } from "./scoring-context";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type JevSessionReading, scorerState } from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
@@ -544,8 +545,13 @@ async function scoreSession(params: {
   session: RoutingHistorySession;
 }): Promise<ScoreOutcome> {
   const { backfill, lease, scorerVersionId, session } = params;
-  const text = openingText(await findOpening(session));
+  const opening = await findOpening(session);
+  const text = openingText(opening);
   if (text === null) {
+    logger.info(
+      { backfillId: backfill.id, reason: openingSkipReason(opening) },
+      "[AutoRouting] Backfill session skipped",
+    );
     await withDbTransaction(async (tx) => {
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return;
       await RoutingHistoryModel.recordScore(
@@ -565,7 +571,11 @@ async function scoreSession(params: {
   // short commit that settles the call.
   await RoutingHistoryModel.copyUsage(session);
 
-  const input = { firstUserText: text, client: session.client };
+  const input = {
+    firstUserText: text,
+    client: session.client,
+    ...scoringContext(opening?.request),
+  };
   // Reserved once a call slot is free, so a backfill cancelled meanwhile
   // makes no further calls.
   await scorerCalls.acquire();
@@ -611,8 +621,11 @@ async function scoreSession(params: {
         case "read":
           return reading.value.costUsd ?? reserved;
         case "error":
-          // No key: nothing was sent.
-          return reading.error.reason === "no_credentials" ? 0 : reserved;
+          // Missing credentials and oversized local input never reach the scorer.
+          return reading.error.reason === "no_credentials" ||
+            reading.error.reason === "input_too_large"
+            ? 0
+            : reserved;
         case "unexpected":
           return reserved;
       }
@@ -683,28 +696,49 @@ function readingStatus(reading: Reading): "scored" | "failed" | null {
     case "read":
       return "scored";
     case "error":
-      return reading.error.reason === "invalid_response" ? "failed" : null;
+      return reading.error.reason === "invalid_response" ||
+        reading.error.reason === "input_too_large"
+        ? "failed"
+        : null;
     case "unexpected":
       return null;
   }
 }
 
 /**
- * The session's opening: its first main turn, as the sessions list picks
- * one, read page by page until found or the session ends. A slow page fails
- * the run, which retries the session.
+ * Search every page for the first main turn. If there is none, use the first
+ * readable user request; retain the first unreadable row only to classify a
+ * skip. A slow page fails the run, which retries the session.
  */
 async function findOpening(
   session: RoutingHistorySession,
 ): Promise<OpeningRow | null> {
   let after: OpeningRow | null = null;
+  let fallback: OpeningRow | null = null;
+  let first: OpeningRow | null = null;
   for (;;) {
     const page = await RoutingHistoryModel.openingRows(session, after);
+    first ??= page.rows[0] ?? null;
+    fallback ??= page.rows.find((row) => openingText(row) !== null) ?? null;
     const opening = page.rows.find((row) => isSessionMainTurn(row));
     if (opening) return opening;
-    if (page.last) return null;
+    if (page.last) return fallback ?? first;
     after = page.rows[page.rows.length - 1];
   }
+}
+
+function openingSkipReason(
+  opening: OpeningRow | null,
+): "no_main_turn" | "content_unavailable" | "empty_user_text" {
+  if (!opening) return "no_main_turn";
+  if (
+    opening.encrypted ||
+    opening.parentId !== null ||
+    isLogContentNotStored(opening.request)
+  ) {
+    return "content_unavailable";
+  }
+  return "empty_user_text";
 }
 
 type Reading =

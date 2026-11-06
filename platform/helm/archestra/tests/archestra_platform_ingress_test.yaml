@@ -266,7 +266,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.rules[0].http.paths
-          count: 2
+          count: 3
       - equal:
           path: spec.rules[0].http.paths[0].path
           value: "/v1"
@@ -290,3 +290,63 @@ tests:
       - equal:
           path: spec.rules[0].http.paths[0].path
           value: "/"
+
+  - it: routes the exact OpenAPI path to the backend on a UI host
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - contains:
+          path: spec.rules[0].http.paths
+          content:
+            path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: RELEASE-NAME-archestra-platform
+                port:
+                  number: 9000
+
+  - it: adds OpenAPI even when the host supplies its own gateway routes
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /v1
+              port: 9000
+            - path: /
+              port: 3000
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: /openapi.json
+      - equal:
+          path: spec.rules[0].http.paths[2].pathType
+          value: Exact
+      - equal:
+          path: spec.rules[0].http.paths[2].backend.service.port.number
+          value: 9000
+
+  - it: preserves an explicitly configured OpenAPI route without duplicating it
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+            - path: /openapi.json
+              pathType: Exact
+              port: 8080
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 4
+      - equal:
+          path: spec.rules[0].http.paths[3].backend.service.port.number
+          value: 8080

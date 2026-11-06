@@ -1,10 +1,13 @@
 import { once } from "node:events";
 import { createConnection } from "node:net";
+import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { withDrainScope } from "@/utils/drain-scope";
 import {
   drainLlmProxyRequests,
   registerLlmProxyDrain,
@@ -20,6 +23,282 @@ afterEach(async () => {
   for (const app of apps.splice(0)) {
     app.server.closeAllConnections();
     await app.close();
+  }
+});
+
+test("an admitted socket turn finishes its gateway and nested model calls during drain", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 2000);
+  const proceed = gate();
+  const started = gate();
+  const modelStarted = gate();
+  const finishModel = gate();
+  let modelCalls = 0;
+  let dependencyClosed = false;
+  app.addHook("onClose", async () => {
+    dependencyClosed = true;
+  });
+  app.post("/v1/openai/chat/completions", async (request) => {
+    modelCalls++;
+    expect(request.headers["x-archestra-drain-scope"]).toBeUndefined();
+    modelStarted.resolve();
+    await finishModel.promise;
+    expect(dependencyClosed).toBe(false);
+    return { answer: "completed" };
+  });
+  let url: string;
+  app.post("/v1/mcp/agent", async () => {
+    const response = await fetch(`${url}/v1/openai/chat/completions`, {
+      method: "POST",
+      headers: internalCallHeader(),
+    });
+    return { status: response.status, result: await response.json() };
+  });
+  url = await app.listen({ host: "127.0.0.1", port: 0 });
+  let savedHeaders: Record<string, string> = {};
+  const turn = withDrainScope(async () => {
+    savedHeaders = internalCallHeader();
+    started.resolve();
+    await proceed.promise;
+    return fetch(`${url}/v1/mcp/agent`, {
+      method: "POST",
+      headers: savedHeaders,
+    });
+  }).then(async (response) => {
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 200,
+      result: { answer: "completed" },
+    });
+  });
+  trackBackgroundWork(turn);
+  await started.promise;
+  drain.beginShutdown();
+  const closing = drainLlmProxyRequests(app);
+  expect((await fetch(`${url}/v1/mcp/agent`, { method: "POST" })).status).toBe(
+    503,
+  );
+  expect(
+    (
+      await fetch(`${url}/v1/openai/chat/completions`, {
+        method: "POST",
+        headers: internalCallHeader(),
+      })
+    ).status,
+  ).toBe(503);
+  proceed.resolve();
+  await modelStarted.promise;
+  expect(dependencyClosed).toBe(false);
+  finishModel.resolve();
+  await turn;
+  await closing;
+  // A captured proof expires when its work finishes.
+  expect(
+    (
+      await fetch(`${url}/v1/mcp/agent`, {
+        method: "POST",
+        headers: savedHeaders,
+      })
+    ).status,
+  ).toBe(503);
+  expect(modelCalls).toBe(1);
+});
+
+test("an admitted HTTP handler can start its loopback model call after shutdown begins", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 2000);
+  const started = gate();
+  const proceed = gate();
+  let url: string;
+  app.post("/v1/openai/chat/completions", async () => ({ completed: true }));
+  app.get("/api/run", async () => {
+    started.resolve();
+    await proceed.promise;
+    const response = await fetch(`${url}/v1/openai/chat/completions`, {
+      method: "POST",
+      headers: internalCallHeader(),
+    });
+    return { status: response.status };
+  });
+  url = await app.listen({ host: "127.0.0.1", port: 0 });
+  const request = fetch(`${url}/api/run`);
+  await started.promise;
+  drain.beginShutdown();
+  const closing = drainLlmProxyRequests(app);
+  proceed.resolve();
+  expect(await (await request).json()).toEqual({ status: 200 });
+  await closing;
+});
+
+test("drains persistence from a loopback handler started while socket work is draining", async () => {
+  const app = createApp();
+  registerLlmProxyDrain(app, 2000);
+  const proceed = gate();
+  const persist = gate();
+  let dependencyClosed = false;
+  let persisted = false;
+  app.addHook("onClose", async () => {
+    dependencyClosed = true;
+  });
+  app.post("/v1/openai/chat/completions", async (_request, reply) => {
+    reply.raw.writeHead(200, { "Content-Type": "application/json" });
+    reply.raw.end('{"completed":true}');
+    await persist.promise;
+    expect(dependencyClosed).toBe(false);
+    persisted = true;
+  });
+  await app.ready();
+  const turn = withDrainScope(async () => {
+    await proceed.promise;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/openai/chat/completions",
+      headers: internalCallHeader(),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ completed: true });
+  });
+  trackBackgroundWork(turn);
+  let drained = false;
+  const closing = drainLlmProxyRequests(app).then(async () => {
+    drained = true;
+    await app.close();
+  });
+  // The drain initially sees no HTTP handlers and waits on socket work.
+  await setImmediate();
+  proceed.resolve();
+  await turn;
+  await setImmediate();
+  expect(persisted).toBe(false);
+  expect(drained).toBe(false);
+  expect(dependencyClosed).toBe(false);
+  persist.resolve();
+  await closing;
+  expect(persisted).toBe(true);
+  expect(dependencyClosed).toBe(true);
+});
+
+test("forged scopes and live scopes past the drain deadline cannot admit new calls", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 5);
+  app.post("/v1/mcp/agent", async () => ({ completed: true }));
+  app.post("/v1/openai/chat/completions", async () => ({ completed: true }));
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  drain.beginShutdown();
+  for (const path of ["/v1/mcp/agent", "/v1/openai/chat/completions"]) {
+    expect(
+      (
+        await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { "x-archestra-drain-scope": "forged" },
+        })
+      ).status,
+    ).toBe(503);
+  }
+  await withDrainScope(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    for (const path of ["/v1/mcp/agent", "/v1/openai/chat/completions"]) {
+      expect(
+        (
+          await fetch(`${url}${path}`, {
+            method: "POST",
+            headers: internalCallHeader(),
+          })
+        ).status,
+      ).toBe(503);
+    }
+  });
+});
+
+test.each([
+  {
+    clockShiftMs: 3_600_000,
+    graceMs: 60_000,
+    elapsedMs: 1,
+    expectedStatus: 200,
+  },
+  { clockShiftMs: -3_600_000, graceMs: 5, elapsedMs: 6, expectedStatus: 503 },
+])("drain admission uses elapsed time after a $clockShiftMs ms wall-clock correction", async ({
+  clockShiftMs,
+  graceMs,
+  elapsedMs,
+  expectedStatus,
+}) => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, graceMs);
+  const paths = ["/v1/mcp/agent", "/v1/openai/chat/completions"];
+  for (const path of paths) app.post(path, async () => ({ completed: true }));
+  await app.ready();
+  const wallTime = Date.now();
+  const elapsedClock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  const wallClock = vi.spyOn(Date, "now").mockReturnValue(wallTime);
+  try {
+    drain.beginShutdown();
+    wallClock.mockReturnValue(wallTime + clockShiftMs);
+    elapsedClock.mockReturnValue(1000 + elapsedMs);
+    await withDrainScope(async () => {
+      for (const path of paths) {
+        const response = await app.inject({
+          method: "POST",
+          url: path,
+          headers: internalCallHeader(),
+        });
+        expect(
+          response.statusCode,
+          "Wall-clock corrections must not move the elapsed admission deadline",
+        ).toBe(expectedStatus);
+      }
+    });
+  } finally {
+    wallClock.mockRestore();
+    elapsedClock.mockRestore();
+  }
+});
+
+test("a backward wall-clock correction cannot extend the drain wait", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 20);
+  const started = gate();
+  const finish = gate();
+  app.get("/v1/openai/pending", async () => {
+    started.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  await app.ready();
+  const request = app.inject("/v1/openai/pending");
+  await started.promise;
+  const wallTime = Date.now();
+  const elapsedClock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  const wallClock = vi.spyOn(Date, "now").mockReturnValue(wallTime);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const scheduleTimeout = vi.spyOn(globalThis, "setTimeout");
+  try {
+    drain.beginShutdown();
+    wallClock.mockReturnValue(wallTime - 3_600_000);
+    elapsedClock.mockReturnValue(1007);
+    let completed = false;
+    const draining = drainLlmProxyRequests(app).then(() => {
+      completed = true;
+    });
+    expect(scheduleTimeout).toHaveBeenCalledWith(expect.any(Function), 13);
+    elapsedClock.mockReturnValue(1019);
+    await vi.advanceTimersByTimeAsync(12);
+    expect(completed).toBe(false);
+    elapsedClock.mockReturnValue(1020);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(
+      completed,
+      "A wall-clock rollback must not extend the elapsed drain budget",
+    ).toBe(true);
+    await draining;
+  } finally {
+    scheduleTimeout.mockRestore();
+    vi.useRealTimers();
+    wallClock.mockRestore();
+    elapsedClock.mockRestore();
+    finish.resolve();
+    await request;
   }
 });
 

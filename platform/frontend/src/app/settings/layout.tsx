@@ -138,6 +138,8 @@ export type SettingsPageHeader = {
   /** Browser tab title, when `title` is composed markup rather than a string. */
   documentTitle?: string;
   description?: React.ReactNode;
+  /** The record's own mark, drawn beside the title as on a detail page. */
+  icon?: React.ReactNode;
   backLink?: React.ReactNode;
   status?: React.ReactNode;
   /**
@@ -205,12 +207,41 @@ export default function SettingsLayout({
 
   const contextValue = useMemo(() => ({ setActionButton, setPageHeader }), []);
 
+  // A record's own page (a role, say) is read and edited like any other
+  // detail page: the content centred at the wizard width, with the back link
+  // as the way out. The section list is for moving between settings pages,
+  // and this is not one of them. Decided from the path, so the page does not
+  // first draw with the list and then lose it.
+  if (isSettingsRecordPath(pathname)) {
+    return (
+      <SettingsLayoutContext.Provider value={contextValue}>
+        <PageLayout
+          maxWidth="wizard"
+          minWidth="phone"
+          contentOverflowX="clip"
+          title={pageHeader?.title ?? config.title}
+          documentTitle={pageHeader?.documentTitle}
+          description={pageHeader?.description}
+          icon={pageHeader?.icon}
+          backLink={pageHeader?.backLink}
+          status={pageHeader?.status}
+          tabs={pageHeader?.tabs}
+          mobileVisibleCount={pageHeader?.tabs?.length}
+          actionButton={actionButton}
+        >
+          {children}
+        </PageLayout>
+      </SettingsLayoutContext.Provider>
+    );
+  }
+
   return (
     <SettingsLayoutContext.Provider value={contextValue}>
       <PageLayout
         title={pageHeader?.title ?? config.title}
         documentTitle={pageHeader?.documentTitle}
         description={pageHeader ? pageHeader.description : config.description}
+        icon={pageHeader?.icon}
         backLink={pageHeader?.backLink}
         status={pageHeader?.status}
         tabs={pageHeader?.tabs}
@@ -245,6 +276,13 @@ export default function SettingsLayout({
     </SettingsLayoutContext.Provider>
   );
 }
+
+/** The pages that stand for one record rather than for a settings section. */
+function isSettingsRecordPath(pathname: string) {
+  return SETTINGS_RECORD_PATHS.some((pattern) => pattern.test(pathname));
+}
+
+const SETTINGS_RECORD_PATHS = [/^\/settings\/roles\/[^/]+/];
 
 function GuardrailsDescription() {
   const appName = useAppName();

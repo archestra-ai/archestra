@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import { vi } from "vitest";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
@@ -11,6 +12,7 @@ import {
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { ApiError } from "@/types";
 import agentRuntimeRoutes from "./agent-runtime.routes";
 
 setupTestCacheManager();
@@ -20,6 +22,129 @@ describe("/api/agent-workspace-transfers/:transferId/content", () => {
 
   beforeEach(() => {
     vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
+  });
+
+  test.for([
+    "idle",
+    "suspended",
+  ] as const)("downloads and resumes binary files while the workspace is %s", async (state, {
+    makeAgent,
+  }) => {
+    const taskId = await retainedRun({
+      makeAgent,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      state,
+    });
+    const resume = vi
+      .spyOn(agentRuntimeManager, "resumeWorkspace")
+      .mockResolvedValue(undefined);
+    const bytes = Buffer.alloc(5 * 1024 * 1024);
+    for (let index = 0; index < bytes.length; index++)
+      bytes[index] = index % 256;
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    vi.spyOn(
+      agentRuntimeManager,
+      "runWorkspaceTransferCommand",
+    ).mockResolvedValue({
+      transfer_id: "binary-snapshot",
+      path: "artifacts/archive.tar.gz",
+      size: bytes.length,
+      sha256,
+      ino: "1",
+      mtime_ns: "1",
+    });
+    vi.spyOn(
+      agentRuntimeManager,
+      "readWorkspaceTransferRange",
+    ).mockImplementation(async ({ offset }) => ({
+      stdout: Readable.from([bytes.subarray(offset)]),
+      completed: Promise.resolve(),
+    }));
+    const started = await ctx.app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${taskId}/workspace/transfers`,
+      payload: { direction: "download", path: "artifacts/archive.tar.gz" },
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const { token, contentUrl } = started.json();
+    for (const offset of [0, 1024]) {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: contentUrl,
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(offset ? { range: `bytes=${offset}-` } : {}),
+        },
+      });
+      expect(response.statusCode, response.body.slice(0, 500)).toBe(
+        offset ? 206 : 200,
+      );
+      expect(response.rawPayload.equals(bytes.subarray(offset))).toBe(true);
+      expect(response.headers.etag).toBe(`"${sha256}"`);
+    }
+    expect(resume).toHaveBeenCalledTimes(state === "suspended" ? 1 : 0);
+  });
+
+  test.for([
+    409, 500,
+  ])("a failed download preserves its %i error before any bytes are sent", async (statusCode, {
+    makeAgent,
+  }) => {
+    const taskId = await retainedRun({
+      makeAgent,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+    });
+    vi.spyOn(
+      agentRuntimeManager,
+      "runWorkspaceTransferCommand",
+    ).mockResolvedValue({
+      transfer_id: "unavailable-snapshot",
+      path: "artifacts/archive.tar.gz",
+      size: 5 * 1024 * 1024,
+      sha256: "a".repeat(64),
+      ino: "1",
+      mtime_ns: "1",
+    });
+    vi.spyOn(
+      agentRuntimeManager,
+      "readWorkspaceTransferRange",
+    ).mockImplementation(async () => ({
+      stdout: new Readable({
+        read() {
+          this.destroy(
+            statusCode === 409
+              ? new ApiError(409, "The pinned export is no longer available")
+              : new Error("The pinned export is no longer available"),
+          );
+        },
+      }),
+      completed: Promise.resolve(),
+    }));
+    const started = await ctx.app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${taskId}/workspace/transfers`,
+      payload: { direction: "download", path: "artifacts/archive.tar.gz" },
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const { token, contentUrl } = started.json();
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: contentUrl,
+      headers: { authorization: `Bearer ${token}`, range: "bytes=1024-" },
+    });
+    expect(response.statusCode, response.body).toBe(statusCode);
+    expect(response.json()).toMatchObject({
+      error: { message: "The pinned export is no longer available" },
+    });
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.headers["content-range"]).toBeUndefined();
+    expect(response.headers.etag).toBeUndefined();
+    expect(response.headers["accept-ranges"]).toBeUndefined();
+    expect(Number(response.headers["content-length"])).toBe(
+      response.rawPayload.length,
+    );
   });
 
   test("a request with the wrong token, no bearer or the wrong direction is not found", async ({
@@ -90,6 +215,7 @@ async function retainedRun(params: {
   makeAgent: (overrides: Record<string, unknown>) => Promise<{ id: string }>;
   organizationId: string;
   userId: string;
+  state?: "idle" | "suspended";
 }): Promise<string> {
   const { organizationId, userId } = params;
   const agent = await params.makeAgent({
@@ -102,7 +228,6 @@ async function retainedRun(params: {
       backend: "kubernetes",
       steerMode: "tmux_keys",
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: 1,
@@ -137,7 +262,7 @@ async function retainedRun(params: {
     backend: "kubernetes",
     runtimeScope: "archestra-dev",
     workloadName,
-    state: "idle",
+    state: params.state ?? "idle",
     lastTaskId: task.id,
     expiresAt: new Date(Date.now() + 3600_000),
   });

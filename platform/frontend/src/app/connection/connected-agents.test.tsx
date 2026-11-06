@@ -168,6 +168,27 @@ describe("DisconnectLine", () => {
     return found;
   };
 
+  it("shows the symmetric local cleanup command for ChatGPT", () => {
+    render(
+      <DisconnectLine data={data} picked={client("chatgpt")} agents={[]} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(screen.getByText("Clean up this computer")).toBeVisible();
+    expect(
+      screen.getByText(
+        /if \[ -f "\$HOME\/\.archestra\/codex-startup-guard\.sh" \]/,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/disconnect\.md\?client=chatgpt/)).toBeVisible();
+    expect(
+      screen.getByText(/ChatGPT desktop and Codex share local settings/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Other MCP connections are left in place/),
+    ).toBeVisible();
+    expect(screen.queryByText(/added no local provider/)).toBeNull();
+  });
+
   it("explains disconnecting before anything is connected", () => {
     render(
       <DisconnectLine data={data} picked={client("claude-code")} agents={[]} />,

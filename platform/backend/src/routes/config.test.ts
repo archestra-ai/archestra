@@ -243,6 +243,11 @@ describe("config routes", () => {
         available: false,
         defaultTtlHours: config.agentRuntime.defaultTtlHours,
       });
+      // Tiers and their default are organization settings, not public config.
+      expect(missing.features.agentRuntimeBackend).not.toHaveProperty("tiers");
+      expect(missing.features.agentRuntimeBackend).not.toHaveProperty(
+        "defaultTier",
+      );
 
       sandboxInstalled.mockReturnValue(true);
       const installed = (

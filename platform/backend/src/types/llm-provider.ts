@@ -97,7 +97,7 @@ export interface CreateClientOptions {
   llmProviderApiKeyId?: string;
   /**
    * Aborted when the downstream HTTP client disconnects before its response
-   * finishes. Provider clients may forward it to their upstream requests.
+   * finishes. Provider clients must forward it to their upstream requests.
    */
   abortSignal?: AbortSignal;
   /**
@@ -218,7 +218,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * Build the modified provider-specific request
    * Incorporates all modifications (model, tool results)
    */
-  toProviderRequest(): TRequest;
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest;
 }
 
 // =============================================================================
@@ -416,6 +416,15 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   readonly clientResponse?: { id: string; model: string };
 
+  /**
+   * The Chat Completions `finish_reason` this turn ends with, for an adapter
+   * that translates another provider's stream into Chat Completions. A wrapper
+   * that serves another wire reads it to tell a cut-off or filtered turn from a
+   * finished one. Adapters whose `state.stopReason` already is a Chat
+   * Completions finish reason leave it unset.
+   */
+  getOpenAiFinishReason?(): string;
+
   // ---------------------------------------------------------------------------
   // Chunk Processing
   // ---------------------------------------------------------------------------
@@ -539,6 +548,14 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * which is needed for saving the interaction to the database.
    */
   toProviderResponse(): TResponse;
+
+  /**
+   * The response as its log row stores it, when that holds more than plugins
+   * should receive: the audio a speech or audio-chat stream returned, kept up
+   * to a size limit so the Logs page can play it. Defaults to
+   * `toProviderResponse()`.
+   */
+  toLoggedResponse?(): TResponse;
 }
 
 // =============================================================================
@@ -576,8 +593,18 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
 
   /** This operation cannot provide authoritative usage/pricing for enforced accounting. */
   readonly unavailableUsageAccounting?: boolean;
-  /** Propagate downstream disconnection to upstream work. */
-  readonly cancelOnDisconnect?: boolean;
+  /**
+   * For a media operation: whether its response will carry what the
+   * provider's published media tariff prices, so its cost is authoritative.
+   */
+  mediaTariffCovers?(request: TRequest): boolean;
+  /**
+   * The request as its log row keeps it, when that differs from what the
+   * provider and plugins receive: an image edit adds its uploaded images, so
+   * the Logs page can show what was edited. Typed loosely so an adapter that
+   * spreads another provider's factory does not inherit its request type.
+   */
+  toLoggedRequest?(request: unknown): unknown;
   /** End failed binary streams by closing the transport, never injecting SSE bytes. */
   readonly binaryStream?: boolean;
 
@@ -688,6 +715,9 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   executeStream(
     client: unknown,
     request: TRequest,
+    /** Signal only after a successful upstream HTTP response, never merely
+     * after constructing a lazy iterator. Implementations may omit it. */
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<TChunk>>;
 
   /**
@@ -733,14 +763,16 @@ export interface UsageView {
   cacheWriteTokens?: number;
   /** Portion of cacheWriteTokens written at the 1-hour TTL (billed higher than 5m). Anthropic-only; absent elsewhere. */
   cacheWrite1hTokens?: number;
-  /** Output tokens spent on reasoning/extended thinking. Reported by OpenAI (reasoning_tokens) and Gemini (thoughtsTokenCount); absent elsewhere. */
+  /** Output tokens spent on reasoning/extended thinking: a SUBSET of outputTokens, never added on top. Gemini (thoughtsTokenCount) and xAI report it outside their output count, so their usage readers fold it in (see observability/metrics/llm-usage.ts). Absent where the provider does not break it out. */
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
   /** True for locally synthesized output metrics; excluded from token quotas. */
   outputTokensEstimated?: boolean;
-  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
+  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`), or the cost of a media operation priced from the provider's published media tariff (see `mediaTariff`). When present it is the recorded cost instead of a token-price estimate. */
   providerReportedCost?: number;
+  /** The cost is a media operation's, priced per image token, character or second from the provider's published tariff (`services/media-pricing`), which per-token chat prices cannot express. */
+  mediaTariff?: boolean;
 }
 
 /**

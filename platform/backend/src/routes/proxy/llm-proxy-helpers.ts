@@ -46,8 +46,10 @@ import {
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import type { ProxyRequestFailure } from "@/observability/llm-proxy-request";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
+import { toolCallArgumentsText } from "@/openappa/tool-call-arguments";
 import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
@@ -129,9 +131,10 @@ export function normalizeToolCallsForPolicy(
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
+      const text = toolCallArgumentsText(tc.arguments);
       try {
-        args = JSON.parse(tc.arguments);
-        argsString = tc.arguments;
+        args = JSON.parse(text);
+        argsString = text;
       } catch {
         args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
@@ -278,7 +281,7 @@ export function planDispatchModeToolCallRewrites(params: {
     // shape and dispatch something the model did not ask for.
     let toolArgs: unknown;
     try {
-      toolArgs = JSON.parse(toolCall.arguments || "{}");
+      toolArgs = JSON.parse(toolCallArgumentsText(toolCall.arguments));
     } catch {
       return toolCall;
     }
@@ -367,6 +370,8 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (usage.usageUnavailable || usage.costUnavailable) return undefined;
@@ -378,6 +383,8 @@ export async function calculateUsageCost(params: {
         provider,
         mode: "enforce",
         providerApiKeyId: params.providerApiKeyId,
+        billingEndpoint: params.billingEndpoint,
+        requestedModel: params.requestedModel,
       })
     ).cost,
   );
@@ -398,6 +405,8 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   providerApiKeyId?: string;
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   autoRouting?: AutoRoutingRequestContext;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
@@ -421,6 +430,8 @@ export async function calculateInteractionCosts(params: {
     provider: params.providerName,
     mode: "enforce",
     providerApiKeyId: params.providerApiKeyId,
+    billingEndpoint: params.billingEndpoint,
+    requestedModel: params.requestedModel,
   });
   const actualCost = Number(billingUsage.cost);
   const componentsCache = billingUsage.components.map(componentCacheCosts);
@@ -628,6 +639,8 @@ export async function estimateCutOffAttemptUsage(params: {
     provider?: SupportedProvider;
     modelId?: string;
     providerApiKeyId?: string;
+    billingEndpoint?: "fireworks" | "other";
+    requestedModel?: string;
   };
 }): Promise<{ inputTokens: number; cost: string | null } | undefined> {
   const { member } = params;
@@ -648,6 +661,8 @@ export async function estimateCutOffAttemptUsage(params: {
     usage: { inputTokens, outputTokens: 0 },
     provider: member.provider,
     providerApiKeyId: member.providerApiKeyId,
+    billingEndpoint: member.billingEndpoint,
+    requestedModel: member.requestedModel,
   });
   return { inputTokens, cost: cost?.toFixed(10) ?? null };
 }
@@ -945,6 +960,52 @@ export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
   return (
     code === "upstream_connection_closed" || code === "upstream_unreachable"
   );
+}
+
+/** Final request classification, using the same status/transport rules as the error response. */
+export function classifyProxyFailure(error: unknown): ProxyRequestFailure {
+  const explicitStatus = explicitHttpStatus(error);
+  const transportFailure =
+    explicitStatus === undefined && !isClientAbortError(error)
+      ? classifyUpstreamTransportFailure(error)
+      : undefined;
+  const statusCode =
+    explicitStatus ??
+    (isClientAbortError(error) ? 499 : transportFailure?.status) ??
+    500;
+  const origin =
+    statusCode === 499
+      ? "client"
+      : error instanceof ThroughputError ||
+          (error instanceof ApiError && !error.upstream)
+        ? "archestra"
+        : error instanceof ObservedProviderUsageError ||
+            transportFailure ||
+            explicitStatus !== undefined ||
+            (error instanceof ApiError && error.upstream) ||
+            (error instanceof Error &&
+              (hasProviderHttpErrorShape(error) ||
+                hasUpstreamErrorPayload(error)))
+          ? "provider"
+          : "archestra";
+  return {
+    statusCode,
+    origin,
+    outcome:
+      statusCode === 499
+        ? "cancelled"
+        : statusCode === 429
+          ? "throttled"
+          : origin === "archestra" && (statusCode === 402 || statusCode === 403)
+            ? "denied"
+            : origin === "provider" &&
+                (statusCode === 503 || statusCode === 529)
+              ? "overloaded"
+              : origin === "provider" &&
+                  (statusCode === 408 || statusCode === 504)
+                ? "timeout"
+                : "error",
+  };
 }
 
 export function handleError(

@@ -14,6 +14,27 @@
      watcher (`ARCHESTRA_DEV_BACKEND_WATCH` defaults to false there). After
      changing backend code run `tilt trigger pnpm-dev-backend` to rebuild and
      restart it (about 20 s). The frontend dev server reloads on its own.
+   - Without Docker or Kubernetes (a lite Agent Runtime image), run the
+     stack as plain processes:
+     `scripts/dev-lite.sh up` (PostgreSQL 18, backend :9000, frontend :3000;
+     `status`, `logs <component>`, `up --e2e` then `e2e` for the Playwright
+     lite projects, `down`). Inside an Agent Runtime both servers run builds,
+     not dev servers: nothing watches files, so after a change and before you
+     run tests against the stack or share a preview, run
+     `scripts/dev-lite.sh reload backend` (about 15 s) or
+     `scripts/dev-lite.sh reload frontend` (a production build, about 45 to
+     80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` gives the Next dev server back
+     (about 3.5 GB once pages are open). A pod's bootstrap only runs
+     `scripts/dev-lite.sh prepare` (dependencies, PostgreSQL, migrations):
+     run `up` when you need the servers; it builds the backend and the
+     frontend one after the other, then starts them. On a clean checkout of
+     a main commit it installs the frontend CI built for that commit
+     instead, and a rebuild after edits starts from CI's build cache
+     (`scripts/frontend-prebuilt.mjs`). `pause` and `resume`
+     stop and restart the two servers, keeping PostgreSQL and the builds, to
+     give one memory-heavy command their memory. MCP server installs, nested Agent
+     Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,
+     `hibernation` and `vault-k8s` Playwright projects need the Tilt stack.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.
 5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default. Load the `archestra-dev-testing` skill to choose the level and to avoid the "fluff test" anti-pattern
 6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: the Licensing section of docs/pages/get-started/index.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
@@ -85,7 +106,11 @@ pnpm run prepare                        # Install the husky pre-commit hook. `ti
                                         # because ignoreScripts blocks lifecycle scripts (see below).
 pnpm lint                               # Check lint
 pnpm lint:fix                           # Lint and auto-fix
-pnpm type-check                         # Check TypeScript types
+pnpm type-check                         # Check TypeScript types. Run it (or `pnpm --dir <pkg> type-check`), not bare
+                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. backend/tsconfig.json
+                                        # is a solution of projects (one per layer or test shard), so bare tsc there
+                                        # checks nothing; type-check builds the projects one at a time, each in its own
+                                        # compiler, and keeps their declarations in .tsbuild/ for the next run.
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
@@ -119,10 +144,9 @@ A new worktree has no dependencies or native bindings. Before tests or type-chec
 
 ```bash
 pnpm install --frozen-lockfile                  # from platform/
-pnpm --dir archestra-rs/<crate> build:dev       # each NAPI crate the tests load
 ```
 
-A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
+The backend tests install the NAPI addons CI published for the checkout's `archestra-rs` tree when any is missing or was installed for another tree (`scripts/napi-prebuilt.mjs`: a download of about 20 MB, a few seconds; `ARCHESTRA_DEV_NAPI_PREBUILT=false` skips it). They never compile. A changed `archestra-rs` tree has no published addons: build each crate the tests load with `pnpm --dir archestra-rs/<crate> build:dev`. A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
 
 ## Environment Variables
 
@@ -318,7 +342,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
     createInsertSchema,
     createUpdateSchema,
   } from "drizzle-zod";
-  import { schema } from "@/database";
+  // The table definitions only: "@/database" also opens the connection.
+  import { schema } from "@/database/schema";
 
   export const SelectEntitySchema = createSelectSchema(schema.entityTable);
   export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit(
@@ -407,7 +432,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Archestra MCP Server**:
 
 - Tools must be explicitly assigned to Agents (not auto-injected)
-- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, and the delegated-run gate; policy writes stay assignment-only
+- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, the delegated-run gate, and the Agent Runtime OAuth token gate (single-agent runtime tokens with `accessAllTools: false` require explicit assignment); policy writes stay assignment-only
 - Tools prefixed with `archestra__` to avoid conflicts
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`

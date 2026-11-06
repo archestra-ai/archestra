@@ -492,3 +492,25 @@ describe("UserModel.delete personal MCP credential cleanup", () => {
     expect(await SecretModel.findById(vaultSecret.id)).not.toBeNull();
   });
 });
+
+describe("UserModel.createOrGetExistingDefaultAdminUser", () => {
+  test("signs a new admin up through Better Auth, then returns the same user", async () => {
+    const email = "first-admin@example.com";
+
+    const created = await UserModel.createOrGetExistingDefaultAdminUser({
+      email,
+      password: "first-admin-password",
+      name: "First Admin",
+    });
+
+    expect(created).toMatchObject({ email, name: "First Admin" });
+    const [row] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.email, email));
+    expect(row).toMatchObject({ role: ADMIN_ROLE_NAME, emailVerified: true });
+    await expect(
+      UserModel.createOrGetExistingDefaultAdminUser({ email }),
+    ).resolves.toMatchObject({ id: created?.id });
+  });
+});

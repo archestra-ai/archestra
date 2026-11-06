@@ -2,7 +2,7 @@ import {
   type archestraApiTypes,
   DEFAULT_RESOURCE_ACCESS_RELATIONS,
 } from "@archestra/shared";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
+import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 
 // The Agents page's catalog requests, built in one place so the server
 // component streams exactly the queries the page then reads.
@@ -12,7 +12,7 @@ export type CatalogFilters = Omit<CatalogQuery, "limit" | "offset">;
 
 /** The filters of /agents with no search parameters. */
 export const DEFAULT_CATALOG_FILTERS = {
-  sortBy: DEFAULT_SORT_BY,
+  sortBy: DEFAULT_AGENT_SORT_BY,
   sortDirection: DEFAULT_SORT_DIRECTION,
   access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
 } satisfies CatalogFilters;

@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export const RoutingDecisionReasonSchema = z.enum([
   "planned",
@@ -55,6 +55,13 @@ export const JevSessionSignalSchema = z.object({
 export const RoutingDecisionFeaturesSchema = z.object({
   signals: z.object({ "jev-session": JevSessionSignalSchema }),
   client: z.string(),
+  /** Scorer billing metadata; absent on readings stored before usage accounting. */
+  scorerUsage: z
+    .object({
+      inputTokens: z.number().int().nonnegative().nullable(),
+      outputTokens: z.number().int().nonnegative().nullable(),
+    })
+    .optional(),
 });
 export type RoutingDecisionFeatures = z.infer<
   typeof RoutingDecisionFeaturesSchema
@@ -120,13 +127,21 @@ export const SelectRoutingPlanSchema = createSelectSchema(
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
 
-/** Auto-routing settings of an organization, stored on its LLM Proxy row. */
-export const AutoRoutingSettingsSchema = z.object({
-  enabled: z.boolean(),
-  budgetUsdPerDay: z.string().nullable(),
+/** The tiers auto routing chooses between: the organization's default model trio. */
+const AutoRoutingTrioSchema = z.object({
   fastModelId: z.string().uuid().nullable(),
   normalModelId: z.string().uuid().nullable(),
   smartModelId: z.string().uuid().nullable(),
+});
+export type AutoRoutingTrio = z.infer<typeof AutoRoutingTrioSchema>;
+
+/**
+ * Auto-routing settings of an organization, stored on its LLM Proxy row. The
+ * tiers are read from the organization's default model trio.
+ */
+export const AutoRoutingSettingsSchema = AutoRoutingTrioSchema.extend({
+  enabled: z.boolean(),
+  budgetUsdPerDay: z.string().nullable(),
   scorerVersionId: z.string().uuid().nullable(),
   /** Bumped by every write of plan-relevant state; a fit publishes only at the generation it read. */
   generation: z.number().int(),
@@ -135,10 +150,9 @@ export const AutoRoutingSettingsSchema = z.object({
 });
 export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
 
-export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.omit({
-  scorerVersionId: true,
-  generation: true,
-  plannedGeneration: true,
+export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.pick({
+  enabled: true,
+  budgetUsdPerDay: true,
 }).partial();
 export type UpdateAutoRoutingSettings = z.infer<
   typeof UpdateAutoRoutingSettingsSchema
@@ -251,7 +265,7 @@ export const RoutingHistoryScoreStatusSchema = z.enum([
   /** A paid call is under way or its reading did not land; read again until the attempts run out. */
   "pending",
   "scored",
-  /** No opening text to score: withheld, encrypted, a delta suffix, or no main turn. */
+  /** No readable opening text; structured logs distinguish the reason. */
   "no_text",
   /** The scorer answered something unusable, or every paid attempt was spent; not retried for this version. */
   "failed",

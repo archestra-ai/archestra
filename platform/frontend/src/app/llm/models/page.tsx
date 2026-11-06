@@ -16,12 +16,14 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Trash2,
   UserRoundCheck,
   Users,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
@@ -84,12 +86,16 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
   useBulkUpdateModelVisibility,
+  useDeleteModel,
   useModelsWithApiKeys,
   useSyncLlmModels,
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { formatPricePerMillion } from "@/lib/model-price-format";
+import {
+  formatMediaPricing,
+  formatPricePerMillion,
+} from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils/format-context-length";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
@@ -122,6 +128,10 @@ export default function ModelsPage() {
     useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
+  const deleteModel = useDeleteModel();
+  const [deletingModel, setDeletingModel] = useState<ModelWithApiKeys | null>(
+    null,
+  );
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const { data: baseCanUpdate } = useHasPermissions({ llmModel: ["update"] });
   const { data: scopedCapabilities } = useScopedCapabilities();
@@ -459,8 +469,18 @@ export default function ModelsPage() {
         // lines when the column is narrow.
         header: "$/M In/Out",
         cell: ({ row }) => {
-          const { pricePerMillionInput, pricePerMillionOutput } = row.original;
+          const { pricePerMillionInput, pricePerMillionOutput, mediaPricing } =
+            row.original;
           if (hasUnknownCapabilities(row.original)) return null;
+          // A media model is charged by its media rates; the per-token price
+          // beside it would be a fallback estimate nothing is billed at.
+          if (mediaPricing) {
+            return (
+              <span className="text-sm font-mono">
+                {formatMediaPricing(mediaPricing)}
+              </span>
+            );
+          }
           if (!pricePerMillionInput && !pricePerMillionOutput) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }
@@ -480,12 +500,16 @@ export default function ModelsPage() {
         size: 160,
         header: "$/M Cache R/W",
         cell: ({ row }) => {
-          const { pricePerMillionCacheRead, pricePerMillionCacheWrite } =
-            row.original;
+          const {
+            pricePerMillionCacheRead,
+            pricePerMillionCacheWrite,
+            mediaPricing,
+          } = row.original;
           if (hasUnknownCapabilities(row.original)) return null;
           if (
-            pricePerMillionCacheRead === null &&
-            pricePerMillionCacheWrite === null
+            mediaPricing ||
+            (pricePerMillionCacheRead === null &&
+              pricePerMillionCacheWrite === null)
           ) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }
@@ -568,6 +592,9 @@ export default function ModelsPage() {
                   <EyeOff className="h-4 w-4" />
                 ),
                 label: row.original.ignored ? "Show model" : "Hide model",
+                tooltip: row.original.ignored
+                  ? "Enable model selection and requests, subject to its permissions"
+                  : "Hide from selection and block new requests, including direct API calls",
                 onClick: () =>
                   updateModel.mutate({
                     id: row.original.id,
@@ -583,11 +610,22 @@ export default function ModelsPage() {
                 onClick: () => openEditDialog(row.original),
               },
             ]}
+            dropdownActions={[
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete",
+                variant: "destructive",
+                disabled: !baseCanUpdate,
+                disabledTooltip:
+                  "Requires organization-wide model management permission",
+                onClick: () => setDeletingModel(row.original),
+              },
+            ]}
           />
         ),
       },
     ],
-    [updateModel, openEditDialog, canUpdateModel],
+    [updateModel, openEditDialog, canUpdateModel, baseCanUpdate],
   );
 
   if (isModelsLoadError) {
@@ -841,6 +879,22 @@ export default function ModelsPage() {
         onOpenChange={setIsCreateApiKeyDialogOpen}
         title="Add API Key"
         description="Add a new LLM provider API key to load its available models."
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletingModel}
+        onOpenChange={(open) => {
+          if (!open && !deleteModel.isPending) setDeletingModel(null);
+        }}
+        title="Delete model"
+        description={`Remove ${deletingModel?.modelId ?? "this entry"} from Models for everyone? Only unconfigured entries observed in requests can be removed. Recorded requests and spend will remain. Another request can add the entry again.`}
+        isPending={deleteModel.isPending}
+        onConfirm={() => {
+          if (deletingModel)
+            deleteModel.mutate(deletingModel.id, {
+              onSuccess: () => setDeletingModel(null),
+            });
+        }}
       />
 
       {editingModel && (

@@ -2,6 +2,7 @@ import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { type SupportedProvider, TimeInMs } from "@archestra/shared";
+import { normalizeModelPrice } from "@archestra/shared/model-price";
 import { LRUCacheManager } from "@/cache-manager";
 import { withDbTransaction } from "@/database";
 import { isModelHistoryIndexReady } from "@/database/index-maintenance";
@@ -498,7 +499,7 @@ function pricingFor(params: {
   );
   // Long-context prices are the model's own, the same for every key, so they
   // apply as the proxy applies them; resolved just past the threshold.
-  const threshold = model.longContextThreshold;
+  const threshold = ModelModel.getLongContextThreshold(priced);
   const longContext =
     threshold === null
       ? null
@@ -544,7 +545,7 @@ function hasCustomPrices(model: Model, prices: CostBackfillPrices): boolean {
       const actual = stored[key];
       return expected === null || actual === null
         ? expected === actual
-        : Number(expected) === Number(actual);
+        : expected === normalizeModelPrice(actual);
     },
   );
 }
@@ -558,18 +559,9 @@ function customPricesOf(model: Model): CostBackfillPrices {
   };
 }
 
-/**
- * The price as `numeric(10,2)` will store it, so the preview prices what Save
- * stores. Decimal half-up on the digits themselves: binary `toFixed` rounds
- * "1.005" down where Postgres rounds it up.
- */
+/** Normalize unsaved prices with the same decimal contract as model updates. */
 function toStoredPrice(price: string | null): string | null {
-  if (price === null) return null;
-  const [whole, fraction = ""] = price.split(".");
-  const roundUp = fraction.length > 2 && fraction[2] >= "5" ? 1n : 0n;
-  const cents = BigInt(whole + fraction.padEnd(2, "0").slice(0, 2)) + roundUp;
-  const digits = cents.toString().padStart(3, "0");
-  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
+  return price === null ? null : normalizeModelPrice(price);
 }
 
 /**

@@ -14,10 +14,17 @@
  *   ARCHESTRA_HASHICORP_VAULT_TOKEN=s.xxx \
  *   node dist/standalone-scripts/vault-env-injector.ee.mjs
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { assertPortsBound } from "@/models/ports";
 import { VaultClient } from "../secrets-manager/vault-client.ee";
 import { getVaultConfigFromEnv } from "../secrets-manager/vault-config";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 interface SecretSpec {
   envVar: string;

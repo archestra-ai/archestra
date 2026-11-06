@@ -177,6 +177,60 @@ describe("recomputing past costs", () => {
     });
   });
 
+  test("leaves media requests at the cost their media tariff recorded", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const model = await ModelModel.create({
+      externalId: "openai/gpt-image-backfill",
+      provider: "openai",
+      modelId: "gpt-image-backfill",
+      inputModalities: ["text", "image"],
+      outputModalities: ["image"],
+      customPricePerMillionInput: "3",
+      customPricePerMillionOutput: "15",
+    });
+    const row = (overrides: Parameters<typeof makeInteraction>[1] = {}) =>
+      makeInteraction(agent.id, {
+        type: "openai:chatCompletions",
+        model: model.modelId,
+        createdAt: new Date(Date.now() - DAY_MS),
+        cost: "9.0000000000",
+        inputTokens: 1034,
+        outputTokens: 272,
+        ...overrides,
+      });
+    const chat = await row();
+    const images = await row({ type: "openai:images" });
+    // Gemini records an image generation under its chat type; the media
+    // marker on the response is what sets it apart.
+    const marked = await row({
+      response: {
+        __mediaUsage: { tokensAvailable: true, costAvailable: true },
+      } as unknown as NonNullable<
+        Parameters<typeof makeInteraction>[1]
+      >["response"],
+    });
+
+    const started = await modelCostBackfillService.start({
+      model,
+      since: new Date(Date.now() - 2 * DAY_MS),
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(started.rowsEstimated).toBe(1);
+    await modelCostBackfillService.runNext();
+
+    expect((await costsOf(chat.id)).cost).not.toBe("9.0000000000");
+    expect((await costsOf(images.id)).cost).toBe("9.0000000000");
+    expect((await costsOf(marked.id)).cost).toBe("9.0000000000");
+  });
+
   test("re-prices settled requests from their receipts and corrects the budgets still holding their charge", async ({
     makeAgent,
     makeOrganization,
@@ -662,6 +716,97 @@ describe("recomputing past costs", () => {
     ).toBeCloseTo(total, 8);
   });
 
+  test("recomputes published Copilot tiers consistently with receipts and budgets after custom prices are cleared", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    let model = await ModelModel.create({
+      externalId: "github-copilot/claude-haiku-5.5",
+      provider: "github-copilot",
+      modelId: "claude-haiku-5.5",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const budget = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    const usage = {
+      inputTokens: 99_401,
+      outputTokens: 4,
+      cacheReadTokens: 500,
+      cacheWriteTokens: 100,
+    };
+    const quote = () =>
+      priceBillingUsage({
+        model: model.modelId,
+        provider: "github-copilot",
+        usage: { ...usage },
+        mode: "enforce",
+      });
+    const billingUsage = await quote();
+    expect(billingUsage.cost).toBe("0.0497980000");
+    const row = await InteractionModel.create({
+      profileId: agent.id,
+      type: "github-copilot:chatCompletions",
+      model: model.modelId,
+      ...usage,
+      cost: billingUsage.cost,
+      billingMode: "metered",
+      billingUsage,
+      billingAttribution: {
+        organizationId: org.id,
+        environmentId: agent.environmentId,
+        entities: [{ entityType: "organization", entityId: org.id }],
+      },
+      request: { model: model.modelId, messages: [] },
+      response: {
+        id: "chatcmpl-published-tier",
+        object: "chat.completion",
+        created: 1,
+        model: model.modelId,
+        choices: [],
+      },
+    });
+    for (const customInput of [null, "2", null]) {
+      model = (await ModelModel.update(model.id, {
+        customPricePerMillionInput: customInput,
+        customPricePerMillionOutput: customInput,
+      })) as Model;
+      const expected = await quote();
+      const preview = await modelCostBackfillService.getPreview({
+        model,
+        timeZone: "UTC",
+        since: new Date(0),
+      });
+      expect(preview.window?.recomputedCost).toBeCloseTo(
+        Number(expected.cost),
+        10,
+      );
+      await modelCostBackfillService.start({
+        model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      });
+      await modelCostBackfillService.runNext();
+      expect((await costsOf(row.id)).cost).toBe(expected.cost);
+      const [receipt] = await InteractionBillingModel.findMany([row.id]);
+      expect(receipt.usage.cost).toBe(expected.cost);
+      const spend = (await LimitModel.getSpendUsage([budget.id])).get(
+        budget.id,
+      );
+      expect(spend?.modelUsage[0].cost).toBeCloseTo(Number(expected.cost), 10);
+    }
+  });
+
   test("a run out of time resumes from its cursor on the next run", async ({
     makeAgent,
     makeInteraction,
@@ -869,6 +1014,33 @@ describe("recomputing past costs", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  test("rejects a stale eighth-decimal price even when both prices map to the same Number", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const model = await makeAnthropicModel({
+      input: "99999999.98999999",
+      output: "0",
+    });
+    await expect(
+      modelCostBackfillService.start({
+        model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+        expectedPrices: {
+          input: "99999999.99000000",
+          output: "0",
+          cacheRead: null,
+          cacheWrite: null,
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await modelCostBackfillService.getLatest(model.id)).toBeNull();
+  });
+
   test("nothing starts when the prices changed after the caller saved them", async ({
     makeOrganization,
     makeUser,
@@ -981,11 +1153,11 @@ describe("previewing a recompute", () => {
       },
     });
 
-    // Priced as numeric(10,2) will store it: "1.005" saves as 1.01.
+    // Preview uses the same eight-decimal half-up price as persistence.
     const rounded = await modelCostBackfillService.getPreview({
       model,
       prices: {
-        input: "1.005",
+        input: "1.000000005",
         output: "0",
         cacheRead: null,
         cacheWrite: null,
@@ -993,7 +1165,9 @@ describe("previewing a recompute", () => {
       timeZone: "UTC",
       since: null,
     });
-    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([1.01, 2.02]);
+    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([
+      1.00000001, 2.00000002,
+    ]);
   });
 
   test("says why a model's past costs cannot be recomputed", async ({

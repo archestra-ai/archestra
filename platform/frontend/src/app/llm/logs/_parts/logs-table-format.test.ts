@@ -8,6 +8,7 @@ import {
   identiconHue,
   initialsOf,
   isFreeTierModel,
+  passThroughProvider,
   sessionTitleOf,
   shortModelName,
 } from "./logs-table-format";
@@ -97,6 +98,23 @@ describe("describeModelOrigin", () => {
     ).toEqual({ kind: "unknown", name: "Meta" });
   });
 
+  it("credits a first-party provider with an id no vendor pattern knows", () => {
+    // OpenAI serves only its own models, so an unfamiliar id on its endpoint
+    // (a moderation or speech model) is still OpenAI's.
+    expect(
+      describeModelOrigin({
+        model: "omni-moderation-latest",
+        interactionType: "openai:passthrough",
+      }),
+    ).toEqual({ kind: "maker", provider: "openai", name: "OpenAI" });
+    expect(
+      describeModelOrigin({
+        model: "omni-moderation-latest",
+        interactionType: null,
+      }),
+    ).toEqual({ kind: "unknown", name: "Self-hosted" });
+  });
+
   it.each([
     ["qwen/qwen3-coder", "Qwen"],
     ["acme-labs/widget-1", "Acme"],
@@ -106,6 +124,15 @@ describe("describeModelOrigin", () => {
       kind: "unknown",
       name,
     });
+  });
+});
+
+describe("passThroughProvider", () => {
+  it("names the provider of a pass-through call, which may name no model", () => {
+    expect(passThroughProvider("openai:passthrough")).toBe("openai");
+    expect(passThroughProvider("anthropic:passthrough")).toBe("anthropic");
+    expect(passThroughProvider("openai:chatCompletions")).toBeNull();
+    expect(passThroughProvider(null)).toBeNull();
   });
 });
 

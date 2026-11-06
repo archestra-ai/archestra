@@ -70,3 +70,34 @@ test("stdout, retained context and exported OTEL records share credential redact
     await provider.shutdown();
   }
 });
+
+test("delayed observer export preserves the record's originating span rather than the current context", async () => {
+  const exporter = new InMemoryLogRecordExporter();
+  const provider = new LoggerProvider({
+    processors: [new SimpleLogRecordProcessor({ exporter })],
+  });
+  try {
+    const stream = createLogObserverStream({
+      logger: provider.getLogger("test"),
+      retain: () => {},
+    });
+    stream.write(
+      JSON.stringify({
+        level: 30,
+        msg: "completed",
+        trace_id: "11111111111111111111111111111111",
+        span_id: "2222222222222222",
+        trace_flags: "01",
+        session_id: "session-a",
+      }),
+    );
+    await provider.forceFlush();
+    expect(exporter.getFinishedLogRecords()[0].spanContext).toMatchObject({
+      traceId: "11111111111111111111111111111111",
+      spanId: "2222222222222222",
+      traceFlags: 1,
+    });
+  } finally {
+    await provider.shutdown();
+  }
+});

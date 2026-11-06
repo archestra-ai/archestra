@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { type ClientMark, KIMI_MARK, PI_MARK } from "../client-mark";
+import {
+  CHATGPT_MARK,
+  type ClientMark,
+  COPILOT_CLI_MARK,
+  KIMI_MARK,
+  PI_MARK,
+} from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
 import {
   OPENCODE_FAMILY_CLIENTS,
@@ -35,6 +41,9 @@ export const CLAUDE_CLIENT_LABEL = "Claude Code";
 /** Human-readable label for the Codex client id in the UI. */
 export const CODEX_CLIENT_LABEL = "Codex";
 
+/** Human-readable label for the ChatGPT client id in the UI. */
+export const CHATGPT_CLIENT_LABEL = "ChatGPT";
+
 /** Human-readable label for the Copilot CLI client id in the UI. */
 export const COPILOT_CLI_CLIENT_LABEL = "Copilot CLI";
 
@@ -67,6 +76,15 @@ export const CLAUDE_DESKTOP_CLIENT_ID = "anthropic_claude_desktop";
  * `originator` (see {@link isCodexOriginator}).
  */
 export const CODEX_CLIENT_ID = "openai_codex";
+
+/**
+ * `external_agent_id` value for the ChatGPT desktop app, and its Connect tile
+ * id. The app's Work and Codex tabs run Codex's app server and read Codex's
+ * config.toml, so their requests carry the Codex setup's
+ * `X-Archestra-Agent-Id`. The proxy records this id instead when the request's
+ * originator is the desktop app's (see {@link isChatGptOriginator}).
+ */
+export const CHATGPT_CLIENT_ID = "chatgpt";
 
 /** Native app-server identity used by the installed connection verifier. */
 export const ARCHESTRA_CODEX_CONNECTION_ORIGINATOR =
@@ -141,6 +159,41 @@ export function isCodexOriginator(
     CODEX_FIRST_PARTY_ORIGINATORS.has(value) ||
     value === ARCHESTRA_CODEX_CONNECTION_ORIGINATOR ||
     value.startsWith("codex ")
+  );
+}
+
+/**
+ * Whether an `originator` value names the ChatGPT desktop app. Its app server
+ * names the process `Codex Desktop`, which the Codex tab sends, and a Work
+ * thread names itself `codex_work_desktop`. The other `codex_work_*` values
+ * and `chatgpt_cca` are ChatGPT's hosted surfaces on the same runtime.
+ */
+export function isChatGptOriginator(
+  originator: string | null | undefined,
+): boolean {
+  if (!originator) {
+    return false;
+  }
+  const value = originator.trim().toLowerCase();
+  return (
+    value === "codex desktop" ||
+    value.startsWith("codex_work_") ||
+    value === "chatgpt_cca"
+  );
+}
+
+/**
+ * Whether a User-Agent names the ChatGPT desktop app. The app server puts its
+ * process originator first (`Codex Desktop/0.163.0 (…)`), also on Work
+ * threads and on a CLI thread the app resumes, whose originator stays the
+ * thread's own.
+ */
+export function isChatGptUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return (
+    !!userAgent &&
+    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "codex desktop"
   );
 }
 
@@ -304,6 +357,13 @@ export function isCodexClientAgentId(
   return CODEX_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
 }
 
+/** Whether an `external_agent_id` value denotes the ChatGPT desktop app. */
+export function isChatGptClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  return externalAgentId?.trim().toLowerCase() === CHATGPT_CLIENT_ID;
+}
+
 /**
  * `external_agent_id` values for Copilot CLI clients. Only the one explicit
  * id exists today (set by the connect scripts; there is no auto-discovery
@@ -385,6 +445,7 @@ export function isKiloClientAgentId(
  */
 export const CLAUDE_CLIENT_FILTER = "claude";
 export const CODEX_CLIENT_FILTER = "codex";
+export const CHATGPT_CLIENT_FILTER = "chatgpt";
 export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
 export const CURSOR_CLIENT_FILTER = "cursor";
 export const OPENCODE_CLIENT_FILTER = "opencode";
@@ -395,6 +456,7 @@ export const ClientFilterSchema = z.enum([
   "claude-code",
   "claude-desktop",
   CODEX_CLIENT_FILTER,
+  CHATGPT_CLIENT_FILTER,
   COPILOT_CLI_CLIENT_FILTER,
   CURSOR_CLIENT_FILTER,
   OPENCODE_CLIENT_FILTER,
@@ -471,6 +533,14 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     agentIds: CODEX_CLIENT_AGENT_IDS,
     isClientAgentId: isCodexClientAgentId,
   },
+  {
+    filter: CHATGPT_CLIENT_FILTER,
+    label: CHATGPT_CLIENT_LABEL,
+    provider: "openai",
+    mark: CHATGPT_MARK,
+    agentIds: [CHATGPT_CLIENT_ID],
+    isClientAgentId: isChatGptClientAgentId,
+  },
   // OpenCode and Kilo Code route to many providers; their own mark takes
   // precedence. The filter is also the Connect tile id, so proxy traffic and
   // sign-ins merge into one connected agent.
@@ -503,7 +573,10 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
   {
     filter: COPILOT_CLI_CLIENT_FILTER,
     label: COPILOT_CLI_CLIENT_LABEL,
+    // The client's own mark, as on its Connect tile: the GitHub Copilot
+    // provider logo would read as the provider, not the CLI.
     provider: "github-copilot",
+    mark: COPILOT_CLI_MARK,
     agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
     isClientAgentId: isCopilotCliClientAgentId,
   },

@@ -1,0 +1,71 @@
+diff --git a/dist/src/SocketModeClient.js b/dist/src/SocketModeClient.js
+index 88ce57611f33f2a5593bf3b26652d757df6507f1..64199e5556c01be9c7ad949a497bec15931cb72d 100644
+--- a/dist/src/SocketModeClient.js
++++ b/dist/src/SocketModeClient.js
+@@ -113,7 +113,12 @@ class SocketModeClient extends eventemitter3_1.EventEmitter {
+         this.on('close', () => {
+             // Underlying WebSocket connection was closed, possibly reconnect.
+             if (!this.shuttingDown && this.autoReconnectEnabled) {
+-                this.delayReconnectAttempt(this.start);
++                this.delayReconnectAttempt(this.start).catch((error) => {
++                    // This event owns reconnects; callers own explicit start failures.
++                    if (!this.shuttingDown) {
++                        this.emit('error', error);
++                    }
++                });
+             }
+             else {
+                 // If reconnect is disabled or user explicitly called `disconnect()`, emit a disconnected state.
+@@ -134,9 +139,14 @@ class SocketModeClient extends eventemitter3_1.EventEmitter {
+             // python equiv: SocketModeClient.connect
+             this.shuttingDown = false;
+             this.logger.debug('Starting Socket Mode session ...');
++            const url = yield this.retrieveWSSURL();
++            // A response arriving after disconnect must not reopen the socket.
++            if (this.shuttingDown) {
++                throw new Error('Socket Mode client is shutting down');
++            }
+             // create a socket connection using SlackWebSocket
+             this.websocket = new SlackWebSocket_1.SlackWebSocket({
+-                url: yield this.retrieveWSSURL(),
++                url,
+                 // web socket events relevant to this client will be emitted into the instance of this class
+                 // see bottom of constructor for where we bind to these events
+                 client: this,
+@@ -199,17 +209,33 @@ class SocketModeClient extends eventemitter3_1.EventEmitter {
+         this.numOfConsecutiveReconnectionFailures += 1;
+         const msBeforeRetry = this.clientPingTimeoutMS * this.numOfConsecutiveReconnectionFailures;
+         this.logger.debug(`Before trying to reconnect, this client will wait for ${msBeforeRetry} milliseconds`);
+-        return new Promise((res, _rej) => {
+-            setTimeout(() => {
++        return new Promise((res, rej) => {
++            const cancel = () => {
++                clearTimeout(timer);
++                this.removeListener(State.Disconnecting, cancel);
++                rej(new Error('Socket Mode client is shutting down'));
++            };
++            const timer = setTimeout(() => {
++                this.removeListener(State.Disconnecting, cancel);
+                 if (this.shuttingDown) {
+                     this.logger.debug('Client shutting down, will not attempt reconnect.');
++                    cancel();
+                 }
+                 else {
+                     this.logger.debug('Continuing with reconnect...');
+                     this.emit(State.Reconnecting);
+-                    cb.apply(this).then(res);
++                    if (this.shuttingDown) {
++                        cancel();
++                    }
++                    else {
++                        cb.apply(this).then(res, rej);
++                    }
+                 }
+             }, msBeforeRetry);
++            this.once(State.Disconnecting, cancel);
++            if (this.shuttingDown) {
++                cancel();
++            }
+         });
+     }
+     /**

@@ -3410,6 +3410,37 @@ describe("knowledge base routes", () => {
       expect(listResponse.json().data).toHaveLength(1);
       expect(listResponse.json().data[0].id).toBe(kb.id);
     });
+
+    test("rejects assigning a connector to a knowledge base when the caller lacks manage-permissions on the connector", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        createdBy: user.id,
+        name: "Target KB",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Read-only Connector",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        accessGrants({ users: [user.id], preset: "use" }),
+      );
+      await MemberModel.updateRole(user.id, organizationId, "editor");
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/knowledge-bases`,
+        payload: { knowledgeBaseIds: [kb.id] },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
   });
 
   describe("DELETE /api/connectors/:id/knowledge-bases/:kbId", () => {

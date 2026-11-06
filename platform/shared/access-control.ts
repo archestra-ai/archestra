@@ -28,12 +28,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete"],
+  agent: ["read", "create", "delete", "configure-runtime"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  sre: ["read"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -94,7 +93,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   guardrailsPolicy: ["read", "update"],
-  sre: [],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -151,7 +149,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Members do not see the Guardrails pages or read the policy. Enforcement,
   // yells, and remedies do not depend on this permission.
   guardrailsPolicy: [],
-  sre: [],
 
   // LLM
   llmProxy: ["read"],
@@ -253,8 +250,7 @@ export const adminPermissions: Record<Resource, Action[]> = {
 
 /**
  * Platform Admin: runs the deployment — full user, role, and settings
- * management — while org-wide log visibility, impersonation, and the SRE
- * agent (which reads pod specs that can carry credentials) stay withheld.
+ * management — while org-wide log visibility and impersonation stay withheld.
  * They keep log:read / auditLog:read, so their OWN activity stays visible to
  * them. Combined with the no-escalation rule (a role can only be granted by
  * someone holding every permission it carries), holders cannot hand
@@ -264,7 +260,6 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   log: ["read"],
   auditLog: ["read"],
-  sre: [],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
 };
 
@@ -339,6 +334,8 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
+  "agent:configure-runtime":
+    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",
@@ -436,8 +433,6 @@ export const permissionDescriptions: Record<string, string> = {
     "View every audit event in your organization (also requires Read)",
   "log:admin":
     "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
-  "sre:read":
-    "Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -483,6 +478,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
+  [RouteId.OpenAiImagesWithDefaultAgent]: {},
+  [RouteId.OpenAiImagesWithAgent]: {},
+  [RouteId.OpenAiImageEditsWithDefaultAgent]: {},
+  [RouteId.OpenAiImageEditsWithAgent]: {},
+  [RouteId.ModelRouterImagesWithDefaultAgent]: {},
+  [RouteId.ModelRouterImagesWithAgent]: {},
+  [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},
+  [RouteId.ModelRouterImageEditsWithAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithAgent]: {},
   [RouteId.AzureImageEditsWithDefaultAgent]: {},
   [RouteId.AzureImageEditsWithAgent]: {},
   [RouteId.AzureCreateFile]: {},
@@ -525,6 +534,14 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
+  [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
@@ -571,6 +588,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
   [RouteId.DeleteAgentRun]: {},
+  // Like the single-run routes: each run is checked against its owner.
+  [RouteId.BulkDeleteAgentRuns]: {},
+  [RouteId.BulkCancelAgentRuns]: {},
+  [RouteId.BulkDeleteAgentWorkspaces]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -745,6 +766,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteraction]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionAutoRouting]: {
+    log: ["read"],
+  },
   [RouteId.GetUniqueExternalAgentIds]: {
     log: ["read"],
   },
@@ -757,6 +781,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
+  [RouteId.GetLlmProxyLogs]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSummaries]: { log: ["read"] },
+  [RouteId.GetLlmProxyLog]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogAutoRouting]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogExternalAgentIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},
@@ -1182,6 +1214,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
+  // Deletion removes global catalog metadata, not just a scoped assignment.
+  [RouteId.DeleteModel]: { llmModel: ["update"] },
   // Cost backfill: scoped llmModel:update checked in the handler
   [RouteId.PreviewModelCostBackfill]: {},
   [RouteId.StartModelCostBackfill]: {},
@@ -1420,9 +1454,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  // Handlers require llmCost:read, or scope a team admin to the teams they
+  // administer (see services/cost-access.ts).
+  [RouteId.GetTeamStatistics]: {},
+  [RouteId.GetModelUsage]: { llmCost: ["read"] },
+  [RouteId.GetMyModelUsage]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
   [RouteId.GetAgentStatistics]: {
     llmCost: ["read"],
@@ -1459,9 +1495,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
-  [RouteId.GetCostStatistics]: {
-    llmCost: ["read"],
-  },
+  // Same team admin scoping as GetTeamStatistics.
+  [RouteId.GetCostStatistics]: {},
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1469,6 +1504,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // require member:read before returning anyone else's usage, and app/skill
   // usage narrow to the apps and skills the caller can see.
   [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  // Same organization-wide totals as GetTeamStatistics and
+  // GetProxyCostStatistics, cut finer. Like GetProxyCostStatistics, a
+  // credential breakdown narrows to the caller's own usage without member:read,
+  // since a virtual key can be one person's own (see the handler).
+  [RouteId.GetLlmUsage]: {
     llmCost: ["read"],
   },
   [RouteId.GetAppUsage]: {
@@ -2164,6 +2206,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
+  "/settings/roles/new": { ac: ["create"] },
+  "/settings/roles/[id]": { ac: ["read"] },
+  "/settings/roles/[id]/edit": { ac: ["update"] },
   // Type-wide grants are an access decision, not a role definition, so the
   // page answers to the same permission that opens the roles screen.
   "/settings/identity-providers": { identityProvider: ["read"] },

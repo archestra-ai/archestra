@@ -558,6 +558,47 @@ class LlmProviderApiKeyModel {
     provider?: SupportedProvider,
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
+    const { keys, credentialKinds } =
+      await LlmProviderApiKeyModel.findUsableKeys({
+        organizationId,
+        userId,
+        provider,
+      });
+    const labelsByKey = await LlmProviderApiKeyLabelModel.getLabelsForMany(
+      keys.map((key) => key.id),
+    );
+
+    return CreatedByModel.attach(
+      await Promise.all(
+        keys.map(async (key) => ({
+          ...toApiKeyWithScopeInfo(
+            key,
+            options?.includeSubscriptionInfo === true
+              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
+              : null,
+          ),
+          githubOrganization: await githubOrganizationOf({
+            ...key,
+            credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
+          }),
+          labels: labelsByKey.get(key.id) ?? [],
+        })),
+      ),
+      (key) => key.createdBy,
+    );
+  }
+
+  /**
+   * The keys `userId` may use, with their display scope, as listed by
+   * `getAvailableKeysForUser` but without its labels, creators and GitHub App
+   * organizations, which read secrets: for inference-time key selection.
+   */
+  static async findUsableKeys(params: {
+    organizationId: string;
+    userId: string;
+    provider?: SupportedProvider;
+  }) {
+    const { organizationId, userId, provider } = params;
     // Build conditions
     const conditions = [
       eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
@@ -646,35 +687,18 @@ class LlmProviderApiKeyModel {
         userId,
       }),
     );
-    const [labelsByKey, displayScopes] = await Promise.all([
-      LlmProviderApiKeyLabelModel.getLabelsForMany(
-        accessibleKeys.map((key) => key.id),
-      ),
-      LlmProviderApiKeyModel.findDisplayScopes({
-        organizationId,
-        keys: accessibleKeys,
-      }),
-    ]);
-
-    return CreatedByModel.attach(
-      await Promise.all(
-        accessibleKeys.map(async (key) => ({
-          ...toApiKeyWithScopeInfo(
-            // `scope` from the owner column and grants, not the retired one.
-            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
-            options?.includeSubscriptionInfo === true
-              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
-              : null,
-          ),
-          githubOrganization: await githubOrganizationOf({
-            ...key,
-            credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-          }),
-          labels: labelsByKey.get(key.id) ?? [],
-        })),
-      ),
-      (key) => key.createdBy,
-    );
+    const displayScopes = await LlmProviderApiKeyModel.findDisplayScopes({
+      organizationId,
+      keys: accessibleKeys,
+    });
+    return {
+      // `scope` from the owner column and grants, not the retired one.
+      keys: accessibleKeys.map((key) => ({
+        ...key,
+        scope: displayScopes.get(key.id) ?? key.scope,
+      })),
+      credentialKinds,
+    };
   }
   // SPDX-SnippetEnd
 

@@ -42,13 +42,18 @@ describe("A2A knowledge search for an unbound application", () => {
       }) => {
         const org = await makeOrganization();
         const author = await makeUser();
+        const outsider = await makeUser();
         await makeMember(author.id, org.id, { role: "admin" });
+        await makeMember(outsider.id, org.id, { role: "member" });
         const base = await makeKnowledgeBase(org.id, { access: "org" });
+        const privateBase = await makeKnowledgeBase(org.id, {
+          access: "personal",
+        });
         const connector =
           source === "connector"
             ? await makeKnowledgeBaseConnector(base.id, org.id, {
                 name: "Published handbook",
-                access: "org",
+                access: "personal",
                 syncPermissionsFromSource: true,
               })
             : null;
@@ -57,15 +62,9 @@ describe("A2A knowledge search for an unbound application", () => {
           resource: "knowledgeBase",
           scope: base.id,
         });
-        if (connector)
-          await publishKnowledgeSource({
-            organizationId: org.id,
-            resource: "knowledgeConnector",
-            scope: connector.id,
-          });
         const agent = await makeInternalAgent({
           organizationId: org.id,
-          knowledgeBaseIds: [base.id],
+          knowledgeBaseIds: [base.id, privateBase.id],
           accessAllTools: false,
           toolExposureMode: "full",
         });
@@ -81,26 +80,32 @@ describe("A2A knowledge search for an unbound application", () => {
           await indexKnowledgeDocument({
             organizationId: org.id,
             connectorId: connector.id,
-            content: "The author's private code is SECRET.",
+            content: "The author's upstream code is AUTHOR_UPSTREAM.",
             acl: [`user_email:${author.email}`],
           });
+          await indexKnowledgeDocument({
+            organizationId: org.id,
+            connectorId: connector.id,
+            content: "Another user's private code is SECRET.",
+            acl: [`user_email:${outsider.email}`],
+          });
         } else {
+          // A file in the published base is searchable even without per-file publication.
           await indexKnowledgeFile({
             organizationId: org.id,
             knowledgeBaseId: base.id,
             uploadedBy: author.id,
             content: "The public launch code is ORBIT.",
-            published: true,
+            published: false,
           });
           await indexKnowledgeFile({
             organizationId: org.id,
-            knowledgeBaseId: base.id,
+            knowledgeBaseId: privateBase.id,
             uploadedBy: author.id,
             content: "The author's private code is SECRET.",
             published: false,
           });
         }
-        // The OAuth client's author must never become the acting search user.
         let offeredKnowledge = false;
         let receivedKnowledge = "";
         const model = new MockLanguageModelV3({
@@ -212,6 +217,11 @@ describe("A2A knowledge search for an unbound application", () => {
           expect(response.statusCode).toBe(200);
           expect(offeredKnowledge, response.body).toBe(true);
           expect(receivedKnowledge, response.body).toContain("ORBIT");
+          if (source === "connector") {
+            expect(receivedKnowledge, response.body).toContain(
+              "AUTHOR_UPSTREAM",
+            );
+          }
           expect(receivedKnowledge).not.toContain("SECRET");
           expect(response.body).toContain("ORBIT");
         } finally {

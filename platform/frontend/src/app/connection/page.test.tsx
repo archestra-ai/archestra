@@ -124,16 +124,10 @@ vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   },
 }));
 vi.mock("@/lib/organization.query");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getSkills: vi.fn(async () => ({ data: null })),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: vi.fn(async () => ({ data: null })),
+}));
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({
     children,
@@ -155,11 +149,22 @@ vi.mock("./connect-command-panel", () => ({
   ConnectCommandPanel: (props: {
     variant?: string;
     exclude?: readonly string[];
+    onStarted?: () => void;
+    terminal?: boolean;
+    platform?: string;
   }) => (
     <div
       data-testid={props.variant === "download" ? "desktop-download" : "panel"}
       data-exclude={props.exclude?.join(",")}
-    />
+      data-terminal={props.terminal ? "true" : undefined}
+      data-platform={props.platform}
+    >
+      {props.onStarted && (
+        <button type="button" onClick={props.onStarted}>
+          Installer downloaded
+        </button>
+      )}
+    </div>
   ),
 }));
 vi.mock("./connection-flow", () => ({
@@ -335,7 +340,7 @@ describe("ConnectPage gateway footprint", () => {
     expect(await within(summary).findByText("2 tools")).toBeVisible();
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
     expect(within(summary).queryByText("3 tools")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Codex CLI$/ }));
     await requestToolCounts();
     expect(await screen.findByText("~1.1K tokens")).toBeVisible();
   });
@@ -465,10 +470,10 @@ describe("ConnectPage saved agent order", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
     const tileNames = names.filter((name) =>
-      ["n8n", "Codex", "Claude Code"].includes(name ?? ""),
+      ["n8n", "Codex CLI", "Claude Code"].includes(name ?? ""),
     );
-    expect(tileNames).toEqual(["n8n", "Codex", "Claude Code"]);
-    expect(screen.getByRole("button", { name: /Codex$/ })).toHaveAttribute(
+    expect(tileNames).toEqual(["n8n", "Codex CLI", "Claude Code"]);
+    expect(screen.getByRole("button", { name: /Codex CLI$/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -604,13 +609,16 @@ describe("ConnectPage guardrails chip", () => {
     Object.entries(NATIVE_SESSION_CLIENT_LABELS),
   )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
     setup(clientId, { active: false, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: new RegExp(`${label}$`) });
+    const clientLabel = clientId === "codex" ? "Codex CLI" : label;
+    const tile = screen.getByRole("button", {
+      name: new RegExp(`${clientLabel}$`),
+    });
     const badge = within(tile).getByRole("img", {
       name: "Supports LLM proxy guardrails",
     });
     expect(badge).toBeVisible();
     // Separate from the label text so the shield does not shift the agent name.
-    expect(within(tile).getByText(label)).not.toContainElement(badge);
+    expect(within(tile).getByText(clientLabel)).not.toContainElement(badge);
     await userEvent.hover(badge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Enforcement depends on your organization's settings.",
@@ -634,7 +642,7 @@ describe("ConnectPage guardrails chip", () => {
       ),
     );
     setup("codex", { active: true, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: "Codex" });
+    const tile = screen.getByRole("button", { name: "Codex CLI" });
     const lastConnected = await within(tile).findByRole("img", {
       name: "Last connected",
     });
@@ -643,7 +651,9 @@ describe("ConnectPage guardrails chip", () => {
     });
     const corner = guardrails.parentElement;
     expect(lastConnected.parentElement).toBe(corner);
-    expect(within(tile).getByText("Codex")).not.toContainElement(guardrails);
+    expect(within(tile).getByText("Codex CLI")).not.toContainElement(
+      guardrails,
+    );
     expect(
       within(corner as HTMLElement)
         .getAllByRole("img")
@@ -660,7 +670,7 @@ describe("ConnectPage guardrails chip", () => {
 
   it("keeps the selected client button name concise when it has a support hint", () => {
     setup("codex", { active: true, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: "Codex" });
+    const tile = screen.getByRole("button", { name: "Codex CLI" });
     expect(tile).toHaveAttribute("aria-pressed", "true");
     expect(tile).toHaveAccessibleDescription("Supports LLM proxy guardrails");
   });
@@ -1013,6 +1023,77 @@ describe("ConnectPage (no connect request)", () => {
       "data-exclude",
       "skills",
     );
+  });
+
+  it("offers ChatGPT one desktop command and keeps web plugin setup separate", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=chatgpt") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProfile).mockReturnValue({
+      data: { id: "gw-1", name: "Team gateway", slug: "team", tools: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    mockOrganization({ data: { connectionDefaultMcpGatewayId: "gw-1" } });
+    render(<ConnectionPage />);
+    const band = screen.getByRole("region", { name: "Connect" });
+    expect(band).toHaveTextContent("Run the command in your terminal");
+    expect(band).toHaveTextContent("--client chatgpt");
+    expect(band).not.toHaveTextContent("--exclude plugins");
+    expect(band).toHaveTextContent("Quit ChatGPT");
+    expect(
+      within(band).queryByRole("button", { name: "Download ChatGPT plugin" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    expect(
+      within(band).getByRole("heading", {
+        name: "Download the plugin for ChatGPT",
+      }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(band).getByRole("button", { name: "Download ChatGPT plugin" }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", {
+        name: "Use the Windows command",
+      }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(within(band).getByRole("button", { name: "Copy" })).toBeVisible();
+    await userEvent.click(
+      within(band).getByRole("button", { name: "Use the Windows command" }),
+    );
+    expect(band).toHaveTextContent("irm ");
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(
+      within(band).getByRole("button", {
+        name: "Use the macOS / Linux command",
+      }),
+    ).toBeVisible();
   });
 
   it("re-reads the connection settings when the tab comes back", () => {
@@ -1613,6 +1694,102 @@ describe("ConnectPage after copying the command", () => {
     expect(
       screen.getByRole("button", { name: "Show the starter prompt" }),
     ).toBeVisible();
+  });
+
+  it("lists Claude Desktop's steps after setup, and offers the starter prompt once its installer downloads", async () => {
+    show(["claude-desktop"]);
+    const band = screen.getByRole("region", { name: "Connect" });
+    expect(band).toHaveTextContent(
+      "Open Claude Desktop Settings → Extensions and install the downloaded .MCPB file.",
+    );
+    expect(band).toHaveTextContent(
+      "When it finishesIf Desktop doesn't restart after extension installation, quit it and open it again.Open Settings → Connectors in Desktop and connect the new team_gateway connector.",
+    );
+    expect(band).toHaveTextContent(
+      "In a new conversation, open + → Connectors and turn on team_gateway if it is off.",
+    );
+    expect(screen.queryByRole("region", { name: "Next steps" })).toBeNull();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Installer downloaded" }),
+    );
+    // No approval page reports back from Desktop, so nothing waits for one.
+    expect(status()).toBeNull();
+    const next = screen.getByRole("region", { name: "Next steps" });
+    expect(next).toHaveTextContent(
+      "Next, ask Claude Desktop what it can do now",
+    );
+    expect(next).toHaveTextContent(
+      "Once team_gateway is connected and turned on in Desktop, paste this into a new conversation.",
+    );
+    expect(within(next).getByText(welcome)).toBeVisible();
+    await userEvent.click(within(next).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Next steps" })).toBeNull();
+  });
+
+  it("switches Claude Desktop to terminal setup for third-party mode", async () => {
+    show(["claude-desktop"]);
+    // The band stacks each version of a spot in one place, so only the
+    // shown one counts: the others are hidden from people and screen readers.
+    const shown = (text: RegExp) =>
+      expect(screen.getByText(text).closest("[aria-hidden]")).toHaveAttribute(
+        "aria-hidden",
+        "false",
+      );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Desktop in third-party mode? Use terminal setup",
+      }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Run the command in your terminal" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Download the installer for Claude Desktop",
+      }),
+    ).toBeNull();
+    expect(screen.getByTestId("desktop-download")).toHaveAttribute(
+      "data-terminal",
+      "true",
+    );
+    shown(/^Run it in a terminal on the computer where you use Claude Desktop/);
+    // The terminal command follows the page's shared OS switch.
+    expect(screen.getByTestId("desktop-download")).toHaveAttribute(
+      "data-platform",
+      "macos",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use the Windows command" }),
+    );
+    expect(screen.getByTestId("desktop-download")).toHaveAttribute(
+      "data-platform",
+      "windows",
+    );
+    shown(/^When the terminal asks, choose Exit from the Claude icon/);
+    expect(
+      screen.getByRole("button", { name: "Use the macOS / Linux command" }),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Desktop in standard mode? Download the installer",
+      }),
+    );
+    expect(
+      screen.getByRole("heading", {
+        name: "Download the installer for Claude Desktop",
+      }),
+    ).toBeVisible();
+    // The installer runs where it is downloaded: no OS choice, and the steps
+    // are for this computer's OS again.
+    expect(screen.getByTestId("desktop-download")).not.toHaveAttribute(
+      "data-platform",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Use the macOS / Linux command" }),
+    ).toBeNull();
+    shown(
+      /^If Desktop doesn't restart after extension installation, quit it and open it again/,
+    );
   });
 
   it("starts waiting when the command text is copied by hand", () => {

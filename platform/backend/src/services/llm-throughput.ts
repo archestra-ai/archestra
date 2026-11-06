@@ -34,14 +34,18 @@ export class ThroughputError extends Error {
 export class LlmThroughput {
   private reservation: ThroughputReceipt | null = null;
   private admitted = false;
+  private attemptSpend: LlmThroughput | undefined;
 
   constructor(
     private readonly scope: {
       entities: Array<{ entityType: LimitEntityType; entityId: string }>;
       model: string;
+      modelAliases?: string[];
       provider?: SupportedProvider;
       subscription?: boolean;
       rules?: Limit[];
+      /** Pools meter each selected member separately from logical request/token quotas. */
+      attemptSpendRules?: Limit[];
     },
   ) {}
 
@@ -78,10 +82,35 @@ export class LlmThroughput {
     }
   }
 
+  async admitSpendForModel(
+    model: string,
+    subscription: boolean,
+    modelAliases?: string[],
+  ): Promise<void> {
+    if (!this.scope.attemptSpendRules) return;
+    // Failed attempts settle before the next member replaces this receipt.
+    // Spend admission reserves no request capacity; internal retries reuse it.
+    this.attemptSpend = undefined;
+    const attempt = new LlmThroughput({
+      ...this.scope,
+      model,
+      modelAliases,
+      subscription,
+      rules: this.scope.attemptSpendRules,
+      attemptSpendRules: undefined,
+    });
+    await attempt.admit();
+    this.attemptSpend = attempt;
+  }
+
   async settleSpend(
     cost: string | number | null | undefined,
     billingMode?: "metered" | "subscription",
   ): Promise<void> {
+    if (this.scope.attemptSpendRules) {
+      await this.attemptSpend?.settleSpend(cost, billingMode);
+      return;
+    }
     if (!this.reservation || cost == null) return;
     try {
       await LlmThroughputModel.reconcile({
@@ -98,6 +127,7 @@ export class LlmThroughput {
   }
 
   async cancelBeforeSend(): Promise<void> {
+    await this.attemptSpend?.cancelBeforeSend();
     if (!this.reservation) return;
     try {
       await LlmThroughputModel.reconcile({
@@ -119,14 +149,13 @@ export class LlmThroughput {
     // This provider exposes only locally synthesized token metrics.
     if (this.scope.provider === "microsoft-365-copilot") return;
     // Cache reads do not consume token allowance; cache creation is new work.
-    // Cache-write 1h is a subset, never an additional charge. Gemini reports
-    // thoughts separately from candidate output; OpenAI includes them already.
+    // Cache-write 1h is a subset, never an additional charge. Reasoning is a
+    // subset of output (adapters fold it in where the provider does not).
     const count = (item: UsageView) => {
       const values = [
         item.inputTokensEstimated ? 0 : item.inputTokens,
         item.outputTokensEstimated ? 0 : item.outputTokens,
         item.cacheWriteTokens ?? 0,
-        this.scope.provider === "gemini" ? (item.reasoningTokens ?? 0) : 0,
       ];
       if (values.some((value) => !Number.isSafeInteger(value) || value < 0))
         return Number.NaN;

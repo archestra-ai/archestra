@@ -40,6 +40,7 @@ import {
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
+import { isAgentRunGatewayToken } from "@/services/agent-runtime/runtime-contract";
 import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
 import {
   agentToolExclusionsService,
@@ -132,6 +133,7 @@ import { handleSkillDelegation } from "./skill-delegation";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import { toolEntries as taskToolEntries, tools as taskTools } from "./tasks";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
+import { reparseStringifiedObjectArgs } from "./tool-args-repair";
 import { toolParamsSkeleton } from "./tool-args-skeleton";
 import {
   toolEntries as toolAssignmentToolEntries,
@@ -319,6 +321,36 @@ export function getArchestraToolInputSchema(
     string,
     unknown
   >;
+}
+
+/**
+ * The schema a call's arguments are validated with: a built-in's, or the
+ * delegation schema of an agent or skill tool.
+ */
+export function getArchestraToolArgsSchema(
+  toolName: string,
+): ZodType | undefined {
+  if (toolName === SELF_FORK_TOOL_NAME) return selfForkToolArgsSchema;
+  if (isAgentTool(toolName) || isSkillTool(toolName))
+    return delegationToolArgsSchema;
+  return findToolEntry(toolName)?.toolEntry.schema;
+}
+
+function findToolEntry(
+  toolName: string,
+):
+  | { toolEntry: ArchestraRuntimeToolEntry; resolvedToolName: string }
+  | undefined {
+  const resolvedToolName =
+    getToolEntries()[toolName as ArchestraToolFullName] != null
+      ? toolName
+      : resolveArchestraToolName(toolName);
+  const toolEntry = resolvedToolName
+    ? getToolEntries()[resolvedToolName as ArchestraToolFullName]
+    : undefined;
+  return resolvedToolName && toolEntry
+    ? { toolEntry, resolvedToolName }
+    : undefined;
 }
 
 export async function executeArchestraTool(
@@ -611,6 +643,7 @@ async function resolveToolAssignment(params: {
   );
   if (
     openappaEnabled() &&
+    !isAgentRunGatewayToken(context.tokenAuth) &&
     isImplicitOpenAppaReadToolShortName(shortName) &&
     !isToolIdentityExcluded(
       {
@@ -625,6 +658,7 @@ async function resolveToolAssignment(params: {
     toolName,
     agentId: context.agentId,
     userId: context.userId,
+    oauthClientId: context.tokenAuth?.oauthClientId,
     organizationId: context.organizationId,
     exclusionSets,
   });
@@ -681,19 +715,14 @@ async function admitArchestraToolCall(params: {
   });
   if (assignmentDenied) return { error: assignmentDenied };
 
-  const resolvedToolName =
-    getToolEntries()[toolName as ArchestraToolFullName] != null
-      ? toolName
-      : resolveArchestraToolName(toolName);
-  const toolEntry = resolvedToolName
-    ? getToolEntries()[resolvedToolName as ArchestraToolFullName]
-    : undefined;
-  if (!resolvedToolName || !toolEntry) {
+  const found = findToolEntry(toolName);
+  if (!found) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
     };
   }
+  const { toolEntry, resolvedToolName } = found;
 
   const parsedArgs = validateToolArgs({
     schema: toolEntry.schema,
@@ -796,30 +825,6 @@ function validateToolArgs(params: {
       schema: describedSchema,
     }),
   };
-}
-
-function reparseStringifiedObjectArgs(
-  args: Record<string, unknown> | undefined,
-  error: ZodError,
-): Record<string, unknown> | null {
-  if (!args) return null;
-  let repaired: Record<string, unknown> | null = null;
-  for (const issue of error.issues) {
-    const key = issue.path[0];
-    if (typeof key !== "string") continue;
-    const value = (repaired ?? args)[key];
-    if (typeof value !== "string") continue;
-    const text = value.trim();
-    if (!text.startsWith("{") && !text.startsWith("[")) continue;
-    try {
-      const parsedValue: unknown = JSON.parse(text);
-      if (typeof parsedValue !== "object" || parsedValue === null) continue;
-      repaired = { ...(repaired ?? args), [key]: parsedValue };
-    } catch {
-      // Not JSON after all — leave the value (and the original error) as is.
-    }
-  }
-  return repaired;
 }
 
 async function claimRuntimeDispatch(

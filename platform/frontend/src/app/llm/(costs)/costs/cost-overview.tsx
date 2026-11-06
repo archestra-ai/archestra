@@ -2,6 +2,12 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { formatCompact, formatCost, formatInt } from "./cost-explorer.query";
 
@@ -85,13 +91,21 @@ function DeltaChip({ delta }: { delta: number | null }) {
   const up = delta >= 0;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
   return (
-    <span
-      title="Second half of the range vs the first half"
-      className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground"
-    >
-      <Icon className="size-3" />
-      {Math.abs(delta * 100).toFixed(0)}%
-    </span>
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          aria-label={`${Math.abs(delta * 100).toFixed(0)}% ${up ? "increase" : "decrease"}`}
+          className="inline-flex cursor-help items-center gap-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground"
+        >
+          <Icon aria-hidden="true" className="size-3" />
+          <span>{Math.abs(delta * 100).toFixed(0)}%</span>
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent>
+        {Math.abs(delta * 100).toFixed(0)}% {up ? "higher" : "lower"} in the
+        second half of the selected range than in the first half.
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

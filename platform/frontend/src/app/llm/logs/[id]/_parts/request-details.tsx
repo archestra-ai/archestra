@@ -7,6 +7,7 @@ import {
   describeModelOrigin,
   formatCompactNumber,
   formatRequestCost,
+  passThroughProvider,
   shortModelName,
   sourceLabel,
 } from "@/app/llm/logs/_parts/logs-table-format";
@@ -215,28 +216,44 @@ function RequestOverview({
   const modelOrigin = row.model
     ? describeModelOrigin({ model: row.model, interactionType: row.type })
     : null;
+  // A pass-through call such as a file listing names no model.
+  const passThrough = row.model ? null : passThroughProvider(row.type);
   const provider =
-    modelOrigin && modelOrigin.kind !== "unknown" ? modelOrigin.provider : null;
-  const vendor = !modelOrigin
-    ? "Unknown"
-    : modelOrigin.kind === "aggregator"
-      ? providerLabel(modelOrigin.provider)
-      : modelOrigin.name;
-  const modelName = row.model ? shortModelName(row.model) : "Unknown model";
+    modelOrigin && modelOrigin.kind !== "unknown"
+      ? modelOrigin.provider
+      : passThrough;
+  const vendor = passThrough
+    ? `${providerLabel(passThrough)} · pass-through`
+    : !modelOrigin
+      ? "Unknown"
+      : modelOrigin.kind === "aggregator"
+        ? providerLabel(modelOrigin.provider)
+        : modelOrigin.name;
+  const modelName = row.model
+    ? shortModelName(row.model)
+    : passThrough
+      ? "No model"
+      : "Unknown model";
   const gapBefore = previous ? span.start - previous.end : null;
   const prompt = kind === "main" ? requestPrompt(row) : null;
 
   // Tokens: cache counts are part of the input when they fit inside it
   // (OpenAI-style); otherwise they are reported beside it (Anthropic-style).
-  const input = row.inputTokens ?? 0;
-  const output = row.outputTokens ?? 0;
+  const input = row.inputTokens;
+  const output = row.outputTokens;
+  const usageUnknown = input === null || output === null;
+  const allUsageUnknown = input === null && output === null;
   const read = row.cacheReadTokens ?? 0;
   const write = row.cacheWriteTokens ?? 0;
-  const cacheInsideInput = read + write <= input;
-  const fresh = cacheInsideInput ? input - read - write : input;
-  const tokenTotal = cacheInsideInput
-    ? input + output
-    : input + read + write + output;
+  const cacheInsideInput = input !== null && read + write <= input;
+  const fresh =
+    input === null ? null : cacheInsideInput ? input - read - write : input;
+  const tokenTotal =
+    input === null || output === null
+      ? null
+      : cacheInsideInput
+        ? input + output
+        : input + read + write + output;
   const segments = [
     {
       key: "fresh",
@@ -258,8 +275,12 @@ function RequestOverview({
     },
     { key: "output", label: "Output", value: output, tone: TOKEN_TONES.output },
   ];
-  const cacheShare = input > 0 && cacheInsideInput ? read / input : 0;
+  const cacheShare =
+    input !== null && input > 0 && cacheInsideInput ? read / input : 0;
 
+  // A pass-through call or a model without a tariff records no cost at all,
+  // which is not the same as costing nothing.
+  const costRecorded = row.cost != null;
   const cost = Number(row.cost ?? 0);
   const baseline = Number(row.baselineCost ?? row.cost ?? 0);
   const onPlan = row.billingMode === "subscription";
@@ -374,59 +395,92 @@ function RequestOverview({
 
         <OverviewSection
           title="Tokens"
-          aside={<BigFigure value={tokenTotal.toLocaleString()} />}
+          aside={
+            <BigFigure
+              value={
+                tokenTotal === null ? "Unknown" : tokenTotal.toLocaleString()
+              }
+            />
+          }
         >
-          <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
-            {segments
-              .filter((segment) => segment.value > 0)
-              .map((segment) => (
-                <span
-                  key={segment.key}
-                  className={segment.tone}
-                  style={{
-                    width: `${(segment.value / Math.max(tokenTotal, 1)) * 100}%`,
-                  }}
-                />
-              ))}
-          </div>
-          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            {segments.map((segment) => (
-              <li
-                key={segment.key}
-                className={cn(
-                  "flex min-w-0 items-center gap-1.5",
-                  segment.value === 0 && "opacity-40",
-                )}
-                title={
-                  tokenTotal > 0
-                    ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
-                    : undefined
-                }
-              >
-                <span
-                  className={cn("size-2 shrink-0 rounded-[2px]", segment.tone)}
-                  aria-hidden="true"
-                />
-                <span className="truncate text-muted-foreground">
-                  {segment.label}
-                </span>
-                <span className="ml-auto tabular-nums">
-                  {formatCompactNumber(segment.value)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {cacheShare > 0 ? (
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              {Math.round(cacheShare * 100)}% of input from the prompt cache
+          {allUsageUnknown ? (
+            <p className="text-xs text-muted-foreground">
+              No token count was received for this request. This can happen when
+              a stream ends early or the provider does not include token counts.
             </p>
-          ) : null}
-          {row.inputTokensEstimated ? (
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              Input is estimated from the request: the provider reported no
-              usage.
-            </p>
-          ) : null}
+          ) : (
+            <>
+              {usageUnknown ? (
+                <p className="text-xs text-muted-foreground">
+                  Not all token counts were received for this request. This can
+                  happen when a stream ends early or the provider returns only
+                  some counts.
+                </p>
+              ) : null}
+              {tokenTotal !== null ? (
+                <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted">
+                  {segments
+                    .filter(
+                      (segment) => segment.value !== null && segment.value > 0,
+                    )
+                    .map((segment) => (
+                      <span
+                        key={segment.key}
+                        className={segment.tone}
+                        style={{
+                          width: `${((segment.value ?? 0) / Math.max(tokenTotal, 1)) * 100}%`,
+                        }}
+                      />
+                    ))}
+                </div>
+              ) : null}
+              <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                {segments.map((segment) => (
+                  <li
+                    key={segment.key}
+                    className={cn(
+                      "flex min-w-0 items-center gap-1.5",
+                      segment.value === 0 && "opacity-40",
+                    )}
+                    title={
+                      tokenTotal !== null &&
+                      tokenTotal > 0 &&
+                      segment.value !== null
+                        ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
+                        : undefined
+                    }
+                  >
+                    <span
+                      className={cn(
+                        "size-2 shrink-0 rounded-[2px]",
+                        segment.tone,
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate text-muted-foreground">
+                      {segment.label}
+                    </span>
+                    <span className="ml-auto tabular-nums">
+                      {segment.value === null
+                        ? "Unknown"
+                        : formatCompactNumber(segment.value)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {cacheShare > 0 ? (
+                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                  {Math.round(cacheShare * 100)}% of input from the prompt cache
+                </p>
+              ) : null}
+              {row.inputTokensEstimated ? (
+                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                  Input is estimated from the request: the provider reported no
+                  usage.
+                </p>
+              ) : null}
+            </>
+          )}
         </OverviewSection>
 
         <PoolAttempt row={row} />
@@ -440,13 +494,13 @@ function RequestOverview({
                 <TooltipTrigger asChild>
                   <span className="cursor-default">
                     <BigFigure
-                      value={formatRequestCost(billed)}
-                      muted={onPlan}
+                      value={costRecorded ? formatRequestCost(billed) : "—"}
+                      muted={onPlan || !costRecorded}
                     />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="tabular-nums">
-                  {formatCost(billed)}
+                  {costRecorded ? formatCost(billed) : "No cost recorded"}
                 </TooltipContent>
               </Tooltip>
             </span>
@@ -457,7 +511,11 @@ function RequestOverview({
               {onPlan ? "Subscription plan" : "Metered"}
             </OverviewCell>
             <OverviewCell label="List price">
-              <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
+              {costRecorded ? (
+                <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
+              ) : (
+                <span>Not recorded</span>
+              )}
             </OverviewCell>
             <OverviewCell label="Routing">
               {rerouted && row.baselineModel ? (

@@ -90,7 +90,16 @@ function callableContract(
     (holder.inputSchema as Record<string, unknown> | undefined)?.json;
   if (typeof input !== "object" || input === null || Array.isArray(input))
     return {};
-  const { name: _name, description: _description, ...definition } = holder;
+  const { name: _name, description: _description, ...fields } = holder;
+  // What the tool does, not how it is loaded: a server-side tool search
+  // (Copilot CLI) hands the model a loaded copy of a deferred declaration
+  // with `output_schema: null` added, and both copies are one declaration.
+  const definition = Object.fromEntries(
+    Object.entries(fields).filter(
+      ([key, value]) =>
+        key !== "defer_loading" && value !== null && value !== undefined,
+    ),
+  );
   try {
     // Unlike diagnostic canonicalization, this never truncates deep schemas.
     // An unrepresentable contract provides no evidence for alias recovery.

@@ -32,6 +32,27 @@ docker run …
 
 Always tag a fence with its language (`bash`, `powershell`, `yaml`, …); the block shows it as a label and highlights by it.
 
+## Content Tabs
+
+When the same task differs by provider, such as the database setup on AWS, Google Cloud, and Azure, put each variant in a tab instead of stacking sections. A `:::tabs` block holds any Markdown; each `@tab <label>` line starts a tab, and a line with only `:::` ends the block:
+
+````markdown
+:::tabs
+@tab AWS
+Amazon RDS for PostgreSQL fits every size.
+
+| Size | Instance |
+| --- | --- |
+| Small | `db.m7g.large` |
+@tab Google Cloud
+Cloud SQL for PostgreSQL fits every size.
+:::
+````
+
+- Use the same labels for the same choice on every page: a reader's pick applies to every tab group with that label.
+- Headings inside a tab stay out of the table of contents. Use a bold label or a list instead.
+- Search, `llms.txt`, and the docs MCP server show each tab as its bold label followed by its content.
+
 ## Environment Variables
 
 Every RBAC permission a page mentions links to its row on the Permissions page: [`agent:read`](/docs/reference/permissions#agent:read). The generator anchors each row by the permission name. CI enforces this with `.github/scripts/check-docs-permission-links.py`; run it with `--fix` to add the links.

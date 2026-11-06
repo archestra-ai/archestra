@@ -33,6 +33,8 @@ const XAI_SUBSCRIPTION_CREDENTIAL_MARKER =
 export interface XaiSubscriptionCredential {
   /** Long-lived xAI OAuth refresh token (may rotate on redemption). */
   refreshToken: string;
+  accessToken?: string;
+  accessTokenExpiresAtMs?: number;
   /** `sub` from the xAI id_token, sent as the required `x-userid` header. */
   userId: string;
   /** Optional account email sent as `x-email`, matching xAI's first-party client. */
@@ -82,6 +84,13 @@ export function decodeXaiSubscriptionCredential(
     return {
       refreshToken: parsed.refreshToken,
       userId: parsed.userId,
+      ...(typeof parsed.accessToken === "string" && parsed.accessToken
+        ? { accessToken: parsed.accessToken }
+        : {}),
+      ...(typeof parsed.accessTokenExpiresAtMs === "number" &&
+      Number.isFinite(parsed.accessTokenExpiresAtMs)
+        ? { accessTokenExpiresAtMs: parsed.accessTokenExpiresAtMs }
+        : {}),
       ...(typeof parsed.email === "string" && parsed.email
         ? { email: parsed.email }
         : {}),

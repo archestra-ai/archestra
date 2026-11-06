@@ -303,9 +303,11 @@ export default defineConfig((options: UserConfig) => {
       "src/standalone-scripts/openappa-declare-installs.ts",
     ],
 
-    // Copy SQL migrations and other assets that need to exist at runtime
+    // Copy assets that need to exist at runtime. Migrations are not among
+    // them: every migration path (scripts/migrate-with-lock.mjs, the Helm Job,
+    // the image entrypoint) applies src/database/migrations, which the
+    // package's `files` ships without drizzle-kit's schema snapshots.
     copy: [
-      "src/database/migrations",
       "src/static",
       "src/skills/appa-guide.core.generated.md",
       ...readdirSync("src/skills")
@@ -329,7 +331,10 @@ export default defineConfig((options: UserConfig) => {
     loader: {
       ".py": "text" as const,
     },
-    tsconfig: "./tsconfig.json",
+    // The compiler options and the `@/*` alias, without tsconfig.json's
+    // project references: the bundler follows those, and the image build
+    // copies only backend/ and shared/.
+    tsconfig: "./tsconfig.base.json",
 
     ignoreWatch: [
       ".turbo",

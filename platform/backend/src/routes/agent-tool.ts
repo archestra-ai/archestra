@@ -28,11 +28,11 @@ import {
 import { createAgentDelegation } from "@/services/agent-delegation";
 import {
   assignToolToAgent,
-  type PrefetchedMcpServer,
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
+import type { PrefetchedMcpServer } from "@/services/mcp-server-assignability";
 import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,

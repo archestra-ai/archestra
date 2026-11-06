@@ -2,7 +2,7 @@
 title: GitHub Copilot
 description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Bring your individual Copilot subscription into Archestra for personal chats, co
 
 On **Model Providers**, connect **GitHub Copilot** under **Personal subscriptions** and authorize Archestra on GitHub with the one-time device code.
 
-Your sign-in belongs only to you and is never shared across your organization. If you set up the Copilot CLI with [Connect](/docs/get-started/connect), Archestra connects your account automatically.
+Your sign-in belongs only to you and is never shared across your organization. If you set up Copilot CLI with [Connect](/docs/get-started/connect), you can sign in there: **Model routing** in **Setup options** offers the same two choices, personal sign-in and enterprise plan. With both connected, you pick the account the setup bills.
 
 ## Enterprise Plans
 
@@ -38,7 +38,7 @@ To connect a plan, your Archestra account needs permission to create provider ke
 
 On **Model Providers**, connect **GitHub Copilot** under **Enterprise plans**. Create a new GitHub App or connect using existing App credentials. The App requires the **Copilot Requests (Read-only)** permission on your GitHub organization (see [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access)). Install it on the organization, including one in an Enterprise Managed Users enterprise. An installation on the enterprise cannot make Copilot requests.
 
-Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Model Router](/docs/llm-proxy/model-router) as `github-copilot:<model-id>`):
+Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Unified Model API](/docs/llm-proxy/unified-model) as `github-copilot:<model-id>`):
 
 ```bash
 curl "https://<archestra-host>/v1/github-copilot/chat/completions" \

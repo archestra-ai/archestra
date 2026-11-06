@@ -19,7 +19,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   getLlmModels,
@@ -27,12 +27,15 @@ const {
   getLlmModelIdsByKey,
   getLlmModelOptions,
   updateModel,
+  deleteModel,
   syncLlmModels,
   bulkUpdateModels,
 } = archestraApiSdk;
 type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
 type LlmModelsParams = Partial<LlmModelsQuery> & {
   enabled?: boolean;
+  /** Poll the list, for a catalog the server is still filling. */
+  refetchInterval?: number | false;
 };
 
 export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
@@ -86,6 +89,7 @@ export function useLlmModels(params?: LlmModelsParams) {
     // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
     placeholderData: keepPreviousData,
     enabled: params?.enabled,
+    refetchInterval: params?.refetchInterval,
     // The new-chat composer resolves its default model from this catalog.
     // Recover from a transient fetch failure rather than latching an empty
     // catalog into "Select model" (T-1317).
@@ -259,6 +263,25 @@ export function useBulkUpdateModelVisibility() {
   });
 }
 
+export function useDeleteModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await deleteModel({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Model deleted");
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+    },
+  });
+}
+
 export function useUpdateModel() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -293,20 +316,27 @@ export function useUpdateModel() {
   });
 }
 
-export function useSyncLlmModels() {
+/**
+ * Refresh the models of every key the viewer can use. `silent` leaves the
+ * outcome to the caller (no toasts): for a surface that reports it inline.
+ */
+export function useSyncLlmModels(options?: { silent?: boolean }) {
   const queryClient = useQueryClient();
+  const silent = options?.silent === true;
   return useMutation({
     mutationFn: async () => {
       const { data: responseData, error } = await syncLlmModels();
       if (error) {
-        handleApiError(error);
+        if (!silent) handleApiError(error);
         throw error;
       }
       return responseData;
     },
     onSuccess: (data) => {
       if (!data) return;
-      if (data.success) {
+      if (silent) {
+        // Only the caches: the caller shows the outcome.
+      } else if (data.success) {
         toast.success("Models refreshed");
       } else {
         toast.error("Some models could not be refreshed", {

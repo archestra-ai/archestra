@@ -3,26 +3,25 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { decodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { overrideConfig } from "@/test/config";
 import type { User } from "@/types";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
-vi.mock("@/cache-manager");
+// The rate limiter uses cacheManager: start the real cache on this file's
+// test database, whose per-test reset clears its entries.
+setupTestCacheManager();
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    llm: {
-      xai: {
-        subscription: {
-          issuer: "https://auth.x.ai",
-          clientId: "test-xai-client-id",
-          scopes: "openid offline_access api:access",
-        },
+overrideConfig({
+  llm: {
+    xai: {
+      subscription: {
+        issuer: "https://auth.x.ai",
+        clientId: "test-xai-client-id",
+        scopes: "openid offline_access api:access",
       },
     },
-  }),
-);
+  },
+});
 
 const DISCOVERY_URL = "https://auth.x.ai/.well-known/openid-configuration";
 const TOKEN_ENDPOINT = "https://auth.x.ai/oauth2/token";
@@ -90,6 +89,7 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
   });
 
   test("returns the encoded credential once the user has authorized", async () => {
+    const startedAt = Date.now();
     const fetchMock = mockXaiFetch(() =>
       Response.json({
         access_token: "xai-access-token",
@@ -110,7 +110,15 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
       refreshToken: "xai-refresh-token",
       userId: "x-user-123",
       email: "x@example.com",
+      accessToken: "xai-access-token",
+      accessTokenExpiresAtMs: expect.any(Number),
     });
+    expect(
+      decodeXaiSubscriptionCredential(body.credential)?.accessTokenExpiresAtMs,
+    ).toBeGreaterThanOrEqual(startedAt + 3600 * 1000);
+    expect(
+      decodeXaiSubscriptionCredential(body.credential)?.accessTokenExpiresAtMs,
+    ).toBeLessThanOrEqual(Date.now() + 3600 * 1000);
 
     const tokenCall = fetchMock.mock.calls.find(
       ([url]) => String(url) === TOKEN_ENDPOINT,
@@ -181,6 +189,26 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
 
     expect(response.statusCode).toBe(502);
     expect(response.json().error.message).toContain("refresh token");
+  });
+
+  test("stores the access token's JWT expiry when expires_in is absent", async () => {
+    const expiresAtSeconds = Math.floor(Date.now() / 1000) + 1800;
+    const accessToken = idToken({ exp: expiresAtSeconds });
+    mockXaiFetch(() =>
+      Response.json({
+        access_token: accessToken,
+        refresh_token: "rt_device_jwt",
+        id_token: idToken({ sub: "test-account" }),
+      }),
+    );
+    const response = await poll(app);
+    expect(response.statusCode).toBe(200);
+    expect(
+      decodeXaiSubscriptionCredential(response.json().credential),
+    ).toMatchObject({
+      accessToken,
+      accessTokenExpiresAtMs: expiresAtSeconds * 1000,
+    });
   });
 
   test("502s when xAI grants no usable account identity", async () => {

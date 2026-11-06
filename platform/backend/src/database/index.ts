@@ -10,7 +10,10 @@ import {
   withTransactionRetry,
   wrapPoolWithRetry,
 } from "./retry";
+import type { Transaction } from "./schema";
 import * as schema from "./schemas";
+
+export type { Transaction };
 
 let nativeDatabaseConnectionString: string | undefined;
 /** Database URL for embedded storage. */
@@ -19,11 +22,6 @@ export function getDatabaseConnectionString(): string {
     throw new Error("Database not initialized");
   return nativeDatabaseConnectionString;
 }
-
-/** Type for database transactions */
-export type Transaction = Parameters<
-  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
->[0];
 
 /**
  * Initialize the database connection pool.

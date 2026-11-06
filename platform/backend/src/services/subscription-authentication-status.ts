@@ -8,12 +8,15 @@ export async function recordSubscriptionAuthenticationFailure(params: {
   providerApiKeyId: string;
   provider: SupportedProvider;
   matchesCredential: (stored: string) => boolean;
+  skipCache?: boolean;
 }): Promise<void> {
   const { providerApiKeyId, provider, matchesCredential } = params;
   try {
     const row = await LlmProviderApiKeyModel.findById(providerApiKeyId);
     if (!row?.secretId || row.provider !== provider) return;
-    const stored = await getSecretValueForLlmProviderApiKey(row.secretId);
+    const stored = await getSecretValueForLlmProviderApiKey(row.secretId, {
+      skipCache: params.skipCache,
+    });
     // A reconnect may already have replaced the rejected token family.
     if (stored === undefined || !matchesCredential(stored)) return;
     await LlmProviderApiKeyModel.setRequiresReauthentication({

@@ -34,15 +34,27 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
+  agentNetworkRuntimeChanged,
+  assertCanWriteAgentNetworkPolicy,
+  syncAgentNetworkRuntimes,
+} from "@/services/agent-network-policy";
+import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, AgentRuntime, ToolExposureMode } from "@/types";
+import type {
+  Agent,
+  AgentRuntime,
+  NetworkPolicy,
+  NetworkPolicyInput,
+  ToolExposureMode,
+} from "@/types";
 import {
   AgentActivationSkillSchema,
   AgentRuntimeSchema,
@@ -51,11 +63,11 @@ import {
   ApiError,
   InsertAgentSchemaBase,
   LabelWithDetailsSchema,
+  NetworkPolicyInputSchema,
   SuggestedPromptInputSchema,
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { archestraMcpBranding } from "./branding";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
@@ -170,7 +182,7 @@ export const AgentRuntimeToolInputSchema = z
       .required({ image: true })
       .strict()
       .describe(
-        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the model router.",
+        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the unified model API.",
       ),
   ])
   .describe(
@@ -189,12 +201,6 @@ export const AgentModelToolInputSchemas = {
   ),
   modelId: UuidIdSchema.describe(
     `Model the agent uses: the model's id from ${TOOL_LIST_LLM_MODELS_SHORT_NAME}, not its provider name. Set together with llmApiKeyId.`,
-  ),
-  fastModelId: UuidIdSchema.describe(
-    "Optional faster model on the same llmApiKeyId, used when the agent forks itself with tier fast. Omit to use the provider default.",
-  ),
-  smartModelId: UuidIdSchema.describe(
-    "Optional stronger model on the same llmApiKeyId, used when the agent forks itself with tier smart. Omit to use the provider default.",
   ),
 };
 
@@ -288,16 +294,6 @@ export const AgentDetailOutputSchema = ResourceDetailOutputSchema.extend({
     .nullable()
     .optional()
     .describe("The pinned model ID, or null for the default."),
-  fastModelId: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("The pinned fast-tier model ID, or null for the default."),
-  smartModelId: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("The pinned smart-tier model ID, or null for the default."),
   skillsEnabled: z
     .boolean()
     .optional()
@@ -366,10 +362,9 @@ export async function handleCreateResource<
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
     runtime?: AgentRuntimeToolInput;
+    networkPolicy?: NetworkPolicyInput;
     llmApiKeyId?: string;
     modelId?: string;
-    fastModelId?: string;
-    smartModelId?: string;
   },
 >(params: {
   args: TArgs;
@@ -412,8 +407,6 @@ export async function handleCreateResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
-      fastModelId: args.fastModelId,
-      smartModelId: args.smartModelId,
       existing: null,
     });
 
@@ -439,6 +432,13 @@ export async function handleCreateResource<
       createParams.accessAllSubagents = args.accessAllSubagents;
     }
     Object.assign(createParams, runtimeAndModel);
+    if (args.networkPolicy !== undefined) {
+      createParams.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: null,
+      });
+    }
 
     // A template-backed agent starts with what the catalog card would give
     // it: a coding-agent prompt and dynamic tool access.
@@ -508,13 +508,20 @@ export async function handleCreateResource<
     const created = await AgentModel.create(createParams, context.userId, {
       initialPermissionGrants: args.initialGrants ?? [],
     });
+    if (created.networkPolicy) {
+      syncAgentNetworkRuntimes({
+        agentId: created.id,
+        organizationId: created.organizationId,
+      });
+    }
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (targetAgentType === "agent" || targetAgentType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
         : [];
 
@@ -738,10 +745,9 @@ export async function handleEditResource<
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
     runtime?: AgentRuntimeToolInput | null;
+    networkPolicy?: NetworkPolicyInput | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
-    fastModelId?: string | null;
-    smartModelId?: string | null;
   },
 >(params: {
   args: TArgs;
@@ -800,8 +806,6 @@ export async function handleEditResource<
       runtimeInput: args.runtime,
       llmApiKeyId: args.llmApiKeyId,
       modelId: args.modelId,
-      fastModelId: args.fastModelId,
-      smartModelId: args.smartModelId,
       existing: existingAgent,
     });
 
@@ -821,6 +825,13 @@ export async function handleEditResource<
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
+    }
+    if (args.networkPolicy !== undefined) {
+      updateData.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: existingAgent.networkPolicy,
+      });
     }
 
     if (expectedType === "agent" || expectedType === "mcp_gateway") {
@@ -859,13 +870,21 @@ export async function handleEditResource<
     }
     // A Slack bot of this agent follows its name and icon (best effort).
     void slackAppFactory.syncAgentIdentity(args.id);
+    if (agentNetworkRuntimeChanged({ before: existingAgent, after: updated })) {
+      syncAgentNetworkRuntimes({
+        agentId: updated.id,
+        organizationId: updated.organizationId,
+        engine: !!(existingAgent.networkPolicy || updated.networkPolicy),
+      });
+    }
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (expectedType === "agent" || expectedType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
         : [];
 
@@ -913,6 +932,43 @@ async function resolveNewAgentEnvironmentId(params: {
 }
 
 /**
+ * Validate a network policy argument with the API's own schema and the same
+ * permission the agents REST routes require. Returns the normalized policy, or
+ * null to inherit the environment's policy.
+ */
+async function resolveNetworkPolicyForWrite(params: {
+  context: ArchestraContext;
+  input: NetworkPolicyInput | null;
+  existing: NetworkPolicy | null | undefined;
+}): Promise<NetworkPolicy | null> {
+  const { context, input, existing } = params;
+  let policy: NetworkPolicy | null = null;
+  if (input !== null) {
+    const parsed = NetworkPolicyInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ApiError(
+        400,
+        `Invalid networkPolicy: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    }
+    policy = parsed.data;
+  }
+  if (!context.userId || !context.organizationId) {
+    throw new ApiError(
+      403,
+      "User and organization context are required to set a network policy.",
+    );
+  }
+  await assertCanWriteAgentNetworkPolicy({
+    userId: context.userId,
+    organizationId: context.organizationId,
+    before: existing,
+    after: policy,
+  });
+  return policy;
+}
+
+/**
  * Validate a runtime and model change the way the agents REST routes do, and
  * return only the fields to write. `existing` is the stored agent on an edit,
  * so a change to one field is checked against the other's current value.
@@ -924,22 +980,15 @@ async function resolveRuntimeAndModelForWrite(params: {
   runtimeInput: AgentRuntimeToolInput | null | undefined;
   llmApiKeyId: string | null | undefined;
   modelId: string | null | undefined;
-  fastModelId: string | null | undefined;
-  smartModelId: string | null | undefined;
   existing: Pick<Agent, AgentModelField> | null;
 }): Promise<Partial<Pick<Agent, AgentModelField>>> {
   const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
-  const { fastModelId, smartModelId } = params;
   const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
-  const touchesTiers =
-    llmApiKeyId !== undefined ||
-    fastModelId !== undefined ||
-    smartModelId !== undefined;
-  if (runtimeInput === undefined && !touchesModel && !touchesTiers) return {};
+  if (runtimeInput === undefined && !touchesModel) return {};
   if (params.agentType !== "agent") {
     throw new ApiError(
       400,
-      "runtime, llmApiKeyId, modelId, fastModelId, and smartModelId apply only to agents.",
+      "runtime, llmApiKeyId, and modelId apply only to agents.",
     );
   }
   if (!context.userId || !context.organizationId) {
@@ -953,10 +1002,17 @@ async function resolveRuntimeAndModelForWrite(params: {
           input: runtimeInput,
           organizationId: context.organizationId,
         });
-  requireAgentRuntimePermission({
+  await requireAgentRuntimePermission({
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
+    userId: context.userId,
+    organizationId: context.organizationId,
+    previous: existing?.runtime,
+  });
+  await assertAgentRuntimeTiersExist({
+    runtime,
+    organizationId: context.organizationId,
   });
   await assertCanBindRuntimeCredentials({
     organizationId: context.organizationId,
@@ -981,40 +1037,21 @@ async function resolveRuntimeAndModelForWrite(params: {
   if (touchesModel) {
     await assertAgentModelSelectionAvailable({ ...scope, agent: merged });
   }
-  if (touchesTiers) {
-    await assertModelTrioTiers({
-      apiKeyId: merged.llmApiKeyId,
-      fastModelId:
-        fastModelId !== undefined
-          ? fastModelId
-          : (existing?.fastModelId ?? null),
-      smartModelId:
-        smartModelId !== undefined
-          ? smartModelId
-          : (existing?.smartModelId ?? null),
-    });
-  }
   await assertAgentRuntimeModelCompatibility({
     ...scope,
     runtime: merged.runtime,
     agent: merged,
+    selectsModel: touchesModel,
   });
 
   return {
     ...(runtime !== undefined && { runtime }),
     ...(llmApiKeyId !== undefined && { llmApiKeyId }),
     ...(modelId !== undefined && { modelId }),
-    ...(fastModelId !== undefined && { fastModelId }),
-    ...(smartModelId !== undefined && { smartModelId }),
   };
 }
 
-type AgentModelField =
-  | "runtime"
-  | "llmApiKeyId"
-  | "modelId"
-  | "fastModelId"
-  | "smartModelId";
+type AgentModelField = "runtime" | "llmApiKeyId" | "modelId";
 
 function describeRuntime(runtime: AgentRuntime | null): string {
   if (!runtime) return "built-in chat harness";

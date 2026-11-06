@@ -8,7 +8,11 @@ import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
-import type { Interaction, InteractionUtils } from "./llmProviders/common";
+import type {
+  Interaction,
+  InteractionUtils,
+  RequestedToolCall,
+} from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
@@ -26,8 +30,10 @@ import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenAiEmbeddingInteraction from "./llmProviders/openai-embedding";
 import OpenAiResponsesInteraction from "./llmProviders/openai-responses";
 import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
+import PassthroughInteraction from "./llmProviders/passthrough";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import PerplexityResponsesInteraction from "./llmProviders/perplexity-responses";
+import RealtimeInteraction from "./llmProviders/realtime";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import XaiChatCompletionInteraction from "./llmProviders/xai";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
@@ -76,6 +82,10 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
   "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
   "azure:images": (i) => new AzureImagesInteraction(i),
+  "openai:images": (i) => new AzureImagesInteraction(i),
+  "openai:passthrough": (i) => new PassthroughInteraction(i),
+  "anthropic:passthrough": (i) => new PassthroughInteraction(i),
+  "openai:realtime": (i) => new RealtimeInteraction(i),
   "azure:audio": (i) => new AudioInteraction(i),
   "openai:audio": (i) => new AudioInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
@@ -242,6 +252,13 @@ export class DynamicInteraction implements InteractionUtils {
       return [];
     }
     return this.interactionClass.getToolNamesRequested();
+  }
+
+  /** The requested tool calls with their provider ids; [] where the wire has none. */
+  getToolCallsRequested(): RequestedToolCall[] {
+    if (this.contentUnavailable) return [];
+    if (this.getErrorResponseText() !== null) return [];
+    return this.interactionClass.getToolCallsRequested?.() ?? [];
   }
 
   getToolNamesUsed(): string[] {

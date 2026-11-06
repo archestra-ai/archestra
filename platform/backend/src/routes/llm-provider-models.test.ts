@@ -2,7 +2,7 @@ import { MAX_CUSTOM_MODEL_TOKEN_LIMIT } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -24,7 +24,7 @@ import type { Model, User } from "@/types";
 
 vi.mock("@/auth");
 
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(() => false),
 }));
 
@@ -147,10 +147,10 @@ describe("chat model routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(await ModelModel.findById(model.id)).toMatchObject({
-      customPricePerMillionInput: "0.25",
-      customPricePerMillionOutput: "10.00",
-      customPricePerMillionCacheRead: "0.00",
-      customPricePerMillionCacheWrite: "0.50",
+      customPricePerMillionInput: "0.25000000",
+      customPricePerMillionOutput: "10.00000000",
+      customPricePerMillionCacheRead: "0.00000000",
+      customPricePerMillionCacheWrite: "0.50000000",
     });
     await vi.waitFor(async () => {
       const { data: rows } = await AuditLogModel.findPaginated({
@@ -169,8 +169,8 @@ describe("chat model routes", () => {
       });
       expect(successful[0].after).toMatchObject({
         isCustomPrice: true,
-        pricePerMillionInput: "0.25",
-        pricePerMillionOutput: "10.00",
+        pricePerMillionInput: "0.25000000",
+        pricePerMillionOutput: "10.00000000",
       });
     });
   });

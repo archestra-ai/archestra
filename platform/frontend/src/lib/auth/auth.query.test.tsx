@@ -16,18 +16,13 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 // Mock the auth client and SDK
 vi.mock("@/lib/clients/auth/auth-client");
 
-vi.mock("@archestra/shared", async () => {
-  const actual = await vi.importActual("@archestra/shared");
-  return {
-    ...actual,
-    archestraApiSdk: {
-      getDefaultCredentialsStatus: vi.fn(),
-      getUserPermissions: vi.fn(),
-      getScopedCapabilities: vi.fn(),
-      getBootstrap: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getDefaultCredentialsStatus: vi.fn(),
+  getUserPermissions: vi.fn(),
+  getScopedCapabilities: vi.fn(),
+  getBootstrap: vi.fn(),
+}));
 
 // Helper to wrap hooks with QueryClient
 const createWrapper = () => {

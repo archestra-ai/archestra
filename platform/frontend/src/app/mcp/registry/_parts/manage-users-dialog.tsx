@@ -11,7 +11,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import {
   AlertTriangle,
   Building2,

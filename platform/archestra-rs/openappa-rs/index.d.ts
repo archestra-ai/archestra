@@ -80,6 +80,9 @@ export interface ChildReturnRecord {
   value: string
 }
 
+/** Cumulative embedded engine samples for the host's existing Prometheus endpoint. */
+export declare function collectOpenappaMetrics(): string
+
 export interface ComposeBatteryInput {
   /** The include entry this battery answers, as the root document spells it. */
   entry: string
@@ -339,6 +342,12 @@ export interface ReportingOptions {
   endpoint: string
   hostname?: string
 }
+
+/**
+ * Reads an offer's original refusal from authenticated, host-scoped journal
+ * records, including encrypted and escaped decisions. Executes no remedy.
+ */
+export declare function retainedOfferRefusal(input: string, encryption?: ContentEncryption | undefined | null): string | null
 
 export declare function sendPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 

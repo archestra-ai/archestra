@@ -1,3 +1,4 @@
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 /**
  * Groq LLM Proxy Adapter - OpenAI-compatible
  *
@@ -96,8 +97,8 @@ class GroqRequestAdapter
   convertToolResultContent(messages: GroqMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 
@@ -149,8 +150,8 @@ class GroqStreamAdapter
   readonly provider = "groq" as const;
   private delegate: OpenAIStreamAdapter;
 
-  constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+  constructor(request?: GroqRequest) {
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {
@@ -212,8 +213,10 @@ export const groqAdapterFactory: LLMProvider<
     return new GroqResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<GroqStreamChunk, GroqResponse> {
-    return new GroqStreamAdapter();
+  createStreamAdapter(
+    request?: GroqRequest,
+  ): LLMStreamAdapter<GroqStreamChunk, GroqResponse> {
+    return new GroqStreamAdapter(request);
   },
 
   extractApiKey(headers: GroqHeaders): string | undefined {
@@ -243,7 +246,7 @@ export const groqAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },

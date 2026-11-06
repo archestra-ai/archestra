@@ -1,3 +1,4 @@
+import { azureModelEvidence } from "@archestra/shared/azure-models";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -13,6 +14,7 @@ import {
 } from "@/models";
 import { expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import modelRouterProxyRoutes from "./model-router";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook.
@@ -127,18 +129,20 @@ test("preserves native Responses reasoning, replay state and tool calls through 
   app.setSerializerCompiler(serializerCompiler);
   await app.register(modelRouterProxyRoutes);
   try {
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/model-router/${agent.id}/responses`,
-      headers: {
-        authorization: `Bearer ${value}`,
-        "user-agent": "test-client",
-      },
-      payload,
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
-    expect(response.json().output).toEqual([message, call]);
+    for (const path of ["unified-model", "model-router"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/${path}/${agent.id}/responses`,
+        headers: {
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstream).toMatchObject({ ...payload, model: "gpt-5.4" });
+      expect(response.json().output).toEqual([message, call]);
+    }
   } finally {
     await app.close();
   }
@@ -405,7 +409,28 @@ async function setUpAzureRouter(params: {
   const key = await params.makeLlmProviderApiKey(organization.id, secret.id, {
     provider: "azure",
   });
-  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
+  await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+    key.id,
+    [
+      {
+        id: model.id,
+        modelId: model.modelId,
+        azureCapabilities: {
+          ...azureModelEvidence({
+            underlyingModelName: params.modelId,
+            source: "deployment",
+          })!,
+          configurationHash: azureCapabilityConfigurationHash({
+            baseUrl: config.llm.azure.baseUrl,
+            inferenceBaseUrl: null,
+            extraHeaders: null,
+            secretId: secret.id,
+          }),
+        },
+      },
+    ],
+    "azure",
+  );
   const { value } = await VirtualApiKeyModel.create({
     organizationId: organization.id,
     name: "Azure Model Router test",

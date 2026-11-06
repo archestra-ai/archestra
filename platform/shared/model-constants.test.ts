@@ -8,10 +8,12 @@ import {
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isClaudeCodeRuntimeCommand,
   isClaudeOnBedrock,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
+  lacksOpenAiChatCompletions,
   providerDisplayNames,
   providerSearchTerms,
   requiresOpenAiResponsesApi,
@@ -139,6 +141,22 @@ describe("requiresOpenAiResponsesApi", () => {
   });
 });
 
+describe("lacksOpenAiChatCompletions", () => {
+  test("matches the models OpenAI serves only over Responses", () => {
+    expect(lacksOpenAiChatCompletions("gpt-5.5-pro")).toBe(true);
+    expect(lacksOpenAiChatCompletions("o3-pro")).toBe(true);
+    expect(lacksOpenAiChatCompletions("gpt-5.3-codex")).toBe(true);
+    expect(lacksOpenAiChatCompletions("openai/gpt-5.1-codex-max")).toBe(true);
+  });
+
+  test("leaves out gpt-5.6 and gpt-6, which answer chat completions without tools", () => {
+    expect(lacksOpenAiChatCompletions("gpt-5.6-terra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-6.1-terra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-6-astra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-4o")).toBe(false);
+  });
+});
+
 describe("getAgentRuntimeModelCompatibility", () => {
   test("applies maintained runtime provider requirements before protocol constraints", () => {
     expect(
@@ -173,6 +191,11 @@ describe("getAgentRuntimeModelCompatibility", () => {
       compatible: false,
       message: expect.stringContaining("Codex runtime requires an OpenAI"),
     });
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code")).toBe(true);
+    expect(isClaudeCodeRuntimeCommand("archestra-claude-code-runtime")).toBe(
+      true,
+    );
+    expect(isClaudeCodeRuntimeCommand("archestra-codex")).toBe(false);
   });
 
   test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {
@@ -201,33 +224,38 @@ describe("getAgentRuntimeModelCompatibility", () => {
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
-    const runtime = {
-      inferenceProtocol: "anthropic" as const,
-      runtimeCommand: ["archestra-claude-code"],
-      provider: "bedrock" as const,
-    };
+    for (const runtimeCommand of [
+      ["archestra-claude-code"],
+      ["archestra-claude-code-runtime"],
+    ] as const) {
+      const runtime = {
+        inferenceProtocol: "anthropic" as const,
+        runtimeCommand,
+        provider: "bedrock" as const,
+      };
 
-    // Key filtering has no selected model yet, so Bedrock remains available
-    // until its model-specific eligibility is evaluated.
-    expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
-      compatible: true,
-    });
-    for (const modelId of [
-      "anthropic.claude-sonnet-4-6",
-      "us.anthropic.claude-sonnet-4-6",
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
-    ]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toEqual({ compatible: true });
-    }
-    for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
-      expect(
-        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
-      ).toMatchObject({
-        compatible: false,
-        message: expect.stringContaining("requires a Claude model"),
+      // Key filtering has no selected model yet, so Bedrock remains available
+      // until its model-specific eligibility is evaluated.
+      expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
+        compatible: true,
       });
+      for (const modelId of [
+        "anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+      ]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toEqual({ compatible: true });
+      }
+      for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
+        expect(
+          getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("requires a Claude model"),
+        });
+      }
     }
   });
 

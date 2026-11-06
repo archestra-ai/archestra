@@ -2,6 +2,7 @@ import {
   CACHE_PRICE_MULTIPLIERS,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
+  stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
@@ -19,6 +20,8 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
+import { mediaPricingFor } from "@/services/media-pricing";
+import { resolveVendorPublishedPriceSchedule } from "@/services/vendor-published-pricing";
 import type {
   CreateModel,
   Model,
@@ -27,6 +30,7 @@ import type {
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import { ApiError } from "@/types";
 import type {
   ProviderModelPricing,
   ProviderPricedModel,
@@ -162,7 +166,7 @@ function combineCacheSource(
  * end's job.
  */
 function formatPerMillionPrice(perMillion: number): string {
-  return Number.parseFloat(perMillion.toFixed(8)).toString();
+  return perMillion.toFixed(8).replace(/\.?0+$/, "");
 }
 
 /**
@@ -191,7 +195,124 @@ function readOllamaDefaultNumCtx(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Ollama's local model name: default host/library/latest and case-insensitive parts.
+ * This is availability matching only; never rewrite the provider-bound model ID.
+ */
+function ollamaAvailabilityName(id: string): string | undefined {
+  // ParseRef trims Unicode White_Space, then separates explicit local/cloud
+  // source selection from the model tag.
+  const trim = (value: string) => {
+    let from = 0;
+    let to = value.length;
+    // Scan only the ends: a trailing-whitespace regex can backtrack across a
+    // long invalid interior run before the provider rejects the model name.
+    while (from < to && /\p{White_Space}/u.test(value.charAt(from))) from++;
+    while (to > from && /\p{White_Space}/u.test(value.charAt(to - 1))) to--;
+    return value.slice(from, to);
+  };
+  const sourceOf = (value: string) => {
+    const separator = value.lastIndexOf(":");
+    if (separator < 0) return undefined;
+    const suffix = trim(value.slice(separator + 1));
+    const lower = suffix.toLowerCase();
+    if (lower === "local" || lower === "cloud")
+      return { base: value.slice(0, separator), cloud: lower === "cloud" };
+    if (!suffix.includes("/") && lower.endsWith("-cloud"))
+      return {
+        base: value.slice(0, separator + 1) + suffix.slice(0, -6),
+        cloud: true,
+      };
+    return undefined;
+  };
+  id = trim(id);
+  const source = sourceOf(id);
+  if (source && sourceOf(source.base)) return undefined;
+  id = source?.base ?? id;
+  // ParseName ignores the scheme for local identity; it does not validate it as
+  // a URL scheme. Registry, namespace, model and tag remain distinct.
+  const scheme = id.indexOf("://");
+  const parts = id.slice(scheme < 0 ? 0 : scheme + 3).split("/");
+  if (parts.length > 3 || (scheme >= 0 && parts.length !== 3)) return undefined;
+  const leaf = parts.at(-1) ?? "";
+  const separator = leaf.lastIndexOf(":");
+  const model = separator < 0 ? leaf : leaf.slice(0, separator);
+  const tag = separator < 0 ? "latest" : leaf.slice(separator + 1);
+  const namespace = parts.length > 1 ? parts.at(-2) : "library";
+  const host = parts.length === 3 ? parts[0] : "registry.ollama.ai";
+  if (
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(model) ||
+    !/^[a-z0-9_][a-z0-9_.-]{0,79}$/i.test(tag) ||
+    !namespace ||
+    !/^[a-z0-9_][a-z0-9_-]{0,79}$/i.test(namespace) ||
+    !/^[a-z0-9_][a-z0-9_.:-]{0,349}$/i.test(host)
+  )
+    return undefined;
+  return `${source?.cloud ? "cloud" : "local"}:${host}/${namespace}/${model}:${tag}`.toLowerCase();
+}
+
 class ModelModel {
+  /** Check the resolved provider/model immediately before starting an execution. */
+  static async assertAvailable(params: {
+    provider: SupportedProvider;
+    modelId: string;
+    /** Equivalent spellings supplied only by a trusted endpoint resolver. */
+    aliases?: string[];
+  }): Promise<void> {
+    const modelId = stripClaudeContextVariantSuffix(params.modelId);
+    // Read current state, not a cached catalog or the request's admission snapshot:
+    // a request may have waited for throughput or for another pool member.
+    // Gemini's native and OpenAI-compatible adapters accept both spellings.
+    const providerAliases =
+      params.provider === "gemini"
+        ? [
+            modelId.replace(/^models\//, ""),
+            `models/${modelId.replace(/^models\//, "")}`,
+          ]
+        : [];
+    let hidden: Pick<Model, "modelId"> | undefined;
+    if (params.provider === "ollama" || params.provider === "ollama-native") {
+      const ids = new Set([modelId, ...(params.aliases ?? [])]);
+      const canonicalNames = new Set(
+        [...ids]
+          .map(ollamaAvailabilityName)
+          .filter((name) => name !== undefined),
+      );
+      // Only hidden IDs are needed. Compare both names using Ollama's defaults;
+      // exact-only lookup lets omitted tags/default registries bypass Hidden.
+      const hiddenModels = await db
+        .select({ modelId: schema.modelsTable.modelId })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, params.provider),
+            eq(schema.modelsTable.ignored, true),
+          ),
+        );
+      hidden = hiddenModels.find(
+        (model) =>
+          ids.has(model.modelId) ||
+          canonicalNames.has(ollamaAvailabilityName(model.modelId) ?? ""),
+      );
+    } else {
+      const models = await ModelModel.findByProviderModelIds(
+        [
+          ...new Set([modelId, ...providerAliases, ...(params.aliases ?? [])]),
+        ].map((id) => ({
+          provider: params.provider,
+          modelId: id,
+        })),
+      );
+      hidden = [...models.values()].find((model) => model.ignored);
+    }
+    if (hidden) {
+      throw new ApiError(
+        403,
+        `Model ${hidden.modelId} is hidden and cannot be used. Show the model in the model catalog to enable it.`,
+        "model_hidden",
+      );
+    }
+  }
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -380,7 +501,7 @@ class ModelModel {
 
   /**
    * Find text chat models by exact model ID across providers.
-   * Used by the OpenAI-compatible model router to resolve a client-supplied
+   * Used by the OpenAI-compatible unified model API to resolve a client-supplied
    * model name to the provider that owns it.
    */
   static async findTextChatModelsByModelId(params: {
@@ -705,6 +826,189 @@ class ModelModel {
   }
 
   /**
+   * Overwrite the modalities and tool support of rows a catalog sync already
+   * wrote. These are the classification columns {@link ModelModel.bulkUpsert}
+   * keeps once set; a model the fetcher classified from its id needs them
+   * replaced, but none of the administrator's overrides (custom prices and
+   * limits) that only {@link ModelModel.bulkUpsertFull} resets. An entry with no
+   * stored row for its provider and model id is skipped, not inserted.
+   */
+  static async applyAuthoritativeCapabilities(
+    rows: Pick<
+      CreateModel,
+      | "provider"
+      | "modelId"
+      | "inputModalities"
+      | "outputModalities"
+      | "supportsToolCalling"
+    >[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+
+    const BATCH_SIZE = 50;
+    await withDbTransaction(async (tx) => {
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const values = sql.join(
+          rows
+            .slice(i, i + BATCH_SIZE)
+            .map(
+              (row) =>
+                sql`(${row.provider}::text, ${row.modelId}::text, ${jsonbOrNull(row.inputModalities)}::jsonb, ${jsonbOrNull(row.outputModalities)}::jsonb, ${row.supportsToolCalling ?? null}::boolean)`,
+            ),
+          sql`, `,
+        );
+        await tx
+          .update(schema.modelsTable)
+          .set({
+            inputModalities: sql`fresh.input_modalities`,
+            outputModalities: sql`fresh.output_modalities`,
+            supportsToolCalling: sql`fresh.supports_tool_calling`,
+            updatedAt: sql`NOW()`,
+          })
+          .from(
+            sql`(VALUES ${values}) AS fresh(provider, model_id, input_modalities, output_modalities, supports_tool_calling)`,
+          )
+          .where(
+            and(
+              eq(schema.modelsTable.provider, sql`fresh.provider`),
+              eq(schema.modelsTable.modelId, sql`fresh.model_id`),
+            ),
+          );
+      }
+    });
+  }
+
+  /** Remove an unconfigured proxy-discovered entry, retaining request history. */
+  static async deleteUnused(id: string) {
+    return withDbTransaction(async (tx) => {
+      // Serialize catalog writes first: refreshes write models before their
+      // policies, so taking the policy lock first can deadlock with a refresh.
+      // Name references and policy scopes have no model FK; keep their writers
+      // out until eligibility checks and this rare cleanup commit together.
+      await tx.execute(sql`LOCK TABLE ${schema.modelsTable},
+        ${schema.organizationsTable}, ${schema.modelPoolMembersTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
+      const [model] = await tx
+        .select()
+        .from(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, id))
+        .for("update");
+      if (!model) return { status: "not_found" } as const;
+      // Chats and agents acquire the model FK row lock before creating their
+      // policy. Let those transactions finish before locking the policy table.
+      await tx.execute(sql`LOCK TABLE ${schema.resourcePermissionPoliciesTable}
+        IN SHARE ROW EXCLUSIVE MODE`);
+
+      // Unknown prices are null, even when the UI displays a fallback. An explicit
+      // zero is still saved pricing and must survive this cleanup operation.
+      const configuredValues = [
+        model.promptPricePerToken,
+        model.completionPricePerToken,
+        model.cacheReadPricePerToken,
+        model.cacheWritePricePerToken,
+        model.customPricePerMillionInput,
+        model.customPricePerMillionOutput,
+        model.customPricePerMillionCacheRead,
+        model.customPricePerMillionCacheWrite,
+        model.longContextThreshold,
+        model.customContextLength,
+        model.customOutputLength,
+        model.configuredParameters,
+        model.inputModalities,
+        model.outputModalities,
+        model.embeddingDimensions,
+      ];
+      if (
+        !model.discoveredViaLlmProxy ||
+        model.ignored ||
+        configuredValues.some((value) => value !== null)
+      ) {
+        return { status: "ineligible" } as const;
+      }
+      const configuredLinks = await tx.execute(sql`
+        SELECT 1 FROM ${schema.llmProviderApiKeyModelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelLabelsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelTeamsTable} WHERE model_id = ${id}
+        UNION ALL SELECT 1 FROM ${schema.modelUsersTable} WHERE model_id = ${id}
+      `);
+      if (configuredLinks.rows.length) return { status: "ineligible" } as const;
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Only untouched discovery defaults may be cleaned up with the row.
+      const editedPolicies = await tx.execute(sql`
+        SELECT 1 FROM ${schema.resourcePermissionPoliciesTable}
+        WHERE resource = 'llmModel' AND scope = ${id}
+          AND (revision <> 1 OR NOT legacy_sharing_migrated
+            OR legacy_organization_audience
+            OR grants <> '[{"subject":{"type":"organization","id":"*"},"actions":["read","use"]}]'::jsonb)
+      `);
+      if (editedPolicies.rows.length) return { status: "ineligible" } as const;
+      // SPDX-SnippetEnd
+
+      // The row lock also serializes new FK references (defaults/backfills)
+      // with deletion. Check all organizations: model metadata is global.
+      const references = await tx.execute<{ reason: string }>(sql`
+        SELECT 'a default model or knowledge setting' AS reason
+        WHERE EXISTS (
+          SELECT 1 FROM ${schema.organizationsTable} o
+          WHERE o.default_model_id = ${id} OR o.default_fast_model_id = ${id}
+            OR o.default_smart_model_id = ${id}
+            OR EXISTS (
+              SELECT 1 FROM ${schema.llmProviderApiKeysTable} k
+              WHERE k.provider = ${model.provider} AND (
+                (o.embedding_chat_api_key_id = k.id AND o.embedding_model = ${model.modelId})
+                OR (o.reranker_chat_api_key_id = k.id AND o.reranker_model = ${model.modelId})
+                OR (o.ocr_chat_api_key_id = k.id AND o.ocr_model = ${model.modelId})
+              )
+            )
+        )
+        UNION ALL SELECT 'a member default' WHERE EXISTS (
+          SELECT 1 FROM ${schema.membersTable} WHERE default_model_id = ${id}
+        )
+        UNION ALL SELECT 'an agent' WHERE EXISTS (
+          SELECT 1 FROM ${schema.agentsTable} WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'an existing chat' WHERE EXISTS (
+          SELECT 1 FROM ${schema.conversationsTable}
+          WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'a routing decision' WHERE EXISTS (
+          SELECT 1 FROM ${schema.routingDecisionsTable} WHERE model_id = ${id}
+        )
+        UNION ALL SELECT 'guardrails' WHERE EXISTS (
+          SELECT 1 FROM ${schema.guardrailsDeploymentTable} WHERE annotator_model_id = ${id}
+        )
+        UNION ALL SELECT 'a model pool' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelPoolMembersTable} m
+          JOIN ${schema.llmProviderApiKeysTable} k ON k.id = m.provider_api_key_id
+          WHERE m.model_id = ${model.modelId} AND k.provider = ${model.provider}
+        )
+        UNION ALL SELECT 'cost recompute history' WHERE EXISTS (
+          SELECT 1 FROM ${schema.modelCostBackfillsTable}
+          WHERE model_id = ${id}
+        )
+      `);
+      if (references.rows.length) {
+        return { status: "in_use", reason: references.rows[0].reason } as const;
+      }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["llmModel"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
+      await tx.delete(schema.modelsTable).where(eq(schema.modelsTable.id, id));
+      return { status: "deleted" } as const;
+    });
+  }
+
+  /**
    * Delete model by provider and model ID
    */
   static async delete(
@@ -913,6 +1217,34 @@ class ModelModel {
     return { ...model, ...prices[0], providerPricing: prices[0] ?? undefined };
   }
 
+  /** The effective threshold used by both routing plans and request pricing. */
+  static getLongContextThreshold(model: ProviderPricedModel): number | null {
+    if (model.longContextThreshold !== null) return model.longContextThreshold;
+    if (model.providerPricing) return null;
+    const schedule = resolveVendorPublishedPriceSchedule(model);
+    if (!schedule) return null;
+    const short = ModelModel.getEffectivePricing(
+      model,
+      undefined,
+      undefined,
+      schedule.threshold,
+    );
+    const long = ModelModel.getEffectivePricing(
+      model,
+      undefined,
+      undefined,
+      schedule.threshold + 1,
+    );
+    // Custom prices can make the published tier irrelevant, including a model
+    // with an unpublished cache direction. Do not constrain routing in that case.
+    return short.pricePerMillionInput !== long.pricePerMillionInput ||
+      short.pricePerMillionOutput !== long.pricePerMillionOutput ||
+      short.pricePerMillionCacheRead !== long.pricePerMillionCacheRead ||
+      short.pricePerMillionCacheWrite !== long.pricePerMillionCacheWrite
+      ? schedule.threshold
+      : null;
+  }
+
   /**
    * Get effective pricing for a model.
    *
@@ -929,8 +1261,9 @@ class ModelModel {
    * Cache prices are null when the provider has no cache pricing model and none
    * was synced/set (so cache cost is not fabricated for non-caching providers).
    *
-   * With `promptTokens` above the model's long-context threshold, its long
-   * prices replace all four rates while the chosen source is kept.
+   * Published context schedules replace incomplete flat catalogs, below custom
+   * overrides and selected-instance pricing. An explicit custom schedule
+   * replaces the published threshold and long rates.
    */
   static getEffectivePricing(
     model: ProviderPricedModel | null,
@@ -943,7 +1276,28 @@ class ModelModel {
     if (model?.providerPricing && model.providerPricing !== "conflicting") {
       model = { ...model, ...model.providerPricing };
     }
-    const base = ModelModel.getEffectiveBasePricing(model, modelId, provider);
+    const resolvedProvider = model?.provider ?? provider;
+    const schedule =
+      resolvedProvider && !model?.providerPricing
+        ? resolveVendorPublishedPriceSchedule({
+            provider: resolvedProvider,
+            modelId: model?.modelId ?? modelId ?? "",
+          })
+        : null;
+    const published = schedule
+      ? isLongContextPrompt(
+          model?.longContextThreshold == null ? schedule.threshold : null,
+          promptTokens,
+        )
+        ? schedule.long
+        : schedule.short
+      : undefined;
+    const base = ModelModel.getEffectiveBasePricing(
+      model,
+      modelId,
+      provider,
+      published,
+    );
     const instance = model?.providerPricing;
     const useInstance = instance && base.source !== "custom";
     const pricePerMillionInput = useInstance
@@ -965,10 +1319,12 @@ class ModelModel {
       model,
       pricePerMillionInput,
       provider,
+      published,
     );
 
     const cacheSource =
-      cache.cacheSource === "models_dev" && model?.providerPricing
+      cache.cacheSource === "models_dev" &&
+      (model?.providerPricing || published)
         ? "provider"
         : cache.cacheSource;
     if (
@@ -978,14 +1334,14 @@ class ModelModel {
       // The CHECK constraint makes the threshold and all four prices all-or-none.
       // They are configured on the model, so they are no estimate even when
       // the base rates fell back to the default.
-      const longSource = source === "default" ? "custom" : source;
+      const longSource = "custom";
       return {
         pricePerMillionInput: model.longContextPricePerMillionInput,
         pricePerMillionOutput: model.longContextPricePerMillionOutput,
         pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
         pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
         source: longSource,
-        cacheSource: cacheSource ?? longSource,
+        cacheSource: longSource,
       };
     }
 
@@ -1005,9 +1361,10 @@ class ModelModel {
     model: Model | null,
     modelId?: string,
     provider?: SupportedProvider,
+    published?: ProviderModelPricing,
   ): {
-    pricePerMillionInput: string;
-    pricePerMillionOutput: string;
+    pricePerMillionInput: string | null;
+    pricePerMillionOutput: string | null;
     source: PriceSource;
   } {
     // Tier 1: Custom admin-set price
@@ -1019,6 +1376,21 @@ class ModelModel {
         pricePerMillionInput: model.customPricePerMillionInput,
         pricePerMillionOutput: model.customPricePerMillionOutput,
         source: "custom",
+      };
+    }
+
+    if (
+      published?.promptPricePerToken != null &&
+      published.completionPricePerToken != null
+    ) {
+      return {
+        pricePerMillionInput: formatPerMillionPrice(
+          Number(published.promptPricePerToken) * 1_000_000,
+        ),
+        pricePerMillionOutput: formatPerMillionPrice(
+          Number(published.completionPricePerToken) * 1_000_000,
+        ),
+        source: "provider",
       };
     }
 
@@ -1063,18 +1435,18 @@ class ModelModel {
       };
     }
 
-    // Tier 3: Default fallback. The generic estimate below assumes an unknown
-    // price exists to be approximated; for these providers none does, so it
-    // fabricates one — inflating recorded spend and burning cost limits against
-    // tokens nobody is billed for. vLLM is an inference server the operator
-    // runs. Ollama bills no per-token rate on either transport: a self-hosted
-    // server charges nothing, and its cloud offering is a flat monthly
-    // subscription metered on GPU time rather than tokens.
-    //
-    // Listed explicitly rather than derived from the self-hosted-provider set
-    // it currently matches, so that adding a keyless provider that does bill
-    // per token cannot silently make its traffic free.
+    // vLLM deployment costs are operator-defined. Missing rates are unknown,
+    // while explicit custom or instance zeroes have already resolved above.
     const resolvedProvider = model?.provider ?? provider;
+    if (resolvedProvider === "vllm") {
+      return {
+        pricePerMillionInput: null,
+        pricePerMillionOutput: null,
+        source: "default",
+      };
+    }
+
+    // Ollama retains its zero fallback; other providers keep the estimate.
     if (
       resolvedProvider &&
       PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)
@@ -1102,6 +1474,7 @@ class ModelModel {
     model: ProviderPricedModel | null,
     effectivePricePerMillionInput: string | null,
     providerHint?: SupportedProvider,
+    published?: ProviderModelPricing,
   ): {
     pricePerMillionCacheRead: string | null;
     pricePerMillionCacheWrite: string | null;
@@ -1117,14 +1490,20 @@ class ModelModel {
 
     const read = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheRead,
-      syncedPerToken: model?.cacheReadPricePerToken,
-      multiplierFactor: model?.providerPricing ? undefined : multiplier?.read,
+      syncedPerToken: published
+        ? published.cacheReadPricePerToken
+        : model?.cacheReadPricePerToken,
+      multiplierFactor:
+        model?.providerPricing || published ? undefined : multiplier?.read,
       effectivePricePerMillionInput: priceIn,
     });
     const write = resolveCacheDirection({
       custom: model?.customPricePerMillionCacheWrite,
-      syncedPerToken: model?.cacheWritePricePerToken,
-      multiplierFactor: model?.providerPricing ? undefined : multiplier?.write,
+      syncedPerToken: published
+        ? published.cacheWritePricePerToken
+        : model?.cacheWritePricePerToken,
+      multiplierFactor:
+        model?.providerPricing || published ? undefined : multiplier?.write,
       effectivePricePerMillionInput: priceIn,
     });
 
@@ -1309,6 +1688,7 @@ class ModelModel {
         pricePerMillionCacheRead: null,
         pricePerMillionCacheWrite: null,
         cachePriceSource: null,
+        mediaPricing: null,
       };
     }
 
@@ -1343,6 +1723,7 @@ class ModelModel {
       pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
       pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
       cachePriceSource: pricing.cacheSource,
+      mediaPricing: mediaPricingFor(model.provider, model.modelId),
     };
   }
 
@@ -1499,3 +1880,9 @@ class ModelModel {
 }
 
 export default ModelModel;
+
+// A JSON-encoded `null` would be stored as the jsonb value `null` rather than
+// SQL NULL, which is what every other write leaves for an unknown modality.
+function jsonbOrNull(value: unknown[] | null | undefined): string | null {
+  return value == null ? null : JSON.stringify(value);
+}

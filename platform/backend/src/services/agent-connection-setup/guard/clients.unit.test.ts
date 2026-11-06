@@ -31,6 +31,7 @@ import {
   KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
+import { codexGuardClient } from "./clients/codex";
 import {
   buildStartupGuardInstallSection,
   buildStartupGuardUnshadowSection,
@@ -38,7 +39,10 @@ import {
   type StartupGuardClient,
   type StartupGuardContext,
 } from "./startup-guard";
-import { renderStartupGuardPowerShell } from "./startup-guard.windows";
+import {
+  buildWindowsStartupGuardInstallSection,
+  renderStartupGuardPowerShell,
+} from "./startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 
@@ -55,6 +59,7 @@ const CTX: StartupGuardContext = {
   },
   mcp: {
     serverName: "prod_gateway",
+    toolPrefix: "archestra__",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
     ref: "prod-gateway",
   },
@@ -471,17 +476,25 @@ describe("Codex-specific disconnect", () => {
 
 /**
  * Pull one shell function out of the rendered guard so it can be run on its
- * own. The generator emits every function at column 0 and closes it with a
- * bare `}`, so the slice is unambiguous.
+ * own. Shell syntax distinguishes its closing brace from embedded helper
+ * source that also contains bare `}` lines.
  */
 function extractShellFunction(script: string, name: string): string {
   const lines = script.split("\n");
   // The opening line may carry a trailing `# $1 kind` comment.
   const start = lines.findIndex((line) => line.startsWith(`${name}() {`));
   if (start === -1) throw new Error(`no ${name}() in the rendered guard`);
-  const end = lines.indexOf("}", start);
-  if (end === -1) throw new Error(`${name}() is never closed`);
-  return lines.slice(start, end + 1).join("\n");
+  if (lines[start].endsWith("}")) return lines[start];
+  for (let end = start + 1; end < lines.length; end++) {
+    if (lines[end] !== "}") continue;
+    const candidate = lines.slice(start, end + 1).join("\n");
+    // Embedded JavaScript also has bare closing braces. It does not close
+    // the surrounding shell function while its quoted source is incomplete.
+    if (spawnSync("bash", ["-n"], { input: candidate }).status === 0) {
+      return candidate;
+    }
+  }
+  throw new Error(`${name}() is never closed`);
 }
 
 /**
@@ -512,6 +525,7 @@ async function runGuardSnippet(params: {
 }): Promise<{
   code: number;
   stdout: string;
+  stderr: string;
   cliArgs: string[];
   files: Record<string, string | null>;
 }> {
@@ -581,10 +595,11 @@ async function runGuardSnippet(params: {
         },
       },
     ).then(
-      (r) => ({ code: 0, stdout: r.stdout }),
-      (e: { code?: number; stdout?: string }) => ({
+      (r) => ({ code: 0, stdout: r.stdout, stderr: r.stderr }),
+      (e: { code?: number; stdout?: string; stderr?: string }) => ({
         code: e.code ?? 1,
         stdout: e.stdout ?? "",
+        stderr: e.stderr ?? "",
       }),
     );
 
@@ -703,7 +718,7 @@ describe("Codex disconnect reverses the credential it installed", () => {
     true,
   ])("proxy removal restores direct-mode settings with MCP disconnected first: %s", async (mcpFirst) => {
     const helper = `${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs`;
-    const { code } = await runGuardSnippet({
+    const { code, stdout, stderr } = await runGuardSnippet({
       client: CODEX_GUARD_CLIENT,
       functions: [
         "menu_disconnect_row",
@@ -751,7 +766,7 @@ test ! -f "$HOME/archestra-direct-model-catalog.json"
 ${mcpFirst ? '! grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"' : 'grep -Fq "[mcp_servers.prod_gateway]" "$HOME/config.toml"'}
 `,
     });
-    expect(code).toBe(0);
+    expect(code, stdout + stderr).toBe(0);
   });
 
   test.each([
@@ -995,7 +1010,7 @@ describe("Copilot-specific disconnect", () => {
   test("strips the COPILOT_PROVIDER_* export lines from the shell profiles", () => {
     const script = renderStartupGuardScript(CTX, COPILOT_GUARD_CLIENT);
     expect(script).toContain(
-      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=",
+      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|WIRE_API|API_KEY|HEADERS)=",
     );
     expect(script).toContain('"$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"');
     // Copilot's non-interactive one-shot flag
@@ -1196,18 +1211,24 @@ const SETTINGS_REL = ".claude/settings.json";
 const LEDGER_REL = ".archestra/claude-appa-permissions.json";
 const BACKUP_REL = ".claude/settings.json.archestra-backup";
 
+type ClaudeGuards = { ask: string[]; deny: string[] };
+
+const DEFAULT_GUARDS: ClaudeGuards = {
+  ask: ["Bash(rm *)"],
+  deny: ["WebFetch", OWNED_ALLOW[0]],
+};
+/** Ask and deny rules that name none of the owned rules. */
+const UNGUARDED: ClaudeGuards = { ask: ["Bash(rm *)"], deny: ["WebFetch"] };
+
 function claudeSettings(
   allow: string[] = [...OWNED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+  guards: ClaudeGuards = DEFAULT_GUARDS,
 ): string {
   return JSON.stringify({
     enableAllProjectMcpServers: false,
     numRetries: 1,
     env: { USER_OWNED_KEY: "keep-me" },
-    permissions: {
-      allow,
-      ask: ["Bash(rm *)"],
-      deny: ["WebFetch", OWNED_ALLOW[0]],
-    },
+    permissions: { allow, ask: guards.ask, deny: guards.deny },
     model: "claude-sonnet",
   });
 }
@@ -1267,6 +1288,7 @@ const INVALID_CLAUDE_PERMISSION_FILES = [
 function expectOwnedRulesRemoved(
   raw: string,
   allow: string[] = [...USER_ALLOW, ...OTHER_ALLOW],
+  guards: ClaudeGuards = DEFAULT_GUARDS,
 ): void {
   const settings = JSON.parse(raw) as {
     enableAllProjectMcpServers: boolean;
@@ -1277,8 +1299,8 @@ function expectOwnedRulesRemoved(
   };
   expect(settings.permissions.allow).toEqual(allow);
   expect(Array.isArray(settings.permissions.allow)).toBe(true);
-  expect(settings.permissions.ask).toEqual(["Bash(rm *)"]);
-  expect(settings.permissions.deny).toEqual(["WebFetch", OWNED_ALLOW[0]]);
+  expect(settings.permissions.ask).toEqual(guards.ask);
+  expect(settings.permissions.deny).toEqual(guards.deny);
   expect(Array.isArray(settings.permissions.deny)).toBe(true);
   expect(settings.env).toEqual({ USER_OWNED_KEY: "keep-me" });
   expect(settings.enableAllProjectMcpServers).toBe(false);
@@ -1521,6 +1543,274 @@ describe("Claude APPA permission cleanup on MCP disconnect", () => {
   });
 });
 
+const BRANDED_ALLOW = OWNED_ALLOW.map((rule) =>
+  rule.replace("__archestra__", "__acme__"),
+);
+
+function syncInvoke(healthBody: string, healthState = "ok"): string {
+  return [
+    "already_disconnected() { return 1; }",
+    `HEALTH_STATE=${JSON.stringify(healthState)}`,
+    `HEALTH_BODY=${JSON.stringify(healthBody)}`,
+    "sync_tool_prefix",
+  ].join("\n");
+}
+
+describe("Claude APPA permission prefix sync at launch", () => {
+  test("moves owned rules to the reported prefix and keeps every other rule", async () => {
+    const { code, files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"guardVersion":10,"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(undefined, UNGUARDED),
+        [LEDGER_REL]: claudeLedger(),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(code).toBe(0);
+    expectOwnedRulesRemoved(
+      files[SETTINGS_REL] ?? "",
+      [...BRANDED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+      UNGUARDED,
+    );
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW,
+      other_gateway: OTHER_ALLOW,
+      schemaVersion: 1,
+    });
+  });
+
+  test("leaves a new-prefix rule the user added as theirs", async () => {
+    const userBranded = BRANDED_ALLOW[0];
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(
+          [userBranded, ...OWNED_ALLOW],
+          UNGUARDED,
+        ),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    const settings = JSON.parse(files[SETTINGS_REL] ?? "") as {
+      permissions: { allow: string[] };
+    };
+    expect(settings.permissions.allow).toEqual(BRANDED_ALLOW);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW.slice(1),
+    });
+  });
+
+  test.each([
+    {
+      name: "the prefix already matches",
+      body: '{"mcpToolPrefix":"archestra__"}',
+    },
+    { name: "an older instance omits the prefix", body: '{"guardVersion":9}' },
+    {
+      name: "the prefix is not a tool prefix",
+      body: '{"mcpToolPrefix":"acme__run_tool,Bash(*)__"}',
+    },
+  ])("writes nothing when $name", async ({ body }) => {
+    const settings = claudeSettings();
+    const ledger = claudeLedger();
+    const { code, files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke(body),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(code).toBe(0);
+    expect(files[SETTINGS_REL]).toBe(settings);
+    expect(files[LEDGER_REL]).toBe(ledger);
+  });
+
+  test.each([
+    "ask",
+    "deny",
+  ] as const)("keeps an owned rule the user's %s rule names under its old name", async (kind) => {
+    const guards = { ...UNGUARDED, [kind]: [OWNED_ALLOW[1]] };
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    // Moved, the allow rule would let through the calls the user's rule no longer matches.
+    const kept = [BRANDED_ALLOW[0], OWNED_ALLOW[1], ...BRANDED_ALLOW.slice(2)];
+    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", kept, guards);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({ prod_gateway: kept });
+  });
+
+  test.each([
+    {
+      name: "a wildcard on the old prefix keeps every rule",
+      guard: "mcp__prod_gateway__archestra__*",
+      allow: OWNED_ALLOW,
+    },
+    {
+      name: "a rule for the whole gateway still covers the new names",
+      guard: "mcp__prod_gateway",
+      allow: BRANDED_ALLOW,
+    },
+  ])("an ask rule in another form: $name", async ({ guard, allow }) => {
+    const guards = { ...UNGUARDED, ask: [guard] };
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", allow, guards);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: allow,
+    });
+  });
+
+  test("drops stale owned rules when settings are missing, without creating them", async () => {
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: { [LEDGER_REL]: claudeLedger() },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBeNull();
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      other_gateway: OTHER_ALLOW,
+      schemaVersion: 1,
+    });
+  });
+
+  test("writes nothing for a gateway the instance reports down", async () => {
+    const settings = claudeSettings(undefined, UNGUARDED);
+    const ledger = claudeLedger();
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcp":"down","mcpToolPrefix":"acme__"}'),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBe(settings);
+    expect(files[LEDGER_REL]).toBe(ledger);
+  });
+
+  test("an interrupted move owns each rule once", async () => {
+    // The first ledger write landed and the settings write did not.
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, UNGUARDED),
+        [LEDGER_REL]: claudeLedger({
+          prod_gateway: [...OWNED_ALLOW, ...BRANDED_ALLOW],
+        }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expectOwnedRulesRemoved(
+      files[SETTINGS_REL] ?? "",
+      BRANDED_ALLOW,
+      UNGUARDED,
+    );
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW,
+    });
+  });
+
+  test.each([
+    {
+      name: "every owned rule uses the reported prefix",
+      owned: BRANDED_ALLOW,
+      started: false,
+    },
+    {
+      name: "an owned rule uses another prefix",
+      owned: OWNED_ALLOW,
+      started: true,
+    },
+  ])("starts python only when a rule moves: $name", async ({
+    owned,
+    started,
+  }) => {
+    const bin = await mkdtemp(path.join(tmpdir(), "archestra-fake-python-"));
+    try {
+      const marker = path.join(bin, "started");
+      await writeFile(
+        path.join(bin, "python3"),
+        `#!/bin/sh\nprintf started > ${JSON.stringify(marker)}\n`,
+        "utf8",
+      );
+      await chmod(path.join(bin, "python3"), 0o755);
+      await runGuardSnippet({
+        client: CLAUDE_CODE_GUARD_CLIENT,
+        functions: ["sync_tool_prefix"],
+        invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+        env: { PATH: `${bin}:${process.env.PATH ?? ""}` },
+        files: {
+          [SETTINGS_REL]: claudeSettings([...owned, ...OTHER_ALLOW], UNGUARDED),
+          // Another gateway's rules under the old prefix start nothing.
+          [LEDGER_REL]: claudeLedger({
+            prod_gateway: owned,
+            other_gateway: OTHER_ALLOW,
+          }),
+        },
+      });
+      const ran = await readFile(marker, "utf8").then(
+        () => true,
+        () => false,
+      );
+      expect(ran).toBe(started);
+    } finally {
+      await rm(bin, { recursive: true, force: true });
+    }
+  });
+
+  test("writes nothing while the instance is unreachable", async () => {
+    const settings = claudeSettings();
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}', "down"),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: claudeLedger() },
+      readFiles: [SETTINGS_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBe(settings);
+  });
+
+  test("runs after the health check on both launch paths", async () => {
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    await expectValidBash(script);
+    expect(
+      script.match(/launch_refreshed_guard "\$@"\n\s*sync_tool_prefix/g),
+    ).toHaveLength(2);
+  });
+});
+
 function pwshBin(): string | null {
   const candidates = [
     ...(process.platform === "win32" ? ["powershell.exe"] : []),
@@ -1626,6 +1916,198 @@ async function runWindowsMcpCleanup(params: {
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+async function runWindowsPrefixSync(params: {
+  files: Record<string, string>;
+  readFiles: string[];
+  toolPrefix: string;
+}): Promise<Record<string, string | null>> {
+  const sync = extractPowerShellFunction(
+    renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    "Sync-ArchClaudeAppaPermissions",
+  );
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-appa-ps-sync-"));
+  const home = path.join(dir, "home");
+  try {
+    for (const [relpath, content] of Object.entries(params.files)) {
+      const target = path.join(home, relpath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
+    }
+    const driver = path.join(dir, "driver.ps1");
+    await writeFile(
+      driver,
+      [
+        "$ErrorActionPreference = 'Stop'",
+        "$McpServerName = 'prod_gateway'",
+        `$archToolPrefix = ${psSingleQuote(params.toolPrefix)}`,
+        sync,
+        "Sync-ArchClaudeAppaPermissions",
+      ].join("\n"),
+      "utf8",
+    );
+    await execFileAsync(
+      powershellBin ?? "pwsh",
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          CLAUDE_CONFIG_DIR: "",
+        },
+        timeout: 30_000,
+      },
+    );
+    const out: Record<string, string | null> = {};
+    for (const relpath of params.readFiles) {
+      try {
+        out[relpath] = await readFile(path.join(home, relpath), "utf8");
+      } catch {
+        out[relpath] = null;
+      }
+    }
+    return out;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+describe.skipIf(!powershellBin)(
+  "Claude APPA permission prefix sync at Windows launch",
+  () => {
+    test("moves owned rules to the reported prefix and keeps every other rule", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(undefined, UNGUARDED),
+          [LEDGER_REL]: claudeLedger(),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expectOwnedRulesRemoved(
+        files[SETTINGS_REL] ?? "",
+        [...BRANDED_ALLOW, ...USER_ALLOW, ...OTHER_ALLOW],
+        UNGUARDED,
+      );
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: BRANDED_ALLOW,
+        other_gateway: OTHER_ALLOW,
+        schemaVersion: 1,
+      });
+    });
+
+    test("a single moved rule stays a JSON array", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings([OWNED_ALLOW[0]], UNGUARDED),
+          [LEDGER_REL]: claudeLedger({ prod_gateway: [OWNED_ALLOW[0]] }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(JSON.parse(files[SETTINGS_REL] ?? "").permissions.allow).toEqual([
+        BRANDED_ALLOW[0],
+      ]);
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: [BRANDED_ALLOW[0]],
+      });
+    });
+
+    test.each([
+      "ask",
+      "deny",
+    ] as const)("keeps an owned rule the user's %s rule names under its old name", async (kind) => {
+      const guards = { ...UNGUARDED, [kind]: [OWNED_ALLOW[1]] };
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+          [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      const kept = [
+        BRANDED_ALLOW[0],
+        OWNED_ALLOW[1],
+        ...BRANDED_ALLOW.slice(2),
+      ];
+      expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", kept, guards);
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: kept,
+      });
+    });
+
+    test("a wildcard ask rule on the old prefix keeps every rule", async () => {
+      const guards = { ...UNGUARDED, ask: ["mcp__prod_gateway__archestra__*"] };
+      const settings = claudeSettings(OWNED_ALLOW, guards);
+      const ledger = claudeLedger({ prod_gateway: OWNED_ALLOW });
+      const files = await runWindowsPrefixSync({
+        files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(files[SETTINGS_REL]).toBe(settings);
+      expect(files[LEDGER_REL]).toBe(ledger);
+    });
+
+    test("drops stale owned rules when settings are missing, without creating them", async () => {
+      const files = await runWindowsPrefixSync({
+        files: { [LEDGER_REL]: claudeLedger() },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(files[SETTINGS_REL]).toBeNull();
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        other_gateway: OTHER_ALLOW,
+        schemaVersion: 1,
+      });
+    });
+
+    test("an interrupted move owns each rule once", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, UNGUARDED),
+          [LEDGER_REL]: claudeLedger({
+            prod_gateway: [...OWNED_ALLOW, ...BRANDED_ALLOW],
+          }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expectOwnedRulesRemoved(
+        files[SETTINGS_REL] ?? "",
+        BRANDED_ALLOW,
+        UNGUARDED,
+      );
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: BRANDED_ALLOW,
+      });
+    });
+
+    test.each([
+      "archestra__",
+      "acme__run_tool,Bash(*)__",
+    ])("writes nothing for the prefix %j", async (toolPrefix) => {
+      const settings = claudeSettings();
+      const ledger = claudeLedger();
+      const files = await runWindowsPrefixSync({
+        files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix,
+      });
+
+      expect(files[SETTINGS_REL]).toBe(settings);
+      expect(files[LEDGER_REL]).toBe(ledger);
+    });
+  },
+);
 
 describe.skipIf(!powershellBin)(
   "Claude APPA permission cleanup on Windows MCP disconnect",
@@ -1797,3 +2279,332 @@ exit 0
     });
   },
 );
+
+describe("ChatGPT plugin disconnect verification", () => {
+  test.for([
+    "bash",
+    "powershell",
+  ] as const)("%s retries partial plugin cleanup and keeps it disconnected across refresh", async (platform, {
+    skip,
+  }) => {
+    skip(platform === "powershell" && !powershellBin);
+    const dir = await mkdtemp(path.join(tmpdir(), "chatgpt-plugin-cleanup-"));
+    try {
+      const home = path.join(dir, "home");
+      const bin = path.join(dir, "bin");
+      const configDir = path.join(home, ".codex");
+      await mkdir(configDir, { recursive: true });
+      await mkdir(path.join(home, ".archestra"), { recursive: true });
+      await mkdir(bin);
+      const configFile = path.join(configDir, "config.toml");
+      const logFile = path.join(dir, "calls.jsonl");
+      const owned = [
+        '[plugins."acme-skills@acme-skills"]',
+        "enabled = true",
+        '[marketplaces."acme-skills"]',
+        'source_type = "git"',
+        '[mcp_servers."prod_gateway"]',
+        'url = "https://example.test/mcp"',
+        "",
+      ].join("\n");
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${owned}`);
+      const cli = path.join(bin, "codex");
+      await writeFile(
+        cli,
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + '\\n');
+const config = ${JSON.stringify(configFile)};
+const plugin = '[plugins."acme-skills@acme-skills"]';
+const marketplace = '[marketplaces."acme-skills"]';
+if (args[0] === 'plugin' && args[1] === 'add' && !fs.readFileSync(config, 'utf8').includes(plugin)) {
+  fs.appendFileSync(config, plugin + '\\nenabled = true\\n');
+}
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'upgrade' && !fs.readFileSync(config, 'utf8').includes(marketplace)) {
+  fs.appendFileSync(config, marketplace + '\\nsource_type = "git"\\n');
+}
+let section;
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'remove') {
+  if (process.env.FAIL_MARKETPLACE === '1') process.exit(1);
+  section = '[marketplaces."acme-skills"]';
+} else if (args[0] === 'plugin' && args[1] === 'remove') section = '[plugins."acme-skills@acme-skills"]';
+else if (args[0] === 'mcp' && args[1] === 'remove') section = '[mcp_servers."prod_gateway"]';
+if (section) {
+  const file = ${JSON.stringify(configFile)};
+  const blocks = fs.readFileSync(file, 'utf8').split(/(?=^\\[)/m);
+  fs.writeFileSync(file, blocks.filter(block => !block.startsWith(section)).join(''));
+}
+`,
+      );
+      await chmod(cli, 0o755);
+      const client = codexGuardClient(true);
+      const ctx: StartupGuardContext = {
+        ...CTX,
+        proxy: null,
+        skills: {
+          marketplaceName: "acme-skills",
+          cloneUrl: "https://example.test/marketplace.git",
+          connectionPlugin: true,
+          pluginNames: ["acme-skills"],
+        },
+      };
+      const guard = path.join(
+        home,
+        platform === "bash" ? client.scriptRelpath : client.psScriptRelpath,
+      );
+      await writeFile(
+        guard,
+        platform === "bash"
+          ? renderStartupGuardScript(ctx, client)
+          : renderStartupGuardPowerShell(ctx, client),
+      );
+      const driver = path.join(dir, "disconnect.ps1");
+      await writeFile(
+        driver,
+        // PowerShell can derive real profile paths outside USERPROFILE.
+        // Hide those externally owned files; fixture files use the real cmdlet.
+        `function Test-Path {
+  param([Parameter(Position=0)][string]$Path, [string]$LiteralPath)
+  $target = if ($LiteralPath) { $LiteralPath } else { $Path }
+  $root = [IO.Path]::GetFullPath($env:USERPROFILE) + [IO.Path]::DirectorySeparatorChar
+  if (-not $target -or -not [IO.Path]::GetFullPath($target).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  Microsoft.PowerShell.Management\\Test-Path -LiteralPath $target
+}
+& ${psSingleQuote(guard)}
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+`,
+      );
+      const run = (fail: boolean) =>
+        spawnSync(
+          platform === "bash" ? "bash" : (powershellBin ?? "pwsh"),
+          platform === "bash"
+            ? [guard]
+            : ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              USERPROFILE: home,
+              CODEX_HOME: configDir,
+              XDG_STATE_HOME: path.join(home, "state"),
+              XDG_DATA_HOME: path.join(home, "data"),
+              PATH: `${bin}:${process.env.PATH ?? ""}`,
+              ARCHESTRA_GUARD_ACTION: "disconnect",
+              FAIL_MARKETPLACE: fail ? "1" : "0",
+            },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+      const failed = run(true);
+      expect(failed.error).toBeUndefined();
+      expect(failed.status).toBe(1);
+      expect(failed.stdout.match(/^Could not disconnect /gm)).toHaveLength(1);
+      expect(await readFile(configFile, "utf8")).toContain(
+        '[marketplaces."acme-skills"]',
+      );
+      expect(
+        await readFile(path.join(home, client.skipRelpath), "utf8").catch(
+          () => "",
+        ),
+      ).not.toMatch(/^(mcp|skills)$/m);
+      expect(await readFile(guard, "utf8").catch(() => null)).not.toBeNull();
+      const retried = run(false);
+      expect(retried.error).toBeUndefined();
+      expect(retried.status).toBe(0);
+      expect(retried.stdout.match(/^Disconnected /gm)).toHaveLength(1);
+      expect((await readFile(configFile, "utf8")).trim()).toBe(
+        FOREIGN_TABLES.trim(),
+      );
+      expect(await readFile(guard, "utf8").catch(() => null)).toBeNull();
+
+      // Disconnect only the plugin, keeping the proxy and its launcher.
+      const withProxy = { ...ctx, proxy: CTX.proxy };
+      const proxyBlock =
+        '# >>> archestra:acme_proxy >>>\n[model_providers.acme_proxy]\nname = "acme_proxy"\n# <<< archestra:acme_proxy <<<\n';
+      const lifecycleGuard =
+        platform === "bash"
+          ? renderStartupGuardScript(withProxy, client)
+          : renderStartupGuardPowerShell(withProxy, client);
+      await writeFile(guard, lifecycleGuard);
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${proxyBlock}${owned}`);
+      const skipFile = path.join(home, client.skipRelpath);
+      const refresh =
+        platform === "bash"
+          ? extractShellFunction(
+              buildStartupGuardInstallSection(withProxy, client),
+              "archestra_refresh_codex_marketplace",
+            )
+          : extractPowerShellFunction(
+              buildWindowsStartupGuardInstallSection(withProxy, client),
+              "Invoke-ArchestracodexMarketplaceRefresh",
+            );
+      const lifecycle = path.join(
+        dir,
+        platform === "bash" ? "lifecycle.sh" : "lifecycle.ps1",
+      );
+      await mkdir(path.join(home, "data"));
+      const prelude =
+        platform === "bash"
+          ? `SKIP_FILE=${JSON.stringify(skipFile)}
+MCP_SERVER_NAME=prod_gateway
+SKILLS_MARKETPLACE_NAME=acme-skills
+PLUGIN_NAMES=acme-skills
+C_ERR=''; C_RESET=''; C_ACCENT=''; C_DIM=''
+MIN_CHECK_FRAMES=0; FRAME_SLEEP=0
+line_reset() { :; }
+spin_start() { :; }
+spin_tick() { :; }
+GUARD_KINDS=(mcp)
+GUARD_LABELS=('Connection plugin')
+${["disconnect_actions", "disconnect_verify", "disconnect_resource", "remember_disconnected", "disconnect_and_forget"].map((name) => extractShellFunction(lifecycleGuard, name)).join("\n")}
+`
+          : `$SkipFile = ${psSingleQuote(skipFile)}
+if (-not ([Environment]::GetFolderPath('LocalApplicationData')).StartsWith($env:USERPROFILE + [IO.Path]::DirectorySeparatorChar)) { throw 'Fixture data directory was not selected' }
+$McpServerName = 'prod_gateway'
+$SkillsMarketplaceName = 'acme-skills'
+$PluginNames = @('acme-skills')
+$FrameSleepMs = 0
+function Show-ArchSpinStart { }
+function Show-ArchSpinTick { }
+function Clear-ArchLine { }
+function Write-Arch { }
+${["Get-ArchRealExe", "Invoke-ArchDisconnectActions", "Test-ArchDisconnected", "Disconnect-ArchRemote", "Add-ArchDisconnected", "Disconnect-ArchRemotes"].map((name) => extractPowerShellFunction(lifecycleGuard, name)).join("\n")}
+`;
+      const invokeLifecycle = async (body: string) => {
+        await writeFile(lifecycle, prelude + body);
+        const result = spawnSync(
+          platform === "bash" ? "bash" : (powershellBin ?? "pwsh"),
+          platform === "bash"
+            ? [lifecycle]
+            : ["-NoProfile", "-NonInteractive", "-File", lifecycle],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              USERPROFILE: home,
+              CODEX_HOME: configDir,
+              XDG_STATE_HOME: path.join(home, "state"),
+              XDG_DATA_HOME: path.join(home, "data"),
+              PATH: `${bin}:${process.env.PATH ?? ""}`,
+            },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status, result.stdout + result.stderr).toBe(0);
+      };
+      await invokeLifecycle(
+        platform === "bash"
+          ? "disconnect_and_forget 0"
+          : "Disconnect-ArchRemotes @(@{ Kind = 'mcp'; Label = 'Connection plugin' })",
+      );
+      expect(await readFile(skipFile, "utf8")).toMatch(/^mcp\r?$/m);
+      expect(await readFile(configFile, "utf8")).toContain(proxyBlock.trim());
+      expect(await readFile(configFile, "utf8")).not.toContain(
+        '[marketplaces."acme-skills"]',
+      );
+      const refreshCall =
+        refresh +
+        (platform === "bash"
+          ? "\narchestra_refresh_codex_marketplace"
+          : "\nInvoke-ArchestracodexMarketplaceRefresh -ClientArgs @() | Out-Null");
+      const callsAfterDisconnect = await readFile(logFile, "utf8");
+      await invokeLifecycle(refreshCall);
+      expect(await readFile(logFile, "utf8")).toBe(callsAfterDisconnect);
+
+      // An older loaded launcher may already have restored owned entries.
+      await writeFile(configFile, `${FOREIGN_TABLES}\n${proxyBlock}${owned}`);
+      const cleanedAgain = run(false);
+      expect(
+        cleanedAgain.status,
+        cleanedAgain.stdout + cleanedAgain.stderr,
+      ).toBe(0);
+      expect(cleanedAgain.stdout).toContain("Disconnected Connection plugin");
+      expect((await readFile(configFile, "utf8")).trim()).toBe(
+        FOREIGN_TABLES.trim(),
+      );
+      expect(await readFile(guard, "utf8").catch(() => null)).toBeNull();
+      const callsAfterCleanup = await readFile(logFile, "utf8");
+      await invokeLifecycle(refreshCall);
+      expect(await readFile(logFile, "utf8")).toBe(callsAfterCleanup);
+
+      // Refresh still runs for a connected plugin with its guard installed.
+      await writeFile(guard, lifecycleGuard);
+      await invokeLifecycle(refreshCall);
+      expect(
+        (await readFile(logFile, "utf8")).slice(callsAfterCleanup.length),
+      ).toContain('["plugin","marketplace","upgrade","acme-skills"]');
+      expect(await readFile(configFile, "utf8")).toContain(
+        '[plugins."acme-skills@acme-skills"]',
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  const entries = [
+    ['[plugins."acme-skills@acme-skills"]\nenabled = true\n', 7],
+    [
+      '[plugins."acme-skills@acme-skills".mcp_servers.prod_gateway.tools.helper]\napproval_mode = "approve"\n',
+      7,
+    ],
+    ['[marketplaces."acme-skills"]\nsource_type = "git"\n', 7],
+    ['[mcp_servers."prod_gateway"]\nurl = "https://example.test/mcp"\n', 7],
+    [FOREIGN_TABLES, 0],
+  ] as const;
+
+  test.each(
+    entries,
+  )("does not claim cleanup succeeded while an owned entry remains: %s", async (configToml, expected) => {
+    const result = await runGuardSnippet({
+      client: codexGuardClient(true),
+      functions: [],
+      files: { ".codex/config.toml": configToml },
+      invoke: `verify() {\n${codexGuardClient(true).mcpDisconnectVerify}\n}\nPLUGIN_NAMES='acme-skills'\nverify || exit 7\n`,
+    });
+    expect(result.code).toBe(expected);
+  });
+
+  test.skipIf(!powershellBin).each(entries)(
+    "PowerShell refuses cleanup while an owned entry remains: %s",
+    async (configToml, expected) => {
+      const dir = await mkdtemp(path.join(tmpdir(), "chatgpt-disconnect-ps-"));
+      try {
+        await writeFile(path.join(dir, "config.toml"), configToml);
+        const script = path.join(dir, "verify.ps1");
+        await writeFile(
+          script,
+          [
+            "$ErrorActionPreference = 'Stop'",
+            "$SkillsMarketplaceName = 'acme-skills'",
+            "$McpServerName = 'prod_gateway'",
+            "$PluginNames = @('acme-skills')",
+            "function Test-Disconnect {",
+            codexGuardClient(true).windows.mcpDisconnectVerify,
+            "return $true",
+            "}",
+            "if (-not (Test-Disconnect)) { exit 7 }",
+            "exit 0",
+          ].join("\n"),
+        );
+        const result = spawnSync(
+          powershellBin ?? "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", script],
+          {
+            env: { ...process.env, CODEX_HOME: dir },
+            encoding: "utf8",
+            timeout: 30_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.stderr).toBe("");
+        expect(result.status).toBe(expected);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});

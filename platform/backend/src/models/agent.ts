@@ -1,5 +1,7 @@
 import type { CreatedBy } from "@archestra/shared";
 import {
+  AGENT_CATALOG_IDS,
+  type AgentCatalogId,
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
   type CursorQuery,
@@ -16,6 +18,7 @@ import {
   RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+  SubagentLoadBalancingConfigSchema,
   type SupportedProvider,
   TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -85,6 +88,8 @@ import {
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type NetworkPolicy,
+  NetworkPolicyInputSchema,
   type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
@@ -108,6 +113,7 @@ import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import { agentToolSurfaceChanged } from "./agent-tool-surface";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
@@ -115,6 +121,7 @@ import { gatewayAgentSelection } from "./gateway-agent-selection";
 import { idArrayCondition } from "./id-array-condition";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
+import { port } from "./ports";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
 } from "./resource-permission-policy";
@@ -194,6 +201,7 @@ type AgentListFilters = {
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
+  runtime?: AgentCatalogId | "chat" | "custom";
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
   /** False skips the count; `total` is then a lower bound. */
@@ -219,6 +227,14 @@ type AgentCatalogCandidatePage = {
 };
 
 class AgentModel {
+  /** SRE is built-in for ownership and grants but remains a user-facing agent. */
+  private static isRegularOrSreAgent(): SQL {
+    return or(
+      eq(schema.agentsTable.builtIn, false),
+      sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.SRE}`,
+    ) as SQL;
+  }
+
   /**
    * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
    * lookup runs on every MCP-gateway request before auth, so under load it is
@@ -265,7 +281,13 @@ class AgentModel {
     Array<
       Pick<
         Agent,
-        "id" | "name" | "agentType" | "scope" | "authorId" | "isPersonalGateway"
+        | "id"
+        | "name"
+        | "agentType"
+        | "scope"
+        | "authorId"
+        | "isPersonalGateway"
+        | "networkPolicy"
       > & { isBuiltIn: boolean; teamIds: string[] }
     >
   > {
@@ -284,6 +306,7 @@ class AgentModel {
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
         isPersonalGateway: schema.agentsTable.isPersonalGateway,
         isBuiltIn: schema.agentsTable.builtIn,
+        networkPolicy: schema.agentsTable.networkPolicy,
       })
       .from(schema.agentsTable)
       .where(
@@ -364,7 +387,9 @@ class AgentModel {
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
-  }): Promise<Array<Pick<Agent, "id" | "name" | "agentType">>> {
+  }): Promise<
+    Array<Pick<Agent, "id" | "name" | "agentType" | "environmentId">>
+  > {
     const { organizationId, agentIds } = params;
 
     if (agentIds.length === 0) {
@@ -376,6 +401,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        environmentId: schema.agentsTable.environmentId,
       })
       .from(schema.agentsTable)
       .where(
@@ -549,16 +575,26 @@ class AgentModel {
    * once per request scope. Outside a memoizing request this is a fresh read,
    * so a changed setting applies to the next call.
    */
-  private static findToolAccessFields(
-    id: string,
-  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+  private static findToolAccessFields(id: string): Promise<{
+    environmentId: string | null;
+    accessAllTools: boolean;
+    keepMediaInLogs: boolean | null;
+  } | null> {
     return readConfig(`agent-tool-access\0${id}`, async () => {
+      // The organization's media setting rides along so each log write learns
+      // it from the read it already makes; an organization change drops the
+      // cached entry like an agent change does.
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
           accessAllTools: schema.agentsTable.accessAllTools,
+          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
         })
         .from(schema.agentsTable)
+        .leftJoin(
+          schema.organizationsTable,
+          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+        )
         .where(
           and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
         )
@@ -705,10 +741,10 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
-    // Lazy: the availability check reaches into the service layer, which
-    // would otherwise load with every model.
-    const { isSkillSandboxAvailableForAgent } = await import(
-      "@/skills/skill-sandbox-availability"
+    // Through a port: the availability check sits above the models and loads
+    // on first use.
+    const { isSkillSandboxAvailableForAgent } = await port(
+      "skillSandboxAvailability",
     );
     await Promise.all(
       agents.map(async (agent) => {
@@ -770,6 +806,8 @@ class AgentModel {
        */
       skipExclusionPrefill?: boolean;
       initialPermissionGrants?: ResourcePermissionGrant[];
+      /** A system-seeded agent can retain its author without an individual grant. */
+      grantAuthor?: boolean;
       /** Publish to the whole organization; for system callers only. */
       publishToOrganization?: boolean;
       /**
@@ -824,12 +862,20 @@ class AgentModel {
           activationSkillMode: "manual" as const,
         }),
         ...(enableAccessAllTools && { accessAllTools: false }),
+        // The insert type carries the input shape; store the normalized policy.
+        networkPolicy: agent.networkPolicy
+          ? NetworkPolicyInputSchema.parse(agent.networkPolicy)
+          : agent.networkPolicy,
+        subagentLoadBalancing: agent.subagentLoadBalancing
+          ? SubagentLoadBalancingConfigSchema.parse(agent.subagentLoadBalancing)
+          : agent.subagentLoadBalancing,
         organizationId,
         ...(slug && { slug }),
         ...(authorId && { authorId }),
       },
       {
         grants: options?.initialPermissionGrants,
+        grantAuthor: options?.grantAuthor,
         publishToOrganization: options?.publishToOrganization,
       },
     );
@@ -999,7 +1045,7 @@ class AgentModel {
     options: AgentRosterOptions;
   }): Promise<ChatAgentRoster[]> {
     const where = await AgentModel.buildRosterWhere(params);
-    return AgentModel.findChatRosterRows(where);
+    return AgentModel.findChatRosterRows({ where, userId: params.userId });
   }
 
   /** Bounded fallback identities; explicit URL references use findChatRoster IDs. */
@@ -1048,9 +1094,10 @@ class AgentModel {
       ),
     ]);
     const ids = [...new Set([...fallback, ...system].map((row) => row.id))];
-    const rows = await AgentModel.findChatRosterRows(
-      and(where, idArrayCondition(table.id, ids)),
-    );
+    const rows = await AgentModel.findChatRosterRows({
+      where: and(where, idArrayCondition(table.id, ids)),
+      userId: params.userId,
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     return ids.flatMap((id) => {
       const row = byId.get(id);
@@ -1096,8 +1143,12 @@ class AgentModel {
     // SPDX-SnippetEnd
     const where = and(
       base,
-      or(eq(table.authorId, params.userId), nonPersonalAudience),
-      eq(table.builtIn, false),
+      or(
+        eq(table.authorId, params.userId),
+        nonPersonalAudience,
+        namedChatReader(params.userId),
+        eq(table.builtIn, true),
+      ),
       pattern
         ? or(ilike(table.name, pattern), ilike(table.description, pattern))
         : undefined,
@@ -1108,7 +1159,6 @@ class AgentModel {
       return AgentModel.findChatOrderedRosterPage({
         where: and(
           base,
-          eq(table.builtIn, false),
           pattern
             ? or(ilike(table.name, pattern), ilike(table.description, pattern))
             : undefined,
@@ -1123,7 +1173,11 @@ class AgentModel {
       sortBy,
       pagination: params.pagination,
     });
-    const rows = await AgentModel.findChatRosterRows(where, page);
+    const rows = await AgentModel.findChatRosterRows({
+      where,
+      page,
+      userId: params.userId,
+    });
     return createCursorPaginatedResult(rows, params.pagination, page.position);
   }
 
@@ -1404,8 +1458,10 @@ class AgentModel {
         runtime: schema.agentsTable.runtime,
         namespace: schema.environmentsTable.namespace,
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+        agentPolicy: schema.agentsTable.networkPolicy,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+        agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
       })
       .from(schema.agentsTable)
       .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
@@ -1430,6 +1486,83 @@ class AgentModel {
         ),
       )
       .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
+  }
+
+  /**
+   * Agents with their own egress policy, each with the namespace its Code
+   * Sandbox engine runs in: the bound environment's namespace, or the
+   * organization's default namespace when unbound. Optionally narrowed to one
+   * organization, one environment, or one agent.
+   */
+  static async listNetworkPolicyEngineTargets(
+    filter: {
+      organizationId?: string;
+      environmentId?: string;
+      agentId?: string;
+    } = {},
+  ): Promise<
+    {
+      id: string;
+      organizationId: string;
+      environmentId: string | null;
+      networkPolicy: NetworkPolicy;
+      namespace: string | null;
+    }[]
+  > {
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        environmentId: schema.agentsTable.environmentId,
+        networkPolicy: schema.agentsTable.networkPolicy,
+        environmentNamespace: schema.environmentsTable.namespace,
+        defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.agentsTable)
+      .innerJoin(
+        schema.organizationsTable,
+        eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+      )
+      .leftJoin(
+        schema.environmentsTable,
+        and(
+          eq(schema.environmentsTable.id, schema.agentsTable.environmentId),
+          eq(
+            schema.environmentsTable.organizationId,
+            schema.agentsTable.organizationId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentsTable.networkPolicy),
+          notDeleted(schema.agentsTable),
+          filter.organizationId
+            ? eq(schema.agentsTable.organizationId, filter.organizationId)
+            : undefined,
+          filter.environmentId
+            ? eq(schema.agentsTable.environmentId, filter.environmentId)
+            : undefined,
+          filter.agentId
+            ? eq(schema.agentsTable.id, filter.agentId)
+            : undefined,
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.networkPolicy
+        ? [
+            {
+              id: row.id,
+              organizationId: row.organizationId,
+              environmentId: row.environmentId,
+              networkPolicy: row.networkPolicy,
+              namespace: row.environmentId
+                ? row.environmentNamespace
+                : row.defaultNamespace,
+            },
+          ]
+        : [],
+    );
   }
 
   /**
@@ -1458,6 +1591,27 @@ class AgentModel {
       );
   }
 
+  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
+  static async countFollowingOrganizationRouting(
+    organizationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNull(schema.agentsTable.modelPoolId),
+          isNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return row?.total ?? 0;
+  }
+
   static async findRuntimeTargets(organizationId: string) {
     return db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
@@ -1480,7 +1634,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -1614,7 +1768,7 @@ class AgentModel {
   }
 
   /**
-   * Internal agents (not built-in) the user can use, for the agent picker in
+   * Internal agents and the SRE agent the user can use, for the agent picker in
    * Teams/Slack/etc. A channel is shared, so it leaves personal agents out. A
    * direct message is the user's own, so it keeps them.
    */
@@ -1635,7 +1789,7 @@ class AgentModel {
         and(
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
           ResourcePermissionPolicyModel.grantCondition({
             ...principal,
@@ -1677,7 +1831,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           not(agentAudienceIs("personal")),
           notDeleted(schema.agentsTable),
         ),
@@ -1706,7 +1860,7 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           or(
             not(agentAudienceIs("personal")),
             eq(schema.agentsTable.authorId, userId),
@@ -1768,6 +1922,7 @@ class AgentModel {
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
+      !params.filters?.runtime &&
       params.filters?.pinned !== true &&
       params.filters?.scope !== "built_in";
     const externalWhereConditions: SQL[] = [
@@ -2332,6 +2487,24 @@ class AgentModel {
         ilike(schema.agentsTable.name, `%${escapeLikePattern(filters.name)}%`),
       );
     }
+    if (filters?.runtime) {
+      // Match resolveAgentCatalogId: the launcher identifies the runtime,
+      // independently of the saved image registry or tag.
+      const command = sql<string>`coalesce(${schema.agentsTable.runtime}->'command'->>0, '')`;
+      if (filters.runtime === "chat") {
+        whereConditions.push(isNull(schema.agentsTable.runtime));
+      } else if (filters.runtime === "custom") {
+        whereConditions.push(
+          isNotNull(schema.agentsTable.runtime),
+          notInArray(
+            command,
+            AGENT_CATALOG_IDS.map((id) => `archestra-${id}`),
+          ),
+        );
+      } else {
+        whereConditions.push(eq(command, `archestra-${filters.runtime}`));
+      }
+    }
     if (filters?.providerApiKeyId === "organization-default") {
       whereConditions.push(
         isNull(schema.agentsTable.llmApiKeyId),
@@ -2363,23 +2536,23 @@ class AgentModel {
     ) {
       whereConditions.push(
         agentAudienceIs(filters.scope),
-        eq(schema.agentsTable.builtIn, false),
+        AgentModel.isRegularOrSreAgent(),
       );
     }
-    // Chat selection keeps the system assistant visible to every member; the
-    // platform's other built-in agents stay hidden. Non-admins get the same
-    // limit whatever scope they ask for.
+    // SRE stays in the user-facing catalog wherever its grants permit it.
+    // Chat selection also includes the system assistant when enabled; the
+    // platform's other built-in agents stay hidden.
     if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
       whereConditions.push(
-        chatAssistant
-          ? (or(
-              eq(schema.agentsTable.builtIn, false),
-              eq(
+        or(
+          AgentModel.isRegularOrSreAgent(),
+          chatAssistant
+            ? eq(
                 sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
                 BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-              ),
-            ) as SQL)
-          : eq(schema.agentsTable.builtIn, false),
+              )
+            : undefined,
+        ) as SQL,
       );
     }
     if (filters?.teamIds?.length) {
@@ -2971,6 +3144,21 @@ class AgentModel {
   }
 
   /**
+   * What a log row written for this agent needs: its environment, and whether
+   * its organization keeps media in logs (null when the agent is not found).
+   */
+  static async findLogSettings(id: string): Promise<{
+    environmentId: string | null;
+    keepMediaInLogs: boolean | null;
+  }> {
+    const fields = await AgentModel.findToolAccessFields(id);
+    return {
+      environmentId: fields?.environmentId ?? null,
+      keepMediaInLogs: fields?.keepMediaInLogs ?? null,
+    };
+  }
+
+  /**
    * The two fields that decide whether a caller missing an MCP connection is
    * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
    * check costs one indexed row read.
@@ -3259,7 +3447,7 @@ class AgentModel {
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
-   * Built-in agents back platform machinery and are excluded.
+   * Built-in platform agents are excluded except for the user-facing SRE agent.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -3284,7 +3472,7 @@ class AgentModel {
     const baseConditions = [
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      AgentModel.isRegularOrSreAgent(),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
@@ -3358,13 +3546,7 @@ class AgentModel {
     tx?: Transaction,
   ): Promise<Pick<
     Agent,
-    | "id"
-    | "name"
-    | "agentType"
-    | "llmApiKeyId"
-    | "modelId"
-    | "fastModelId"
-    | "smartModelId"
+    "id" | "name" | "agentType" | "llmApiKeyId" | "modelId"
   > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
@@ -3373,8 +3555,6 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        fastModelId: schema.agentsTable.fastModelId,
-        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -3454,6 +3634,61 @@ class AgentModel {
       .limit(1);
 
     return agent ?? null;
+  }
+
+  /**
+   * IDs of live runtime-backed subagents explicitly assigned to this agent
+   * (`agent_tools` -> `tools.delegate_to_agent_id`), in assignment order.
+   */
+  static async findAssignedRuntimeSubagentIds(
+    agentId: string,
+    environmentId: string | null = null,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({
+        targetAgentId: schema.agentsTable.id,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.delegateToAgentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.delegateToAgentId),
+          isNotNull(schema.agentsTable.runtime),
+          environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, environmentId),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentExcludedSubagentsTable)
+              .where(
+                and(
+                  eq(schema.agentExcludedSubagentsTable.agentId, agentId),
+                  eq(
+                    schema.agentExcludedSubagentsTable.targetAgentId,
+                    schema.agentsTable.id,
+                  ),
+                ),
+              ),
+          ),
+          notDeleted(schema.toolsTable),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(
+        asc(schema.agentToolsTable.createdAt),
+        asc(schema.agentToolsTable.id),
+      );
+
+    return [...new Set(rows.map((row) => row.targetAgentId))];
   }
 
   /**
@@ -3965,7 +4200,7 @@ class AgentModel {
           eq(schema.agentsTable.id, params.id),
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, "agent"),
-          eq(schema.agentsTable.builtIn, false),
+          AgentModel.isRegularOrSreAgent(),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -4021,6 +4256,62 @@ class AgentModel {
       )
       .returning({ id: schema.agentsTable.id });
     return rows.length === 1;
+  }
+
+  /** How many of the organization's agents name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`(lower(${table.runtime}->>'tier') = lower(${params.name}) or lower(${table.runtime}->>'maxTier') = lower(${params.name}))`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Follow tier renames on every agent of the organization that names one of
+   * them. The whole mapping applies to each stored name once, so a save that
+   * renames S to M and M to Medium leaves the former S agents on M.
+   */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx?: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.agentsTable;
+    const from = params.renames.map((rename) => rename.from.toLowerCase());
+    for (const field of ["tier", "maxTier"] as const) {
+      const stored = sql`lower(${table.runtime}->>${field})`;
+      const mapped = sql.join(
+        params.renames.map(
+          (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+        ),
+        sql` `,
+      );
+      await (params.tx ?? db)
+        .update(table)
+        .set({
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(coalesce((case ${stored} ${mapped} end), ${table.runtime}->>${field})::text))`,
+        })
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            sql`${stored} in (${sql.join(
+              from.map((name) => sql`${name}`),
+              sql`, `,
+            )})`,
+          ),
+        );
+    }
   }
 
   static async update(
@@ -4162,13 +4453,8 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
-        // Lazy (here and below): the chat MCP client imports the service
-        // layer, which would otherwise load with every model.
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
         for (const parentAgentId of parentAgentIds) {
-          clearChatMcpClient(parentAgentId);
+          agentToolSurfaceChanged(parentAgentId);
         }
       }
 
@@ -4182,10 +4468,7 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
-        const { clearChatMcpClient } = await import(
-          "@/clients/chat-mcp-client"
-        );
-        clearChatMcpClient(id);
+        agentToolSurfaceChanged(id);
       }
     } else {
       updatedAgent = existingAgent;
@@ -5230,6 +5513,7 @@ class AgentModel {
     values: typeof schema.agentsTable.$inferInsert,
     permissions: {
       grants?: ResourcePermissionGrant[];
+      grantAuthor?: boolean;
       publishToOrganization?: boolean;
     },
   ) {
@@ -5269,7 +5553,7 @@ class AgentModel {
             resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
             scope: row.id,
             grants: permissions.grants,
-            authorId: row.authorId,
+            authorId: permissions.grantAuthor === false ? null : row.authorId,
             publishToOrganization: permissions.publishToOrganization,
           });
           // SPDX-SnippetEnd
@@ -5475,6 +5759,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,
@@ -5487,7 +5772,8 @@ class AgentModel {
             backend: row.runtime.backend,
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
-            resources: row.runtime.resources,
+            tier: row.runtime.tier ?? null,
+            maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),
@@ -5612,6 +5898,9 @@ class AgentModel {
     // platform subagents remain excluded from ordinary chat selection.
     if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }
@@ -5696,6 +5985,9 @@ class AgentModel {
     if (options.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const builtInName = sql<string>`coalesce(${table.builtInAgentConfig}->>'name', '')`;
       const visibleAgents = [eq(table.builtIn, false)];
+      if (isChatView) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.SRE));
+      }
       if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }
@@ -5783,9 +6075,15 @@ class AgentModel {
           ),
         ),
     );
+    // A personal agent shared with the caller by name ranks with the caller's
+    // own: its audience is still personal.
     const ranks = [
       and(
-        eq(table.authorId, params.userId),
+        or(
+          eq(table.authorId, params.userId),
+          eq(table.builtIn, true),
+          namedChatReader(params.userId),
+        ),
         sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared)))`,
       ),
       sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE NOT organization_shared))`,
@@ -5834,7 +6132,10 @@ class AgentModel {
         asc(merged.id),
       )
       .limit(limit);
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -5847,16 +6148,20 @@ class AgentModel {
   // SPDX-SnippetEnd
 
   /** Chat roster rows and their object policies in one statement. */
-  private static async findChatRosterRows(
-    where: SQL | undefined,
-    page?: RosterPage,
-  ): Promise<ChatAgentRoster[]> {
+  private static async findChatRosterRows(params: {
+    where: SQL | undefined;
+    page?: RosterPage;
+    userId: string;
+  }): Promise<ChatAgentRoster[]> {
     const rows = await AgentModel.selectRosterRows({
       columns: { ...CHAT_ROSTER_COLUMNS, policies: objectPoliciesColumn() },
-      where,
-      page,
+      where: params.where,
+      page: params.page,
     });
-    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    const agents = rows.map(({ policies, ...agent }) => ({
+      ...agent,
+      sharedByName: isSharedByName({ agent, policies, userId: params.userId }),
+    }));
     await AgentModel.populateGrantedScope(
       agents,
       rows.flatMap((row) => row.policies),
@@ -6681,6 +6986,60 @@ function organizationLlmProxyCondition(userId: string): SQL {
     eq(table.isDefault, true),
     sql`EXISTS (SELECT 1 FROM member proxy_member WHERE proxy_member.organization_id = ${table.organizationId} AND proxy_member.user_id = ${userId})`,
   ) as SQL;
+}
+
+/**
+ * The agent's own policy grants read to this user by name. Every personal
+ * agent's policy names its author, so this matches only shares with the
+ * caller; it never widens what the roster's base query lets the caller read.
+ */
+function namedChatReader(userId: string): SQL {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grant = JSON.stringify([
+    { subject: { type: "user", id: userId }, actions: ["read"] },
+  ]);
+  return sql`(${table.organizationId}, ${table.id}::text) IN (
+    SELECT named_policy.organization_id, named_policy.scope
+    FROM resource_permission_policies named_policy
+    WHERE named_policy.resource = 'agent' AND named_policy.scope <> '*'
+      AND named_policy.grants @> ${grant}::jsonb
+  )`;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * Whether another user's agent grants this user read by name on its own
+ * policy: the share {@link namedChatReader} admits to the chat roster. An
+ * agent read only through admin oversight is not shared by name.
+ */
+function isSharedByName(params: {
+  agent: Pick<Agent, "id" | "organizationId" | "agentType" | "authorId">;
+  policies: ObjectPolicy[];
+  userId: string;
+}): boolean {
+  const { agent, policies, userId } = params;
+  if (agent.authorId === userId || agent.agentType === "llm_proxy")
+    return false;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const resource = agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+  return policies.some(
+    (policy) =>
+      policy.organizationId === agent.organizationId &&
+      policy.resource === resource &&
+      policy.scope === agent.id &&
+      policy.grants.some(
+        (grant) =>
+          grant.subject.type === "user" &&
+          grant.subject.id === userId &&
+          grant.actions.includes("read"),
+      ),
+  );
+  // SPDX-SnippetEnd
 }
 
 /**

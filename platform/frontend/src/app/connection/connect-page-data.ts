@@ -203,11 +203,15 @@ const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
  * their own fetch tools and open the page through a gateway browser tool.
  */
 export function welcomePrompt(params: {
+  clientId?: string;
   origin: string;
   appName: string;
   serverName: string | null;
 }): string {
   const { origin, appName, serverName } = params;
+  if (params.clientId === "chatgpt") {
+    return `First check whether the installed ${appName} plugin's onboarding skill is present in the local skill catalog already provided in this conversation. If the plugin or its bundled local skill is unavailable, stop immediately without making any MCP calls: tell me "This ${appName} plugin is not available in this conversation" and direct me to ${origin}/connection?clientId=chatgpt. Otherwise, use that installed skill to show me what I can do with its tools and shared skills.${serverName ? ` Use only the MCP server exactly named ${serverName} supplied by that plugin. Do not call other servers, including similarly named gateways.` : ""} Do not search for onboarding through a gateway, guess skill names, or substitute another skill. Stop any lookup that Guardrails refuses without a remedy; explain the restriction and finish the tour using only this plugin's advertised capabilities.`;
+  }
   if (!serverName) {
     return `Read ${origin}/welcome.md and show me what I can do with ${appName}.`;
   }
@@ -477,7 +481,10 @@ export function useConnectPageData({
     skills: skillsAvailable,
     proxy: proxyAvailable && client.proxy.kind !== "unsupported",
     // Plugins come with the installer; other agents set themselves up.
-    plugins: !usesGenericInstructions(client) && pluginsFor(client).length > 0,
+    plugins:
+      client.id !== "chatgpt" &&
+      !usesGenericInstructions(client) &&
+      pluginsFor(client).length > 0,
   });
 
   const [origin, setOrigin] = useState("");
@@ -561,9 +568,12 @@ export function useConnectPageData({
       // Keeping none of the plugins is leaving plugins out.
       const exclude = CONNECT_SETUP_PARTS.filter(
         (part) =>
-          (client.id === "pi" && part === "plugins") ||
-          !choices[part] ||
-          (part === "plugins" && offered.length > 0 && kept.length === 0),
+          // ChatGPT installs its skills plugin through the skills choice;
+          // it does not deliver the separately managed hook plugins.
+          !(client.id === "chatgpt" && part === "plugins") &&
+          ((client.id === "pi" && part === "plugins") ||
+            !choices[part] ||
+            (part === "plugins" && offered.length > 0 && kept.length === 0)),
       );
       const pickedGateway =
         choices.tools && gateway && gateway.id !== defaultGatewayId

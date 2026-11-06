@@ -6,7 +6,7 @@
  * a request in those shapes and returns a response or chunk stream in those
  * shapes, whatever the member's own provider speaks: the same wire is sent
  * as is with the member's model id, and a different wire goes through a
- * translator. Members a client's wire cannot reach are left out of its plan.
+ * translator. A pool containing incompatible enabled members is rejected.
  */
 import {
   isClaudeOnBedrock,
@@ -16,7 +16,21 @@ import {
   type SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import type { Anthropic, Bedrock, LLMProvider, OpenAi } from "@/types";
+import {
+  openAIUsageTokens,
+  reportsReasoningOutsideCompletion,
+  withReasoningOutsideCompletion,
+} from "@/observability/metrics/llm-usage";
+import type {
+  Anthropic,
+  Bedrock,
+  Gemini,
+  LLMProvider,
+  OpenAi,
+  UsageView,
+} from "@/types";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
@@ -24,6 +38,7 @@ import {
   bedrockInvokeAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
+  geminiAdapterFactory,
   groqAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -35,28 +50,51 @@ import {
   xaiAdapterFactory,
   zhipuaiAdapterFactory,
 } from "./adapters";
+import { withAnthropicToolCallIds } from "./adapters/anthropic";
 import {
   anthropicResponseToOpenai,
+  mapStopReason,
   openaiToAnthropic,
 } from "./adapters/anthropic-openai-translator";
+import { withBedrockToolCallIds } from "./adapters/bedrock";
 import {
   converseResponseToOpenai,
   createConverseToOpenaiSseEncoder,
   openaiToConverse,
 } from "./adapters/bedrock-openai-translator";
+import { makeGeminiOpenaiAdapterFactory } from "./adapters/gemini-openai";
+import {
+  createOpenaiToGeminiStreamTranslator,
+  geminiToOpenai,
+  openaiResponseToGemini,
+  openaiToGemini,
+} from "./adapters/gemini-openai-translator";
 import {
   anthropicToOpenai,
   createOpenaiToAnthropicStreamTranslator,
   openaiResponseToAnthropic,
 } from "./adapters/openai-anthropic-translator";
+import { withOpenAiChatToolCallIds } from "./utils/tool-call-ids";
 
 /** The request formats a pool can carry a request in. */
-export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
+export type PoolWire =
+  | "openai-chat"
+  | "anthropic"
+  | "bedrock-converse"
+  | "gemini";
 
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
+  /** Actual provider usage when the client wire cannot represent its cache split. */
+  getUsage?: () => UsageView | null;
+  /** Observed usage retained even when translation cannot emit a terminal event. */
+  getStreamUsage?: () => UsageView | null;
   execute(request: unknown): Promise<unknown>;
-  executeStream(request: unknown): Promise<AsyncIterable<unknown>>;
+  /** `onAccepted` fires once the member's provider accepted the request. */
+  executeStream(
+    request: unknown,
+    onAccepted?: () => void,
+  ): Promise<AsyncIterable<unknown>>;
 }
 
 /** Whether a pool can send requests to a key on this provider. */
@@ -70,6 +108,7 @@ export function inboundPoolWire(
 ): PoolWire | null {
   if (interactionType === "anthropic:messages") return "anthropic";
   if (interactionType === "bedrock:converse") return "bedrock-converse";
+  if (interactionType === "gemini:generateContent") return "gemini";
   const [provider, surface] = interactionType.split(":");
   if (
     surface === "chatCompletions" &&
@@ -93,8 +132,54 @@ export function canReachMember(
 /**
  * The transport for one member. `client` is built with the member provider's
  * own adapter (see `memberAdapter`).
+ *
+ * The client's route reads the answer with its own adapter, so an OpenAI chat
+ * answer is put in that route's reasoning dialect: xAI leaves reasoning out of
+ * `completion_tokens`, every other member and translator counts it inside
+ * (see `reportsReasoningOutsideCompletion`). Without this an xAI member's
+ * reasoning goes uncounted behind an OpenAI client and a Gemini member's is
+ * counted twice behind an xAI client.
  */
 export function memberTransport(params: {
+  inbound: PoolWire;
+  provider: SupportedProvider;
+  modelId: string;
+  client: unknown;
+  /** The client route's dialect; absent for routes that count it inside. */
+  inboundReasoningOutsideCompletion?: boolean;
+}): MemberTransport {
+  const transport = memberTransportOnWire(params);
+  const inboundOutside = params.inboundReasoningOutsideCompletion ?? false;
+  const memberOutside =
+    wireOf(params.provider) === "openai-chat" &&
+    reportsReasoningOutsideCompletion(params.provider);
+  if (params.inbound !== "openai-chat" || inboundOutside === memberOutside) {
+    return transport;
+  }
+  const inDialect = <T>(value: T): T => {
+    const usage = (value as { usage?: OpenAi.Types.Usage | null } | null)
+      ?.usage;
+    return usage
+      ? {
+          ...value,
+          usage: withReasoningOutsideCompletion(usage, inboundOutside),
+        }
+      : value;
+  };
+  return {
+    ...transport,
+    execute: async (request) => inDialect(await transport.execute(request)),
+    executeStream: async (request, onAccepted) =>
+      mapStream(
+        await transport.executeStream(request, onAccepted),
+        (chunk) => [inDialect(chunk)],
+        () => [],
+      ),
+  };
+}
+
+/** `memberTransport` before the answer's usage is put in the route's dialect. */
+function memberTransportOnWire(params: {
   inbound: PoolWire;
   provider: SupportedProvider;
   modelId: string;
@@ -117,19 +202,45 @@ export function memberTransport(params: {
   }
 
   if (target === inbound) {
-    const withModel = (request: unknown) =>
-      target === "bedrock-converse"
-        ? { ...(request as object), modelId }
-        : { ...(request as object), model: modelId };
+    const withModel = (request: unknown) => {
+      if (target === "bedrock-converse")
+        return { ...(request as object), modelId };
+      if (target === "gemini")
+        return { ...(request as object), _model: modelId };
+      const body = request as OpenAi.Types.ChatCompletionsRequest &
+        Anthropic.Types.MessagesRequest;
+      // The selected OpenAI model may require the modern output-limit field
+      // even when the caller or a translator supplied the legacy one.
+      const { max_tokens, ...openaiBody } = body;
+      const destinationBody =
+        provider === "openai"
+          ? {
+              ...openaiBody,
+              ...(max_tokens != null && body.max_completion_tokens == null
+                ? { max_completion_tokens: max_tokens }
+                : {}),
+            }
+          : body;
+      return {
+        ...destinationBody,
+        model: modelId,
+        messages:
+          target === "anthropic"
+            ? withAnthropicToolCallIds(body.messages)
+            : withOpenAiChatToolCallIds(body.messages),
+      };
+    };
     return {
       execute: (request) => adapter.execute(client, withModel(request)),
-      executeStream: (request) =>
-        adapter.executeStream(client, withModel(request)),
+      executeStream: (request, onAccepted) =>
+        adapter.executeStream(client, withModel(request), onAccepted),
     };
   }
 
   if (inbound === "openai-chat" && target === "anthropic") {
+    let getUsage: (() => UsageView | null) | undefined;
     return {
+      getStreamUsage: () => getUsage?.() ?? null,
       async execute(request) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
@@ -137,22 +248,29 @@ export function memberTransport(params: {
         const response = await adapter.execute(client, {
           ...anthropicBody,
           model: modelId,
+          messages: withAnthropicToolCallIds(anthropicBody.messages),
         });
         return anthropicResponseToOpenai(
           response as Anthropic.Types.MessagesResponse,
           openaiContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
         );
-        const events = await adapter.executeStream(client, {
-          ...anthropicBody,
-          model: modelId,
-          stream: true,
-        });
+        const events = await adapter.executeStream(
+          client,
+          {
+            ...anthropicBody,
+            model: modelId,
+            messages: withAnthropicToolCallIds(anthropicBody.messages),
+            stream: true,
+          },
+          onAccepted,
+        );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
+        getUsage = translator.getUsage;
         return mapStream(events, translator.translate, translator.finish);
       },
     };
@@ -164,7 +282,11 @@ export function memberTransport(params: {
         request as OpenAi.Types.ChatCompletionsRequest,
       );
       return {
-        body: { ...converseBody, modelId } as Bedrock.Types.ConverseRequest,
+        body: {
+          ...converseBody,
+          modelId,
+          messages: withBedrockToolCallIds(converseBody.messages ?? []),
+        } as Bedrock.Types.ConverseRequest,
         openaiContext: { ...openaiContext, includeUsageInStream: true },
       };
     };
@@ -177,9 +299,9 @@ export function memberTransport(params: {
           openaiContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { body, openaiContext } = translate(request);
-        const events = await adapter.executeStream(client, body);
+        const events = await adapter.executeStream(client, body, onAccepted);
         const encoder = createConverseToOpenaiSseEncoder(openaiContext);
         return mapStream(
           events,
@@ -188,6 +310,134 @@ export function memberTransport(params: {
               encoder.encodeBedrockEvent(event as ConverseStreamOutput),
             ),
           () => sseToChunks(encoder.formatEnd()),
+        );
+      },
+    };
+  }
+
+  if (inbound === "openai-chat" && target === "gemini") {
+    let observedUsage: UsageView | null = null;
+    const translate = (request: unknown) => {
+      // Translation depends on the selected model's thinking capabilities.
+      const { geminiBody, openaiContext } = openaiToGemini({
+        ...(request as OpenAi.Types.ChatCompletionsRequest),
+        model: modelId,
+      });
+      return {
+        body: geminiBody,
+        adapter: makeGeminiOpenaiAdapterFactory({
+          ...openaiContext,
+          requestedModel: (request as OpenAi.Types.ChatCompletionsRequest)
+            .model,
+        }),
+      };
+    };
+    return {
+      getStreamUsage: () => observedUsage,
+      async execute(request) {
+        const { body, adapter } = translate(request);
+        const response = await adapter.execute(client, body);
+        return adapter.createResponseAdapter(response).getOriginalResponse();
+      },
+      async executeStream(request, onAccepted) {
+        const { body, adapter } = translate(request);
+        observedUsage = null;
+        const events = await adapter.executeStream(client, body);
+        onAccepted?.();
+        const stream = adapter.createStreamAdapter(body);
+        return mapStream(
+          events,
+          (event) => {
+            const result = stream.processChunk(
+              event as Parameters<typeof stream.processChunk>[0],
+            );
+            if (stream.state.usage) {
+              // Output already includes thinking, as completion tokens do.
+              observedUsage = stream.state.usage;
+            }
+            return sseToChunks(result.sseData);
+          },
+          () => {
+            if (!stream.state.stopReason) {
+              throw new UpstreamStreamIncompleteError(
+                "The upstream stream ended before it finished",
+              );
+            }
+            return [
+              ...(stream.state.toolCalls.length > 0
+                ? (
+                    stream.formatToolCallsSSE?.(stream.state.toolCalls) ?? []
+                  ).flatMap(sseToChunks)
+                : []),
+              ...sseToChunks(stream.formatEndSSE()),
+            ];
+          },
+        );
+      },
+    };
+  }
+
+  if (inbound === "gemini") {
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
+    let usage: UsageView | null = null;
+    const observe = (raw: OpenAi.Types.ChatCompletionChunk["usage"]) => {
+      if (!raw) return;
+      const tokens = openAIUsageTokens(raw);
+      usage = {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheWriteTokens: tokens.cacheWrite,
+        cacheWrite1hTokens: tokens.cacheWrite1h,
+        reasoningTokens: tokens.reasoning,
+      };
+    };
+    return {
+      getUsage: () => usage,
+      getStreamUsage: viaOpenai.getStreamUsage,
+      async execute(request) {
+        const response = (await viaOpenai.execute(
+          geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+        )) as OpenAi.Types.ChatCompletionsResponse;
+        observe(response.usage);
+        try {
+          return openaiResponseToGemini(response);
+        } catch (error) {
+          if (!usage) throw error;
+          throw new ObservedProviderUsageError({
+            original: error,
+            usage,
+            response: {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Upstream response cannot be translated",
+            },
+          });
+        }
+      },
+      async executeStream(request, onAccepted) {
+        const chunks = await viaOpenai.executeStream(
+          {
+            ...geminiToOpenai(request as Gemini.Types.GenerateContentRequest),
+            stream: true,
+          },
+          onAccepted,
+        );
+        const translator = createOpenaiToGeminiStreamTranslator();
+        return mapStream(
+          chunks,
+          (raw) => {
+            const chunk = raw as OpenAi.Types.ChatCompletionChunk;
+            observe(chunk.usage);
+            return translator.translate(chunk);
+          },
+          translator.finish,
         );
       },
     };
@@ -204,6 +454,7 @@ export function memberTransport(params: {
       client,
     });
     return {
+      getStreamUsage: viaOpenai.getStreamUsage,
       async execute(request) {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,
@@ -214,14 +465,14 @@ export function memberTransport(params: {
           anthropicContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,
         );
-        const chunks = await viaOpenai.executeStream({
-          ...openaiBody,
-          stream: true,
-        });
+        const chunks = await viaOpenai.executeStream(
+          { ...openaiBody, stream: true },
+          onAccepted,
+        );
         const translator =
           createOpenaiToAnthropicStreamTranslator(anthropicContext);
         return mapStream(
@@ -246,11 +497,13 @@ export function requestedMaxOutputTokens(request: unknown): number | undefined {
     max_completion_tokens?: unknown;
     max_tokens?: unknown;
     inferenceConfig?: { maxTokens?: unknown };
+    generationConfig?: { maxOutputTokens?: unknown };
   } | null;
   const limit =
     body?.max_completion_tokens ??
     body?.max_tokens ??
-    body?.inferenceConfig?.maxTokens;
+    body?.inferenceConfig?.maxTokens ??
+    body?.generationConfig?.maxOutputTokens;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? limit
     : undefined;
@@ -280,6 +533,7 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
   azure: azureAdapterFactory,
   cerebras: cerebrasAdapterFactory,
   deepseek: deepseekAdapterFactory,
+  gemini: geminiAdapterFactory,
   groq: groqAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
@@ -295,14 +549,20 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
 const TRANSLATED = new Set([
   "openai-chat>anthropic",
   "openai-chat>bedrock-converse",
+  "openai-chat>gemini",
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
+  "anthropic>gemini",
+  "gemini>openai-chat",
+  "gemini>anthropic",
+  "gemini>bedrock-converse",
 ]);
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;
   if (provider === "anthropic") return "anthropic";
   if (provider === "bedrock") return "bedrock-converse";
+  if (provider === "gemini") return "gemini";
   return "openai-chat";
 }
 
@@ -320,16 +580,21 @@ function anthropicEventsToOpenAiChunks(ctx: {
   chatcmplId: string;
   createdUnix: number;
   requestedModel: string;
-}): { translate(event: unknown): unknown[]; finish(): unknown[] } {
+}): {
+  translate(event: unknown): unknown[];
+  finish(): unknown[];
+  getUsage(): UsageView | null;
+} {
   // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK event union
   type Event = any;
   let nextToolIndex = 0;
   let toolIndexByBlock = new Map<number, number>();
-  let finishReason: string | null = null;
+  let finishReason: Anthropic.Types.MessagesResponse["stop_reason"] = null;
+  let observedUsage = false;
   let inputTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
-  let cacheWrite1h = 0;
+  let cacheWrite1h: number | undefined;
   let outputTokens = 0;
   const chunk = (delta: Record<string, unknown>, finish: string | null) => ({
     id: ctx.chatcmplId,
@@ -339,15 +604,27 @@ function anthropicEventsToOpenAiChunks(ctx: {
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
   return {
+    getUsage: () =>
+      observedUsage
+        ? {
+            inputTokens,
+            outputTokens,
+            cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
+            cacheWrite1hTokens: cacheWrite1h,
+          }
+        : null,
     translate(raw) {
       const event = raw as Event;
       switch (event?.type) {
         case "message_start": {
           const usage = event.message?.usage ?? {};
+          observedUsage ||= event.message?.usage !== undefined;
           inputTokens = usage.input_tokens ?? 0;
           cacheRead = usage.cache_read_input_tokens ?? 0;
           cacheWrite = usage.cache_creation_input_tokens ?? 0;
-          cacheWrite1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+          cacheWrite1h =
+            usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined;
           outputTokens = usage.output_tokens ?? 0;
           toolIndexByBlock = new Map();
           return [chunk({ role: "assistant" }, null)];
@@ -398,6 +675,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
         case "message_delta": {
           finishReason = event.delta?.stop_reason ?? finishReason;
           const usage = event.usage ?? {};
+          observedUsage ||= event.usage !== undefined;
           outputTokens = usage.output_tokens ?? outputTokens;
           inputTokens = usage.input_tokens ?? inputTokens;
           cacheRead = usage.cache_read_input_tokens ?? cacheRead;
@@ -413,18 +691,13 @@ function anthropicEventsToOpenAiChunks(ctx: {
     finish() {
       // Without a stop reason the stream was cut off, not finished.
       if (finishReason === null) {
-        throw new Error("The upstream stream ended before it finished");
+        throw new UpstreamStreamIncompleteError(
+          "The upstream stream ended before it finished",
+        );
       }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [
-        chunk(
-          {},
-          finishReason === "max_tokens"
-            ? "length"
-            : finishReason === "tool_use"
-              ? "tool_calls"
-              : "stop",
-        ),
+        chunk({}, mapStopReason(finishReason)),
         {
           id: ctx.chatcmplId,
           object: "chat.completion.chunk",
@@ -442,7 +715,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
                     ...(cacheWrite > 0
                       ? { cache_write_tokens: cacheWrite }
                       : {}),
-                    ...(cacheWrite1h > 0
+                    ...((cacheWrite1h ?? 0) > 0
                       ? { cache_write_1h_tokens: cacheWrite1h }
                       : {}),
                   },
@@ -458,9 +731,9 @@ function anthropicEventsToOpenAiChunks(ctx: {
 const DECODER = new TextDecoder();
 
 /** The chunk objects in OpenAI SSE bytes; `[DONE]` carries none. */
-function sseToChunks(bytes: Uint8Array | null): unknown[] {
+function sseToChunks(bytes: Uint8Array | string | null): unknown[] {
   if (!bytes) return [];
-  return DECODER.decode(bytes)
+  return (typeof bytes === "string" ? bytes : DECODER.decode(bytes))
     .split("\n\n")
     .map((event) => event.trim())
     .filter((event) => event.startsWith("data: ") && event !== "data: [DONE]")

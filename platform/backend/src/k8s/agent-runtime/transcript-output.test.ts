@@ -8,10 +8,16 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
-import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
+import {
+  AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
+  agentRunGatewayTokenId,
+} from "@/services/agent-runtime/runtime-contract";
 import { expect, test } from "@/test";
 import manager from "./manager";
 
@@ -179,6 +185,26 @@ test.for([
     workloadName: `retained-${randomUUID()}`,
     virtualApiKeyId: key.virtualKey.id,
   });
+  const userGatewayTokenHash =
+    actorKind === "user"
+      ? OAuthAccessTokenModel.hashTokenForLookup(`user-run-token-${run.id}`)
+      : null;
+  if (userGatewayTokenHash) {
+    await OAuthClientModel.ensurePlatformIssuedClient({
+      id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      name: "Agent Runtime",
+    });
+    await OAuthAccessTokenModel.create({
+      id: agentRunGatewayTokenId(run.id),
+      tokenHash: userGatewayTokenHash,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+      scopes: ["mcp"],
+      referenceId: `mcp-resource:${agent.id}`,
+    });
+  }
   const pods = vi
     .spyOn(CoreV1Api.prototype, "listNamespacedPod")
     .mockResolvedValue({
@@ -227,6 +253,10 @@ test.for([
     expect(await ServiceAccountModel.verifyToken(gateway.token)).toMatchObject({
       serviceAccount: { id: actorId },
     });
+  if (userGatewayTokenHash)
+    expect(
+      await OAuthAccessTokenModel.getByTokenHash(userGatewayTokenHash),
+    ).toBeDefined();
   pods.mockResolvedValue({ items: [] });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
   await manager.releaseRun(run, { retainInteractiveSession: true });
@@ -236,4 +266,8 @@ test.for([
   expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
   if (gateway)
     expect(await ServiceAccountModel.verifyToken(gateway.token)).toBeNull();
+  if (userGatewayTokenHash)
+    expect(
+      await OAuthAccessTokenModel.getByTokenHash(userGatewayTokenHash),
+    ).toBeUndefined();
 });

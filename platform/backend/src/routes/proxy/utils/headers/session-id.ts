@@ -1,7 +1,9 @@
 import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
+  isChatGptClientAgentId,
   isCodexClientAgentId,
+  isCopilotCliClientAgentId,
   KIMI_CODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
@@ -50,7 +52,9 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
+  | "chatgpt_session"
   | "pi_session"
+  | "copilot_session"
   | "kimi_code_session"
   | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
@@ -74,7 +78,9 @@ export interface SessionInfo {
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
  * 4. Codex session id — only when `externalAgentId` is a Codex client id:
  *    `client_metadata.thread_id` body field first, then `session_id`, then
- *    the `session-id` request header (source: 'codex_session')
+ *    the `session-id` request header (source: 'codex_session'). The ChatGPT
+ *    desktop app runs Codex's app server and sends the same fields (source:
+ *    'chatgpt_session').
  * 5. OpenCode session id — only when `externalAgentId` was configured by the
  *    caller or resolved from OpenCode's native User-Agent/originator:
  *    `x-session-id`, `x-session-affinity`, `x-opencode-session`, then the
@@ -82,13 +88,15 @@ export interface SessionInfo {
  *    'opencode_session'). A delegated child keeps its own native session id;
  *    its parent signal classifies the row instead of renaming it.
  * 6. Pi `x-pi-session-id`, only for the Pi client (source: 'pi_session').
- *    Kimi Code `prompt_cache_key`, only for the Kimi Code client (source:
+ * 7. Kimi Code `prompt_cache_key`, only for the Kimi Code client (source:
  *    'kimi_code_session'). It stays the same across resume and compaction.
- * 7. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
+ * 8. Copilot CLI `prompt_cache_key`, only for that client and only on the
+ *    Responses wire, where it names the session (source: 'copilot_session').
+ * 9. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/branch` or `--fork-session` creates a new ID here, ensuring forks
  *    record as separate sessions in logs.
- * 8. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 9. OpenAI user field (source: 'openai_user')
+ * 10. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 11. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
@@ -137,13 +145,21 @@ export function extractSessionInfo({
 
   // Priority 4: Codex session id, gated on the resolved client attribution —
   // the `session-id` header name is generic, so it is never read as a Codex
-  // session on its own.
-  if (isCodexClientAgentId(externalAgentId)) {
+  // session on its own. ChatGPT's desktop app sends Codex's fields.
+  const codexSessionSource = isCodexClientAgentId(externalAgentId)
+    ? "codex_session"
+    : isChatGptClientAgentId(externalAgentId)
+      ? "chatgpt_session"
+      : undefined;
+  if (codexSessionSource) {
     const metadataSessionId =
       codexClientMetadataValue(body?.client_metadata, "thread_id") ??
       codexClientMetadataValue(body?.client_metadata, "session_id");
     if (metadataSessionId) {
-      return { sessionId: metadataSessionId, sessionSource: "codex_session" };
+      return {
+        sessionId: metadataSessionId,
+        sessionSource: codexSessionSource,
+      };
     }
     const codexHeaderSessionId = getHeaderValue(
       headers,
@@ -152,7 +168,7 @@ export function extractSessionInfo({
     if (codexHeaderSessionId?.trim()) {
       return {
         sessionId: codexHeaderSessionId.trim(),
-        sessionSource: "codex_session",
+        sessionSource: codexSessionSource,
       };
     }
   }
@@ -189,8 +205,8 @@ export function extractSessionInfo({
     }
   }
 
-  // Kimi Code sends its session id as the prompt cache key. The field is a
-  // generic OpenAI one, so it is read only for the Kimi Code client.
+  // Priority 7: Kimi Code sends its session id as the prompt cache key. The
+  // field is a generic OpenAI one, so it is read only for the Kimi Code client.
   if (externalAgentId?.trim().toLowerCase() === KIMI_CODE_CLIENT_ID) {
     const kimiSessionId =
       typeof body?.prompt_cache_key === "string"
@@ -201,7 +217,20 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 7: Out-of-process Claude Code / Claude Desktop children spawned
+  // Priority 8: the Copilot CLI's session, which it names only on the
+  // Responses wire. Read for that client alone: the field is OpenAI's own
+  // cache partition, and another client may use it for something else.
+  if (isCopilotCliClientAgentId(externalAgentId)) {
+    const copilotSessionId = body?.prompt_cache_key;
+    if (typeof copilotSessionId === "string" && copilotSessionId.trim()) {
+      return {
+        sessionId: copilotSessionId.trim(),
+        sessionSource: "copilot_session",
+      };
+    }
+  }
+
+  // Priority 9: Out-of-process Claude Code / Claude Desktop children spawned
   // with `--parent-session-id` carry `parent_session_id` in `metadata.user_id`
   // alongside their own `x-claude-code-session-id`; group them under the parent
   // session in logs. `/branch` and `--fork-session` do not set
@@ -228,7 +257,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 8: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 10: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -237,7 +266,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 9: OpenAI user field (some clients use this for session tracking)
+  // Priority 11: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };

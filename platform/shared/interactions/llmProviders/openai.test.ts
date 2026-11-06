@@ -48,4 +48,96 @@ describe("OpenAiChatCompletionInteraction", () => {
       ]),
     );
   });
+
+  it("lists requested function and custom tool calls with their ids", () => {
+    const interaction = new OpenAiChatCompletionInteraction({
+      type: "openai:chatCompletions",
+      model: "gpt-4o",
+      request: { model: "gpt-4o", messages: [] },
+      response: {
+        id: "chatcmpl-1",
+        created: 0,
+        model: "gpt-4o",
+        object: "chat.completion",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_1",
+                  type: "function",
+                  function: { name: "search", arguments: "{}" },
+                },
+                {
+                  id: "call_2",
+                  type: "custom",
+                  custom: { name: "apply_patch", input: "*** Begin Patch" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    } as unknown as Interaction);
+
+    expect(interaction.getToolCallsRequested()).toEqual([
+      { id: "call_1", name: "search" },
+      { id: "call_2", name: "apply_patch" },
+    ]);
+  });
+
+  it("plays a spoken reply and shows its transcript", () => {
+    // gpt-audio answers with `content: null` and the speech under `audio`.
+    const interaction = new OpenAiChatCompletionInteraction({
+      type: "openai:chatCompletions",
+      model: "gpt-audio",
+      request: {
+        model: "gpt-audio",
+        modalities: ["text", "audio"],
+        messages: [{ role: "user", content: "Say hello in five words." }],
+      },
+      response: {
+        id: "chatcmpl-2",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: null,
+              audio: {
+                id: "audio_1",
+                data: "UklGRiQAAABXQVZF",
+                transcript: "Hello there from Archestra!",
+                expires_at: 0,
+              },
+            },
+          },
+        ],
+        created: 0,
+        model: "gpt-audio",
+        object: "chat.completion",
+      },
+    } as unknown as Interaction);
+
+    expect(interaction.getLastAssistantResponse()).toBe(
+      "Hello there from Archestra!",
+    );
+    const messages = interaction.mapToUiMessages();
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      parts: [
+        {
+          type: "file",
+          mediaType: "audio/wav",
+          url: "data:audio/wav;base64,UklGRiQAAABXQVZF",
+        },
+        { type: "text", text: "Hello there from Archestra!" },
+      ],
+    });
+  });
 });

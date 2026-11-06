@@ -51,6 +51,7 @@ async function resolveUploadConnector(params: {
         organizationId: params.organizationId,
         name: "Uploaded files",
         connectorType: "file_upload",
+        schedule: "",
         config: {} as never,
         visibility: "org-wide",
       })
@@ -194,6 +195,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
       const acl = await KbFileModel.findDocumentAcl({
         fileId: file.id,
         organizationId: params.organizationId,
+        knowledgeBaseId: params.knowledgeBaseId,
       });
 
       const existing = await KbDocumentModel.findBySourceId({

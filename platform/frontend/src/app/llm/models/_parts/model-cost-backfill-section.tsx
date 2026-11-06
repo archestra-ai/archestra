@@ -1,11 +1,9 @@
 "use client";
 
-import {
-  addDays,
-  differenceInCalendarDays,
-  format,
-  startOfDay,
-} from "date-fns";
+import { addDays } from "date-fns/addDays";
+import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
+import { format } from "date-fns/format";
+import { startOfDay } from "date-fns/startOfDay";
 import { ArrowRight, Info, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import {
@@ -29,9 +27,9 @@ import {
   useModelCostBackfillPreview,
   useStartModelCostBackfill,
 } from "@/lib/model-cost-backfill.query";
-import { formatCurrency } from "@/lib/utils/format-currency";
 import { cn } from "@/lib/utils/tailwind";
 import { type ChartDay, CostChart, presetDate } from "./model-cost-chart";
+import { formatModelCost, formatUsdShort } from "./model-cost-format";
 
 /**
  * "Apply new prices to" on the Pricing page: recompute the recorded cost of
@@ -289,24 +287,6 @@ function toChartDays(days: ModelCostBackfillPreview["days"]): ChartDay[] {
   });
 }
 
-/** Shorter USD for the stat strip: drops cents from $1,000, compacts from $100k. */
-function formatUsdShort(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 100_000) {
-    return `${n < 0 ? "-" : ""}$${(abs / 1000).toLocaleString("en-US", {
-      maximumFractionDigits: 1,
-    })}k`;
-  }
-  if (abs >= 1000) {
-    return n.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    });
-  }
-  return formatCurrency(n);
-}
-
 function OptionCard({
   id,
   value,
@@ -428,7 +408,7 @@ function StatStrip({
       >
         <span
           className="flex min-w-0 items-center gap-1 text-sm"
-          title={`${formatCurrency(impact.recordedCost)} recorded, ${formatCurrency(impact.recomputedCost)} with the prices above (${deltaLabel})`}
+          title={`${formatModelCost(impact.recordedCost)} recorded, ${formatModelCost(impact.recomputedCost)} with the prices above (${deltaLabel})`}
         >
           <span className="truncate text-muted-foreground">
             {formatUsdShort(impact.recordedCost)}

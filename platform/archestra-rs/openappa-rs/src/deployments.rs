@@ -62,6 +62,10 @@ pub(crate) enum DeploymentError {
     /// The dispatch carries a policy the organization has since recomposed, and the
     /// line's head names another one: publishing it would roll the line back.
     Superseded,
+    /// The dispatch carries other bytes under the composition the held deployment
+    /// was prepared from. One composition spells one document, so publishing them
+    /// would only move the line's head and void every live offer of the organization.
+    Diverged,
     Failed(Fault),
 }
 
@@ -84,6 +88,8 @@ fn panicked(error: tokio::task::JoinError) -> Fault {
 #[derive(Clone)]
 struct Pinned {
     content: Arc<str>,
+    /// The composition hash `content` was read under, when the host named one.
+    composition: Option<Arc<str>>,
     /// Every variable the compilation looked up, in order.
     variables: Arc<[String]>,
     /// The digest of what each of `variables` resolved to.
@@ -232,6 +238,16 @@ impl Deployments {
         if let Some(pinned) = self.serving(organization_id, policy) {
             return Ok(pinned);
         }
+        if let Some(held) = self.held(organization_id)
+            && let Some(composition) = &policy.composition
+            && held.composition.as_deref() == Some(composition.as_str())
+            && *held.content != *policy.content
+        {
+            eprintln!(
+                "OpenAPPA: organization {organization_id} dispatched a second policy document under composition {composition}; refusing to publish it"
+            );
+            return Err(DeploymentError::Diverged);
+        }
         let (runtime, store) = (runtime.clone(), store.clone());
         let (organization, policy) = (organization_id.to_owned(), policy.clone());
         let pinned = tokio::task::spawn_blocking(move || {
@@ -314,6 +330,7 @@ fn prepare(
         })?;
     let pinned = Pinned {
         content: policy.content.as_str().into(),
+        composition: policy.composition.as_deref().map(Into::into),
         answers,
         variables,
         key: key.into(),
@@ -486,8 +503,63 @@ mod tests {
         block_on(deployments.deployment(runtime, &runtime.store, organization, policy, false))
             .map_err(|error| match error {
                 DeploymentError::Superseded => "superseded".to_owned(),
+                DeploymentError::Diverged => "diverged".to_owned(),
                 DeploymentError::Failed(fault) => fault.message,
             })
+    }
+
+    #[test]
+    fn other_bytes_under_the_held_composition_refuse_and_publish_nothing() {
+        let runtime = runtime();
+        let deployments = Deployments::default();
+        let line = DeploymentName::new("org-a");
+        serve(&deployments, &runtime, "org-a", &policy(JEV, Some("one")))
+            .expect("the policy compiles");
+        // As a host-read composition would be held; the in-memory store has no host table
+        // to check a first publish against.
+        deployments
+            .by_organization
+            .lock()
+            .unwrap()
+            .get_mut("org-a")
+            .expect("a deployment is held")
+            .composition = Some("composition-1".into());
+        let head = runtime.store.head(&line).unwrap();
+        let under = |content: &str| HostedPolicy {
+            composition: Some("composition-1".to_owned()),
+            ..policy(content, Some("one"))
+        };
+
+        assert_eq!(
+            serve(
+                &deployments,
+                &runtime,
+                "org-a",
+                &under(&format!("{JEV}# pod-local\n"))
+            )
+            .err()
+            .as_deref(),
+            Some("diverged"),
+        );
+        assert_eq!(
+            runtime.store.head(&line).unwrap(),
+            head,
+            "the refusal publishes nothing"
+        );
+        assert!(
+            serve(&deployments, &runtime, "org-a", &under(JEV)).is_ok(),
+            "the composition's own bytes are still served"
+        );
+        assert!(
+            serve(
+                &deployments,
+                &runtime,
+                "org-a",
+                &policy(&format!("{JEV}# edited\n"), Some("one"))
+            )
+            .is_ok(),
+            "a dispatch naming no composition publishes as before"
+        );
     }
 
     #[test]

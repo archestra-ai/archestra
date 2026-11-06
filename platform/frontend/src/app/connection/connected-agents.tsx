@@ -7,6 +7,7 @@
 import {
   INSTALLER_CLIENT_FOOTPRINT,
   revokeSignsOut,
+  startupGuardDisconnectCommand,
   startupGuardStem,
 } from "@archestra/shared/connection-setup";
 import { ChevronDown, History, Unplug } from "lucide-react";
@@ -453,17 +454,19 @@ function RevokeEffect({ client }: { client: ConnectClient }) {
   );
 }
 
-/** What the setup added to this agent, and the prompt that removes it. */
-function DisconnectSteps({
-  data,
-  client,
-  revoke,
-}: {
+interface DisconnectStepsProps {
   data: ConnectPageData;
   client: ConnectClient;
   /** Step 2's body: how, or the button, to revoke access. */
   revoke: ReactNode | null;
-}) {
+}
+
+function DisconnectSteps(props: DisconnectStepsProps) {
+  return <LocalDisconnectSteps {...props} />;
+}
+
+/** What the setup added to this agent, and the prompt that removes it. */
+function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
   const manualOnly = !readsPrompts(client);
   const skills = data.footprintFor(client).skillsInstalled;
   const guard = startupGuardStem(client.id);
@@ -480,34 +483,48 @@ function DisconnectSteps({
         ? ["The MCP Client Tool node you added in n8n"]
         : [`The ${data.appName} MCP entry in your agent's config`])),
   ];
+  const terminal =
+    guard || client.id === "pi" ? (
+      <div className="space-y-2">
+        <p className="text-muted-foreground">
+          {client.id === "chatgpt"
+            ? `Run this in a terminal on the computer where you ran setup (${windows ? "Windows PowerShell" : "macOS or Linux"}):`
+            : `If ${nameOf(client)} won't run it, run this in a terminal yourself (${windows ? "Windows PowerShell" : "macOS or Linux"}):`}
+        </p>
+        <CopyPrompt
+          text={
+            client.id === "pi"
+              ? "arcpi --disconnect"
+              : (startupGuardDisconnectCommand(
+                  client.id,
+                  windows ? "windows" : "bash",
+                ) ?? "")
+          }
+        />
+      </div>
+    ) : null;
   const cleanup = (
     <div className="space-y-3">
+      {client.id === "chatgpt" && terminal}
       <div className="space-y-2">
         <p className="text-muted-foreground">
           {manualOnly
             ? `In ${nameOf(client)}, delete the MCP Client Tool node you added.`
-            : `Paste this into ${nameOf(client)} to remove it:`}
+            : `${client.id === "chatgpt" ? "Or paste" : "Paste"} this into ${nameOf(client)} to remove it:`}
         </p>
         {!manualOnly && (
           <CopyPrompt text={disconnectPrompt(data, client, origin)} />
         )}
       </div>
-      {!manualOnly && (guard || client.id === "pi") && (
-        <div className="space-y-2">
-          <p className="text-muted-foreground">
-            If {nameOf(client)}
-            {` won't run it, run this in a terminal yourself (${windows ? "Windows PowerShell" : "macOS or Linux"}):`}
-          </p>
-          <CopyPrompt
-            text={
-              client.id === "pi"
-                ? "arcpi --disconnect"
-                : windows
-                  ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
-                  : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
-            }
-          />
-        </div>
+      {!manualOnly && client.id !== "chatgpt" && terminal}
+      {client.id === "chatgpt" && (
+        <p className="text-muted-foreground">
+          Restart ChatGPT after cleanup. ChatGPT desktop and Codex share local
+          settings; this also removes their shared gateway sign-in and model
+          routing. Other MCP connections are left in place. If you uploaded the
+          web plugin separately, remove it from ChatGPT Plugins and any dots
+          that use it.
+        </p>
       )}
     </div>
   );

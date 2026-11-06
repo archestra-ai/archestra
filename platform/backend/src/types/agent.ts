@@ -12,6 +12,8 @@ import {
   MAX_SUGGESTED_PROMPTS,
   ResourcePermissionGrantSchema,
   StoredGitHubActionsAccessSchema,
+  StoredSubagentLoadBalancingConfigSchema,
+  SubagentLoadBalancingConfigSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -20,13 +22,14 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import {
   AgentActivationSkillModeSchema,
   CreateAgentActivationSkillPolicySchema,
 } from "./agent-activation-skill-policy";
 import { AgentRuntimeSchema } from "./agent-runtime";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
+import { NetworkPolicyInputSchema, NetworkPolicySchema } from "./environment";
 import { LabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 import {
@@ -141,6 +144,9 @@ const ChatTitleGenerationAgentConfigSchema = z.object({
 const AppRuntimeAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.APP_RUNTIME),
 });
+const SreAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.SRE),
+});
 
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
@@ -148,6 +154,7 @@ export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
+  SreAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -197,7 +204,19 @@ const selectExtendedFields = {
    * without the entry rules, so a row saved under other rules still loads.
    */
   githubActionsAccess: StoredGitHubActionsAccessSchema.nullable().optional(),
+  /**
+   * MCP gateways' subagent load-balancing and fallback setting. Optional so
+   * agent objects built in code without it still fit.
+   */
+  subagentLoadBalancing:
+    StoredSubagentLoadBalancingConfigSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
+  /**
+   * Per-agent egress override for its Agent Runtime and Code Sandbox. Null
+   * inherits the environment's policy. Optional so agent objects built in code
+   * without it still fit.
+   */
+  networkPolicy: NetworkPolicySchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
    * When anything last ran through this agent: the later of its newest MCP
@@ -217,7 +236,10 @@ const insertExtendedFields = {
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
   githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
+  subagentLoadBalancing:
+    SubagentLoadBalancingConfigSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
 
@@ -275,9 +297,6 @@ function validateIncomingEmailDomain(
 const AUTO_ROUTING_COLUMNS = {
   autoRoutingEnabled: true,
   autoRoutingBudgetUsdPerDay: true,
-  autoRoutingFastModelId: true,
-  autoRoutingNormalModelId: true,
-  autoRoutingSmartModelId: true,
   autoRoutingScorerVersionId: true,
   autoRoutingGeneration: true,
   autoRoutingPlannedGeneration: true,
@@ -401,6 +420,13 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   modelId: true,
   llmApiKeyId: true,
   modelPoolId: true,
+}).extend({
+  /**
+   * Another user's agent whose own policy grants the caller read by name. A
+   * personal agent the caller reads only through admin oversight is false, so
+   * the chat picker can tell a share from a reference it should not offer.
+   */
+  sharedByName: z.boolean(),
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 

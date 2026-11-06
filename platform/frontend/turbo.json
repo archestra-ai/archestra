@@ -1,0 +1,17 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/check-workspace.mjs",
+        "$TURBO_ROOT$/scripts/check-workspace.ts",
+        "$TURBO_ROOT$/scripts/check-sequence.ts",
+        "$TURBO_ROOT$/scripts/heavy-lane.ts",
+        "$TURBO_ROOT$/scripts/dev-lite.sh",
+        "$TURBO_ROOT$/scripts/frontend-prebuilt.mjs",
+        "$TURBO_ROOT$/vitest.resources.ts"
+      ]
+    }
+  }
+}

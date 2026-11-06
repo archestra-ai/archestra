@@ -13,12 +13,17 @@ import type {
 import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
+  responsesEndingFromFinishReason,
 } from "./openai-responses-translator";
 import {
   carriesResponsesTerminal,
   formatResponsesStreamErrorFrame,
 } from "./responses-stream-error-frame";
-import { formatResponsesFunctionCallFrames } from "./responses-tool-call-rewrite";
+import {
+  formatResponsesFunctionCallFrames,
+  RESPONSES_STREAM_END,
+  toSse,
+} from "./responses-tool-call-rewrite";
 import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -199,7 +204,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     let sseData = "";
     if (textDelta) {
       sseData += this.ensureOutputStarted();
-      sseData += this.toSse({
+      sseData += toSse({
         type: "response.output_text.delta",
         item_id: this.itemId,
         output_index: 0,
@@ -227,7 +232,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   formatTextDeltaSSE(text: string): string {
     return [
       this.ensureOutputStarted(),
-      this.toSse({
+      toSse({
         type: "response.output_text.delta",
         item_id: this.itemId,
         output_index: 0,
@@ -252,13 +257,13 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       };
 
       return [
-        this.toSse({
+        toSse({
           type: "response.output_item.added",
           output_index: index,
           sequence_number: this.nextSequenceNumber(),
           item,
         }),
-        this.toSse({
+        toSse({
           type: "response.function_call_arguments.done",
           item_id: itemId,
           output_index: index,
@@ -266,7 +271,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           arguments: toolCall.arguments,
           name: toolCall.name,
         }),
-        this.toSse({
+        toSse({
           type: "response.output_item.done",
           output_index: index,
           sequence_number: this.nextSequenceNumber(),
@@ -281,7 +286,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     this.inner.formatCompleteTextSSE(text);
     return [
       this.ensureOutputStarted(),
-      this.toSse({
+      toSse({
         type: "response.output_text.delta",
         item_id: this.itemId,
         output_index: 0,
@@ -310,8 +315,8 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       nextSequenceNumber: () => this.nextSequenceNumber(),
     });
     frames.push(
-      this.toSse({
-        type: "response.completed",
+      toSse({
+        type: this.terminalEventType(),
         sequence_number: this.nextSequenceNumber(),
         response: {
           ...this.buildResponsesResponse(toolCalls),
@@ -327,7 +332,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   // appear in a terminal envelope and each response completes exactly once.
   formatEndSSE(): string {
     if (this.outputCompleted) {
-      return "data: [DONE]\n\n";
+      return RESPONSES_STREAM_END;
     }
     const footer =
       this.replacedText === null &&
@@ -341,7 +346,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     const suffix = footer ? `\n\n${footer}` : "";
     const text = `${this.state.text}${suffix}`;
     const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
-    return `${suffixDelta}${this.completeOutput(text)}data: [DONE]\n\n`;
+    return `${suffixDelta}${this.completeOutput(text)}${RESPONSES_STREAM_END}`;
   }
 
   toProviderResponse(): TResponse {
@@ -357,7 +362,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
     this.outputStarted = true;
     return [
-      this.toSse({
+      toSse({
         type: "response.created",
         sequence_number: this.nextSequenceNumber(),
         response: {
@@ -369,7 +374,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           output: [],
         },
       }),
-      this.toSse({
+      toSse({
         type: "response.output_item.added",
         output_index: 0,
         sequence_number: this.nextSequenceNumber(),
@@ -381,7 +386,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           content: [],
         },
       }),
-      this.toSse({
+      toSse({
         type: "response.content_part.added",
         item_id: this.itemId,
         output_index: 0,
@@ -405,7 +410,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     const text = textOverride ?? this.state.text;
     return [
       this.outputStarted ? "" : this.ensureOutputStarted(),
-      this.toSse({
+      toSse({
         type: "response.output_text.done",
         item_id: this.itemId,
         output_index: 0,
@@ -414,7 +419,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         text,
         logprobs: [],
       }),
-      this.toSse({
+      toSse({
         type: "response.content_part.done",
         item_id: this.itemId,
         output_index: 0,
@@ -426,7 +431,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           annotations: [],
         },
       }),
-      this.toSse({
+      toSse({
         type: "response.output_item.done",
         output_index: 0,
         sequence_number: this.nextSequenceNumber(),
@@ -434,7 +439,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           id: this.itemId,
           type: "message",
           role: "assistant",
-          status: "completed",
+          status: this.ending().status,
           content: [
             {
               type: "output_text",
@@ -444,8 +449,8 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
           ],
         },
       }),
-      this.toSse({
-        type: "response.completed",
+      toSse({
+        type: this.terminalEventType(),
         sequence_number: this.nextSequenceNumber(),
         // The builder omits usage entirely for an unobserved turn, which is
         // fine for the non-streaming body but not here: a terminal frame
@@ -473,7 +478,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         id: this.itemId,
         type: "message",
         role: "assistant",
-        status: "completed",
+        status: this.ending().status,
         content: [
           {
             type: "output_text",
@@ -504,23 +509,33 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       object: "response",
       created_at: this.ctx.createdUnix,
       model: this.ctx.requestedModel,
-      status: "completed",
+      ...this.ending(),
       output,
       usage: this.state.usage ? this.getResponsesUsage() : undefined,
     };
   }
 
-  private getResponsesUsage() {
-    const usage = this.state.usage;
-    // Gemini counts thinking separately; Responses includes it in output tokens.
-    return toResponsesUsage(
-      usage && this.provider === "gemini"
-        ? {
-            ...usage,
-            outputTokens: usage.outputTokens + (usage.reasoningTokens ?? 0),
-          }
-        : usage,
+  // A turn the model did not finish (token budget, content filter) ends as
+  // `incomplete`, as the non-streamed translation does. A policy refusal that
+  // replaced the response is a finished answer.
+  private ending() {
+    return responsesEndingFromFinishReason(
+      this.replacedText !== null
+        ? "stop"
+        : (this.inner.getOpenAiFinishReason?.() ?? this.state.stopReason),
     );
+  }
+
+  private terminalEventType() {
+    return this.ending().status === "incomplete"
+      ? "response.incomplete"
+      : "response.completed";
+  }
+
+  private getResponsesUsage() {
+    // Every adapter reports outputTokens with reasoning included, as
+    // Responses' output_tokens does.
+    return toResponsesUsage(this.state.usage);
   }
 
   private nextSequenceNumber(): number {
@@ -544,10 +559,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         index,
       }),
     }));
-  }
-
-  private toSse(event: unknown): string {
-    return `data: ${JSON.stringify(event)}\n\n`;
   }
 }
 

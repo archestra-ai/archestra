@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.15" # x-release-please-version
+  imageTag: "1.5.0-rc.23" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -574,7 +574,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.15" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.23" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -669,9 +669,10 @@ archestra:
       clusterDomain: ""
 
       # Cluster resolver IP(s) that MCP server, agent and sandbox egress policies
-      # allow DNS (port 53) to. Leave empty to discover the kube-system/kube-dns
-      # Service (see rbac.kubeDnsServiceRead). Set it when that Service is not the
-      # resolver (NodeLocal DNSCache, custom DNS) or cannot be read.
+      # allow DNS (port 53) to. Leave empty for discovery: the kube-system DNS
+      # Service when readable, otherwise the platform pod's /etc/resolv.conf.
+      # Set verified resolver IPs for custom DNS or workloads using a different
+      # resolver from the platform pod.
       # Example:
       #   clusterDnsIps:
       #     - 172.20.0.10
@@ -733,12 +734,13 @@ archestra:
         # namespace and deletes each Role during release uninstall.
         create: true
 
-        # Grant the platform ServiceAccount `get` on the kube-system/kube-dns
-        # Service (a Role + RoleBinding in kube-system, scoped to that one
-        # object). Egress policies pin DNS to its ClusterIP. Without this read,
-        # and with no clusterDnsIps set, the AWS ApplicationNetworkPolicy DNS rule
-        # omits the DNS bootstrap exception. Requires rbac.create.
-        kubeDnsServiceRead: true
+        # Optional grant of `get` on the kube-system/kube-dns Service to the
+        # platform ServiceAccount. Creates a Role + RoleBinding in kube-system;
+        # the installer must be authorized to manage both there. Requires rbac.create.
+        # Usually unnecessary in-cluster: discovery falls back to the platform
+        # pod's /etc/resolv.conf. Alternatively set clusterDnsIps explicitly.
+        # If no resolver is known, AWS policies omit the DNS bootstrap exception.
+        kubeDnsServiceRead: false
 
         # Kubernetes namespaces backing deployment environments that the platform
         # may deploy MCP servers into. The platform ServiceAccount only gets
@@ -892,8 +894,8 @@ archestra:
     # Annotations for the ingress resource
     annotations: {}
 
-    # Route the backend's own API prefixes (/v1, /v2) straight to the backend
-    # port on any host that also serves the UI.
+    # Route /v1, /v2 and exact /openapi.json straight to the backend port on
+    # any host that also serves the UI.
     #
     # Neither prefix has a frontend route — the frontend only forwards them to
     # the backend. /v1 is the LLM proxy and the MCP gateway; /v2 is A2A. That is
@@ -905,9 +907,10 @@ archestra:
     # removes that contention.
     #
     # Applies to hosts declared under `hosts:` below. A host that already
-    # declares its own /v1 or /v2 path is left alone, as is one that never
-    # routes to the frontend port (a backend-only hostname). Set to false to
-    # keep everything on whatever `hosts:` says.
+    # declares its own /v1 or /v2 path keeps those gateway routes. An explicit
+    # /openapi.json path is preserved independently; otherwise it is added for
+    # Terraform model-pool preflight. Backend-only hosts are unchanged.
+    # Set to false to keep everything on whatever `hosts:` says.
     #
     # Ignored when `spec:` is used, since that replaces the generated rules.
     routeBackendApisDirectly: true

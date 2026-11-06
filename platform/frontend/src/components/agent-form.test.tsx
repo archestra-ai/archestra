@@ -6,7 +6,14 @@ import {
   getAgentCatalogImages,
   type SupportedProvider,
 } from "@archestra/shared";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
@@ -91,6 +98,16 @@ vi.mock("@/lib/agent-options.query", () => ({
   },
 }));
 
+vi.mock("@/lib/agent-runtime-templates.query", () => ({
+  useRuntimeTemplateCatalog: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+}));
 vi.mock("next/navigation");
 
 const {
@@ -206,7 +223,6 @@ const {
   ),
   useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
   useOrganizationDefaultModelMock: vi.fn(() => ({
-    isSet: false,
     model: null,
     label: null,
   })),
@@ -370,6 +386,19 @@ const {
 
 vi.mock("@/components/initial-resource-permissions", () => ({
   InitialResourcePermissions: () => null,
+}));
+
+// The per-agent network policy editor reads the cluster's policy support.
+vi.mock("@/lib/environment.query", async () => ({
+  ...(await vi.importActual("@/lib/environment.query")),
+  useK8sCapabilities: () => ({
+    data: {
+      networkPolicy: {
+        supportsFqdn: true,
+        enforcementStatus: "verified-enforced",
+      },
+    },
+  }),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -1157,8 +1186,6 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
-  fastModelId: null,
-  smartModelId: null,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -2872,7 +2899,6 @@ describe("AgentForm save payload and failure handling", () => {
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
     useAgentRuntimePreflightMock.mockReturnValue({ data: undefined });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: false,
       model: null,
       label: null,
     });
@@ -2994,6 +3020,8 @@ describe("AgentForm save payload and failure handling", () => {
       );
 
       expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Tools" })).toBeVisible();
+      expect(screen.queryByText("Tools & Knowledge")).toBeNull();
       expect(
         screen.queryByRole("radiogroup", { name: "Tool access" }),
       ).toBeNull();
@@ -3036,6 +3064,47 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("keeps saved runtime settings read-only without Configure runtime", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    render(
+      <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Enable runtime" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Configure runtime permission is required/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "example.test/worker:v1",
+    };
+    render(<AgentForm agentType="agent" agent={{ ...baseAgent, runtime }} />);
+    await user.type(
+      await screen.findByDisplayValue("Existing Agent"),
+      " renamed",
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(updateAgent.mock.calls[0][0].data).not.toHaveProperty("runtime");
+  });
+
   it("hides existing runtime settings when another form panel is active", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const { rerender } = render(
@@ -3045,10 +3114,8 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
       />,
     );
-    // The runtime fields render their own sections, so the panel is the
-    // wrapper directly around them.
     const runtimePanel = () =>
-      screen.getByTestId("agent-runtime").parentElement;
+      screen.getByTestId("agent-runtime").closest("fieldset")?.parentElement;
     expect(runtimePanel()).toHaveClass("hidden");
     rerender(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
@@ -3286,7 +3353,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -3418,7 +3484,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3478,7 +3543,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3547,7 +3611,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3605,7 +3668,6 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       label: "Google · Gemini 2.5 Pro",
       model: {
         dbId: "gemini-default",
@@ -3631,7 +3693,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3680,7 +3741,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3727,7 +3787,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3786,7 +3845,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3948,7 +4006,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -3998,7 +4055,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -4077,7 +4133,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -4116,6 +4171,40 @@ describe("AgentForm save payload and failure handling", () => {
 
     await waitFor(() => expect(saveChannelChangesMock).toHaveBeenCalled());
     expect(updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("sends the agent's own network policy once it is edited", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          networkPolicy: {
+            egressMode: "restricted",
+            domainPreset: "none",
+            allowedDomains: ["api.example.com"],
+            allowedCidrs: [],
+          },
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    const domains = await screen.findByLabelText("Allowed domains");
+    expect(domains).toHaveValue("api.example.com");
+    fireEvent.change(domains, {
+      target: { value: "api.example.com\nregistry.example.com" },
+    });
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().networkPolicy).toEqual({
+      egressMode: "restricted",
+      domainPreset: "none",
+      allowedDomains: ["api.example.com", "registry.example.com"],
+      allowedCidrs: [],
+    });
   });
 
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
@@ -4283,68 +4372,6 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().llmApiKeyId).toBe("key-1");
     expect(savedBody().modelId).toBe("model-1");
-  });
-
-  it("clears the fast and smart models when the key changes", async () => {
-    // They are validated against the trio's key, so they cannot follow the
-    // normal model onto another key.
-    const user = userEvent.setup();
-    useAvailableLlmProviderApiKeysMock.mockReturnValue({
-      data: [
-        {
-          id: "key-0",
-          name: "Old OpenAI",
-          provider: "openai",
-          scope: "org",
-          bestModelId: "model-1",
-        },
-        {
-          id: "key-1",
-          name: "Org OpenAI",
-          provider: "openai",
-          scope: "org",
-          bestModelId: "model-1",
-        },
-      ],
-    });
-    useLlmModelsByProviderMock.mockReturnValue({
-      modelsByProvider: {
-        openai: [
-          {
-            dbId: "model-1",
-            id: "gpt-4o",
-            displayName: "GPT-4o",
-            provider: "openai",
-            isFree: false,
-          },
-        ],
-      },
-    });
-    render(
-      <AgentForm
-        agentType="agent"
-        agent={{
-          ...baseAgent,
-          llmApiKeyId: "key-0",
-          modelId: "model-1",
-          fastModelId: "fast-0",
-          smartModelId: "smart-0",
-        }}
-        sections={["configuration"]}
-      />,
-    );
-
-    await user.click(
-      await screen.findByRole("button", { name: /pick api key/i }),
-    );
-    await user.click(screen.getByRole("button", { name: /update/i }));
-
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toMatchObject({
-      llmApiKeyId: "key-1",
-      fastModelId: null,
-      smartModelId: null,
-    });
   });
 
   it("automatically uses an existing ChatGPT subscription for the Codex catalog runtime", async () => {
@@ -4590,7 +4617,6 @@ describe("AgentForm save payload and failure handling", () => {
       },
     });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       model: {
         dbId: "gpt-default",
         id: "gpt-5.6-luna",
@@ -4690,6 +4716,169 @@ describe("AgentForm save payload and failure handling", () => {
       screen.queryByRole("img", { name: /Select a model/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("keeps the Claude account radio cards visible with personal subscription disabled, shows the command notice, and rewrites subscription to provider on save when a Claude runtime uses a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "org",
+          bestModelId: "claude-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        anthropic: [
+          {
+            dbId: "claude-model",
+            id: "claude-sonnet-4-6",
+            displayName: "Claude Sonnet",
+            provider: "anthropic",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["custom-claude-entrypoint"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(screen.getByText("Whose Claude account runs it")).toBeVisible();
+    const subscriptionRadio = screen.getByRole("radio", {
+      name: /Each person's Claude subscription/,
+    });
+    const providerRadio = screen.getByRole("radio", {
+      name: /A company API key/,
+    });
+    expect(subscriptionRadio).toBeDisabled();
+    expect(subscriptionRadio).not.toBeChecked();
+    expect(providerRadio).toBeChecked();
+    expect(
+      screen.getByText(
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toMatchObject({
+      command: ["custom-claude-entrypoint"],
+      claudeCode: {
+        authentication: "provider",
+        model: "opus",
+      },
+    });
+  });
+
+  it("omits runtime from the configuration save when the caller lacks configure-runtime permission even if claudeCode.authentication is subscription on a custom command", async () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      const requested = permissions as { agent?: string[] };
+      const hasConfigureRuntime =
+        requested.agent?.includes("configure-runtime") ?? false;
+      return {
+        data: !hasConfigureRuntime,
+      } as unknown as ReturnType<typeof useHasPermissions>;
+    });
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["custom-claude-entrypoint"],
+            claudeCode: {
+              authentication: "subscription",
+              model: "opus",
+            },
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(savedBody().runtime).toBeUndefined();
+  });
+
+  it("does not treat a maintained non-Claude harness on the Anthropic protocol as Claude Code", () => {
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "key-1",
+          modelId: "claude-model",
+          runtime: {
+            image: "example.com/opencode:latest",
+            command: ["archestra-opencode"],
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "tmux_keys",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Whose Claude account runs it"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/change Dedicated runtime → Container → Command/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pick API key" })).toBeVisible();
   });
 
   it("marks the image row until a container image and command are supplied", async () => {

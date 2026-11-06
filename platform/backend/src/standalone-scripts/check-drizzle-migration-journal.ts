@@ -1,6 +1,13 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 // Drizzle decides which migrations to run from the journal `when` high-water
 // mark, not just the filename order. A migration appended with an older `when`

@@ -17,6 +17,8 @@ export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   "claude-desktop": "Claude Desktop",
   codex: "Codex",
+  chatgpt: "ChatGPT",
+  "copilot-cli": "Copilot CLI",
   pi: "Pi",
   "kimi-code": "Kimi Code",
   opencode: OPENCODE_FAMILY.opencode.label,
@@ -25,7 +27,57 @@ export const NATIVE_SESSION_CLIENT_LABELS = {
 
 export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
 
-/** Connection defaults must be served by the selected provider's catalog. */
+/**
+ * The providers whose proxy route serves the OpenAI Responses API. The Copilot
+ * CLI names its conversation only on that wire (as `prompt_cache_key`), so a
+ * Copilot setup on one of these selects it in providers.json and Guardrails
+ * can follow the session. On every other provider Copilot stays on Chat
+ * Completions, which names no conversation.
+ */
+export const COPILOT_CLI_RESPONSES_PROVIDERS = [
+  "openai",
+  "azure",
+  "github-copilot",
+  "xai",
+] as const satisfies readonly SupportedProvider[];
+
+export function copilotCliUsesResponsesWire(
+  provider: SupportedProvider,
+): boolean {
+  return (COPILOT_CLI_RESPONSES_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
+/**
+ * Whether a client's setup can run a model over the API the setup configures.
+ * Copilot CLI reaches OpenAI, Azure, GitHub Copilot and xAI through the
+ * Responses API, so a model its provider serves only on other endpoints
+ * (Claude on GitHub Copilot serves only Chat Completions) cannot answer it. A
+ * model with no endpoint list is taken to serve both.
+ */
+export function connectionModelServesClient(params: {
+  clientId: string;
+  provider: SupportedProvider;
+  supportedEndpoints?: readonly string[] | null;
+}): boolean {
+  if (
+    params.clientId !== "copilot-cli" ||
+    !copilotCliUsesResponsesWire(params.provider)
+  ) {
+    return true;
+  }
+  const endpoints = params.supportedEndpoints;
+  return !endpoints?.length || endpoints.includes("/responses");
+}
+
+/**
+ * Connection defaults must be served by the selected provider's catalog: the
+ * provider's usual model when it is, else the newest general GPT line on the
+ * providers that carry one (OpenAI first of all; GitHub Copilot when its usual
+ * Claude model is not in the list, as for a client that reaches it through the
+ * Responses API only), else the first model listed.
+ */
 export function defaultConnectionModel({
   provider,
   modelIds,
@@ -33,20 +85,20 @@ export function defaultConnectionModel({
   provider: SupportedProvider;
   modelIds: readonly string[];
 }): string | null {
-  if (provider === "openai") {
+  const usual = modelIds.find(
+    (id) => id === PROVIDER_MODEL_TIERS[provider].normal,
+  );
+  if (provider === "openai" || provider === "github-copilot") {
     // Compatible routers can return provider-qualified IDs. Keep the original
     // ID for requests; only strip the qualifier when comparing model families.
     const name = (id: string) => id.replace(/^openai[:/]/, "");
     const preferred =
       modelIds.find((id) => /^gpt-6\.1(?:-|$)/.test(name(id))) ??
       modelIds.find((id) => /^gpt-6(?:[.-]|$)/.test(name(id)));
-    if (preferred) return preferred;
+    if (provider === "openai" && preferred) return preferred;
+    if (provider === "github-copilot" && !usual && preferred) return preferred;
   }
-  return (
-    modelIds.find((id) => id === PROVIDER_MODEL_TIERS[provider].normal) ??
-    modelIds[0] ??
-    null
-  );
+  return usual ?? modelIds[0] ?? null;
 }
 
 export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
@@ -59,6 +111,9 @@ export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
  * instead of sending a request the backend refuses.
  */
 export const CONNECTION_SETUP_MAX_SKILLS = 1111;
+
+/** Setup tokens are render tickets, not credentials — keep them short-lived. */
+export const CONNECTION_SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 /** Upper bound on plugins delivered by one setup or share link. */
 export const PLUGIN_DELIVERY_MAX_COUNT = 555;
@@ -90,6 +145,7 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-code",
   "cursor",
   "codex",
+  "chatgpt",
   "claude-desktop",
   "copilot-cli",
   "opencode",
@@ -105,6 +161,7 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
   codex: "Codex",
+  chatgpt: "ChatGPT",
   pi: "Pi",
   "kimi-code": "Kimi Code",
   "copilot-cli": "Copilot CLI",
@@ -125,6 +182,7 @@ export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   "kimi-code": ["kimi-code", "kimi"],
   "copilot-cli": [
@@ -163,10 +221,26 @@ export function isPlainMcpClientServerName(name: string): boolean {
 export function startupGuardStem(id: string): string | undefined {
   // Pi invokes the guard from its native launcher, not a shell-profile wrapper.
   if (id === "pi") return undefined;
+  if (id === "chatgpt") return startupGuardStem("codex");
   const guard = STARTUP_GUARD_INSTALL[id as keyof typeof STARTUP_GUARD_INSTALL];
   return guard?.scriptRelpath
     .replace(/^\.archestra\//, "")
     .replace(/-startup-guard\.sh$/, "");
+}
+
+/** Repeated cleanup succeeds after the guard removes itself; real failures still fail. */
+export function startupGuardDisconnectCommand(
+  clientId: string,
+  platform: "bash" | "windows",
+): string | null {
+  const guard = startupGuardStem(clientId);
+  if (!guard) return null;
+  if (platform === "windows") {
+    const script = `$HOME\\.archestra\\${guard}-startup-guard.ps1`;
+    return `if (Test-Path -LiteralPath "${script}" -PathType Leaf) { $env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "${script}"; if ($LASTEXITCODE -ne 0) { throw "Local cleanup failed (exit $LASTEXITCODE)." } } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION -ErrorAction SilentlyContinue } } else { Write-Host 'No local cleanup script remains.'; $global:LASTEXITCODE=0 }`;
+  }
+  const script = `$HOME/.archestra/${guard}-startup-guard.sh`;
+  return `if [ -f "${script}" ]; then ARCHESTRA_GUARD_ACTION=disconnect bash "${script}"; else printf '%s\\n' 'No local cleanup script remains.'; fi`;
 }
 
 /**
@@ -185,6 +259,11 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   codex: [
     "~/.codex/config.toml (gateway, model provider, skills marketplace)",
     "Plugins from the skills marketplace",
+    "Startup check in your shell profile",
+  ],
+  chatgpt: [
+    "~/.codex/config.toml (gateway, model provider, plugins)",
+    "Shared skills installed through the plugin marketplace",
     "Startup check in your shell profile",
   ],
   pi: [
@@ -355,7 +434,11 @@ export function oauthClientIdOf(agentId: string): string | null {
 
 /** Whether revoking an agent signs it out of the gateway. */
 export function revokeSignsOut(agentId: string): boolean {
-  return isOAuthRecognisedClient(agentId) || oauthClientIdOf(agentId) !== null;
+  return (
+    agentId === "chatgpt" ||
+    isOAuthRecognisedClient(agentId) ||
+    oauthClientIdOf(agentId) !== null
+  );
 }
 
 /** A known agent's name; null for one known only from its sign-in. */

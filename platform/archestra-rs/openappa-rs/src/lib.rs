@@ -11,10 +11,12 @@ mod declarations;
 mod deployments;
 mod labels;
 mod lease;
+mod metrics;
 #[allow(dead_code)]
 mod peer;
 mod policy;
 mod replay;
+mod retained_refusal;
 mod sealed;
 
 use appa_eventlog::{
@@ -622,6 +624,11 @@ where
         .await
         .map_err(|refusal| match refusal {
             deployments::DeploymentError::Superseded => policy_moved(),
+            deployments::DeploymentError::Diverged => Fault::binding(
+                BindingFailure::InvalidInput,
+                "OpenAPPA was handed two policy documents under one composition; the organization's deployment is unchanged",
+            )
+            .into(),
             deployments::DeploymentError::Failed(fault) => fault.into(),
         })?;
     match work(state.pinned(&deployment)).await {
@@ -937,6 +944,7 @@ pub async fn initialize_openappa(
                 "OpenAPPA needs at least one PostgreSQL connection",
             )
         })?;
+    metrics::initialize();
     let mut slot = state_mutex().lock().await;
     if slot.is_some() {
         return Ok(());
@@ -1764,6 +1772,25 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
+}
+
+/// Reads an offer's original refusal from authenticated, host-scoped journal
+/// records, including encrypted and escaped decisions. Executes no remedy.
+#[napi(js_name = "retainedOfferRefusal")]
+pub fn retained_offer_refusal(
+    input: String,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<Option<String>> {
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let input = serde_json::from_str(&input).map_err(invalid_input)?;
+        let cipher = match encryption {
+            Some(encryption) => StorageCipher::encrypted(encryption.key.as_ref(), encryption.scope)
+                .map_err(invalid_input)?,
+            None => StorageCipher::Plain,
+        };
+        retained_refusal::find(input, &cipher).map_err(invalid_input)
+    }))
+    .map_err(|_| panicked("OpenAPPA retained refusal lookup failed"))?
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
@@ -2862,12 +2889,16 @@ impl State {
             }
             // Before the runtime spends the offer. A missing row is empty
             // presentation, not an error, so an old call still redeems.
-            let recorded = recorded_call_presentation(
-                pg,
-                &input.organization_id,
-                &input.session_id,
-                &offer_id,
-            )?;
+            let recorded = match offer_id.as_deref() {
+                Some(offer_id) => recorded_call_presentation(
+                    pg,
+                    &input.organization_id,
+                    &input.session_id,
+                    offer_id,
+                )?,
+                // A return declared ahead of its spawn names no offer, so no call presented one.
+                None => Default::default(),
+            };
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
@@ -2885,7 +2916,7 @@ impl State {
                 outcome,
                 &RemedyAct {
                     owner: &owner,
-                    offer_id: &offer_id,
+                    offer_id: offer_id.as_deref().unwrap_or_default(),
                     ruling: input.ruling,
                 },
             )?;
@@ -3608,8 +3639,9 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
 /// returned a block, and the offer was retired.
 /// Otherwise, the original runtime text returns unchanged.
 fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Option<String> {
+    let block = denied_block(&presentation.feedback);
     let denied = act.ruling == Some(RulingInput::Deny)
-        && presentation.feedback.starts_with("[appa] Blocked:")
+        && block.starts_with("[appa] Blocked:")
         && !presentation
             .offers
             .iter()
@@ -3636,15 +3668,30 @@ fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Op
     );
     if !presentation.offers.is_empty() {
         text.push_str("\n\nThe policy still offers options that do not need this reviewer:\n");
-        text.push_str(&presentation.feedback);
+        text.push_str(block);
     }
     Some(text)
+}
+
+/// The call's block in a denial's feedback, past the line the runtime leads it with to name
+/// the authority that denied the plan. The text above says who refused the call.
+fn denied_block(feedback: &str) -> &str {
+    match feedback.split_once('\n') {
+        Some((lead, block))
+            if lead.starts_with("[appa] authority ") && lead.ends_with(" denied this plan.") =>
+        {
+            block
+        }
+        _ => feedback,
+    }
 }
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
         RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
-        RemedyRefusal::InvalidOfferId(_)
+        // Its text says how to declare at the spawn's block instead.
+        RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
         | RemedyRefusal::Runtime { .. } => None,
@@ -5087,6 +5134,31 @@ mod remedy_tests {
     }
 
     #[test]
+    fn a_human_denial_reads_as_final_past_the_line_naming_the_authority() {
+        let feedback = format!("[appa] authority human-approval denied this plan.\n{DENIED_BLOCK}");
+        let response = render(
+            declined(&feedback, &[]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+        let denial = text(&response);
+        assert!(denial.starts_with("[appa] Denied:"), "{denial}");
+        assert!(!denial.contains("denied this plan"), "{denial}");
+
+        let remaining =
+            format!("{feedback}\n\nContinue:\n  - execute_remedy_plan(offer_id: \"{OTHER}\")");
+        let response = render(
+            declined(&remaining, &[OTHER]),
+            &owner(None),
+            Some(RulingInput::Deny),
+        );
+        let denial = text(&response);
+        assert!(denial.starts_with("[appa] Denied:"), "{denial}");
+        assert!(denial.ends_with(&remaining[remaining.find('\n').unwrap() + 1..]));
+        assert!(!denial.contains("denied this plan"), "{denial}");
+    }
+
+    #[test]
     fn a_human_denial_names_the_canonical_tool_without_a_client_spelling() {
         let response = render(
             declined(DENIED_BLOCK, &[]),
@@ -5879,3 +5951,13 @@ mod failure_tests {
         assert_eq!(code(&failed), json!("storage"));
     }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/// Cumulative embedded engine samples for the host's existing Prometheus endpoint.
+#[napi(js_name = "collectOpenappaMetrics")]
+pub fn collect_openappa_metrics() -> napi::Result<String> {
+    metrics::collect().map_err(|_| napi::Error::from_reason("OpenAPPA metric collection failed"))
+}
+// SPDX-SnippetEnd

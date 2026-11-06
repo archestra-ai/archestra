@@ -122,8 +122,8 @@ class AzureRequestAdapter
   convertToolResultContent(messages: AzureMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 
@@ -186,8 +186,8 @@ class AzureStreamAdapter
   private audioChunks: Buffer[] = [];
   private audioBytes = 0;
 
-  constructor() {
-    this.delegate = new OpenAIStreamAdapter();
+  constructor(request?: AzureRequest) {
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {
@@ -305,8 +305,10 @@ export const azureAdapterFactory: LLMProvider<
     return new AzureResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<AzureStreamChunk, AzureResponse> {
-    return new AzureStreamAdapter();
+  createStreamAdapter(
+    request?: AzureRequest,
+  ): LLMStreamAdapter<AzureStreamChunk, AzureResponse> {
+    return new AzureStreamAdapter(request);
   },
 
   extractApiKey(headers: AzureHeaders): string | undefined {

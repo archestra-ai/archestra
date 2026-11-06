@@ -30,7 +30,9 @@ const SESSION_SOURCES: Exclude<SessionSource, null>[] = [
   "header",
   "meta_header",
   "codex_session",
+  "chatgpt_session",
   "pi_session",
+  "copilot_session",
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   ...OPENCODE_FAMILY_SESSION_SOURCES,
 ];
@@ -609,16 +611,22 @@ class RoutingHistoryModel {
               and not ${active(sql`s.organization_id`, sql`s.started_at >= b.window_start`)}
             limit ${limit})`,
       ),
+      // Build the compact reference set once per batch instead of allowing
+      // an agent-table scan for every candidate score.
       scores: await deleteInBatches(
         batchSize,
         (limit) => sql`
+          with referenced_scorers as materialized (
+            select distinct organization_id, auto_routing_scorer_version_id
+            from agents where auto_routing_scorer_version_id is not null
+          )
           delete from routing_history_scores where (history_session_id, scorer_version_id) in (
             select sc.history_session_id, sc.scorer_version_id
             from routing_history_scores sc
             join routing_history_sessions s on s.id = sc.history_session_id
             where sc.scorer_version_id <> ${params.keepScorerVersionId}
               and not exists (
-                select 1 from agents a
+                select 1 from referenced_scorers a
                 where a.organization_id = s.organization_id
                   and a.auto_routing_scorer_version_id = sc.scorer_version_id
               )

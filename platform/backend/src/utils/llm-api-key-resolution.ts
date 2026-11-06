@@ -13,7 +13,9 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import { LlmProviderApiKeyModel, ModelModel, TeamModel } from "@/models";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ModelModel from "@/models/model";
+import TeamModel from "@/models/team";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { LlmProviderApiKey } from "@/types";
 import { ApiError } from "@/types/api";

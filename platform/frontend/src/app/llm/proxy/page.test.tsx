@@ -22,7 +22,8 @@ import {
 } from "@/lib/organization.query";
 import LlmProxyPage from "./page";
 
-const API_ORIGIN = "http://localhost:9000";
+// Keep a missing MSW handler away from the developer's running backend.
+const API_ORIGIN = "http://127.0.0.1:1";
 
 // The credential picker is a Radix Select, which needs pointer capture and
 // scrollIntoView that jsdom lacks.
@@ -74,11 +75,11 @@ describe("LlmProxyPage provider dropdown", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
-  it("defaults to the Model Router endpoint", async () => {
+  it("defaults to the Unified Model API endpoint", async () => {
     renderPage();
 
     expect(
-      await screen.findByText("http://localhost:3000/v1/model-router"),
+      await screen.findByText("http://localhost:3000/v1/unified-model"),
     ).toBeInTheDocument();
   });
 
@@ -113,15 +114,19 @@ describe("LlmProxyPage provider dropdown", () => {
 
     await user.click(mistralOption);
 
-    // Selecting from the search dropdown promotes the provider to its own
-    // active tab and repoints the endpoint at it, same as the tab bar does
-    // for the built-in primary providers.
+    // Selecting from the dropdown repoints the endpoint and shows the choice in
+    // the dropdown itself; the tabs stay as they were.
     expect(
       await screen.findByText("http://localhost:3000/v1/mistral"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Mistral AI" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Mistral AI" }),
+    ).not.toBeInTheDocument();
+    expect(moreTrigger).toHaveTextContent("Mistral AI");
+
+    // Picking a tab resets the dropdown to its placeholder.
+    await user.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(moreTrigger).toHaveTextContent(/More providers \(\d+\)/);
   });
 });
 
@@ -571,8 +576,11 @@ describe("LlmProxyPage connect steps", () => {
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
       ),
-      http.get(`${API_ORIGIN}/api/llm-oauth-clients`, () =>
-        HttpResponse.json(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get("capability")).toBe(
+          "llm:proxy",
+        );
+        return HttpResponse.json(
           page([
             {
               id: "oc-batch",
@@ -581,10 +589,13 @@ describe("LlmProxyPage connect steps", () => {
               grantType: "client_credentials",
               authorId: "someone-else",
               providerApiKeys: JUDGE_KEY.providerApiKeys,
+              includeFutureProviders: false,
+              scopes: ["llm:proxy"],
+              modelPoolIds: [],
             },
           ]),
-        ),
-      ),
+        );
+      }),
     );
     const user = userEvent.setup();
     renderPage();
@@ -606,7 +617,7 @@ describe("LlmProxyPage connect steps", () => {
     );
   });
 
-  it("keeps passthrough off the Model Router, which has no route for it", async () => {
+  it("keeps passthrough off the Unified Model API, which has no route for it", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
@@ -623,7 +634,7 @@ describe("LlmProxyPage connect steps", () => {
     // and comes back with the provider.
     await selectJev(user);
     await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
-    await user.click(screen.getByRole("button", { name: "Model Router" }));
+    await user.click(screen.getByRole("button", { name: "Unified Model API" }));
     expect(screen.getByRole("radio", { name: /Standard/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Passthrough/ })).toBeDisabled();
 

@@ -18,7 +18,13 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelPoolModel } from "@/models";
-import type { ModelPool, ModelPoolMember, ModelPoolWithHealth } from "@/types";
+import {
+  ApiError,
+  type ModelPool,
+  type ModelPoolMember,
+  type ModelPoolWithHealth,
+} from "@/types";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { poolFailoverReason } from "./llm-proxy-helpers";
 import {
   canReachMember,
@@ -53,6 +59,11 @@ export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {
+  /** The terminal pool failure already has an interaction and settled spend. */
+  interactionRecorded?: boolean;
+  modelAliases?: string[];
+  billingEndpoint?: "fireworks" | "other";
+  requestedModel?: string;
   providerApiKeyId?: string;
   modelPoolId?: string;
   attempt?: number;
@@ -100,39 +111,41 @@ export interface ModelPoolCaller {
   virtualKeyId?: string;
   /** Provider keys the caller may already use. */
   providerApiKeyIds: string[];
-  /** Pools an OAuth client was granted outright. */
+  /**
+   * Pools an OAuth client calling as the app was given, the only ones it may
+   * use. Unset for a caller that has no list of its own.
+   */
   modelPoolIds?: string[];
 }
 
 /**
- * Whether a caller may spend a pool's member keys: when it already uses one of
- * them, since the admin who put that key in the pool chose the other members
- * as its backups. That is what puts a user who connected through Connect on
- * the pool without knowing it. A virtual key or an OAuth client can also be
- * granted the pool outright, for one that maps none of the members.
+ * Whether a caller may spend a pool's member keys. A virtual key, or an OAuth
+ * client calling as the app, may only when the pool was added to it, whatever
+ * provider keys it maps. A caller with no pools of its own (a signed-in user,
+ * an identity provider's token) may when it already uses one of the members'
+ * keys, since the admin who put that key in the pool chose the other members
+ * as its backups.
  */
 export function mayUseModelPool(params: {
   pool: Pick<ModelPool, "id" | "members" | "virtualApiKeyIds">;
   caller: ModelPoolCaller;
 }): boolean {
   const { pool, caller } = params;
-  if (
-    (caller.virtualKeyId &&
-      pool.virtualApiKeyIds.includes(caller.virtualKeyId)) ||
-    caller.modelPoolIds?.includes(pool.id)
-  ) {
-    return true;
+  if (caller.virtualKeyId) {
+    return pool.virtualApiKeyIds.includes(caller.virtualKeyId);
   }
+  if (caller.modelPoolIds) return caller.modelPoolIds.includes(pool.id);
   return pool.members.some((member) =>
     caller.providerApiKeyIds.includes(member.providerApiKeyId),
   );
 }
 
 /**
- * The plan for a request whose model is a pool's name, or null when model
- * pools are off (a beta feature), no pool has that name, the caller may not
- * use it, or none of its members can answer the client's wire. The session id keeps one conversation on one member
- * while it is healthy, which keeps the provider's prompt cache warm.
+ * Plan a named or explicitly selected pool. Returns null when pools are off,
+ * a named pool does not exist, or the caller cannot use that named pool.
+ * A missing selected pool throws 404; no enabled members or any enabled member
+ * incompatible with the client wire throws 400. Session affinity keeps a
+ * conversation on one healthy member to reuse the provider's prompt cache.
  */
 export async function planModelPool(params: {
   organizationId: string;
@@ -144,7 +157,7 @@ export async function planModelPool(params: {
   poolId?: string;
   inbound: PoolWire;
   caller: ModelPoolCaller;
-  /** Set when the Model Router already let this caller use the pool. */
+  /** Set when the Unified Model API already let this caller use the pool. */
   grantedPoolId?: string;
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
@@ -158,7 +171,11 @@ export async function planModelPool(params: {
         organizationId: params.organizationId,
         name: params.name,
       });
-  if (!pool) return null;
+  if (!pool) {
+    if (params.poolId)
+      throw new ApiError(404, "The selected model pool no longer exists");
+    return null;
+  }
   if (
     pool.id !== params.poolId &&
     pool.id !== params.grantedPoolId &&
@@ -166,22 +183,18 @@ export async function planModelPool(params: {
   ) {
     return null;
   }
-  const reachable = pool.members.filter((member) =>
+  const enabled = pool.members.filter((member) => member.enabled);
+  if (enabled.length === 0)
+    throw new ApiError(400, "The selected model pool has no enabled members");
+  const reachable = enabled.filter((member) =>
     canReachMember(params.inbound, member.provider),
   );
-  if (reachable.length < pool.members.length) {
-    logger.info(
-      {
-        poolId: pool.id,
-        inbound: params.inbound,
-        skipped: pool.members
-          .filter((member) => !reachable.includes(member))
-          .map((member) => member.provider),
-      },
-      "Model pool members on a wire this client cannot reach are skipped",
+  if (reachable.length < enabled.length) {
+    throw new ApiError(
+      400,
+      `This model pool has members that cannot serve ${params.inbound} requests. Use a compatible request format or remove incompatible members; the pool will not be silently bypassed.`,
     );
   }
-  if (reachable.length === 0) return null;
   const benches = await readBenches({ ...pool, members: reachable });
   const benchedUntil = new Map<string, number>();
   for (const [memberId, bench] of benches) {
@@ -290,6 +303,10 @@ export async function openThroughModelPool<T>(params: {
     member: PlannedMember,
     signal: AbortSignal,
   ) => Promise<MemberTransport>;
+  /** Resolve the member and reject hidden models before limits or provider work. */
+  prepareAttempt?: (member: PlannedMember) => Promise<void>;
+  /** Request-level checks run outside provider timeouts and failover handling. */
+  beforeAttempt?: (member: PlannedMember) => Promise<void>;
   open: (transport: MemberTransport) => Promise<T>;
   /**
    * How long a member that isn't the last may take for `open` to resolve: the
@@ -303,20 +320,75 @@ export async function openThroughModelPool<T>(params: {
     delayMs: number;
     error: unknown;
   }) => void;
-  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  /** Record and settle this failure now; finalize its routing outcome when the next choice is known. */
+  prepareFailedAttempt: (
+    attempt: UpstreamAttempt,
+  ) => Promise<(outcome: "failed" | "failed_over") => Promise<void>>;
 }): Promise<T> {
   const { plan, attempt } = params;
   attempt.modelPoolId = plan.poolId;
+  let lastFailure:
+    | {
+        error: unknown;
+        attempt: UpstreamAttempt;
+        record?: (outcome: "failed" | "failed_over") => Promise<void>;
+      }
+    | undefined;
+  const recordPreviousFailure = async (
+    outcome: "failed" | "failed_over",
+  ): Promise<boolean> => {
+    if (!lastFailure?.record) return false;
+    try {
+      await lastFailure.record(outcome);
+      return true;
+    } catch (recordError) {
+      logger.error(
+        { err: recordError, poolId: plan.poolId },
+        "Failed to record a failed model pool attempt",
+      );
+      return false;
+    }
+  };
+  let hiddenError: ApiError | undefined;
+  let attempted = 0;
   for (const [index, member] of plan.members.entries()) {
     attempt.providerApiKeyId = member.providerApiKeyId;
     attempt.provider = member.provider;
     attempt.modelId = member.modelId;
-    attempt.attempt = index + 1;
+    attempt.attempt = attempted + 1;
     attempt.failureReason = undefined;
+    attempt.interactionRecorded = undefined;
     attempt.cutOff = undefined;
-    attempt.startedAt = index > 0 ? Date.now() : undefined;
+    attempt.startedAt = attempted > 0 ? Date.now() : undefined;
+    try {
+      await params.prepareAttempt?.(member);
+    } catch (error) {
+      if (
+        !(error instanceof ApiError) ||
+        error.internalCode !== "model_hidden"
+      ) {
+        await recordPreviousFailure("failed_over");
+        throw error;
+      }
+      hiddenError = error;
+      continue;
+    }
+    try {
+      await params.beforeAttempt?.(member);
+    } catch (error) {
+      // A visible sibling's admission refusal keeps the preceding failover
+      // outcome. Only skipped hidden members leave that failure terminal.
+      await recordPreviousFailure("failed_over");
+      throw error;
+    }
+    attempted++;
+    // Last means last in this request's plan. Availability is checked just
+    // before each member is attempted, so hidden trailing members do not
+    // extend an earlier member's timeout or enable its connection retries.
+    // Keep that bounded timing even if every remaining member is later hidden.
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
+    let retryFailure: unknown;
     try {
       const transport = await params
         .transportFor(member, abort.signal)
@@ -330,15 +402,36 @@ export async function openThroughModelPool<T>(params: {
         // than retrying a member that may be down.
         isRetryable: isLast ? params.isRetryable : () => false,
         shouldContinue: params.shouldContinue,
-        onRetry: params.onRetry,
+        onRetry: (event) => {
+          retryFailure = event.error;
+          params.onRetry?.(event);
+        },
       });
+      await recordPreviousFailure("failed_over");
       attempt.attemptOutcome = "answered";
       return result;
-    } catch (error) {
+    } catch (caught) {
+      // A hide during connection-retry backoff stops the retry, but the
+      // dispatched member still failed: retain that failure and its accounting.
+      const error =
+        caught instanceof ApiError &&
+        caught.internalCode === "model_hidden" &&
+        retryFailure !== undefined
+          ? retryFailure
+          : caught;
+      if (error instanceof ApiError && error.internalCode === "model_hidden") {
+        hiddenError = error;
+        attempted--;
+        continue;
+      }
+      await recordPreviousFailure("failed_over");
+      lastFailure = undefined;
       const failover =
-        error instanceof MemberUnavailableError
-          ? { reason: "key_unavailable", retryAfterMs: undefined }
-          : poolFailoverReason(error);
+        error instanceof ObservedProviderUsageError
+          ? undefined
+          : error instanceof MemberUnavailableError
+            ? { reason: "key_unavailable", retryAfterMs: undefined }
+            : poolFailoverReason(error);
       attempt.attemptOutcome = "failed";
       if (error instanceof MemberTimeoutError) attempt.cutOff = true;
       // An error that doesn't fail over still gets a reason; its message is in
@@ -365,20 +458,29 @@ export async function openThroughModelPool<T>(params: {
         },
         "Model pool member failed before answering; trying the next member",
       );
+      lastFailure = {
+        error: error instanceof MemberUnavailableError ? error.cause : error,
+        attempt: { ...attempt },
+      };
       try {
-        await params.recordFailedAttempt({
-          ...attempt,
-          attemptOutcome: "failed_over",
-        });
+        lastFailure.record = await params.prepareFailedAttempt(
+          lastFailure.attempt,
+        );
       } catch (recordError) {
         logger.error(
           { err: recordError, poolId: plan.poolId },
-          "Failed to record a failed model pool attempt",
+          "Failed to prepare a failed model pool attempt",
         );
       }
     }
   }
-  // Unreachable: the plan has at least one member and the last one returns or throws.
+  if (lastFailure) {
+    Object.assign(attempt, lastFailure.attempt);
+    attempt.interactionRecorded = await recordPreviousFailure("failed");
+    throw lastFailure.error;
+  }
+  if (hiddenError) throw hiddenError;
+  // The plan must have at least one member.
   throw new Error("Model pool plan has no members");
 }
 

@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import Busboy, { type BusboyInstance } from "@fastify/busboy";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { ApiError } from "@/types/api";
 
 export interface MediaMultipartFile {
   fieldname: string;
@@ -18,6 +19,18 @@ export interface MediaMultipartLimits {
   maxFields?: number;
   maxFieldBytes?: number;
   maxParts?: number;
+}
+
+/**
+ * The MIME type a media upload declares, lower-cased and without parameters.
+ * A file part sent without its own Content-Type (Python `requests` uploads
+ * that way by default) reaches the parser as `text/plain`, the multipart
+ * default, which no audio or image upload means. Such a part counts as
+ * untyped bytes, as OpenAI reads the format from the filename and content.
+ */
+export function mediaUploadType(file: { mimetype: string }): string {
+  const type = file.mimetype.split(";")[0].trim().toLowerCase();
+  return !type || type === "text/plain" ? "application/octet-stream" : type;
 }
 
 /** Fastify enforces route bodyLimit, including chunked wire bytes and headers. */
@@ -216,12 +229,14 @@ export async function parseMediaMultipart(
   });
 }
 
-class MediaMultipartError extends Error {
-  constructor(
-    readonly statusCode: number,
-    message: string,
-  ) {
-    super(message);
+/**
+ * An ApiError, so the error handler keeps this message: a bare 413 is read as
+ * Fastify's body-limit error and reworded around the route's much larger
+ * wire limit.
+ */
+class MediaMultipartError extends ApiError {
+  constructor(statusCode: number, message: string) {
+    super(statusCode, message);
     this.name = "MediaMultipartError";
   }
 }

@@ -26,6 +26,15 @@ servers) need the Kind+Helm environment (`scripts/e2e-local.sh`), and the
 `@quickstart` onboarding specs need a key-less pristine instance (CI runs
 them in their own job; this stack seeds provider keys).
 
+A spec that installs a local MCP server (the Kubernetes orchestrator) carries
+the tag `@needs-kubernetes`; one that needs the e2e Keycloak realm carries
+`@needs-keycloak`. A stack without one of them sets `E2E_UNAVAILABLE`
+(comma-separated: `kubernetes`, `keycloak`), and the tagged tests report as
+skipped with that reason instead of failing. This harness and CI run both, so
+they set nothing; `scripts/dev-lite.sh e2e` sets it from what it runs. See
+`dependencies.ts` for the rule and the group-level helper for `beforeAll`
+setups.
+
 ## Troubleshooting e2e tests that fail on CI
 
 1. Go to the failing GitHub workflow run (e.g. from a PR check)

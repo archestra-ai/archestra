@@ -364,27 +364,6 @@ describe("shared K8s utilities", () => {
     });
   });
 
-  describe("ensureStringIsRfc1123Compliant", () => {
-    async function getEnsureStringIsRfc1123Compliant() {
-      const { ensureStringIsRfc1123Compliant } = await import("./shared");
-      return ensureStringIsRfc1123Compliant;
-    }
-
-    test.each([
-      ["My Server", "my-server"],
-      ["TEST-VALUE", "test-value"],
-      ["hello_world", "helloworld"],
-      ["a..b", "a.b"],
-      ["a--b", "a-b"],
-      ["-leading", "leading"],
-      ["trailing-", "trailing"],
-      ["UPPER CASE", "upper-case"],
-    ])("converts '%s' to '%s'", async (input, expected) => {
-      const fn = await getEnsureStringIsRfc1123Compliant();
-      expect(fn(input)).toBe(expected);
-    });
-  });
-
   describe("sanitizeMetadataLabels", () => {
     test("sanitizes both keys and values", async () => {
       const { sanitizeMetadataLabels } = await import("./shared");

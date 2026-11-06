@@ -1,6 +1,8 @@
 import { SESSION_ID_HEADER } from "@archestra/shared/consts";
 import {
+  CHATGPT_CLIENT_ID,
   CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
   KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
@@ -51,6 +53,43 @@ describe("extractSessionInfo", () => {
         externalAgentId: "pi",
       }),
     ).toEqual({ sessionId: "explicit-session", sessionSource: "header" });
+  });
+
+  test("groups Copilot CLI Responses requests by their prompt cache key", () => {
+    expect(
+      extractSessionInfo({
+        headers: {},
+        body: { prompt_cache_key: " efeab99e17779df23bb5d2437f3c8f8f " },
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "efeab99e17779df23bb5d2437f3c8f8f",
+      sessionSource: "copilot_session",
+    });
+  });
+
+  test.each([
+    undefined,
+    CODEX_CLIENT_ID,
+    "cursor",
+  ])("does not read prompt_cache_key as a session for %s", (externalAgentId) => {
+    expect(
+      extractSessionInfo({
+        headers: {},
+        body: { prompt_cache_key: "efeab99e17779df23bb5d2437f3c8f8f" },
+        externalAgentId,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("a Copilot CLI Chat Completions request names no session", () => {
+    expect(
+      extractSessionInfo({
+        headers: {},
+        body: { user: undefined },
+        externalAgentId: COPILOT_CLI_CLIENT_ID,
+      }),
+    ).toEqual({ sessionId: null, sessionSource: null });
   });
 
   test("extracts session ID from X-Archestra-Session-Id header", () => {
@@ -472,6 +511,33 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({
       sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
       sessionSource: "codex_session",
+    });
+  });
+
+  test("ChatGPT attribution: reads the Codex thread as a ChatGPT session", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+        body: {
+          client_metadata: {
+            thread_id: "019f66bc-440e-72d1-b927-4d96fad7dc3b",
+          },
+        },
+        externalAgentId: CHATGPT_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3b",
+      sessionSource: "chatgpt_session",
+    });
+    expect(
+      extractSessionInfo({
+        headers: { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+        body: undefined,
+        externalAgentId: CHATGPT_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "chatgpt_session",
     });
   });
 

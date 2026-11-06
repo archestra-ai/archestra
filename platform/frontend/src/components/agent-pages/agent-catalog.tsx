@@ -1,9 +1,11 @@
 import {
+  AGENT_CATALOG_IDS,
   AGENT_CATALOG_IMAGE_REGISTRY,
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
+  buildCustomAgentRuntime,
   getAgentCatalogImages,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
@@ -20,22 +22,29 @@ import {
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import { AgentIcon } from "@/components/agent-icon";
 import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
-import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
+import { ChannelIcon } from "@/components/channel-icon";
 import { ClientMarkTile } from "@/components/client-mark-tile";
 import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
+import {
+  useResolveRuntimeTemplate,
+  useRuntimeTemplateCatalog,
+} from "@/lib/agent-runtime-templates.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { useOrganization } from "@/lib/organization.query";
 
 export interface AgentCatalogTemplate {
-  id: AgentCatalogId;
+  id: string;
+  customTemplateId?: string;
   name: string;
   description: string;
   /** What the catalog card says: how it runs and who pays for it. */
@@ -153,17 +162,62 @@ export function useAvailableAgentCatalogTemplates() {
     refetch,
   } = useOrganization(true, { fresh: true });
   const catalog = getAgentCatalogTemplates(images, appName);
+  const custom = useRuntimeTemplateCatalog();
+  const builtIns = orderedPopularAgentIds(
+    organization?.popularAgentOverrides ?? null,
+    AGENT_CATALOG_IDS,
+  ).flatMap((id) => catalog.filter((item) => item.id === id));
   const templates =
-    organization && !isError && !isFetching
-      ? orderedPopularAgentIds(
-          organization.popularAgentOverrides ?? null,
-          catalog.map((item) => item.id),
-        ).flatMap((id) => catalog.filter((item) => item.id === id))
+    organization &&
+    !isError &&
+    !custom.isError &&
+    !isFetching &&
+    !custom.isFetching
+      ? [
+          ...builtIns,
+          ...(custom.data ?? [])
+            .filter((item) => !item.hidden)
+            .map(
+              (item): AgentCatalogTemplate => ({
+                id: item.id,
+                customTemplateId: item.id,
+                name: item.name,
+                description: item.description,
+                summary:
+                  item.description ||
+                  "Run an agent from this custom runtime template.",
+                icon: item.icon,
+                initialValues: {
+                  name: item.name,
+                  description: item.description,
+                  icon: item.icon,
+                  accessAllTools: true,
+                  runtime: buildCustomAgentRuntime({ image: item.image }),
+                },
+              }),
+            ),
+        ].sort((a, b) => {
+          const position = (id: string) =>
+            runtimeTemplatePosition(
+              id,
+              custom.data ?? [],
+              organization.popularAgentOverrides,
+            );
+          return position(a.id) - position(b.id);
+        })
       : [];
-  // Nothing to offer yet: the first read has not answered, or a fresh one is
-  // still on its way.
-  const isLoading = isFetching || (!organization && !isError);
-  return { templates, isError, isFetching, isLoading, refetch };
+  const isLoading =
+    isFetching ||
+    custom.isFetching ||
+    (!organization && !isError) ||
+    custom.isPending;
+  return {
+    templates,
+    isError: isError || custom.isError,
+    isFetching: isFetching || custom.isFetching,
+    isLoading,
+    refetch: () => Promise.all([refetch(), custom.refetch()]),
+  };
 }
 
 export function AgentCatalog({
@@ -186,102 +240,131 @@ export function AgentCatalog({
 }) {
   const { templates, isError, isLoading, refetch } =
     useAvailableAgentCatalogTemplates();
+  const resolver = useResolveRuntimeTemplate();
   const appName = useAppName();
   const appIconLogo = useAppIconLogo();
+  const { data: canConfigureRuntime } = useHasPermissions({
+    agent: ["configure-runtime"],
+  });
   return (
-    <div className="space-y-10">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <CatalogSourceCard
-          icon={<PlatformAgentIcon appIconLogo={appIconLogo} />}
-          title={`New ${appName} agent`}
-          description={`Built into ${appName}. The easiest place to start.`}
-          onClick={onStartFromScratch}
-          disabled={!canCreateAgent}
-          disabledReason="Requires permission to create agents."
-        />
-      </div>
-
-      {/* Always laid out, so it does not pop in and push the rest down; only
-          its cards wait for the fresh settings read that decides which
-          Agent Runtimes are offered. */}
-      <CatalogSection
-        title={
-          <>
-            <span>Agent Runtimes</span>{" "}
-            <Badge
-              variant="outline"
-              className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
-            >
-              Beta
-            </Badge>
-          </>
-        }
-        description={`Each one runs in its own container, with a live terminal and files that persist between messages. Its model and tool calls go through ${appName}, so logs, guardrails and cost limits apply.`}
-      >
-        {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}
-        <GiveItWorkFrom />
-        {runtimeAvailable === undefined || isLoading ? (
-          <output
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            aria-label="Loading Agent Runtimes"
-          >
-            {[0, 1, 2].map((index) => (
-              <Skeleton key={index} className="h-[132px] rounded-xl" />
-            ))}
-          </output>
-        ) : isError ? (
-          <QueryLoadError
-            title="Could not load Agent Runtimes"
-            onRetry={() => refetch()}
-          />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((item) => (
-              <CatalogSourceCard
-                key={item.id}
-                icon={<CatalogAgentIcon id={item.id} />}
-                title={item.name}
-                description={item.summary}
-                onClick={() => onSelect(item)}
-                disabled={!canCreateAgent || !runtimeAvailable}
-                disabledReason={
-                  canCreateAgent
-                    ? "Requires the Agent Sandbox controller."
-                    : "Requires permission to create agents."
-                }
-              />
-            ))}
+    <div className="space-y-6">
+      {canConfigureRuntime === true && runtimeAvailable === false && (
+        <AgentRuntimeUnavailableNotice />
+      )}
+      <div className="space-y-12">
+        <CatalogSection
+          title="Choose an agent"
+          description={`Start with ${appName} or another agent. Configure it on the next page.`}
+        >
+          <GiveItWorkFrom />
+          <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <CatalogSourceCard
-              icon={<Code className="size-5" />}
-              title="Custom image"
-              description="Run your own container image and command."
-              onClick={onStartFromImage}
-              disabled={!canCreateAgent || !runtimeAvailable}
-              disabledReason={
-                canCreateAgent
-                  ? "Requires the Agent Sandbox controller."
-                  : "Requires permission to create agents."
-              }
+              icon={<PlatformAgentIcon appIconLogo={appIconLogo} />}
+              title={appName}
+              description={`Built into ${appName} for chat. Choose its model, instructions, and tools.`}
+              onClick={onStartFromScratch}
+              disabled={!canCreateAgent}
+              disabledReason="Requires permission to create agents."
+            />
+            {canConfigureRuntime === true &&
+              (runtimeAvailable === undefined || isLoading ? (
+                <output
+                  className="contents"
+                  aria-label="Loading Agent Runtimes"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <Skeleton key={index} className="h-[132px] rounded-xl" />
+                  ))}
+                </output>
+              ) : isError ? (
+                <div className="col-span-full">
+                  <QueryLoadError
+                    title="Could not load Agent Runtimes"
+                    onRetry={() => refetch()}
+                  />
+                </div>
+              ) : (
+                <>
+                  {templates.map((item) => (
+                    <CatalogSourceCard
+                      key={item.id}
+                      icon={
+                        item.customTemplateId ? (
+                          <AgentIcon icon={item.icon} size={22} />
+                        ) : (
+                          <CatalogAgentIcon id={item.id as AgentCatalogId} />
+                        )
+                      }
+                      title={item.name}
+                      description={item.summary}
+                      onClick={() => {
+                        if (item.customTemplateId)
+                          resolver.mutate(item.customTemplateId, {
+                            onSuccess: (template) =>
+                              onSelect({
+                                ...item,
+                                initialValues: {
+                                  ...item.initialValues,
+                                  runtime: template.runtime,
+                                },
+                              }),
+                          });
+                        else onSelect(item);
+                      }}
+                      disabled={
+                        !canCreateAgent ||
+                        !canConfigureRuntime ||
+                        !runtimeAvailable ||
+                        resolver.isPending
+                      }
+                      disabledReason={
+                        canCreateAgent
+                          ? !canConfigureRuntime
+                            ? "Requires Configure runtime permission."
+                            : "Requires the Agent Sandbox controller."
+                          : "Requires permission to create agents."
+                      }
+                    />
+                  ))}
+                  <CatalogSourceCard
+                    icon={<Code className="size-5" />}
+                    title="Custom image"
+                    description="Run your own container image and command."
+                    onClick={onStartFromImage}
+                    disabled={
+                      !canCreateAgent ||
+                      !canConfigureRuntime ||
+                      !runtimeAvailable
+                    }
+                    disabledReason={
+                      canCreateAgent
+                        ? !canConfigureRuntime
+                          ? "Requires Configure runtime permission."
+                          : "Requires the Agent Sandbox controller."
+                        : "Requires permission to create agents."
+                    }
+                  />
+                </>
+              ))}
+          </div>
+        </CatalogSection>
+
+        <CatalogSection
+          title="Connect an external agent"
+          description="Already running elsewhere? Connect it so your agents can delegate work to it."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <CatalogSourceCard
+              icon={<Network className="size-5" />}
+              title="Connect via A2A"
+              description="Connect an agent hosted elsewhere using its URL."
+              onClick={onAddExternalAgent}
+              disabled={!canCreateAgent}
+              disabledReason="Requires permission to create agents."
             />
           </div>
-        )}
-      </CatalogSection>
-
-      <CatalogSection
-        title="External agents"
-        description="Agents hosted somewhere else. Your agents can hand them work as subagents."
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <CatalogSourceCard
-            icon={<Network className="size-5" />}
-            title="Connect via A2A"
-            description="Connect an A2A-compatible agent by its URL."
-            onClick={onAddExternalAgent}
-            disabled={!canCreateAgent}
-            disabledReason="Requires permission to create agents."
-          />
-        </div>
-      </CatalogSection>
+        </CatalogSection>
+      </div>
     </div>
   );
 }
@@ -326,7 +409,7 @@ export function CatalogAgentIcon({
 }
 
 function template(params: {
-  id: AgentCatalogTemplate["id"];
+  id: AgentCatalogId;
   name: string;
   description: string;
   summary: string;
@@ -364,7 +447,7 @@ function CatalogSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-4">
+    <section className="space-y-5">
       <div className="space-y-1">
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
@@ -378,23 +461,38 @@ function CatalogSection({
 function GiveItWorkFrom() {
   const appName = useAppName();
   const { visibleIds } = useMessagingChannelCatalog();
-  // Chat apps only, and only the ones the admins left switched on.
-  const messengers = visibleIds.filter((id) => id in CHANNEL_ICON_SRC);
-  const source = (Icon: LucideIcon, label: string) => (
+  // A2A is represented by "Other agents" below; include every enabled
+  // external messaging channel, including email’s generated icon.
+  const messengers = visibleIds.filter((id) => id !== "a2a");
+  const source = ({
+    Icon,
+    label,
+    compactLabel,
+  }: {
+    Icon: LucideIcon;
+    label: string;
+    compactLabel?: string;
+  }) => (
     <span
       key={label}
-      className="flex items-center gap-1.5 text-muted-foreground"
+      className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
     >
-      <Icon className="size-3.5" aria-hidden="true" />
-      <span>{label}</span>
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      {compactLabel ? (
+        <>
+          <span className="sm:hidden">{compactLabel}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </>
+      ) : (
+        <span>{label}</span>
+      )}
     </span>
   );
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
       <span className="font-medium">Give it work from</span>
-      {source(MessageSquare, `${appName} chat`)}
       {messengers.length > 0 && (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 sm:order-2">
           {messengers.map((id) => (
             <span key={id} title={MESSAGING_CHANNEL_LABELS[id]}>
               <ChannelIcon channel={id} className="size-4" />
@@ -403,8 +501,19 @@ function GiveItWorkFrom() {
           ))}
         </span>
       )}
-      {source(Laptop, "Handoff from a local coding agent")}
-      {source(Share2, "Other agents")}
+      <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 sm:contents sm:[&>span]:order-3 sm:[&>span:first-child]:order-1">
+        {source({
+          Icon: MessageSquare,
+          label: `${appName} chat`,
+          compactLabel: "Chat",
+        })}
+        {source({
+          Icon: Laptop,
+          label: "Handoff from a local coding agent",
+          compactLabel: "Handoff",
+        })}
+        {source({ Icon: Share2, label: "Other agents" })}
+      </div>
     </div>
   );
 }

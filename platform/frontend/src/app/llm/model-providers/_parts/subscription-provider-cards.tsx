@@ -119,6 +119,7 @@ export function SubscriptionCard({
   status,
   onConnect,
   connectPermissions,
+  connectAction,
   manage,
   disconnect,
 }: {
@@ -130,9 +131,14 @@ export function SubscriptionCard({
   isLoading: boolean;
   status: SubscriptionCardStatus;
   /** Connect when not connected, Reconnect when the credential was refused. */
-  onConnect: () => void;
+  onConnect?: () => void;
   /** Gates connecting; omitted, connecting is self-service. */
   connectPermissions?: Permissions;
+  /**
+   * Connects on the card itself (a sign-in flow, say) in place of the Connect
+   * button, on its own line under the status.
+   */
+  connectAction?: ReactNode;
   manage?: {
     onClick: () => void;
     permissionScope: string;
@@ -207,6 +213,8 @@ export function SubscriptionCard({
               </PermissionButton>
             )}
           </div>
+        ) : connectAction ? (
+          <div className="basis-full">{connectAction}</div>
         ) : (
           <ConnectButton onClick={onConnect} permissions={connectPermissions} />
         )}
@@ -219,7 +227,7 @@ function ConnectButton({
   onClick,
   permissions,
 }: {
-  onClick: () => void;
+  onClick: (() => void) | undefined;
   permissions: Permissions | undefined;
 }) {
   return permissions ? (

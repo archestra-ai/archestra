@@ -1,0 +1,111 @@
+{
+  // Provider adapters and translators, above the shared wire protocol helpers.
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/provider-adapters",
+    "tsBuildInfoFile": "./.tsbuild/provider-adapters.tsbuildinfo"
+  },
+  "files": [
+    "src/routes/proxy/adapters/anthropic-openai-translator.ts",
+    "src/routes/proxy/adapters/anthropic-openai.ts",
+    "src/routes/proxy/adapters/anthropic.ts",
+    "src/routes/proxy/adapters/archestra.ts",
+    "src/routes/proxy/adapters/audio.ts",
+    "src/routes/proxy/adapters/azure-image-edits.ts",
+    "src/routes/proxy/adapters/azure-images.ts",
+    "src/routes/proxy/adapters/azure-realtime.ts",
+    "src/routes/proxy/adapters/azure-responses.ts",
+    "src/routes/proxy/adapters/azure.ts",
+    "src/routes/proxy/adapters/bedrock-invoke.ts",
+    "src/routes/proxy/adapters/bedrock-openai-translator.ts",
+    "src/routes/proxy/adapters/bedrock-openai.ts",
+    "src/routes/proxy/adapters/bedrock.ts",
+    "src/routes/proxy/adapters/cerebras.ts",
+    "src/routes/proxy/adapters/chat-completions-stream.ts",
+    "src/routes/proxy/adapters/cohere-openai-translator.ts",
+    "src/routes/proxy/adapters/cohere-openai.ts",
+    "src/routes/proxy/adapters/cohere.ts",
+    "src/routes/proxy/adapters/deepseek.ts",
+    "src/routes/proxy/adapters/embeddings-wire.ts",
+    "src/routes/proxy/adapters/gemini-embeddings.ts",
+    "src/routes/proxy/adapters/gemini-images.ts",
+    "src/routes/proxy/adapters/gemini-openai-translator.ts",
+    "src/routes/proxy/adapters/gemini-openai.ts",
+    "src/routes/proxy/adapters/gemini-schema.ts",
+    "src/routes/proxy/adapters/gemini-tool-names.ts",
+    "src/routes/proxy/adapters/gemini.ts",
+    "src/routes/proxy/adapters/github-copilot-responses.ts",
+    "src/routes/proxy/adapters/github-copilot.ts",
+    "src/routes/proxy/adapters/groq.ts",
+    "src/routes/proxy/adapters/image-generation.ts",
+    "src/routes/proxy/adapters/index.ts",
+    "src/routes/proxy/adapters/jev.ts",
+    "src/routes/proxy/adapters/kimi-code.ts",
+    "src/routes/proxy/adapters/kimi.ts",
+    "src/routes/proxy/adapters/microsoft-365-copilot-graph-translator.ts",
+    "src/routes/proxy/adapters/microsoft-365-copilot.ts",
+    "src/routes/proxy/adapters/minimax.ts",
+    "src/routes/proxy/adapters/mistral.ts",
+    "src/routes/proxy/adapters/ollama-native.ts",
+    "src/routes/proxy/adapters/ollama.ts",
+    "src/routes/proxy/adapters/openai-anthropic-translator.ts",
+    "src/routes/proxy/adapters/openai-codex-client.ts",
+    "src/routes/proxy/adapters/openai-codex-responses-client.ts",
+    "src/routes/proxy/adapters/openai-codex-session.ts",
+    "src/routes/proxy/adapters/openai-codex-translator.ts",
+    "src/routes/proxy/adapters/openai-compatible-adapter.ts",
+    "src/routes/proxy/adapters/openai-image-edits.ts",
+    "src/routes/proxy/adapters/openai-images.ts",
+    "src/routes/proxy/adapters/openai-responses-from-chat.ts",
+    "src/routes/proxy/adapters/openai-responses-translator.ts",
+    "src/routes/proxy/adapters/openai-responses.ts",
+    "src/routes/proxy/adapters/openai-sse-chunk.ts",
+    "src/routes/proxy/adapters/openai-translator-utils.ts",
+    "src/routes/proxy/adapters/openai.ts",
+    "src/routes/proxy/adapters/openrouter.ts",
+    "src/routes/proxy/adapters/perplexity-responses.ts",
+    "src/routes/proxy/adapters/perplexity.ts",
+    "src/routes/proxy/adapters/responses-stream-error-frame.ts",
+    "src/routes/proxy/adapters/responses-tool-call-rewrite.ts",
+    "src/routes/proxy/adapters/sampling-param-fallback.ts",
+    "src/routes/proxy/adapters/sdk-retry-policy.ts",
+    "src/routes/proxy/adapters/subscription-auth-error.ts",
+    "src/routes/proxy/adapters/upstream-http-error.ts",
+    "src/routes/proxy/adapters/vllm.ts",
+    "src/routes/proxy/adapters/xai.ts",
+    "src/routes/proxy/adapters/zhipuai.ts",
+    "src/routes/proxy/translated-response-format.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    }
+  ]
+}

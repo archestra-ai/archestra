@@ -27,6 +27,7 @@ describe("useConversationSearch", () => {
 
   afterEach(() => {
     Object.defineProperty(navigator, "platform", {
+      configurable: true,
       value: originalPlatform,
       writable: true,
     });
@@ -34,6 +35,7 @@ describe("useConversationSearch", () => {
 
   function mockPlatform(platform: string) {
     Object.defineProperty(navigator, "platform", {
+      configurable: true,
       value: platform,
       writable: true,
     });

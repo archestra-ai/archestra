@@ -94,9 +94,22 @@ export const PermissionSubjectSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), id: z.string().min(1) }),
   z.object({ type: z.literal("team"), id: z.string().min(1) }),
   z.object({ type: z.literal("serviceAccount"), id: z.string().uuid() }),
+  z.object({ type: z.literal("oauthClient"), id: z.string().uuid() }),
   z.object({ type: z.literal("role"), id: z.string().min(1) }),
   z.object({ type: z.literal("organization"), id: z.literal("*") }),
 ]);
+
+/** Resource types whose grants may name an `oauthClient` recipient. */
+export const OAUTH_CLIENT_SUBJECT_RESOURCES: ReadonlySet<ScopedResource> =
+  new Set<ScopedResource>([
+    "knowledgeBase",
+    "knowledgeConnector",
+    "knowledgeFile",
+  ]);
+
+export function supportsOauthClientSubject(resource: ScopedResource): boolean {
+  return OAUTH_CLIENT_SUBJECT_RESOURCES.has(resource);
+}
 
 export const ResourcePermissionGrantSchema = z.object({
   subject: PermissionSubjectSchema,

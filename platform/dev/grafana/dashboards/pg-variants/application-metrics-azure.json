@@ -19,120 +19,243 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "links": [
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "GenAI Observability",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-genai-observability/archestra-genai-observability"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "MCP Monitoring",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Agent Sessions",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-agent-sessions/archestra-agent-sessions"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "RAG & Knowledge Base",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
-    },
-    {
-      "asDropdown": false,
-      "icon": "doc",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": true,
-      "title": "Documentation",
-      "tooltip": "Archestra Documentation",
-      "type": "link",
-      "url": "https://archestra.ai/docs/administration/observability"
-    }
-  ],
+  "links": [],
   "panels": [
     {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 0,
-        "y": 0
-      },
-      "id": 50,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "<div style=\"display: flex; align-items: center; justify-content: center; height: 100%;\"><a href=\"https://archestra.ai\" target=\"_blank\"><img src=\"https://archestra.ai/logo.png\" alt=\"Archestra\" style=\"height: 100%;\" /></a></div>",
-        "mode": "html"
-      },
-      "pluginVersion": "12.3.2",
+      "id": 90001,
+      "type": "text",
       "title": "",
       "transparent": true,
-      "type": "text"
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"display:flex;align-items:center;gap:16px;min-height:48px\"><img alt=\"Archestra\" src=\"data:image/png;base64,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\" width=\"48\" height=\"48\" style=\"flex:0 0 48px;width:48px;height:48px;object-fit:contain;border-radius:6px\" /><div style=\"min-width:0\"><h2 style=\"font-size:14px;line-height:20px;font-weight:600;margin:0\">Platform Health</h2><p style=\"font-size:12px;line-height:15px;margin:2px 0 0\">Check API errors, queued work, and database pressure.</p></div></div>"
+      }
     },
     {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 21,
-        "x": 3,
-        "y": 0
-      },
-      "id": 301,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## Application Metrics\n\nPlatform-level health monitoring for Archestra deployments. Covers **HTTP traffic** (request rates, latency percentiles, error rates, slowest routes), **Node.js runtime** (event loop lag, GC pauses, heap usage, active handles), and **infrastructure** (CPU, memory, uptime).",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.3.2",
+      "id": 90002,
+      "type": "text",
       "title": "",
       "transparent": true,
-      "type": "text"
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<nav aria-label=\"Observability dashboards\"><table role=\"presentation\" style=\"width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px\"><tbody><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"LLM Proxy\" href=\"/d/archestra-genai-observability?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">LLM Proxy</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Costs &amp; Limits\" href=\"/d/archestra-costs-and-limits?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Costs &amp; Limits</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Agent Runtime\" href=\"/d/archestra-agent-runtime?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Agent Runtime</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Guardrails &amp; OpenAPPA\" href=\"/d/archestra-guardrails?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Guardrails</a></td></tr><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"MCP Monitoring\" href=\"/d/archestra-mcp-monitoring?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">MCP Monitoring</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Knowledge Base Operations\" href=\"/d/archestra-rag-knowledge-base?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Knowledge Base</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Session Investigation\" href=\"/d/archestra-agent-sessions?${__url_time_range}&amp;var-metrics_datasource=${metrics_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Sessions</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Metrics reference\" href=\"https://archestra.ai/docs/admin/observability/metrics\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Metrics docs</a></td></tr></tbody></table></nav>"
+      }
+    },
+    {
+      "id": 1001,
+      "title": "Scrape health (lowest target)",
+      "type": "stat",
+      "description": "Lowest Prometheus up value among the selected scrape jobs: 1 means all reported targets are up; 0 means at least one scrape failed. Some remote-write pipelines omit up, so no samples is not proof that targets are healthy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(up{job=~\"$job\"})",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 1002,
+      "title": "API requests / second",
+      "type": "stat",
+      "description": "HTTP requests handled per second across selected processes, including API and health endpoints. Use route panels below to identify which endpoints drive traffic.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 2,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (rate(http_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 1003,
+      "title": "API P95 request duration",
+      "type": "stat",
+      "description": "95th-percentile HTTP handler duration across selected processes. This is API server latency, not full model generation time.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 2,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
     },
     {
       "collapsed": false,
@@ -140,7 +263,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 6
       },
       "id": 100,
       "panels": [],
@@ -201,7 +324,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -209,7 +333,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "id": 1,
       "options": {
@@ -234,7 +358,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(route) (rate(http_request_duration_seconds_count[$__rate_interval]))",
+          "expr": "sum by(route) (rate(http_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{route}}",
@@ -244,7 +368,8 @@
         }
       ],
       "title": "Request Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP requests per second by route and method. Health checks and monitoring requests can account for a large share of traffic."
     },
     {
       "datasource": {
@@ -308,7 +433,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -316,7 +442,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 7
       },
       "id": 2,
       "options": {
@@ -342,7 +468,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "p95",
@@ -355,7 +481,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "p50",
@@ -365,7 +491,8 @@
         }
       ],
       "title": "Request Duration",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP request latency from histogram observations, grouped as shown in the legend. Inference streaming can outlive the HTTP handler's recorded duration."
     },
     {
       "datasource": {
@@ -429,7 +556,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -468,7 +596,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 15
       },
       "id": 3,
       "options": {
@@ -493,7 +621,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(route, status_code) (rate(http_request_duration_seconds_count{status_code=~\"4..|5..\"}[$__rate_interval]))",
+          "expr": "sum by(route, status_code) (rate(http_request_duration_seconds_count{job=~\"$job\",status_code=~\"4..|5..\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{route}} ({{status_code}})",
@@ -503,7 +631,8 @@
         }
       ],
       "title": "Error Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP responses classified as errors per second. Compare affected routes and response codes with traffic before interpreting a spike."
     },
     {
       "datasource": {
@@ -567,7 +696,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -575,7 +705,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 15
       },
       "id": 4,
       "options": {
@@ -601,7 +731,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[$__rate_interval])) by (route, le)))",
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (route, le)))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{route}}",
@@ -611,7 +741,8 @@
         }
       ],
       "title": "Top Slowest Routes (P95)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Routes with the highest 95th-percentile HTTP request duration. Low-volume routes can have unstable percentile estimates."
     },
     {
       "datasource": {
@@ -667,7 +798,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -736,7 +868,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 23
       },
       "id": 5,
       "options": {
@@ -761,7 +893,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(status_code) (rate(http_request_duration_seconds_count[$__rate_interval]))",
+          "expr": "sum by(status_code) (rate(http_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{status_code}}",
@@ -771,7 +903,8 @@
         }
       ],
       "title": "Request Rate by Status Code",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "HTTP request rate grouped by response status code. A provider failure after streaming headers may still have an HTTP 200 status; use logical proxy outcomes for those failures."
     },
     {
       "collapsed": false,
@@ -779,7 +912,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 31
       },
       "id": 200,
       "panels": [],
@@ -848,7 +981,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -856,7 +990,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 32
       },
       "id": 6,
       "options": {
@@ -882,7 +1016,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_eventloop_lag_p99_seconds)",
+          "expr": "max by (job,instance,pod) (nodejs_eventloop_lag_p99_seconds{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "p99 - {{pod}}",
@@ -895,7 +1029,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_eventloop_lag_p90_seconds)",
+          "expr": "max by (job,instance,pod) (nodejs_eventloop_lag_p90_seconds{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "p90 - {{pod}}",
@@ -908,7 +1042,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_eventloop_lag_p50_seconds)",
+          "expr": "max by (job,instance,pod) (nodejs_eventloop_lag_p50_seconds{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "p50 - {{pod}}",
@@ -918,7 +1052,8 @@
         }
       ],
       "title": "Event Loop Lag (P50, P90, P99)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Delay before Node.js can run scheduled work, by process and percentile. Sustained lag indicates the event loop is busy or blocked."
     },
     {
       "datasource": {
@@ -982,7 +1117,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "percentunit",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -990,7 +1126,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -1016,7 +1152,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum[$__rate_interval]))",
+          "expr": "max by (job,instance,pod) (rate(nodejs_gc_duration_seconds_sum{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "GC Time - {{pod}}",
@@ -1029,7 +1165,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum{kind=\"major\"}[$__rate_interval]))",
+          "expr": "max by (job,instance,pod) (rate(nodejs_gc_duration_seconds_sum{job=~\"$job\",kind=\"major\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "Major GC - {{pod}}",
@@ -1042,7 +1178,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (rate(nodejs_gc_duration_seconds_sum{kind=\"minor\"}[$__rate_interval]))",
+          "expr": "max by (job,instance,pod) (rate(nodejs_gc_duration_seconds_sum{job=~\"$job\",kind=\"minor\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "Minor GC - {{pod}}",
@@ -1051,8 +1187,9 @@
           "refId": "C"
         }
       ],
-      "title": "GC Pause Duration",
-      "type": "timeseries"
+      "title": "GC time per second",
+      "type": "timeseries",
+      "description": "Seconds spent in garbage collection per elapsed second, displayed as a proportion. Sustained collection pressure can increase request latency."
     },
     {
       "datasource": {
@@ -1108,7 +1245,8 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bytes",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1116,7 +1254,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 40
       },
       "id": 8,
       "options": {
@@ -1140,7 +1278,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod, space) (nodejs_heap_space_size_used_bytes)",
+          "expr": "max by (job,instance,pod,space) (nodejs_heap_space_size_used_bytes{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "{{pod}} - {{space}}",
@@ -1150,7 +1288,8 @@
         }
       ],
       "title": "Heap Usage by Space",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Node.js heap bytes by V8 memory space. Compare sustained growth with garbage collection rather than treating every increase as a leak."
     },
     {
       "datasource": {
@@ -1206,7 +1345,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1214,7 +1354,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 40
       },
       "id": 9,
       "options": {
@@ -1238,7 +1378,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_active_handles_total)",
+          "expr": "max by (job,instance,pod) (nodejs_active_handles_total{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Active Handles - {{pod}}",
@@ -1251,7 +1391,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_active_requests_total)",
+          "expr": "max by (job,instance,pod) (nodejs_active_requests_total{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Active Requests - {{pod}}",
@@ -1261,7 +1401,8 @@
         }
       ],
       "title": "Active Handles & Requests",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Node.js handles and requests still active in each process, such as sockets and filesystem operations. These are runtime objects, not the number of user API calls."
     },
     {
       "collapsed": false,
@@ -1269,7 +1410,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 48
       },
       "id": 300,
       "panels": [],
@@ -1334,7 +1475,8 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "cores",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1342,7 +1484,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 47
+        "y": 49
       },
       "id": 10,
       "options": {
@@ -1366,7 +1508,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (rate(process_cpu_seconds_total[$__rate_interval]))",
+          "expr": "max by (job,instance,pod) (rate(process_cpu_seconds_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{pod}}",
@@ -1375,8 +1517,9 @@
           "refId": "A"
         }
       ],
-      "title": "CPU Usage",
-      "type": "timeseries"
+      "title": "Process CPU cores used",
+      "type": "timeseries",
+      "description": "CPU seconds consumed per elapsed second by each process. A value of 1 represents one fully used CPU core."
     },
     {
       "datasource": {
@@ -1436,7 +1579,8 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bytes",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1444,7 +1588,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 47
+        "y": 49
       },
       "id": 11,
       "options": {
@@ -1468,7 +1612,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (process_resident_memory_bytes)",
+          "expr": "max by (job,instance,pod) (process_resident_memory_bytes{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Resident (RSS) - {{pod}}",
@@ -1481,7 +1625,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (process_heap_bytes)",
+          "expr": "max by (job,instance,pod) (process_heap_bytes{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Heap Total - {{pod}}",
@@ -1494,7 +1638,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (nodejs_external_memory_bytes)",
+          "expr": "max by (job,instance,pod) (nodejs_external_memory_bytes{job=~\"$job\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "External - {{pod}}",
@@ -1504,7 +1648,8 @@
         }
       ],
       "title": "Memory Usage",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Process memory in bytes, grouped by the memory category in the legend. Resident memory includes more than the JavaScript heap."
     },
     {
       "datasource": {
@@ -1516,7 +1661,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1526,7 +1682,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1534,7 +1691,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 47
+        "y": 49
       },
       "id": 12,
       "options": {
@@ -1560,7 +1717,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "max by (pod) (time() - last_over_time(process_start_time_seconds[5m]))",
+          "expr": "max by (job,instance,pod) (time() - last_over_time(process_start_time_seconds{job=~\"$job\"}[5m]))",
           "hide": false,
           "instant": true,
           "legendFormat": "{{pod}}",
@@ -1569,7 +1726,8 @@
         }
       ],
       "title": "Process Uptime",
-      "type": "stat"
+      "type": "stat",
+      "description": "Elapsed time since each process started. A drop indicates a restart or a different scrape target."
     },
     {
       "collapsed": false,
@@ -1577,7 +1735,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 57
       },
       "id": 400,
       "panels": [],
@@ -1594,7 +1752,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1603,7 +1772,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1611,7 +1781,7 @@
         "h": 4,
         "w": 5,
         "x": 0,
-        "y": 56
+        "y": 58
       },
       "id": 401,
       "options": {
@@ -1637,7 +1807,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_active_tasks) or vector(0)",
+          "expr": "sum(task_queue_active_tasks{job=~\"$job\"})",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1646,7 +1816,8 @@
         }
       ],
       "title": "Active Tasks",
-      "type": "stat"
+      "type": "stat",
+      "description": "Background tasks currently executing. This is task-queue work, separate from Agent Runtime task health."
     },
     {
       "datasource": {
@@ -1658,7 +1829,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1667,7 +1849,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1675,7 +1858,7 @@
         "h": 4,
         "w": 5,
         "x": 5,
-        "y": 56
+        "y": 58
       },
       "id": 402,
       "options": {
@@ -1701,7 +1884,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(increase(task_queue_tasks_enqueued_total[$__range])) or vector(0)",
+          "expr": "sum(increase(task_queue_tasks_enqueued_total{job=~\"$job\"}[$__range]))",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1710,7 +1893,8 @@
         }
       ],
       "title": "Total Enqueued",
-      "type": "stat"
+      "type": "stat",
+      "description": "Background tasks added during the selected period. A task can be retried later; this is not a unique user-request count."
     },
     {
       "datasource": {
@@ -1722,7 +1906,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1731,7 +1926,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1739,7 +1935,7 @@
         "h": 4,
         "w": 5,
         "x": 10,
-        "y": 56
+        "y": 58
       },
       "id": 403,
       "options": {
@@ -1765,7 +1961,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(increase(task_queue_tasks_completed_total[$__range])) or vector(0)",
+          "expr": "sum(increase(task_queue_tasks_completed_total{job=~\"$job\"}[$__range]))",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1774,7 +1970,8 @@
         }
       ],
       "title": "Total Completed",
-      "type": "stat"
+      "type": "stat",
+      "description": "Background tasks completed during the selected period, across selected processes."
     },
     {
       "datasource": {
@@ -1786,7 +1983,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1799,7 +2007,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1807,7 +2016,7 @@
         "h": 4,
         "w": 5,
         "x": 15,
-        "y": 56
+        "y": 58
       },
       "id": 404,
       "options": {
@@ -1833,7 +2042,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(increase(task_queue_tasks_dead_total[$__range])) or vector(0)",
+          "expr": "sum(increase(task_queue_tasks_dead_total{job=~\"$job\"}[$__range]))",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1842,7 +2051,8 @@
         }
       ],
       "title": "Dead-Lettered",
-      "type": "stat"
+      "type": "stat",
+      "description": "Tasks moved to the dead-letter state during the selected period after exhausting their retry policy. Inspect task failures when this rises."
     },
     {
       "datasource": {
@@ -1854,7 +2064,18 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "gray",
+                  "text": "No samples"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1863,7 +2084,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1871,7 +2093,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 56
+        "y": 58
       },
       "id": 409,
       "options": {
@@ -1897,7 +2119,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(increase(task_queue_stuck_tasks_reset_total[$__range])) or vector(0)",
+          "expr": "sum(increase(task_queue_stuck_tasks_reset_total{job=~\"$job\"}[$__range]))",
           "hide": false,
           "instant": true,
           "legendFormat": "",
@@ -1906,7 +2128,8 @@
         }
       ],
       "title": "Stuck Tasks Reset",
-      "type": "stat"
+      "type": "stat",
+      "description": "Tasks whose stale execution claim was reset during the selected period so they could be retried. Repeated resets can indicate worker interruptions."
     },
     {
       "datasource": {
@@ -1962,7 +2185,8 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "ops",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1970,7 +2194,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 62
       },
       "id": 405,
       "options": {
@@ -1995,7 +2219,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(task_type) (rate(task_queue_tasks_enqueued_total[$__rate_interval]))",
+          "expr": "sum by(task_type) (rate(task_queue_tasks_enqueued_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "enqueued - {{task_type}}",
@@ -2008,7 +2232,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(task_type) (rate(task_queue_tasks_completed_total[$__rate_interval]))",
+          "expr": "sum by(task_type) (rate(task_queue_tasks_completed_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "completed - {{task_type}}",
@@ -2021,7 +2245,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(task_type) (rate(task_queue_tasks_failed_total[$__rate_interval]))",
+          "expr": "sum by(task_type) (rate(task_queue_tasks_failed_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "failed - {{task_type}}",
@@ -2031,7 +2255,8 @@
         }
       ],
       "title": "Task Throughput",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Background task events per second by outcome. Compare arrivals and completions to identify accumulating work."
     },
     {
       "datasource": {
@@ -2087,7 +2312,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -2095,7 +2321,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 60
+        "y": 62
       },
       "id": 406,
       "options": {
@@ -2120,7 +2346,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "histogram_quantile(0.95, sum by(task_type, le) (rate(task_queue_task_duration_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(task_type, le) (rate(task_queue_task_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
           "hide": false,
           "instant": false,
           "legendFormat": "p95 - {{task_type}}",
@@ -2130,7 +2356,8 @@
         }
       ],
       "title": "Task Processing Duration (P95)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "95th-percentile duration of background task execution, grouped as shown. This does not measure time spent waiting in the queue."
     },
     {
       "datasource": {
@@ -2186,7 +2413,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -2194,7 +2422,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 70
       },
       "id": 407,
       "options": {
@@ -2219,7 +2447,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "task_queue_active_tasks",
+          "expr": "task_queue_active_tasks{job=~\"$job\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "{{task_type}}",
@@ -2229,7 +2457,8 @@
         }
       ],
       "title": "Active Tasks Over Time",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Background tasks executing at each scrape, by task type or process. Counts describe concurrent work, not throughput."
     },
     {
       "datasource": {
@@ -2285,7 +2514,8 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "ops",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -2324,7 +2554,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 68
+        "y": 70
       },
       "id": 408,
       "options": {
@@ -2349,7 +2579,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(task_type) (rate(task_queue_tasks_failed_total[$__rate_interval]))",
+          "expr": "sum by(task_type) (rate(task_queue_tasks_failed_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "failed - {{task_type}}",
@@ -2362,7 +2592,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum by(task_type) (rate(task_queue_tasks_dead_total[$__rate_interval]))",
+          "expr": "sum by(task_type) (rate(task_queue_tasks_dead_total{job=~\"$job\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "legendFormat": "dead - {{task_type}}",
@@ -2372,1284 +2602,1303 @@
         }
       ],
       "title": "Failed & Dead Tasks",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "Failed task attempts and dead-letter transitions per second. A retried task can contribute more than one failure."
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 78
       },
       "id": 500,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "gray",
+                      "text": "No samples"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 0,
+            "y": -1
+          },
+          "id": 501,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "sum(azure_active_connections_average{job=~\"$postgres_job\"})",
+              "hide": false,
+              "instant": true,
+              "legendFormat": "",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Active Connections",
+          "type": "stat",
+          "description": "PostgreSQL connections reported by the selected external database exporter. Requires that exporter; it is separate from the application's client pool."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "gray",
+                      "text": "No samples"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 5,
+            "y": -1
+          },
+          "id": 502,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "azure_max_connections_average{job=~\"$postgres_job\"}",
+              "hide": false,
+              "instant": true,
+              "legendFormat": "",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Max Connections",
+          "type": "stat",
+          "description": "PostgreSQL's configured connection ceiling from the selected database exporter. This is server capacity, not the application's pool size."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "gray",
+                      "text": "No samples"
+                    }
+                  }
+                }
+              ],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "percent",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 10,
+            "y": -1
+          },
+          "id": 503,
+          "options": {
+            "minVizHeight": 75,
+            "minVizWidth": 75,
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "sizing": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "sum(azure_active_connections_average{job=~\"$postgres_job\"}) / sum(azure_max_connections_average{job=~\"$postgres_job\"}) * 100",
+              "hide": false,
+              "instant": true,
+              "legendFormat": "",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Connection Utilization",
+          "type": "gauge",
+          "description": "Reported PostgreSQL connections as a percentage of the server's configured connection ceiling. Missing exporter data remains unknown."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "gray",
+                      "text": "No samples"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 536870912
+                  },
+                  {
+                    "color": "red",
+                    "value": 1073741824
+                  }
+                ]
+              },
+              "unit": "bytes",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 15,
+            "y": -1
+          },
+          "id": 511,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "azure_txlogs_storage_used_average{job=~\"$postgres_job\"}",
+              "hide": false,
+              "instant": true,
+              "legendFormat": "",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Transaction Log Storage",
+          "type": "stat",
+          "description": "Write-ahead log size reported by the PostgreSQL exporter, in bytes. This panel requires database metrics outside Archestra's application scrape."
+        },
+        {
+          "description": "Estimated database storage utilization for Kubernetes-backed PostgreSQL. Uses summed non-system database size divided by the PostgreSQL PVC requested storage from kube-state-metrics.",
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 19,
+            "y": -1
+          },
+          "id": 513,
+          "options": {
+            "mode": "markdown",
+            "content": "This PostgreSQL metrics provider does not expose this signal. Select a provider that exports it to populate this view."
+          },
+          "title": "DB Size Utilization (N/A)",
+          "type": "text"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 3
+          },
+          "id": 504,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "azure_active_connections_average{job=~\"$postgres_job\"}",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "{{resource_name}}",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Active Connections Over Time",
+          "type": "timeseries",
+          "description": "PostgreSQL connection counts over time, grouped by database or connection state as exported. Compare with the server connection ceiling."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes",
+              "noValue": "No samples"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "PVC requested storage"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "yellow",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        6
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 2
+                  },
+                  {
+                    "id": "custom.pointSize",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.showPoints",
+                    "value": "never"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 3
+          },
+          "id": 505,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "azure_storage_used_average{job=~\"$postgres_job\"}",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "{{resource_name}}",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "description": "Database sizes excluding PostgreSQL system databases. The dashed line is the inferred PostgreSQL PVC requested storage from kube-state-metrics for Kubernetes-backed deployments.",
+          "title": "Database Size",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops",
+              "noValue": "No samples"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "rollbacks.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 11
+          },
+          "id": 506,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_xact_commit_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "commits",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_xact_rollback_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "rollbacks",
+              "queryType": "range",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Transactions",
+          "type": "timeseries",
+          "description": "PostgreSQL transactions per second, split by commits and rollbacks. Application retries can increase transaction volume without increasing user traffic."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 11
+          },
+          "id": 507,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_blks_hit_total{job=~\"$postgres_job\"}[$__rate_interval]) / clamp_min(rate(azure_blks_hit_total{job=~\"$postgres_job\"}[$__rate_interval]) + rate(azure_blks_read_total{job=~\"$postgres_job\"}[$__rate_interval]), 1e-9)",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "hit ratio",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Cache Hit Ratio",
+          "type": "timeseries",
+          "description": "Share of database block accesses served from PostgreSQL's buffer cache. This is database caching, not LLM prompt caching."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 19
+          },
+          "id": 508,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_tup_inserted_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "inserted",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_tup_updated_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "updated",
+              "queryType": "range",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_tup_deleted_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "deleted",
+              "queryType": "range",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_tup_returned_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "returned",
+              "queryType": "range",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_tup_fetched_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "fetched",
+              "queryType": "range",
+              "range": true,
+              "refId": "E"
+            }
+          ],
+          "title": "Row Operations",
+          "type": "timeseries",
+          "description": "PostgreSQL row operations per second, grouped by operation. Requires database-exporter statistics."
+        },
+        {
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 19
+          },
+          "id": 509,
+          "options": {
+            "mode": "markdown",
+            "content": "This PostgreSQL metrics provider does not expose this signal. Select a provider that exports it to populate this view."
+          },
+          "title": "Locks by Mode (N/A)",
+          "type": "text",
+          "description": "PostgreSQL locks by lock mode and database. Counts alone do not prove blocking; correlate with latency and database activity."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 27
+          },
+          "id": 510,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_deadlocks_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "deadlocks",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Deadlocks",
+          "type": "timeseries",
+          "description": "PostgreSQL deadlocks per second. Any sustained increase warrants investigation of conflicting transactions."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "Bps",
+              "noValue": "No samples"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 27
+          },
+          "id": 512,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "mean"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "$metrics_datasource"
+              },
+              "expr": "rate(azure_temp_bytes_total{job=~\"$postgres_job\"}[$__rate_interval])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "temp bytes",
+              "queryType": "range",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Temp Bytes Written",
+          "type": "timeseries",
+          "description": "Temporary data written by PostgreSQL per second, often from sorts or hashes that spill to disk. Requires a database exporter."
+        }
+      ],
       "title": "PostgreSQL",
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
+      "id": 1099,
+      "title": "Database client pool",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
       "gridPos": {
-        "h": 4,
-        "w": 5,
         "x": 0,
-        "y": 77
-      },
-      "id": 501,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "sum(azure_active_connections_average)",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Connections",
-      "type": "stat"
+        "y": 79,
+        "w": 24,
+        "h": 1
+      }
     },
     {
+      "id": 1100,
+      "title": "Database client pool connections",
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
+        "uid": "${metrics_datasource}"
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 5,
-        "y": 77
-      },
-      "id": 502,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "azure_max_connections_average",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Max Connections",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 10,
-        "y": 77
-      },
-      "id": 503,
-      "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "sum(azure_active_connections_average) / sum(azure_max_connections_average) * 100",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Connection Utilization",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 536870912
-              },
-              {
-                "color": "red",
-                "value": 1073741824
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 15,
-        "y": 77
-      },
-      "id": 511,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "azure_txlogs_storage_used_average",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Transaction Log Storage",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "description": "Estimated database storage utilization for Kubernetes-backed PostgreSQL. Uses summed non-system database size divided by the PostgreSQL PVC requested storage from kube-state-metrics.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 19,
-        "y": 77
-      },
-      "id": 513,
-      "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "DB Size Utilization (N/A)",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 80,
         "w": 12,
-        "x": 0,
-        "y": 81
+        "h": 8
       },
-      "id": 504,
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(state) (database_pool_connections{job=~\"$job\"})",
+          "legendFormat": "{{state}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples"
+        },
+        "overrides": []
+      },
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "displayMode": "list",
+          "placement": "bottom"
         },
         "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
+          "mode": "multi"
         }
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "azure_active_connections_average",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "{{resource_name}}",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Active Connections Over Time",
-      "type": "timeseries"
+      "description": "Application-owned database connections by pool state. Idle connections remain open for reuse; waiting work can indicate pool saturation."
     },
     {
+      "id": 1101,
+      "title": "Configured pool capacity",
+      "type": "timeseries",
       "datasource": {
         "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "PVC requested storage"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    10,
-                    6
-                  ],
-                  "fill": "dash"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 0
-              },
-              {
-                "id": "custom.showPoints",
-                "value": "never"
-              }
-            ]
-          }
-        ]
+        "uid": "${metrics_datasource}"
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 81
-      },
-      "id": 505,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "azure_storage_used_average",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "{{resource_name}}",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "description": "Database sizes excluding PostgreSQL system databases. The dashed line is the inferred PostgreSQL PVC requested storage from kube-state-metrics for Kubernetes-backed deployments.",
-      "title": "Database Size",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "rollbacks.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
+        "y": 80,
         "w": 12,
-        "x": 0,
-        "y": 89
-      },
-      "id": 506,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "h": 8
       },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_xact_commit_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "commits",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_xact_rollback_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "rollbacks",
-          "queryType": "range",
-          "range": true,
-          "refId": "B"
+          "refId": "A",
+          "expr": "sum(database_pool_size_limit{job=~\"$job\"})",
+          "legendFormat": "{{state}}",
+          "range": true
         }
       ],
-      "title": "Transactions",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percentunit"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 89
-      },
-      "id": 507,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "displayMode": "list",
+          "placement": "bottom"
         },
         "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
+          "mode": "multi"
         }
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_blks_hit_total[$__rate_interval]) / clamp_min(rate(azure_blks_hit_total[$__rate_interval]) + rate(azure_blks_read_total[$__rate_interval]), 1e-9)",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "hit ratio",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Cache Hit Ratio",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 97
-      },
-      "id": 508,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_tup_inserted_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "inserted",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_tup_updated_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "updated",
-          "queryType": "range",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_tup_deleted_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "deleted",
-          "queryType": "range",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_tup_returned_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "returned",
-          "queryType": "range",
-          "range": true,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_tup_fetched_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "fetched",
-          "queryType": "range",
-          "range": true,
-          "refId": "E"
-        }
-      ],
-      "title": "Row Operations",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 97
-      },
-      "id": 509,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Locks by Mode (N/A)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 105
-      },
-      "id": 510,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_deadlocks_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "deadlocks",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Deadlocks",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "Bps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 105
-      },
-      "id": 512,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "expr": "rate(azure_temp_bytes_total[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "temp bytes",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Temp Bytes Written",
-      "type": "timeseries"
+      "description": "Maximum client connections configured for each application's database pool. Each process owns its own pool."
     }
   ],
   "refresh": "30s",
@@ -3671,9 +3920,43 @@
         "query": "prometheus",
         "queryValue": "",
         "refresh": 1,
-        "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "name": "job",
+        "label": "Scrape job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics_datasource}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"llm_tokens_total|agent_runtime_health_collection_timestamp_seconds|http_request_duration_seconds_count\"}, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "description": "Prometheus target group: a set of monitored processes. Leave All to include every matching source."
+      },
+      {
+        "name": "postgres_job",
+        "label": "PostgreSQL exporter job regex",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": []
       }
     ]
   },
@@ -3682,7 +3965,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Archestra Application Metrics",
+  "title": "Archestra / Platform Health",
   "uid": "archestra-application-metrics",
   "version": 1
 }

@@ -256,7 +256,10 @@ function AgentDetails({
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
-  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const runtimeFeature = useFeature("agentRuntime");
+  const runtimeEnabled = runtimeFeature === true;
+  const isRuntimeFeaturePending =
+    kind === "agent" && agent.runtime != null && runtimeFeature === undefined;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   // The same query as the access block, so the header chip reflects what
@@ -394,7 +397,11 @@ function AgentDetails({
         return;
       }
     }
-    if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
+    // Wait for configuration before treating the requested tab as invalid.
+    if (
+      sectionParam === "runs" &&
+      (isRuntimeFeaturePending || (hasAgentRuntime && runsQuery.isPending))
+    )
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
   }, [
@@ -405,6 +412,7 @@ function AgentDetails({
     agent.id,
     router,
     hasAgentRuntime,
+    isRuntimeFeaturePending,
     runsQuery.isPending,
     overviewOnly,
     showConnect,
@@ -558,8 +566,6 @@ function AgentDetails({
 
   return (
     <PageLayout
-      // The wizard's column, so a record reads and edits in the same one it
-      // was created in.
       maxWidth="wizard"
       minWidth="phone"
       // A scrolling box would trap the sticky save footer, so it could not
@@ -603,20 +609,27 @@ function AgentDetails({
       documentTitle={agent.name}
       backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
-        isBuiltIn && agent.description ? (
-          <>
-            {agent.description.replace(/\.?$/, ".")}{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
-              className="underline"
-              showIcon={false}
-            >
-              Learn more
-            </ExternalDocsLink>
-          </>
-        ) : (
-          (agent.description ?? "")
-        )
+        // A description has no length limit, and the header stays on screen
+        // on every tab: it keeps to one line, two on a phone.
+        <span
+          className="line-clamp-2 sm:line-clamp-1"
+          title={agent.description ?? undefined}
+        >
+          {isBuiltIn && agent.description ? (
+            <>
+              {agent.description.replace(/\.?$/, ".")}{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
+                className="underline"
+                showIcon={false}
+              >
+                Learn more
+              </ExternalDocsLink>
+            </>
+          ) : (
+            (agent.description ?? "")
+          )}
+        </span>
       }
       tabs={
         // A single-section page is not a tabbed one: a built-in record has
@@ -797,12 +810,15 @@ function AgentDetails({
                 canEdit={canEdit}
               />
             )}
-            {overviewOnly && section === "general" && kind === "agent" && (
-              <AgentSchedulesSection
-                agentId={agent.id}
-                agentName={agent.name}
-              />
-            )}
+            {overviewOnly &&
+              section === "general" &&
+              kind === "agent" &&
+              !isBuiltIn && (
+                <AgentSchedulesSection
+                  agentId={agent.id}
+                  agentName={agent.name}
+                />
+              )}
             {activeFormGroups.length > 0 && (
               <AgentForm
                 afterDescription={
@@ -831,40 +847,42 @@ function AgentDetails({
                   readOnly,
                 }) => {
                   const isSaving = formSaving || savingPermissions;
+                  const saveForm = fieldsDirty && !readOnly;
                   // Share the create flow's sticky row and primary-action
                   // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
-                  // save row at all — the alert above already says why.
-                  const row = readOnly ? null : (
-                    <WizardFooter className="sm:justify-end">
-                      <Button
-                        // With only the grants changed there is no form to
-                        // submit, so the button saves them directly.
-                        type={fieldsDirty ? "submit" : "button"}
-                        size="sm"
-                        form={fieldsDirty ? formId : undefined}
-                        onClick={
-                          fieldsDirty ? undefined : () => void savePermissions()
-                        }
-                        disabled={
-                          isGone ||
-                          isSaving ||
-                          (fieldsDirty ? !canSubmit : !permissionsDirty)
-                        }
-                        data-testid={E2eTestId.AgentSetupSubmitButton}
-                      >
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <span>Save changes</span>
-                        )}
-                      </Button>
-                    </WizardFooter>
-                  );
+                  // save row unless they can change the resource permissions.
+                  const row =
+                    readOnly && !permissionsDirty ? null : (
+                      <WizardFooter className="sm:justify-end">
+                        <Button
+                          // With only the grants changed there is no form to
+                          // submit, so the button saves them directly.
+                          type={saveForm ? "submit" : "button"}
+                          size="sm"
+                          form={saveForm ? formId : undefined}
+                          onClick={
+                            saveForm ? undefined : () => void savePermissions()
+                          }
+                          disabled={
+                            isGone ||
+                            isSaving ||
+                            (saveForm ? !canSubmit : !permissionsDirty)
+                          }
+                          data-testid={E2eTestId.AgentSetupSubmitButton}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Save changes</span>
+                          )}
+                        </Button>
+                      </WizardFooter>
+                    );
                   // Below the permissions block when it is on this tab.
                   if (showPermissions)
                     return footerSlot ? createPortal(row, footerSlot) : null;

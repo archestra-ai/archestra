@@ -47,6 +47,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
 import {
@@ -65,6 +66,7 @@ import {
   namespaceOf,
   namespacesByCallId,
   prependPrefixToResponse,
+  RESPONSES_STREAM_END,
   responsesHostedToolCalls,
   rewriteResponsesOutput,
   toSse,
@@ -204,7 +206,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: resolvedBaseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: options.defaultHeaders,
     });
   },
@@ -223,13 +225,18 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: OpenAiResponsesRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<OpenAiResponsesStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
 
-    const stream = (await openaiClient.responses.create({
+    const pending = openaiClient.responses.create({
       ...request,
       stream: true,
-    } as ResponseCreateParamsStreaming)) as AsyncIterable<OpenAiResponsesStreamChunk>;
+    } as ResponseCreateParamsStreaming);
+    const stream = (await pending) as AsyncIterable<OpenAiResponsesStreamChunk>;
+    // Custom clients can return lazy iterators; only the SDK's response
+    // promise guarantees that successful HTTP headers have arrived.
+    if (typeof pending.asResponse === "function") onAccepted?.();
     // Spread-factory aliases keep their own transport contracts. Native compact
     // requests have a separate executeStream implementation below.
     if (
@@ -1434,7 +1441,7 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatEndSSE(): string {
-    return "data: [DONE]\n\n";
+    return RESPONSES_STREAM_END;
   }
 
   toProviderResponse(): OpenAiResponsesResponse {

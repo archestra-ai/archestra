@@ -34,6 +34,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
     config.agentRuntime.warmPoolSize = 1;
     config.agentRuntime.warmPoolMaxPools = 1;
     config.agentRuntime.workspaceStorageSize = "1Gi";
+    config.agentRuntime.workspaceStorageGiB = 1;
     config.agentRuntime.workspaceStorageClass = undefined;
     config.agentRuntime.nodeSelector = {};
     config.orchestrator.kubernetes.namespace = namespace;
@@ -101,6 +102,8 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         ...specBase,
         taskId: task.id,
         frozenName: workloadName,
+        tier: null,
+        warmTiers: [],
         env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: task.id },
         command: [
           "/bin/sh",

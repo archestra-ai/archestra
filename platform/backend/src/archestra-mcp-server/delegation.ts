@@ -2,7 +2,6 @@ import {
   AGENT_TOOL_PREFIX,
   type ModelSelection,
   SELF_FORK_TOOL_NAME,
-  type SubagentModelTier,
   SubagentModelTierSchema,
   slugify,
 } from "@archestra/shared";
@@ -11,6 +10,7 @@ import { convertToModelMessages, type ModelMessage } from "ai";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
+import { availableSubagentTiers, type ForkTier } from "@/agents/subagent-tiers";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import type { RequestLookups } from "@/auth/request-lookups";
 import logger from "@/logging";
@@ -46,11 +46,7 @@ import {
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
-import {
-  availableSubagentTiers,
-  type ModelTrioTiers,
-  resolveForkParentSelection,
-} from "@/utils/llm-resolution";
+import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -76,9 +72,7 @@ export const selfForkToolArgsSchema = delegationToolArgsSchema.extend({
  * The fork's input schema. `tier` is advertised only with the tiers that would
  * move the copy to another model; with none it is left out entirely.
  */
-function selfForkInputSchema(
-  tiers: Exclude<SubagentModelTier, "normal">[],
-): Tool["inputSchema"] {
+function selfForkInputSchema(tiers: ForkTier[]): Tool["inputSchema"] {
   if (tiers.length === 0) return DELEGATION_INPUT_JSON_SCHEMA;
   const descriptions = {
     smart:
@@ -367,20 +361,32 @@ export async function handleDelegation(
   // A fork is a copy of the running caller, so it always runs in this process.
   const targetAgent = await AgentModel.findById(target.id);
   if (!selfFork && targetAgent && resolveAgentRuntime(targetAgent)) {
+    const callerAgent = await AgentModel.findById(agentId);
+    const loadBalancingEnabled =
+      callerAgent?.subagentLoadBalancing?.enabled === true;
     logger.info(
       {
         agentId,
         targetAgentId: target.id,
         targetAgentName: target.name,
+        loadBalancingEnabled,
         organizationId,
         userId: userId || "system",
       },
       "Starting background task from agent delegation",
     );
     return startDelegatedTask({
-      agentId: target.id,
+      ...(loadBalancingEnabled ? {} : { agentId: target.id }),
       message,
-      context,
+      context: context.agent
+        ? context
+        : {
+            ...context,
+            agent: {
+              id: agentId,
+              name: callerAgent?.name ?? agentId,
+            },
+          },
     });
   }
 
@@ -436,6 +442,7 @@ export async function handleDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       chatOpsPinnedAgentId: context.chatOpsPinnedAgentId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
+      runId: context.runId,
       abortSignal: context.abortSignal,
       // Surface the child's tool calls on the caller's conversation, attributed
       // to this delegation call. The shared bridge is threaded into the child
@@ -936,11 +943,11 @@ async function forkTiers(params: {
   caller: {
     llmApiKeyId: string | null;
     modelId: string | null;
-  } & ModelTrioTiers;
+  };
   organizationId: string;
   userId?: string;
   parentLlm?: ModelSelection;
-}): Promise<Exclude<SubagentModelTier, "normal">[]> {
+}): Promise<ForkTier[]> {
   const { caller, organizationId, userId, parentLlm } = params;
   if (!userId) return [];
   const parent = await resolveForkParentSelection({
@@ -949,7 +956,7 @@ async function forkTiers(params: {
     userId,
     parentLlm,
   });
-  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+  return availableSubagentTiers({ parent, organizationId, userId });
 }
 
 /** A fork may not fork again, so it is not offered the fork tool. */
@@ -968,9 +975,7 @@ const SELF_FORK_TIER_USES = {
 };
 
 /** The fork's description, naming what each advertised tier is for. */
-function selfForkDescription(
-  tiers: Exclude<SubagentModelTier, "normal">[],
-): string {
+function selfForkDescription(tiers: ForkTier[]): string {
   return [
     "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters.",
     ...tiers.map((tier) => SELF_FORK_TIER_USES[tier]),

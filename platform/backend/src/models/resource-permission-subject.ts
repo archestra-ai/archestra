@@ -3,12 +3,15 @@ import {
   type PermissionSubject,
   PredefinedRoleNameSchema,
   type ResourceAccessRelation,
+  type ScopedResource,
+  supportsOauthClientSubject,
 } from "@archestra/shared";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import { readConfig } from "@/services/config-cache";
+import type { AclEntry } from "@/types";
 import MemberModel from "./member";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
@@ -17,6 +20,16 @@ import TeamModel from "./team";
 export type GrantPrincipal = {
   organizationId: string;
   subjects: PermissionSubject[];
+  /** Creator/owner user ID when the principal is a managed OAuth client. */
+  authorId?: string | null;
+  /** Creator/owner email when the principal is a managed OAuth client. */
+  authorEmail?: string | null;
+  /**
+   * Upstream ACL tokens (`user_email:<email>`, `team:<id>`) inherited from the
+   * creator/owner of a managed OAuth client for source-permission-synced
+   * connectors.
+   */
+  upstreamTokens?: AclEntry[];
 };
 
 /**
@@ -168,9 +181,110 @@ export default class ResourcePermissionSubjectModel {
     };
   }
 
-  static async search(params: { organizationId: string; query: string }) {
+  /**
+   * The grant subjects of an active managed OAuth client in its organization,
+   * or null when the client does not exist, is disabled, or belongs to another
+   * organization. Accepts either the row `id` or the OAuth `client_id`.
+   */
+  static async resolveOauthClientPrincipal(params: {
+    oauthClientId: string;
+    organizationId?: string;
+  }): Promise<GrantPrincipal | null> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        params.oauthClientId,
+      );
+    const [client] = await db
+      .select({
+        id: schema.oauthClientsTable.id,
+        organizationId: sql<
+          string | null
+        >`${schema.oauthClientsTable.metadata}->>'organizationId'`,
+        authorId: sql<
+          string | null
+        >`${schema.oauthClientsTable.metadata}->>'authorId'`,
+      })
+      .from(schema.oauthClientsTable)
+      .where(
+        and(
+          isUuid
+            ? or(
+                eq(schema.oauthClientsTable.id, params.oauthClientId),
+                eq(schema.oauthClientsTable.clientId, params.oauthClientId),
+              )
+            : eq(schema.oauthClientsTable.clientId, params.oauthClientId),
+          sql`${schema.oauthClientsTable.metadata}->>'type' = 'managed_oauth_client'`,
+          sql`COALESCE(${schema.oauthClientsTable.disabled}, false) = false`,
+          ...(params.organizationId
+            ? [
+                sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+              ]
+            : []),
+        ),
+      )
+      .limit(1);
+    if (!client?.organizationId) return null;
+    let authorId: string | null = null;
+    let authorEmail: string | null = null;
+    let upstreamTokens: AclEntry[] = [];
+    if (client.authorId) {
+      const [author] = await db
+        .select({
+          id: schema.usersTable.id,
+          email: schema.usersTable.email,
+        })
+        .from(schema.usersTable)
+        .innerJoin(
+          schema.membersTable,
+          and(
+            eq(schema.membersTable.userId, schema.usersTable.id),
+            eq(schema.membersTable.organizationId, client.organizationId),
+          ),
+        )
+        .where(eq(schema.usersTable.id, client.authorId))
+        .limit(1);
+      if (author) {
+        authorId = author.id;
+        authorEmail = author.email ?? null;
+        const teams = await TeamModel.getUserTeamsForOrganization({
+          userId: author.id,
+          organizationId: client.organizationId,
+        });
+        upstreamTokens = [
+          ...(author.email
+            ? ([`user_email:${author.email.trim().toLowerCase()}`] as const)
+            : []),
+          ...teams.map((team): AclEntry => `team:${team.id}`),
+        ];
+      }
+    }
+    return {
+      organizationId: client.organizationId,
+      subjects: [
+        { type: "organization", id: "*" },
+        { type: "oauthClient", id: client.id },
+      ],
+      authorId,
+      authorEmail,
+      upstreamTokens,
+    };
+  }
+
+  static async search(params: {
+    organizationId: string;
+    query: string;
+    resource?: ScopedResource;
+    exclude?: PermissionSubject[];
+    excludedUserRoles?: string[];
+  }) {
+    const excludedIds = (type: PermissionSubject["type"]) =>
+      params.exclude
+        ?.filter((subject) => subject.type === type)
+        .map((subject) => subject.id) ?? [];
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
-    const [users, teams, accounts, roles] = await Promise.all([
+    const includeOauthClients =
+      !params.resource || supportsOauthClientSubject(params.resource);
+    const [users, teams, accounts, oauthClients, roles] = await Promise.all([
       db
         .select({
           id: schema.usersTable.id,
@@ -185,6 +299,11 @@ export default class ResourcePermissionSubjectModel {
         .where(
           and(
             eq(schema.membersTable.organizationId, params.organizationId),
+            notInArray(schema.usersTable.id, excludedIds("user")),
+            notInArray(
+              schema.membersTable.role,
+              params.excludedUserRoles ?? [],
+            ),
             or(
               ilike(schema.usersTable.name, pattern),
               ilike(schema.usersTable.email, pattern),
@@ -199,6 +318,7 @@ export default class ResourcePermissionSubjectModel {
         .where(
           and(
             eq(schema.teamsTable.organizationId, params.organizationId),
+            notInArray(schema.teamsTable.id, excludedIds("team")),
             ilike(schema.teamsTable.name, pattern),
           ),
         )
@@ -217,11 +337,38 @@ export default class ResourcePermissionSubjectModel {
               params.organizationId,
             ),
             eq(schema.serviceAccountsTable.disabled, false),
+            notInArray(
+              schema.serviceAccountsTable.id,
+              excludedIds("serviceAccount"),
+            ),
             ilike(schema.serviceAccountsTable.name, pattern),
           ),
         )
         .orderBy(schema.serviceAccountsTable.name)
         .limit(30),
+      includeOauthClients
+        ? db
+            .select({
+              id: schema.oauthClientsTable.id,
+              name: schema.oauthClientsTable.name,
+              clientId: schema.oauthClientsTable.clientId,
+            })
+            .from(schema.oauthClientsTable)
+            .where(
+              and(
+                sql`${schema.oauthClientsTable.metadata}->>'type' = 'managed_oauth_client'`,
+                sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+                sql`COALESCE(${schema.oauthClientsTable.disabled}, false) = false`,
+                notInArray(
+                  schema.oauthClientsTable.id,
+                  excludedIds("oauthClient"),
+                ),
+                ilike(schema.oauthClientsTable.name, pattern),
+              ),
+            )
+            .orderBy(schema.oauthClientsTable.name)
+            .limit(30)
+        : Promise.resolve([]),
       db
         .select({
           id: schema.organizationRolesTable.id,
@@ -235,6 +382,7 @@ export default class ResourcePermissionSubjectModel {
               params.organizationId,
             ),
             ilike(schema.organizationRolesTable.name, pattern),
+            notInArray(schema.organizationRolesTable.id, excludedIds("role")),
           ),
         )
         .orderBy(schema.organizationRolesTable.name)
@@ -254,6 +402,10 @@ export default class ResourcePermissionSubjectModel {
         subject: { type: "serviceAccount" as const, id: account.id },
         name: account.name,
       })),
+      ...oauthClients.map((client) => ({
+        subject: { type: "oauthClient" as const, id: client.id },
+        name: client.name ?? client.clientId,
+      })),
       ...roles.map((role) => ({
         subject: { type: "role" as const, id: role.id },
         name: role.name,
@@ -269,7 +421,8 @@ export default class ResourcePermissionSubjectModel {
       params.subjects
         .filter((subject) => subject.type === type)
         .map((subject) => subject.id);
-    const [users, teams, accounts, roles] = await Promise.all([
+    const oauthClientIds = ids("oauthClient");
+    const [users, teams, accounts, oauthClients, roles] = await Promise.all([
       db
         .select({
           id: schema.membersTable.userId,
@@ -311,6 +464,23 @@ export default class ResourcePermissionSubjectModel {
             eq(schema.serviceAccountsTable.disabled, false),
           ),
         ),
+      oauthClientIds.length
+        ? db
+            .select({
+              id: schema.oauthClientsTable.id,
+              name: schema.oauthClientsTable.name,
+              clientId: schema.oauthClientsTable.clientId,
+            })
+            .from(schema.oauthClientsTable)
+            .where(
+              and(
+                sql`${schema.oauthClientsTable.metadata}->>'type' = 'managed_oauth_client'`,
+                sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+                sql`COALESCE(${schema.oauthClientsTable.disabled}, false) = false`,
+                inArray(schema.oauthClientsTable.id, oauthClientIds),
+              ),
+            )
+        : Promise.resolve([]),
       db
         .select({
           id: schema.organizationRolesTable.id,
@@ -334,6 +504,11 @@ export default class ResourcePermissionSubjectModel {
         type: "serviceAccount" as const,
         id,
         name,
+      })),
+      ...oauthClients.map(({ id, name, clientId }) => ({
+        type: "oauthClient" as const,
+        id,
+        name: name ?? clientId,
       })),
       ...roles.map(({ id, name }) => ({ type: "role" as const, id, name })),
     ];

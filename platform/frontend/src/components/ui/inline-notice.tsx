@@ -15,9 +15,8 @@ import { cn } from "@/lib/utils/tailwind";
  *
  * Composition is icon, then a `font-medium` title span, then
  * `<InlineNoticeText>` for the explanation, then an optional trailing action
- * (`className="ml-auto"`). Title and explanation share a row and wrap only
- * when the width requires it, which is what keeps the strip one line tall in
- * the common case.
+ * (`className="ml-auto"`). On mobile, the explanation takes a full row below
+ * the title. From `sm` up, they share a row and wrap when needed.
  *
  * When the explanation runs to a sentence or more, wrap the title and text in
  * `<InlineNoticeBody>`: the title sits on its own line with the explanation
@@ -36,7 +35,7 @@ const inlineNoticeVariants = cva(
   // needs, and the variant's colour already says what kind of notice it is.
   // The grid drops the icon column with it, so the text, toggle, details and
   // action each move one column left.
-  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 max-sm:[&>svg]:hidden has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
+  "flex flex-wrap items-center gap-x-2 max-sm:flex-wrap gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 max-sm:[&>svg]:hidden has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
   {
     variants: {
       variant: {
@@ -49,6 +48,10 @@ const inlineNoticeVariants = cva(
         info: "border-blue-500/50 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400 **:data-[slot=inline-notice-text]:text-blue-800 dark:**:data-[slot=inline-notice-text]:text-blue-300",
         neutral:
           "bg-muted/40 text-foreground [&>svg]:text-muted-foreground **:data-[slot=inline-notice-text]:text-muted-foreground",
+      },
+      mobileLayout: {
+        stacked:
+          "max-sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-1 max-sm:[&>[data-slot=inline-notice-action]]:ml-0 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-1 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-2 max-sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-1",
       },
       /**
        * The notice sits over content that scrolls under it, such as a sticky
@@ -91,13 +94,14 @@ const inlineNoticeVariants = cva(
 export function InlineNotice({
   className,
   variant,
+  mobileLayout,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inlineNoticeVariants>) {
   return (
     <div
       role="alert"
       data-slot="inline-notice"
-      className={cn(inlineNoticeVariants({ variant }), className)}
+      className={cn(inlineNoticeVariants({ variant, mobileLayout }), className)}
       {...props}
     />
   );
@@ -117,7 +121,7 @@ export function InlineNoticeText({
   return (
     <div
       data-slot="inline-notice-text"
-      className={cn("min-w-0 flex-1", className)}
+      className={cn("min-w-0 w-full flex-none sm:w-auto sm:flex-1", className)}
       {...props}
     />
   );

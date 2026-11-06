@@ -57,7 +57,7 @@ function completedUsage(
   const text = Array.isArray(sse) ? sse.map(decode).join("") : decode(sse);
   const frame = text
     .split("\n\n")
-    .map((block) => block.replace(/^data: /, "").trim())
+    .map((block) => block.replace(/^(?:event: .*\n)?data: /, "").trim())
     .filter((block) => block.startsWith("{"))
     .map((block) => JSON.parse(block) as Record<string, unknown>)
     .find((event) => event.type === "response.completed");
@@ -186,12 +186,32 @@ describe("translated Responses complete after the policy verdict", () => {
       cacheReadTokens: 8000,
       cacheWriteTokens: 1000,
     };
-    const upstreamFinal = adapter.processChunk({
+    const upstreamFinish = adapter.processChunk({
       id: "chatcmpl_test",
       object: "chat.completion.chunk",
       created: 0,
       model: "test",
       choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+    });
+    expect(upstreamFinish.isFinal).toBe(false);
+    expect(upstreamFinish.sseData ?? "").not.toContain("response.completed");
+    expect(upstreamFinish.sseData ?? "").not.toContain("call_original");
+    const terminalUsage = {
+      prompt_tokens: 9012,
+      completion_tokens: 3,
+      total_tokens: 9015,
+      prompt_tokens_details: {
+        cached_tokens: 8000,
+        cache_write_tokens: 1000,
+      },
+    };
+    const upstreamFinal = adapter.processChunk({
+      id: "chatcmpl_test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "test",
+      choices: [],
+      usage: terminalUsage,
     });
     expect(upstreamFinal.isFinal).toBe(true);
     expect(upstreamFinal.sseData ?? "").not.toContain("response.completed");
@@ -237,6 +257,6 @@ describe("translated Responses complete after the policy verdict", () => {
     expect(upstream.sseData).not.toContain("response.completed");
     const wire = `${upstream.sseData ?? ""}${adapter.formatEndSSE()}`;
     expect(wire.match(/"type":"response.completed"/g)).toHaveLength(1);
-    expect(adapter.formatEndSSE()).toBe("data: [DONE]\n\n");
+    expect(adapter.formatEndSSE()).toBe("");
   });
 });

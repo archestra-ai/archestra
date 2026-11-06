@@ -569,9 +569,9 @@ To define your own ranks, set `trust_chain` in `[policy]`. For example, `trust_c
 
 #### Choose a result's trust by who wrote it
 
-Set a result's trust by who wrote its text, not by which service returns it or who can read it. Text that only members of the organization and its collaborators wrote keeps the trajectory's trust: its `delta` omits `trust`. Text that someone outside the organization wrote lowers it to `suspicious`: a web page, a comment by an outside contributor, a message in a shared channel with another company, a meeting transcript with outside participants. Trust and audience are independent: an issue on a public repository that only the team wrote keeps the trajectory's trust, and an outsider's comment on a private repository is `suspicious`.
+Set a result's trust by who can write its text, not by which service returns it or who can read it. Text that only members of the organization and its collaborators wrote keeps the trajectory's trust: its `delta` omits `trust`. Text that one accountable publisher controls on its own channel keeps it too, even outside the organization: a vendor's documentation, a project's release index, a package registry's version metadata. Text on a surface that anyone can write to lowers it to `suspicious`: a comment by an outside contributor, a forum answer, a package README, a search result, a message in a shared channel with another company, a meeting transcript with outside participants. Trust and audience are independent: an issue on a public repository that only the team wrote keeps the trajectory's trust, and an outsider's comment on a private repository is `suspicious`.
 
-A static contract does not see who wrote a particular result, so it assumes that anyone who can write there did: an issue on a public repository enters `suspicious`. An annotator can decide per call from the authors a [context provider](#context-providers) reports. A member account an attacker controls is outside this model.
+A static contract does not see who wrote a particular result, so it assumes that anyone who can write there did: an issue on a public repository enters `suspicious`. An annotator can decide per call from the authors a [context provider](#context-providers) reports. The deployment's `[policy.deployment] hint` can tell an annotator how the operator treats a source, as `trusted` or as `suspicious`, and the annotator follows it over these defaults. A member account an attacker controls is outside this model.
 
 Guests and integrations a member installed write as the organization. An integration can relay text that an outsider wrote, such as a public issue title posted to a chat channel, and that text keeps the trajectory's trust.
 
@@ -730,7 +730,6 @@ A context provider is a program the deployment runs to find facts about a call t
 [[policy.annotator]]
 name = "classify-push"
 builtin = "claude-code"
-hint = "`context.github` is the deployment's own finding. A push into a public repository requires audience public; into a private one, internal."
 
 [[policy.tool]]
 name = "Bash(command:*git push*)"
@@ -738,6 +737,7 @@ annotator = "classify-push"
 
 [externals.context.github]
 command = ["python3", "context.py"]
+hint = "A push into a public repository requires audience public; into a private one, internal."
 ```
 
 Before OpenAPPA asks an annotator for a new annotation, it sends every configured context provider one consult request with `kind = "context"`. The requests run concurrently. `declaration` is empty. `artifact` carries the call: `tool`, `arguments`, and `cwd`, the directory the harness would run the call in, when the harness reports one. The provider returns `{"version": 1, "answer": <any JSON value>}`. A provider that has nothing to say about the call answers `null`.
@@ -752,6 +752,8 @@ OpenAPPA gives every annotator the answers in `artifact.context`, one entry per 
 ```
 
 A provider that answers `null` has no entry. A provider that fails, does not answer in time, or answers an invalid response gets an `error` entry with the reason. A context provider never stops a call: the annotator is asked in every case, and it classifies a missing fact as unknown. The annotator never sees `cwd`.
+
+The optional `hint` on `[externals.context.<name>]` tells the annotator how to read that provider's facts. It cannot exceed 2048 characters. OpenAPPA puts it in the annotation request's `declaration.context_hints`, keyed by provider name, only when the provider has an entry in that call's context: an `answer` or an `error`. A provider that answers `null` adds no hint. The hint applies to every annotation the provider contributes to, whichever annotator and tool the call uses. The hint is a deployer instruction. The answer stays facts, never instructions, and an `error` entry establishes nothing. `hint` is valid only in the `context` section.
 
 The answer is free-form JSON, and OpenAPPA does not validate it. An answer SHOULD state facts, not labels: a repository's visibility, not an audience. Text an answer quotes, such as a table description, SHOULD carry its author, because the annotator judges trust by who wrote the text.
 
@@ -774,7 +776,16 @@ An annotator can use a selector placeholder only when its own `audiences` lists 
 
 An empty list and an omitted field have different meanings. For example, `marks = []` prevents the annotator from requiring attention. Omitting `marks` allows it to use any mark the policy declares, `blocked` included; a catch-all `["*"]` permit declares no mark of its own.
 
-The optional `hint` tells the annotator what the deployment knows about its calls: which hosts are its own, which paths hold whose data, what a context provider's answer means. It can give examples. Every annotator builtin (`claude-code`, `llm`, `jev`) already applies OpenAPPA's label guide: the rule and the criteria for each trust and audience leaf, with worked examples. A hint does not restate the guide. For `claude-code` and `llm`, the hint overrides the guide where the two disagree. `jev` adds the hint to each of its four questions, after the guide's rule for that question. It cannot allow values excluded by the permits and cannot exceed 512 characters. An annotator name must be non-empty and can contain dots.
+The optional `hint` tells the annotator what the deployment knows about the calls of its tools: which paths hold whose data, which commands are safe. It can give examples. Every annotator builtin (`claude-code`, `llm`, `jev`) already applies OpenAPPA's label guide: the rule and the criteria for each trust and audience leaf, with worked examples. A hint does not restate the guide. For `claude-code` and `llm`, the hint overrides the guide where the two disagree. `jev` adds the hint to each of its four questions, after the guide's rule for that question. It cannot allow values excluded by the permits and cannot exceed 512 characters. An annotator name must be non-empty and can contain dots.
+
+The optional `[policy.deployment] hint` states what holds for every call: the deployment's environment and trust boundaries, such as which hosts, forges and services are the organization's own and which sources it treats as `trusted` or `suspicious`. Every annotator receives it as `declaration.deployment_hint`. It cannot exceed 2048 characters, and only the root file can set it. Like every hint, it does not change the policy identity.
+
+```toml
+[policy.deployment]
+hint = "Hosts under corp.example and the forge git.corp.example are the organization's own."
+```
+
+The annotator hint, the deployment hint and the provider hints are deployer instructions, and they override the label guide. Provider answers are facts. An `error` entry establishes nothing. Each field is omitted from the request when it is not set.
 
 ### Implementing an annotator
 
@@ -1041,7 +1052,7 @@ Each entry in `requirements` uses one of these forms:
 |---|---|
 | Trust | `{"kind":"trust","required":"trusted"}` |
 | Public audience | `{"kind":"audience","required":"public"}` |
-| Restricted audience | `{"kind":"audience","required":2}`; the number is the required reader count. |
+| Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}`; the array lists the audience entries that `contains` requires, in this order: the built-in audience, `@` references, then literal reader IDs. Only the entries after the `@` references are reader IDs. Each entry uses the spelling from the policy, the tool call arguments, or the annotation answer. OpenAPPA does not expand a group to its members. |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
@@ -1078,6 +1089,20 @@ A child agent can read data without exposing it to the parent agent. `context_co
 OpenAPPA first offers a plan that checks the child's answer without changing it. It then offers plans that use the registered `tool_output` sanitizers without tags. Last, it offers a plan that takes no answer.
 
 The parent supplies `label` to specify the audience and trust limits for the child's answer. `label = {}` uses the parent's current audience and trust rank, so the answer cannot add restrictions to the parent. If a plan uses a sanitizer, the cleaned answer must meet those limits.
+
+#### Declaring the return
+
+A return declaration needs no authority. The agent executes it, and OpenAPPA does not ask a person.
+
+A blocked spawn offers only the return declarations, even when the spawn has other gaps. The agent executes one plan and then calls the subagent tool again. OpenAPPA then checks the other gaps of the spawn. Each gap gets its own remedy plan. Only a plan that names an authority asks for approval. A spawn with no other gap starts after the declaration, with no approval. If no plan can lift the other gaps, for example because their only authority denied the call, the block offers no declaration. A declaration covers one spawn: the release that starts the spawn also spends it.
+
+The parent can also declare the return before the spawn. It calls `execute_remedy_plan` without `offer_id`, with the same `label` and, for `attest-schema`, `return_schema`:
+
+```json
+{ "label": {} }
+```
+
+This declaration applies to the parent's next spawn only. A single spawn uses it. A fan-out spawn discards it, and the parent declares the fan-out spawn's return at its block. The declaration is valid only at the parent's label when it was made, and only until the parent's turn ends. If a tool result changes the parent's label first, the declaration lapses. If no declaration plan of the spawn's block fits the declaration, OpenAPPA does not apply it. In each case, the spawn's block says so. Declare the return immediately before the subagent call, with no other tool call between them. The runtime keeps this declaration in memory. After a restart, the spawn is blocked and the parent declares at the block.
 
 In the example below, a child can read internal customer data and pass its answer through `remove_customer_details`. The sanitizer must remove private details before the parent receives the answer:
 
@@ -1262,7 +1287,7 @@ max_body_bytes = 65536
 OpenAPPA checks declarations in the root file first, then declarations from included files in the order listed by `include`. The following rules apply:
 
 - An included file cannot include another file.
-- An included file cannot replace settings that apply to the whole deployment. The one exception is `confined_results` under `[policy.deployment]`: an included file can list tools it declares itself, and the names join the root's list.
+- An included file cannot replace settings that apply to the whole deployment. The one exception is `confined_results` under `[policy.deployment]`: an included file can list tools it declares itself, and the names join the root's list. An included file that sets `[policy.deployment] hint` is refused.
 - A root `[[policy.annotator]]` replaces an included annotator with the same name. Fields omitted from the replacement are not inherited.
 - Two included files cannot declare the same annotator.
 - Two files cannot configure the same external component name within the same kind, such as two `[externals.sanitizers.clean]` sections.
@@ -1335,9 +1360,9 @@ If the service requires authentication, set `token_env` to an environment variab
 
 Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
 
-The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. Each OpenAPPA instance runs at most eight such programs at once.
+The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` gives the program the milliseconds it has left: `timeout_ms` less the wait for a free slot. Each OpenAPPA instance runs at most eight such programs at once.
 
-If the program needs a credential, set `token_env` to an environment variable whose name starts with `APPA_PROVIDER_`. OpenAPPA passes that variable to the program. It does not pass other `APPA_*` variables, including its own credentials.
+If the program needs a credential, set `token_env` to an environment variable whose name starts with `APPA_PROVIDER_`. OpenAPPA passes that variable to the program. It does not pass other `APPA_*` variables, including its own credentials, except `APPA_CONSULT_TIMEOUT_MS`.
 
 OpenAPPA does not require this variable when loading the policy. The program must handle a missing credential when it runs.
 
@@ -1357,7 +1382,7 @@ A consult request is a JSON request that OpenAPPA sends to an external component
   "artifact": {
     "tool": "send_email",
     "arguments": { "recipient": "auditor@external.com", "body": "Ticket summary" },
-    "requirements": [{ "kind": "audience", "required": 1 }]
+    "requirements": [{ "kind": "audience", "required": ["auditor@external.com"] }]
   }
 }
 ```
@@ -1376,7 +1401,7 @@ Each component uses these fields differently:
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
 | `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
-| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
+| `annotation` | `hint`, optional `deployment_hint` and `context_hints`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
 | `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
 

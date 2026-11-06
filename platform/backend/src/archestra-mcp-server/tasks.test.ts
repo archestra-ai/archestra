@@ -24,6 +24,8 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { buildMcpGatewayTool } from "@/clients/chat-tool-builder";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
@@ -31,11 +33,16 @@ import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
+  AgentExcludedSubagentModel,
+  AgentModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentToolModel,
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
+  EnvironmentModel,
   MemberModel,
+  ToolModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
@@ -71,6 +78,7 @@ describe("run tools", () => {
         organizationId,
         authorId: actorId,
         agentType: "agent",
+        accessAllSubagents: true,
       });
       await seedAndAssignArchestraTools(callingAgent.id);
       context = {
@@ -109,6 +117,243 @@ describe("run tools", () => {
     );
   });
 
+  test("enforces subagent restrictions and environment isolation on start_agent_run", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const allowedTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+    });
+    const otherTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+    });
+
+    // 1. Excluded subagent is refused
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, [
+      otherTarget.id,
+    ]);
+    const excludedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run excluded target" },
+      context,
+    );
+    expect(excludedResult.isError).toBe(true);
+    expect((excludedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${callingAgent.name}".`,
+    );
+    await AgentExcludedSubagentModel.replaceForAgent(callingAgent.id, []);
+
+    // 2. Ordinary agent and non-GitHub MCP Gateway with accessAllSubagents=false and zero delegations refuse targets
+    const customAgent = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      accessAllSubagents: false,
+    });
+    await seedAndAssignArchestraTools(customAgent.id);
+    const customAgentResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run from empty-allowlist agent" },
+      {
+        ...context,
+        agent: { id: customAgent.id, name: customAgent.name },
+        agentId: customAgent.id,
+      },
+    );
+    expect(customAgentResult.isError).toBe(true);
+    expect((customAgentResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${customAgent.name}".`,
+    );
+
+    const customGateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: false,
+    });
+    await seedAndAssignArchestraTools(customGateway.id);
+    const customGatewayResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run from empty-allowlist gateway" },
+      {
+        ...context,
+        agent: { id: customGateway.id, name: customGateway.name },
+        agentId: customGateway.id,
+      },
+    );
+    expect(customGatewayResult.isError).toBe(true);
+    expect((customGatewayResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${customGateway.name}".`,
+    );
+
+    // 3. GitHub Actions MCP Gateway with accessAllSubagents=false refuses undelegated target
+    const githubGateway = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      accessAllSubagents: false,
+    });
+    await AgentModel.update(githubGateway.id, {
+      githubActionsAccess: {
+        githubAppCredentialKey: "GITHUB_ACTIONS_APP_CODE_REVIEW",
+        repositories: ["example-org/*"],
+        workflows: [".github/workflows/review.yml"],
+      },
+    });
+    await seedAndAssignArchestraTools(githubGateway.id);
+    const gatewayContext: ArchestraContext = {
+      ...context,
+      agent: { id: githubGateway.id, name: githubGateway.name },
+      agentId: githubGateway.id,
+    };
+    const undelegatedGatewayResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run undelegated target" },
+      gatewayContext,
+    );
+    expect(undelegatedGatewayResult.isError).toBe(true);
+    expect(
+      (undelegatedGatewayResult.content[0] as { text: string }).text,
+    ).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 4. Explicit subagent delegation allows allowedTarget while still refusing otherTarget
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      allowedTarget.id,
+    );
+    await AgentToolModel.create(githubGateway.id, delegationTool.id);
+    const stillRefusedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: otherTarget.id, message: "Run non-allowlisted target" },
+      gatewayContext,
+    );
+    expect(stillRefusedResult.isError).toBe(true);
+    expect((stillRefusedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // allowedTarget passes the subagent check (and hits the runtime check since it has no runtime)
+    const allowedResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run allowlisted target" },
+      gatewayContext,
+    );
+    expect((allowedResult.content[0] as { text: string }).text).toContain(
+      `Agent "${allowedTarget.name}" has no Agent Runtime`,
+    );
+
+    // Removing the last delegation assignment refuses allowedTarget again instead of broadening access
+    await AgentToolModel.delete({
+      agentId: githubGateway.id,
+      toolId: delegationTool.id,
+    });
+    const afterRemovalResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run after removing delegation" },
+      gatewayContext,
+    );
+    expect(afterRemovalResult.isError).toBe(true);
+    expect((afterRemovalResult.content[0] as { text: string }).text).toContain(
+      `Agent "${allowedTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+    await AgentToolModel.create(githubGateway.id, delegationTool.id);
+
+    // 5. Non-allowlisted target's run, workspace, and credentials are also refused
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const otherTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: otherTarget.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: otherTask.id,
+      agentId: otherTarget.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `other-${otherTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const getOtherRunResult = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: otherTask.id },
+      gatewayContext,
+    );
+    expect(getOtherRunResult.isError).toBe(true);
+    expect((getOtherRunResult.content[0] as { text: string }).text).toContain(
+      "Run not found",
+    );
+
+    const deleteOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__delete_workspace",
+      { run_id: otherTask.id, confirm_delete: true },
+      gatewayContext,
+    );
+    expect(deleteOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (deleteOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const readOtherWorkspaceResult = await executeArchestraTool(
+      "archestra__read_workspace_file",
+      { run_id: otherTask.id, path: "notes.md" },
+      gatewayContext,
+    );
+    expect(readOtherWorkspaceResult.isError).toBe(true);
+    expect(
+      (readOtherWorkspaceResult.content[0] as { text: string }).text,
+    ).toContain("Saved run not found");
+
+    const listOtherRunsResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [otherTarget.id], mine_only: true },
+      gatewayContext,
+    );
+    expect(listOtherRunsResult.isError).toBe(true);
+    expect((listOtherRunsResult.content[0] as { text: string }).text).toContain(
+      `Agent "${otherTarget.name}" is not an allowed subagent of "${githubGateway.name}".`,
+    );
+
+    // 6. Cross-environment target is refused with Agent not found on both start_agent_run and list_agent_runs (even with accessAllSubagents=true)
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Isolated Env",
+      namespace: "isolated-ns",
+    });
+    await AgentModel.update(allowedTarget.id, {
+      environmentId: environment.id,
+    });
+    const crossEnvResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      { agent_id: allowedTarget.id, message: "Run cross-env target" },
+      gatewayContext,
+    );
+    expect(crossEnvResult.isError).toBe(true);
+    expect((crossEnvResult.content[0] as { text: string }).text).toContain(
+      "Agent not found",
+    );
+
+    const crossEnvListResult = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [allowedTarget.id], mine_only: true },
+      context,
+    );
+    expect(crossEnvListResult.isError).toBe(true);
+    expect((crossEnvListResult.content[0] as { text: string }).text).toContain(
+      "Agent not found",
+    );
+  });
+
   test("returns a setup link and every missing credential before starting a run", async ({
     makeAgent,
   }) => {
@@ -123,7 +368,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {
@@ -211,6 +455,7 @@ describe("run tools", () => {
       organizationId,
       authorId: actorId,
       agentType: "mcp_gateway",
+      accessAllSubagents: true,
     });
     const gatewayContext = {
       ...context,
@@ -294,6 +539,287 @@ describe("run tools", () => {
         })
       ).tasks,
     ).toEqual([]);
+  });
+
+  test("start_agent_run refuses limits above the Agent's before starting anything", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const target = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
+    // A caller outside any run hears the tiers it may use, so it can start
+    // the run within them.
+    for (const [limits, message] of [
+      [
+        { tier: "L" },
+        "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
+      ],
+      [
+        { max_duration_hours: 24 },
+        "maximum duration of 24 hours is above this Agent's 12",
+      ],
+    ] as const) {
+      const result = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { agent_id: target.id, message: "Review the change", limits },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toContain(message);
+    }
+
+    await seedAndAssignArchestraTools(target.id);
+    const fixedMRunFromSContext: ArchestraContext = {
+      ...context,
+      agent: { id: target.id, name: target.name },
+      agentId: target.id,
+      agentRuntimeTier: "S",
+    };
+    const scaleupFromSResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M",
+        limits: { tier: "M" },
+      },
+      fixedMRunFromSContext,
+    );
+    expect(scaleupFromSResult.isError).toBe(true);
+    expect((scaleupFromSResult.content[0] as { text: string }).text).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    // Resolving caller tier through runId and persisted runtimeLimits:
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const callerTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: target.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: callerTask.id,
+      agentId: target.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `test-${callerTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+    const runIdFromDbCallerContext: ArchestraContext = {
+      ...context,
+      agent: { id: target.id, name: target.name },
+      agentId: target.id,
+      runId: callerTask.id,
+    };
+    const scaleupViaDbLookupResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M via runId",
+        limits: { tier: "M" },
+      },
+      runIdFromDbCallerContext,
+    );
+    expect(scaleupViaDbLookupResult.isError).toBe(true);
+    expect(
+      (scaleupViaDbLookupResult.content[0] as { text: string }).text,
+    ).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    // A run recorded without a tier is still a run of this Agent: it hears
+    // that it cannot scale up, at the Agent's own tier.
+    const untieredTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: target.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: untieredTask.id,
+      agentId: target.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `test-${untieredTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      runtimeLimits: null,
+    });
+    const untieredResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from a run with no recorded tier",
+        limits: { tier: "L" },
+      },
+      { ...runIdFromDbCallerContext, runId: untieredTask.id },
+    );
+    expect(untieredResult.isError).toBe(true);
+    expect((untieredResult.content[0] as { text: string }).text).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    // Calling start_agent_run through the chat tool wrapper resolves the persisted tier via runId:
+    const chatStartRunTool = buildMcpGatewayTool({
+      mcpTool: {
+        name: TOOL_START_AGENT_RUN_FULL_NAME,
+        inputSchema: { type: "object" },
+      },
+      ctx: {
+        agentId: target.id,
+        agentName: target.name,
+        userId: actorId,
+        organizationId,
+        runId: callerTask.id,
+        modelAcceptsImageToolResults: false,
+        mcpGwToken: {
+          tokenValue: null,
+          tokenId: actorId,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+        },
+        repeatTracker: new ToolCallRepeatTracker(),
+      },
+    });
+    const chatScaleupResult = await chatStartRunTool.execute?.(
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M via chat path",
+        limits: { tier: "M" },
+      },
+      { toolCallId: "call-chat-scaleup-1", messages: [] },
+    );
+    const chatOutput =
+      typeof chatScaleupResult === "string"
+        ? chatScaleupResult
+        : ((chatScaleupResult as { content?: string })?.content ?? "");
+    expect(chatOutput).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+
+    const scaleupTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "S",
+        maxTier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const aboveScaleupResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: scaleupTarget.id,
+        message: "Review the change",
+        limits: { tier: "L" },
+      },
+      context,
+    );
+    expect(aboveScaleupResult.isError).toBe(true);
+    expect((aboveScaleupResult.content[0] as { text: string }).text).toContain(
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M",
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  test("a run moves its work to a larger run of its own Agent, up to the Agent's largest tier", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    // A lite worker: runs start at M and may ask for up to L.
+    const worker = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "M",
+        maxTier: "L",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    // Like the Lobster workers, it holds the run tools itself.
+    await seedAndAssignArchestraTools(worker.id);
+    // The launch itself is out of scope: stop right after the hand-off.
+    const sendMessage = vi
+      .spyOn(A2AManager.prototype, "sendMessage")
+      .mockRejectedValue(new Error("launch skipped in this test"));
+    // The caller is a run of that same Agent.
+    const fromWorker = {
+      ...context,
+      agent: { id: worker.id, name: worker.name },
+      agentId: worker.id,
+    };
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: worker.id,
+        message:
+          "Continue on branch feature/x at L: the build needs more memory",
+        limits: { tier: "L" },
+      },
+      fromWorker,
+    );
+    // It failed only in the stubbed launch, after every rule let it through.
+    expect((result.content[0] as { text: string }).text).toContain(
+      "while starting the run",
+    );
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0]).toMatchObject({
+      agentId: worker.id,
+      systemParams: { runtimeLimits: { tier: "L" } },
+    });
   });
 
   test("start_agent_run refuses an Agent without Agent Runtime and starts nothing", async ({

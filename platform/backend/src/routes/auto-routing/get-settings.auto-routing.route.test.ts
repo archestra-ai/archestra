@@ -33,6 +33,7 @@ describe("GET /api/auto-routing/settings", () => {
       enabled: false,
       budgetUsdPerDay: null,
       tiers: { fast: null, normal: null, smart: null },
+      routedAgentCount: 0,
       generation: 0,
       plannedGeneration: 0,
       status: {
@@ -62,8 +63,13 @@ describe("GET /api/auto-routing/settings", () => {
     expect(response.json().status.scorer).toBe("ready");
   });
 
-  test("reports the trio, the active plan, the last fit error and cold-start progress", async () => {
+  test("reports the trio, the routed agents, the active plan, the last fit error and cold-start progress", async ({
+    makeAgent,
+  }) => {
     const trio = await configureAutoRouting(ctx.organizationId);
+    // Counted: agents on the organization default. Not counted: the LLM Proxy configureAutoRouting created.
+    await makeAgent({ organizationId: ctx.organizationId, agentType: "agent" });
+    await makeAgent({ organizationId: ctx.organizationId, agentType: "agent" });
     const plan = await publishFittedPlan({
       organizationId: ctx.organizationId,
       trio,
@@ -105,6 +111,7 @@ describe("GET /api/auto-routing/settings", () => {
         },
         smart: { id: trio[2].id, provider: "openai", modelId: trio[2].modelId },
       },
+      routedAgentCount: 2,
       generation: 2,
       plannedGeneration: 2,
       status: {

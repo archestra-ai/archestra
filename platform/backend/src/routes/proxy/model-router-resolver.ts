@@ -10,6 +10,7 @@ import {
   ModelModel,
   ModelTeamModel,
 } from "@/models";
+import { classifyAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { ApiError, type Model } from "@/types";
 
 export type ModelRouterResolution = {
@@ -27,7 +28,7 @@ export type ModelRouterResolution = {
 
 export async function resolveModelRoute(params: {
   requestedModel: string;
-  capability?: "text-chat" | "embeddings";
+  capability?: "text-chat" | "embeddings" | "media";
   allowedProviders?: Set<SupportedProvider>;
   allowedApiKeyIds?: string[];
 }): Promise<ModelRouterResolution> {
@@ -44,7 +45,7 @@ export async function resolveModelRoute(params: {
     ) {
       throw new ApiError(
         400,
-        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the Model Router virtual key is not mapped to that provider.`,
+        `Model "${requestedModel}" is scoped to provider "${explicit.provider}", but the Unified Model API virtual key is not mapped to that provider.`,
       );
     }
 
@@ -60,7 +61,7 @@ export async function resolveModelRoute(params: {
   // Native clients such as Codex and Hermes expect the provider's own model
   // slug. A virtual key mapped to exactly one provider makes that slug just as
   // unambiguous as a qualified id while preserving strict routing for general
-  // multi-provider Model Router keys.
+  // multi-provider Unified Model API keys.
   if (params.allowedProviders?.size === 1) {
     const [provider] = params.allowedProviders;
     return resolveProviderModel({
@@ -111,7 +112,7 @@ export function sortRoutableModels(models: Model[]): Model[] {
 }
 
 /**
- * The models a Model Router caller may invoke through these provider keys, in
+ * The models a Unified Model API caller may invoke through these provider keys, in
  * the order GET /models lists them. Callers without a user identity (virtual
  * keys) see only organization-wide `use` grants, as at proxy time.
  */
@@ -120,18 +121,54 @@ export async function listRoutableModels(params: {
   providerApiKeyIds: string[];
   userId?: string;
   includeEmbeddings: boolean;
+  includeMedia?: boolean;
 }): Promise<Model[]> {
   const linkedModels =
     await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(
       params.providerApiKeyIds,
     );
+  const azureRows =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels(
+      params.providerApiKeyIds,
+    );
+  const azureRoutableIds = new Set(
+    azureRows
+      .filter((row) => {
+        if (row.model.ignored) return false;
+        const evidence = classifyAzureModelCapabilities(row);
+        if (evidence.status !== "known") return false;
+        return evidence.operations.some(
+          (operation) =>
+            operation === "chat" ||
+            operation === "responses" ||
+            (params.includeEmbeddings && operation === "embedding") ||
+            (params.includeMedia &&
+              [
+                "image-generation",
+                "image-edit",
+                "audio-speech",
+                "audio-transcription",
+                "audio-translation",
+              ].includes(operation)),
+        );
+      })
+      .map((row) => row.model.id),
+  );
   const candidateModels = linkedModels
     .map(({ model }) => model)
     .filter(
       (model) =>
         modelRouterSupportedProviders.has(model.provider) &&
-        (ModelModel.supportsTextChat(model) ||
-          (params.includeEmbeddings && ModelModel.supportsEmbeddings(model))),
+        (azureRoutableIds.has(model.id) ||
+          ModelModel.supportsTextChat(model) ||
+          (params.includeEmbeddings && ModelModel.supportsEmbeddings(model)) ||
+          (params.includeMedia &&
+            !model.ignored &&
+            ["openai", "gemini"].includes(model.provider) &&
+            (model.outputModalities?.includes("image") ||
+              (model.provider === "openai" &&
+                (model.inputModalities?.includes("audio") ||
+                  model.outputModalities?.includes("audio")))))),
     );
   const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
     modelIds: candidateModels.map((model) => model.id),
@@ -160,19 +197,32 @@ async function resolveProviderModel(params: {
   provider: SupportedProvider;
   modelId: string;
   requestedModel: string;
-  capability?: "text-chat" | "embeddings";
+  capability?: "text-chat" | "embeddings" | "media";
   allowedApiKeyIds?: string[];
 }): Promise<ModelRouterResolution> {
+  const mediaModel =
+    params.capability === "media" ||
+    (params.provider === "azure" && params.allowedApiKeyIds)
+      ? await ModelModel.findByProviderAndModelId(
+          params.provider,
+          params.modelId,
+        )
+      : null;
   const providerMatches =
-    params.capability === "embeddings"
-      ? await ModelModel.findEmbeddingModelsByModelId({
-          modelId: params.modelId,
-          provider: params.provider,
-        })
-      : await ModelModel.findTextChatModelsByModelId({
-          modelId: params.modelId,
-          provider: params.provider,
-        });
+    params.capability === "media" ||
+    (params.provider === "azure" && params.allowedApiKeyIds)
+      ? mediaModel && !mediaModel.ignored
+        ? [mediaModel]
+        : []
+      : params.capability === "embeddings"
+        ? await ModelModel.findEmbeddingModelsByModelId({
+            modelId: params.modelId,
+            provider: params.provider,
+          })
+        : await ModelModel.findTextChatModelsByModelId({
+            modelId: params.modelId,
+            provider: params.provider,
+          });
 
   const accessibleMatches = params.allowedApiKeyIds
     ? await filterModelsByLinkedApiKeys(

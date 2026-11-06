@@ -1,6 +1,11 @@
 import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
+import {
+  type ImageEditUploads,
+  imageEditUploadParts,
+  inlineMediaPart,
+} from "./media";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination
 type GeminiFunctionCallPart = {
@@ -281,13 +286,13 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
           input: part.functionCall.args || {},
         });
       } else if (hasInlineData(part) && part.inlineData) {
-        // Inline image/file data - convert base64 to data URL
-        const dataUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        parts.push({
-          type: "file",
-          mediaType: part.inlineData.mimeType,
-          url: dataUrl,
-        });
+        // Inline image/file data, or a placeholder when the log did not keep it
+        parts.push(
+          inlineMediaPart({
+            mediaType: part.inlineData.mimeType,
+            data: part.inlineData.data,
+          }),
+        );
       } else if (hasFileData(part) && part.fileData) {
         // File reference
         parts.push({
@@ -410,6 +415,18 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       } else {
         uiMessages.push(uiMessage);
       }
+    }
+
+    // An Images edit row logs its reference images as the edit's uploads, as
+    // every other provider's edit row does; they follow the prompt they were
+    // sent with. Older rows carry them as inline parts, mapped above.
+    const uploads = imageEditUploadParts(
+      (this.request as { input_files?: ImageEditUploads }).input_files,
+    );
+    if (uploads.length > 0) {
+      const turn = uiMessages.find((message) => message.role === "user");
+      if (turn) turn.parts.push(...uploads);
+      else uiMessages.unshift({ role: "user", parts: uploads });
     }
 
     return uiMessages;

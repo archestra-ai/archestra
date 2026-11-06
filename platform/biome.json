@@ -163,7 +163,45 @@
                   "./__arena__": "design-arena: do not commit",
                   "@/app/_parts/__arena__": "design-arena: do not commit",
                   "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
-                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/*.ee", "**/*.ee.ts", "**/*.ee.tsx"],
+                    "message": "Cannot import .ee.ts files from non-.ee.ts files. Enterprise Edition files should only be imported by other .ee.ts files. Use runtime conditional logic with config.enterpriseFeatures.core instead to avoid bundling enterprise code into OSS builds."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "frontend/**/*.ts",
+        "frontend/**/*.tsx",
+        "!**/*.ee.ts",
+        "!**/*.ee.tsx",
+        "!**/*.ee.test.ts",
+        "!**/*.ee.test.tsx",
+        "!**/*.ee.spec.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "./__arena__": "design-arena: do not commit",
+                  "@/app/_parts/__arena__": "design-arena: do not commit",
+                  "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "date-fns": "Import each function from its own module, for example `import { format } from \"date-fns/format\"`: the package root loads all of date-fns, about 0.6 s in every frontend test file.",
+                  "lodash-es": "Import each function from its own module, for example `import isEqual from \"lodash-es/isEqual\"`: the package root loads all of lodash.",
+                  "googleapis": "Import one API module, such as googleapis/build/src/apis/drive/v3.js, and auth classes from google-auth-library: the package root loads every Google API, about 100 MB in the server and 150 MB of declarations in each type check."
                 },
                 "patterns": [
                   {
@@ -195,7 +233,9 @@
                   "./__arena__": "design-arena: do not commit",
                   "@/app/_parts/__arena__": "design-arena: do not commit",
                   "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
-                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
+                  "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
+                  "date-fns": "Import each function from its own module, for example `import { format } from \"date-fns/format\"`: the package root loads all of date-fns, about 0.6 s in every frontend test file.",
+                  "lodash-es": "Import each function from its own module, for example `import isEqual from \"lodash-es/isEqual\"`: the package root loads all of lodash."
                 }
               }
             }

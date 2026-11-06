@@ -2,13 +2,41 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
+import {
+  detectResourceEnvelope,
+  frontendVitestResourceLimits,
+  reportMemoryKillsAtExit,
+} from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
+import { sharedBarrelImports } from "./vitest.shared-barrel";
 
 const isCI = process.env.CI === "true";
 const testFiles = partitionTestFiles();
+// A third of the cores locally (see frontendVitestResourceLimits). CI runs
+// on a dedicated high-RAM runner where the uncapped default is fine, so
+// there it keeps the 8 GiB heap ceiling and Vitest's own worker count; a
+// container with a memory limit is sized for the container either way.
+// Override with `--maxWorkers=<n|%>`.
+const envelope = detectResourceEnvelope();
+const { maxWorkers, maxOldSpaceMb } =
+  isCI && !envelope.constrained
+    ? { maxWorkers: undefined, maxOldSpaceMb: 8192 }
+    : frontendVitestResourceLimits(envelope);
+// A worker the kernel killed for memory shows up only as a worker that exited
+// unexpectedly; a failed run says so when the container's counters moved.
+reportMemoryKillsAtExit({
+  tool: "vitest",
+  subject: "the tests",
+  steps: [
+    `Run fewer test workers: add --maxWorkers=1${maxWorkers === undefined ? "" : ` (this run allowed ${maxWorkers})`}, or run one test file at a time.`,
+  ],
+});
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  plugins: [
+    sharedBarrelImports(path.resolve(__dirname, "../shared/index.ts")),
+    tsconfigPaths(),
+  ],
   resolve: {
     alias: {
       // Explicit absolute-path alias (tsconfigPaths also provides "@/", but
@@ -20,6 +48,10 @@ export default defineConfig({
         __dirname,
         "../shared/access-control.ts",
       ),
+      "@archestra/shared/api-sdk": path.resolve(
+        __dirname,
+        "../shared/hey-api/clients/api/sdk.gen.ts",
+      ),
       "@archestra/shared/api-error": path.resolve(
         __dirname,
         "../shared/api-error.ts",
@@ -27,6 +59,10 @@ export default defineConfig({
       "@archestra/shared/built-in-agents": path.resolve(
         __dirname,
         "../shared/built-in-agents.ts",
+      ),
+      "@archestra/shared/chatgpt-plugin": path.resolve(
+        __dirname,
+        "../shared/chatgpt-plugin.ts",
       ),
       "@archestra/shared/consts": path.resolve(
         __dirname,
@@ -61,20 +97,27 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
     testTimeout: 10_000,
-    // JSDOM-heavy frontend tests need a larger worker heap on Node 24.
+    // JSDOM-heavy frontend tests need a larger worker heap on Node 24; inside
+    // a container the heap ceiling is each fork's share of the container's
+    // memory, because the kernel kills the container before V8 would give up.
     pool: "forks",
-    execArgv: ["--max-old-space-size=8192"],
-    // Each fork is a separate process, so worker count multiplies memory. Cap
-    // to half the cores locally so this suite doesn't exhaust RAM when it runs
-    // alongside the shared/type-check/lint tasks under `turbo test`. CI runs on
-    // a dedicated high-RAM runner where the uncapped default is fine, so it's
-    // left alone. Override on a big local machine with `--maxWorkers=<n|%>`.
-    ...(isCI ? {} : { maxWorkers: "50%" }),
+    execArgv: [`--max-old-space-size=${maxOldSpaceMb}`],
+    // Each fork is a separate process, so worker count multiplies memory. The
+    // cap keeps this suite from exhausting RAM when it runs alongside the
+    // shared/type-check/lint tasks under `turbo test`, and from passing the
+    // limit of an Agent Runtime pod.
+    // Projects copy this value and ignore the CLI's, so a --maxWorkers flag
+    // has to win here.
+    ...(maxWorkers === undefined || cliSetsMaxWorkers() ? {} : { maxWorkers }),
     // Caps concurrent `test.concurrent` cases within a single file (plain
     // sequential test() is unaffected). Kept as a low guardrail so a future
     // concurrent suite can't pile jsdom work into one worker; worker count is
     // capped separately by maxWorkers above.
     maxConcurrency: 2,
+    // Keeps transformed modules on disk between local runs (keyed by file
+    // content and config), so a rerun transforms only what changed. CI starts
+    // from an empty cache, so it gains nothing there.
+    experimental: { fsModuleCache: !isCI },
     projects: [
       {
         extends: true,
@@ -88,21 +131,55 @@ export default defineConfig({
           unstubEnvs: true,
         },
       },
+      // Both jsdom projects reuse each worker's process and jsdom window
+      // across files: a fresh worker per file re-imported React, Testing
+      // Library and Radix and rebuilt jsdom, most of this suite's CPU.
+      // vitest-setup.ts puts the DOM, globals, timers and storage back
+      // between files.
       {
+        // Files with module mocks also get a fresh graph of the app's
+        // modules and mocks per file, as `isolate: true` gives them.
         extends: true,
         test: {
           name: "jsdom",
           include: testFiles.jsdom,
+          isolate: false,
+          env: {
+            ARCHESTRA_VITEST_SHARED_WINDOW: "true",
+            ARCHESTRA_VITEST_RESET_MODULES: "true",
+          },
+        },
+      },
+      {
+        // Files without module mocks keep the app's modules too.
+        extends: true,
+        test: {
+          name: "jsdom-shared",
+          include: testFiles.jsdomShared,
+          isolate: false,
+          env: { ARCHESTRA_VITEST_SHARED_WINDOW: "true" },
         },
       },
     ],
   },
 });
 
-function partitionTestFiles(): { node: string[]; jsdom: string[] } {
+/**
+ * Node-environment files share a worker and its modules, so they may not
+ * use module mocks. jsdom files with module mocks share a worker but not
+ * its app modules: a mock holds only when the mocked graph is imported
+ * again for each file.
+ */
+function partitionTestFiles(): {
+  node: string[];
+  jsdom: string[];
+  jsdomShared: string[];
+} {
   const node: string[] = [];
   const jsdom: string[] = [];
+  const jsdomShared: string[] = [];
   const root = path.resolve(__dirname, "src");
+  const moduleMock = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\s*\(/;
 
   for (const entry of readdirSync(root, {
     recursive: true,
@@ -113,17 +190,28 @@ function partitionTestFiles(): { node: string[]; jsdom: string[] } {
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
     const source = readFileSync(absolute, "utf8");
+    if (/\bvi\.(mock|doMock)\(\s*["']@archestra\/shared["']/.test(source)) {
+      throw new Error(
+        `${relative} mocks the @archestra/shared barrel, which no code imports under test (see vitest.shared-barrel.ts). Mock the module that defines the export instead, such as "@archestra/shared/api-sdk" for archestraApiSdk.`,
+      );
+    }
     if (source.startsWith("// @vitest-environment node")) {
-      if (/\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\s*\(/.test(source)) {
+      if (moduleMock.test(source)) {
         throw new Error(
           `${relative} cannot use module mocks in the shared-worker Node project`,
         );
       }
       node.push(relative);
-    } else {
+    } else if (moduleMock.test(source)) {
       jsdom.push(relative);
+    } else {
+      jsdomShared.push(relative);
     }
   }
 
-  return { node, jsdom };
+  return { node, jsdom, jsdomShared };
+}
+
+function cliSetsMaxWorkers(): boolean {
+  return process.argv.some((arg) => /^--max-?workers(=|$)/i.test(arg));
 }

@@ -1,6 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { HttpResponse, http } from "msw";
+import client from "prom-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -8,6 +9,8 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import { initializeLlmProxyMetrics } from "@/observability/metrics/llm-proxy";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { accessGrants, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -32,10 +35,11 @@ const poolTest = test.extend<{
   router: {
     app: FastifyInstanceWithZod;
     agentId: string;
+    organizationId: string;
     token: string;
     /** A virtual key in the same org that maps no member key and has no grant. */
     ungrantedToken: string;
-    /** A virtual key that maps a member's key, as a Connect key does. */
+    /** A virtual key that maps a member's key but wasn't given the pool. */
     memberKeyToken: string;
     poolId: string;
     zaiKeyId: string;
@@ -119,6 +123,7 @@ const poolTest = test.extend<{
       await use({
         app,
         agentId: agent.id,
+        organizationId: org.id,
         token: virtual.value,
         ungrantedToken: ungranted.value,
         memberKeyToken: memberKey.value,
@@ -184,7 +189,7 @@ poolTest(
 );
 
 poolTest(
-  "serves the pool to a virtual key that maps a member's key",
+  "keeps the pool from a virtual key that only maps a member's key",
   async ({ router }) => {
     server.use(
       http.post(`${zaiOrigin}/chat/completions`, () =>
@@ -209,15 +214,69 @@ poolTest(
       url: `/v1/model-router/${router.agentId}/models`,
       headers: { authorization: `Bearer ${router.memberKeyToken}` },
     });
-    expect(models.json().data[0]).toMatchObject({
-      id: "glm-5",
-      owned_by: "model-pool",
-    });
+    expect(models.statusCode, models.body).toBe(200);
+    expect(
+      models
+        .json()
+        .data.filter((m: { owned_by: string }) => m.owned_by === "model-pool"),
+    ).toEqual([]);
 
     const response = await router.app.inject({
       method: "POST",
       url: `/v1/model-router/${router.agentId}/chat/completions`,
       headers: { authorization: `Bearer ${router.memberKeyToken}` },
+      payload: {
+        model: "glm-5",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.headers["x-archestra-pool"]).toBeUndefined();
+  },
+);
+
+poolTest(
+  "serves a granted pool to a key that resolves to no provider key",
+  async ({ router }) => {
+    server.use(
+      http.post(`${zaiOrigin}/chat/completions`, () =>
+        HttpResponse.json({
+          id: "chatcmpl-1",
+          object: "chat.completion",
+          created: 1,
+          model: "glm-5",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 },
+        }),
+      ),
+    );
+    // Current and future providers, in an org whose keys aren't primaries:
+    // the key resolves to no provider key and only has the pool.
+    const automatic = await VirtualApiKeyModel.create({
+      organizationId: router.organizationId,
+      name: "Pool-only automatic key",
+      ...accessGrants("org"),
+      providerApiKeys: [],
+      includeFutureProviders: true,
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: router.organizationId,
+      virtualApiKeyId: automatic.virtualKey.id,
+      poolIds: [router.poolId],
+    });
+    expect(
+      await resolveVirtualKeyProviderMappings(automatic.virtualKey.id),
+    ).toEqual([]);
+
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/chat/completions`,
+      headers: { authorization: `Bearer ${automatic.value}` },
       payload: {
         model: "glm-5",
         messages: [{ role: "user", content: "hello" }],
@@ -232,6 +291,11 @@ for (const stream of [false, true]) {
   poolTest(
     `fails over from Z.ai to Bedrock by the pool's name (stream: ${stream})`,
     async ({ router }) => {
+      initializeLlmProxyMetrics();
+      const histogram = client.register.getSingleMetric(
+        "llm_proxy_request_duration_seconds",
+      ) as client.Histogram;
+      histogram.reset();
       let zaiCalls = 0;
       let bedrockModel: string | undefined;
       server.use(
@@ -289,6 +353,19 @@ for (const stream of [false, true]) {
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      const counts = (await histogram.get()).values.filter((value) =>
+        value.metricName?.endsWith("_count"),
+      );
+      expect(counts).toEqual([
+        expect.objectContaining({
+          value: 1,
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            outcome: "success",
+            stream: String(stream),
+          }),
+        }),
+      ]);
       expect(zaiCalls).toBeGreaterThan(0);
       expect(bedrockModel).toBe("zai.glm-5");
       expect(response.headers["x-archestra-pool"]).toBe("glm-5");

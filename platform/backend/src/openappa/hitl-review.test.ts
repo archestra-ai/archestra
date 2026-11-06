@@ -15,6 +15,7 @@ import {
   hitlReviewAskedInForm,
   peekHitlDecision,
   peekHitlRuling,
+  recordHitlAnswerNotRecorded,
   recordHitlReviewResult,
   recordHitlRuling,
   renewHitlReview,
@@ -148,7 +149,9 @@ test("keeps per-call review history after consuming live approval without reopen
   expect(await consumeHitlRuling({ session: active, offerId: "offer-1" })).toBe(
     "approve",
   );
-  expect(await getHitlReviewResult(lookup)).toBe("review_required");
+  expect(await getHitlReviewResult(lookup)).toEqual({
+    outcome: "review_required",
+  });
   expect(await getHitlReview(lookup)).toBeUndefined();
   expect(
     await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
@@ -187,7 +190,9 @@ test("historical status survives review expiry but cannot create an approval", a
     });
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
     expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_required",
+    });
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
       false,
     );
@@ -209,8 +214,10 @@ test.each([
     const lookup = { session: active, callId: "control-1", offerId: "offer-1" };
     await recordHitlReviewResult({ ...lookup, outcome });
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
-    expect(await getHitlReviewResult(lookup)).toBe(outcome);
-    expect(await getHitlReviewResult(lookup)).not.toBe("review_required");
+    expect(await getHitlReviewResult(lookup)).toEqual({ outcome: outcome });
+    expect(await getHitlReviewResult(lookup)).not.toEqual({
+      outcome: "review_required",
+    });
     expect(await getHitlReview(lookup)).toBeUndefined();
     expect(await consumeHitlRuling(lookup)).toBeUndefined();
     expect(
@@ -247,7 +254,9 @@ test("review history expires after thirty days without reviving an approval", as
     const recordedAt = Date.now();
     await recordHitlReviewResult({ ...lookup, outcome: "review_cancelled" });
     vi.setSystemTime(recordedAt + 30 * 24 * 60 * 60 * 1000 - 1);
-    expect(await getHitlReviewResult(lookup)).toBe("review_cancelled");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_cancelled",
+    });
     vi.setSystemTime(Date.now() + 2);
     expect(await getHitlReviewResult(lookup)).toBeUndefined();
     expect(await getHitlReview(lookup)).toBeUndefined();
@@ -271,7 +280,9 @@ test("an expired approval cannot be consumed or revived by review history", asyn
     });
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
-    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_required",
+    });
     expect(await consumeHitlRuling(lookup)).toBeUndefined();
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
       false,
@@ -360,6 +371,63 @@ test("asks Claude Code one line and previews the call in full", async () => {
   });
 });
 
+test("describes a call without a summary by its tool's first sentence", async () => {
+  const active = session("tool-description");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "archestra__delete_workspace",
+      arguments: JSON.stringify({ run_id: "run", confirm_delete: true }),
+      toolDescription:
+        "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available.",
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(asked?.question).toBe("Full review text.");
+  expect(asked?.shortQuestion).toBe(
+    "Approve the archestra__delete_workspace call?",
+  );
+  expect(asked?.callPreview).toBe(
+    [
+      "**archestra\\_\\_delete\\_workspace call**\n*Tool description: Permanently*\n*delete a retained runtime*\n*workspace and all of its files.*",
+      "```yaml\nrun_id: run\nconfirm_delete: true\n```",
+    ].join("\n\n"),
+  );
+});
+
+test("leaves a long tool description off the plain card and escapes an unsafe one", async () => {
+  const active = session("tool-description-limits");
+  const stage = async (offerId: string, toolDescription: string) => {
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId,
+        text: "Full review text.",
+        tool: "mcp/files/read",
+        arguments: JSON.stringify({ path: "notes.txt" }),
+        toolDescription,
+      },
+    });
+    return (
+      await getHitlAskUserArguments({ session: active, offerIds: [offerId] })
+    )?.callPreview;
+  };
+  const long = await stage(
+    "offer-long",
+    `Read ${"a long clause, ".repeat(20)}and finish.`,
+  );
+  expect(long).toBeDefined();
+  expect(long).not.toContain("Tool description");
+  const unsafe = await stage("offer-unsafe", "Read a file\u202e backwards.");
+  expect(unsafe).toContain("Tool description:");
+  expect(unsafe).not.toContain("\u202e");
+});
+
 test("shows a command in full under its description, wrapped to the pane", async () => {
   const command = "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF";
   const asked = await askedAbout("command-call", "Bash", {
@@ -388,6 +456,15 @@ test("wraps every line of a long command to the narrowest pane", async () => {
   expect(lines.length).toBeGreaterThan(2);
   expect(lines.every((line) => line.length <= 34)).toBe(true);
   expect(lines.join("\n").replace(/\n {4}/g, " ")).toBe(command);
+});
+
+test("never shows a credential header the reviewed command carries", async () => {
+  const secret = "tok_5c3f9a1e7b2d4c6a";
+  const asked = await askedAbout("credential-call", "Bash", {
+    command: `curl --header 'Authorization: Bearer ${secret}' https://example.test/api`,
+  });
+  expect(asked?.shortQuestion).toBe("Approve the Bash command?");
+  expect(JSON.stringify(asked)).not.toContain(secret);
 });
 
 test("shows a file write as the file's content", async () => {
@@ -1187,7 +1264,9 @@ test("an approval keeps its review context for as long as it can be spent", asyn
     expect(await consumeHitlRuling(lookup)).toBe("approve");
     expect(await consumeHitlRuling(lookup)).toBeUndefined();
     expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_required",
+    });
   } finally {
     vi.useRealTimers();
   }
@@ -1331,6 +1410,104 @@ test("a review that cannot be read fails the reader instead of reading as gone",
       offerIds: [lookup.offerId],
     }),
   ).rejects.toThrow("Not started");
+});
+
+describe("an answer that ruled nothing", () => {
+  const review = {
+    offerId: "offer-unrecorded",
+    text: "Review this call.",
+    tool: "mcp/example/write",
+    arguments: '{"value":1}',
+  };
+
+  test("a repeated review with no card issued since reports question_not_issued and grants nothing", async () => {
+    const active = session("no-card");
+    expect(
+      await stageHitlReview({ session: active, callId: "first", review }),
+    ).toEqual({ status: "staged" });
+    expect(
+      await stageHitlReview({ session: active, callId: "second", review }),
+    ).toEqual({
+      status: "staged",
+      lastAnswer: { reason: "question_not_issued" },
+    });
+    expect(
+      await getHitlReviewResult({
+        session: active,
+        callId: "second",
+        offerId: review.offerId,
+      }),
+    ).toEqual({
+      outcome: "answer_not_recorded",
+      reason: "question_not_issued",
+    });
+    expect(
+      await peekHitlDecision({ session: active, offerId: review.offerId }),
+    ).toBeUndefined();
+    expect(
+      await consumeHitlRuling({ session: active, offerId: review.offerId }),
+    ).toBeUndefined();
+  });
+
+  test("a card issued since the previous review leaves the repeated review open", async () => {
+    const active = session("card-issued");
+    await stageHitlReview({ session: active, review });
+    await renewHitlReview({ session: active, offerId: review.offerId });
+    expect(await stageHitlReview({ session: active, review })).toEqual({
+      status: "staged",
+    });
+  });
+
+  test("a dropped answer is reported once, and a newer card supersedes it", async () => {
+    const active = session("dropped");
+    await stageHitlReview({ session: active, review });
+    await renewHitlReview({ session: active, offerId: review.offerId });
+    await recordHitlAnswerNotRecorded({
+      session: active,
+      offerId: review.offerId,
+      reason: "stale_card",
+    });
+    expect(await stageHitlReview({ session: active, review })).toEqual({
+      status: "staged",
+      lastAnswer: { reason: "stale_card" },
+    });
+    expect(await stageHitlReview({ session: active, review })).toEqual({
+      status: "staged",
+      lastAnswer: { reason: "question_not_issued" },
+    });
+    await recordHitlAnswerNotRecorded({
+      session: active,
+      offerId: review.offerId,
+      reason: "review_expired",
+    });
+    await renewHitlReview({ session: active, offerId: review.offerId });
+    expect(await stageHitlReview({ session: active, review })).toEqual({
+      status: "staged",
+    });
+  });
+
+  test("a recorded approval still rules the repeated review", async () => {
+    const active = session("approved");
+    await stageHitlReview({ session: active, review });
+    await recordHitlAnswerNotRecorded({
+      session: active,
+      offerId: review.offerId,
+      reason: "record_failed",
+    });
+    expect(
+      await recordHitlRuling({
+        session: active,
+        offerId: review.offerId,
+        ruling: "approve",
+      }),
+    ).toBe(true);
+    expect(await stageHitlReview({ session: active, review })).toEqual({
+      status: "approve",
+    });
+    expect(
+      await consumeHitlRuling({ session: active, offerId: review.offerId }),
+    ).toBe("approve");
+  });
 });
 
 type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];

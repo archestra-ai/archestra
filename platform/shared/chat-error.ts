@@ -382,9 +382,8 @@ export enum ChatErrorCode {
    */
   UpstreamStalled = "upstream_stalled",
   /**
-   * Non-fatal notice: the turn produced a reply, but the model finished for a
-   * reason other than a clean stop (e.g. output limit reached), so the reply
-   * may be cut short. Rendered alongside the reply, not instead of it.
+   * The model stopped before completing a reply. Usually a non-fatal notice
+   * alongside partial content; also used when the output limit leaves no reply.
    */
   IncompleteResponse = "incomplete_response",
   /**
@@ -408,6 +407,10 @@ export enum ChatErrorCode {
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
+
+/** Curated guidance for an empty turn that exhausted its output budget. */
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model reached its output limit before producing a reply. Try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit.";
 
 /**
  * User-friendly error messages for each error code
@@ -455,7 +458,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.UpstreamStalled]:
     "The model stopped sending its reply and timed out. Retrying may help.",
   [ChatErrorCode.IncompleteResponse]:
-    "The model stopped before finishing this reply, so it may be incomplete.",
+    "The model stopped before completing a reply.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.ToolsUnsupported]:

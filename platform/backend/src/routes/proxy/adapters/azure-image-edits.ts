@@ -5,7 +5,10 @@ import { ApiError, Azure, type LLMProvider, type OpenAi } from "@/types";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { PROXY_BODY_LIMIT } from "../common";
 import { boundedMediaFetch } from "../utils/bounded-media-response";
-import type { ValidatedImageEditUploads } from "../utils/image-edit-input";
+import {
+  loggedUploadMetadata,
+  type ValidatedImageEditUploads,
+} from "../utils/image-edit-input";
 import { mediaProviderError } from "../utils/media-provider-error";
 import { azureAdapterFactory, getAzureClientForRequest } from "./azure";
 import { azureImagesAdapterFactory } from "./azure-images";
@@ -18,7 +21,7 @@ export type AzureImageEditRequest = z.infer<
 };
 type ImageResponse = z.infer<typeof Azure.API.ImageGenerationResponseSchema>;
 
-/** Binary inputs live only in this request's closure, never in interaction bodies. */
+/** The uploads live in this request's closure; only the log row keeps a copy. */
 export function createAzureImageEditAdapter(
   uploads: ValidatedImageEditUploads,
 ): LLMProvider<
@@ -32,6 +35,10 @@ export function createAzureImageEditAdapter(
     ...azureImagesAdapterFactory,
     unavailableUsageAccounting: true,
     recordRequestDurationInHandler: true,
+    toLoggedRequest: (request: AzureImageEditRequest) => ({
+      ...request,
+      input_files: loggedUploadMetadata(uploads),
+    }),
     createClient(apiKey, options) {
       // The generic fetch observer logs raw provider error bodies. Keep media
       // failures private and let handleLLMProxy record the request duration.
@@ -52,16 +59,7 @@ export function createAzureImageEditAdapter(
         openai: client.openai.withOptions({ fetch: mediaFetch }),
       };
     },
-    createResponseAdapter(response) {
-      const adapter = azureImagesAdapterFactory.createResponseAdapter(response);
-      const measured = adapter.getUsage.bind(adapter);
-      adapter.getUsage = () => ({
-        ...measured(),
-        costUnavailable: true,
-        ...(!response.usage && { usageUnavailable: true }),
-      });
-      return adapter;
-    },
+
     async execute(client, request) {
       const {
         input_files: _inputFiles,

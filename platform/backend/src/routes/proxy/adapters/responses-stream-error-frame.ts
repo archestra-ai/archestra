@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { StreamErrorFrameContext } from "@/types/llm-provider";
 import { asRecord } from "@/utils/as-record";
+import { toSse } from "./responses-tool-call-rewrite";
 
 /**
  * Mid-stream error framing for the OpenAI Responses transport.
@@ -57,7 +58,7 @@ export function formatResponsesStreamErrorFrame(
   // synthetic events are.
   const sequenceNumber = Date.now();
 
-  const errorFrame = `data: ${JSON.stringify({
+  const errorFrame = toSse({
     type: "error",
     sequence_number: sequenceNumber,
     error,
@@ -66,10 +67,10 @@ export function formatResponsesStreamErrorFrame(
     code,
     message,
     param,
-  })}\n\n`;
+  });
   if (context.terminalSent) return errorFrame;
 
-  return `${errorFrame}data: ${JSON.stringify({
+  return `${errorFrame}${toSse({
     type: "response.failed",
     sequence_number: sequenceNumber + 1,
     response: {
@@ -83,7 +84,7 @@ export function formatResponsesStreamErrorFrame(
       incomplete_details: null,
       usage: null,
     },
-  })}\n\n`;
+  })}`;
 }
 
 /**

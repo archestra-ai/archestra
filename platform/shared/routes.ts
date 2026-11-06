@@ -1,4 +1,8 @@
 export const RouteId = {
+  ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
+  SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
   AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
   AzureAudioTranscriptionsWithDefaultAgent:
@@ -257,14 +261,25 @@ export const RouteId = {
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
 
-  // Interaction Routes
+  // Legacy interaction route IDs remain for backwards-compatible URLs.
   GetInteractions: "getInteractions",
   GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
+  GetInteractionAutoRouting: "getInteractionAutoRouting",
   GetInteractionSessions: "getInteractionSessions",
   GetInteractionSessionLineage: "getInteractionSessionLineage",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
+
+  // LLM Proxy Logs
+  GetLlmProxyLogs: "getLlmProxyLogs",
+  GetLlmProxyLogSummaries: "getLlmProxyLogSummaries",
+  GetLlmProxyLog: "getLlmProxyLog",
+  GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
+  GetLlmProxyLogSessions: "getLlmProxyLogSessions",
+  GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
+  GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
@@ -281,6 +296,10 @@ export const RouteId = {
   OpenAiResponsesCompactWithAgent: "openAiResponsesCompactWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiImagesWithDefaultAgent: "openAiImagesWithDefaultAgent",
+  OpenAiImagesWithAgent: "openAiImagesWithAgent",
+  OpenAiImageEditsWithDefaultAgent: "openAiImageEditsWithDefaultAgent",
+  OpenAiImageEditsWithAgent: "openAiImageEditsWithAgent",
   OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
   OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
@@ -296,6 +315,22 @@ export const RouteId = {
   ModelRouterEmbeddingsWithDefaultAgent:
     "modelRouterEmbeddingsWithDefaultAgent",
   ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
+  ModelRouterImagesWithDefaultAgent: "modelRouterImagesWithDefaultAgent",
+  ModelRouterImagesWithAgent: "modelRouterImagesWithAgent",
+  ModelRouterImageEditsWithDefaultAgent:
+    "modelRouterImageEditsWithDefaultAgent",
+  ModelRouterImageEditsWithAgent: "modelRouterImageEditsWithAgent",
+  ModelRouterAudioSpeechWithDefaultAgent:
+    "modelRouterAudioSpeechWithDefaultAgent",
+  ModelRouterAudioSpeechWithAgent: "modelRouterAudioSpeechWithAgent",
+  ModelRouterAudioTranscriptionsWithDefaultAgent:
+    "modelRouterAudioTranscriptionsWithDefaultAgent",
+  ModelRouterAudioTranscriptionsWithAgent:
+    "modelRouterAudioTranscriptionsWithAgent",
+  ModelRouterAudioTranslationsWithDefaultAgent:
+    "modelRouterAudioTranslationsWithDefaultAgent",
+  ModelRouterAudioTranslationsWithAgent:
+    "modelRouterAudioTranslationsWithAgent",
 
   // Proxy Routes - Gemini
   GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",
@@ -602,6 +637,9 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  BulkDeleteAgentRuns: "bulkDeleteAgentRuns",
+  BulkCancelAgentRuns: "bulkCancelAgentRuns",
+  BulkDeleteAgentWorkspaces: "bulkDeleteAgentWorkspaces",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -652,6 +690,7 @@ export const RouteId = {
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  DeleteModel: "deleteModel",
   PreviewModelCostBackfill: "previewModelCostBackfill",
   StartModelCostBackfill: "startModelCostBackfill",
   GetModelCostBackfill: "getModelCostBackfill",
@@ -684,6 +723,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
+  GetOrganizationDefaultModel: "getOrganizationDefaultModel",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
@@ -706,6 +746,7 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetAgentRuntimeTiers: "getAgentRuntimeTiers",
 
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",
@@ -785,6 +826,8 @@ export const RouteId = {
 
   // Statistics Routes
   GetTeamStatistics: "getTeamStatistics",
+  GetModelUsage: "getModelUsage",
+  GetMyModelUsage: "getMyModelUsage",
   GetProxyCostStatistics: "getProxyCostStatistics",
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
@@ -799,6 +842,7 @@ export const RouteId = {
   GetMcpToolCallUsage: "getMcpToolCallUsage",
   GetAppUsage: "getAppUsage",
   GetSkillUsage: "getSkillUsage",
+  GetLlmUsage: "getLlmUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",

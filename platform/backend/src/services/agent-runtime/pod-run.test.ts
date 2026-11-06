@@ -19,7 +19,21 @@ describe("resolveAgentRuntime", () => {
       organizationId: "organization-1",
       environmentId: "environment-1",
       secretId: "secret-1",
+      agentNetworkPolicy: null,
     });
+  });
+
+  test("carries the Agent's own network policy to its launch", () => {
+    const policy = {
+      egressMode: "off" as const,
+      domainPreset: "none" as const,
+      allowedDomains: [],
+      allowedCidrs: [],
+    };
+    expect(
+      resolveAgentRuntime({ ...agentWithRuntime, networkPolicy: policy })
+        ?.agentNetworkPolicy,
+    ).toEqual(policy);
   });
 
   test("launches a maintained image saved on an older release with this deployment's tag", () => {
@@ -40,7 +54,6 @@ const runtime = {
   backend: "kubernetes",
   steerMode: "pipe",
   privileged: false,
-  resources: null,
   environment: null,
   credentials: null,
   ttlHours: null,

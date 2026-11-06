@@ -469,6 +469,21 @@ export type OpenAiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2190,6 +2205,21 @@ export type CerebrasChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -2831,6 +2861,21 @@ export type MistralChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -3350,6 +3395,21 @@ export type PerplexityChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -3874,6 +3934,21 @@ export type GroqChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4392,6 +4467,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -4413,10 +4492,6 @@ export type OpenrouterChatCompletionRequestInput = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -5947,6 +6022,21 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -6467,6 +6557,21 @@ export type ArchestraChatCompletionRequestInput = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -7558,6 +7663,21 @@ export type XaiChatCompletionRequestInput = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -8146,6 +8266,21 @@ export type OpenAiChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -9869,6 +10004,21 @@ export type CerebrasChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -10510,6 +10660,21 @@ export type MistralChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -11029,6 +11194,21 @@ export type PerplexityChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -11553,6 +11733,21 @@ export type GroqChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12071,6 +12266,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text' | 'json_object' | 'json_schema';
+        [key: string]: unknown;
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -12092,10 +12291,6 @@ export type OpenrouterChatCompletionRequest = {
         include_usage?: boolean;
     } | null;
     user?: string;
-    response_format?: {
-        type: 'text' | 'json_object' | 'json_schema';
-        [key: string]: unknown;
-    };
     reasoning?: {
         enabled?: boolean;
         effort?: string;
@@ -13626,6 +13821,21 @@ export type DeepSeekChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -14146,6 +14356,21 @@ export type ArchestraChatCompletionRequest = {
                     syntax: 'lark' | 'regex';
                 };
             };
+        };
+    };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
         };
     };
     temperature?: number | null;
@@ -15237,6 +15462,21 @@ export type XaiChatCompletionRequest = {
             };
         };
     };
+    response_format?: {
+        type: 'text';
+    } | {
+        type: 'json_object';
+    } | {
+        type: 'json_schema';
+        json_schema: {
+            name: string;
+            description?: string;
+            schema?: {
+                [key: string]: unknown;
+            };
+            strict?: boolean | null;
+        };
+    };
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
@@ -15932,6 +16172,9 @@ export type CreateA2aRemoteAgentData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -16832,7 +17075,7 @@ export type GetAgentCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -16845,13 +17088,14 @@ export type GetAgentCatalogData = {
         selectableOnly?: boolean;
         labels?: string;
         status?: 'active' | 'deleted';
+        runtime?: 'chat' | 'custom' | 'claude-code' | 'codex' | 'opencode' | 'hermes' | 'openclaw' | 'grok' | 'kimi' | 'copilot';
         providerApiKeyId?: string | 'organization-default';
         /**
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
          */
         pinned?: boolean;
         /**
-         * Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include each internal agent's assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         limit?: number;
@@ -16958,10 +17202,14 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -16969,12 +17217,8 @@ export type GetAgentCatalogResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17013,6 +17257,15 @@ export type GetAgentCatalogResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -17021,6 +17274,8 @@ export type GetAgentCatalogResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -17206,7 +17461,7 @@ export type GetAgentsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -17238,7 +17493,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need agents or their counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned.
          */
         includeTools?: boolean;
         /**
@@ -17347,10 +17602,14 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -17358,12 +17617,8 @@ export type GetAgentsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17402,6 +17657,15 @@ export type GetAgentsResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -17410,6 +17674,8 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -17503,10 +17769,14 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -17514,12 +17784,8 @@ export type CreateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17547,6 +17813,15 @@ export type CreateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -17555,6 +17830,8 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -17659,6 +17936,9 @@ export type CreateAgentData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -17771,10 +18051,14 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -17782,12 +18066,8 @@ export type CreateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17826,6 +18106,15 @@ export type CreateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -17834,6 +18123,8 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -18168,6 +18459,8 @@ export type GetChatAgentRosterResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         runtime: {
             image: string;
@@ -18176,12 +18469,8 @@ export type GetChatAgentRosterResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18207,6 +18496,7 @@ export type GetChatAgentRosterResponses = {
         modelId: string | null;
         llmApiKeyId: string | null;
         modelPoolId: string | null;
+        sharedByName: boolean;
     }>;
 };
 
@@ -18315,6 +18605,8 @@ export type GetChatAgentRosterPageResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -18323,12 +18615,8 @@ export type GetChatAgentRosterPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18354,6 +18642,7 @@ export type GetChatAgentRosterPageResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            sharedByName: boolean;
         }>;
         pagination: {
             limit: number;
@@ -18491,12 +18780,8 @@ export type GetAgentOptionsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18677,12 +18962,8 @@ export type GetAgentOptionsPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18945,7 +19226,7 @@ export type GetDefaultMcpGatewayData = {
     path?: never;
     query?: {
         /**
-         * Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.
+         * Include assigned tools (default: true). Set `includeTools=false` for a smaller response when you only need the gateway or its counts. `toolsCount` and `subagentsCount` remain available; an empty `tools` array then means tools were omitted, not that none are assigned. `sandboxAvailable` is omitted too.
          */
         includeTools?: boolean;
     };
@@ -19045,10 +19326,14 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19056,12 +19341,8 @@ export type GetDefaultMcpGatewayResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19100,6 +19381,15 @@ export type GetDefaultMcpGatewayResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19108,6 +19398,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19353,10 +19645,14 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy?: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
             runtime: {
                 image: string;
                 command: Array<string> | null;
@@ -19364,12 +19660,8 @@ export type ImportAgentResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19408,6 +19700,15 @@ export type ImportAgentResponses = {
             activationSkillMode: 'all' | 'manual';
             activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
+            subagentLoadBalancing?: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             builtInAgentConfig: {
                 name: 'openappa-configuration-agent';
             } | {
@@ -19416,6 +19717,8 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -19670,10 +19973,14 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19681,12 +19988,8 @@ export type GetAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19725,6 +20028,15 @@ export type GetAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19733,6 +20045,8 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19808,10 +20122,14 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
         runtime?: {
             image: string;
             command: Array<string> | null;
@@ -19819,12 +20137,8 @@ export type UpdateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19859,6 +20173,15 @@ export type UpdateAgentData = {
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
+        subagentLoadBalancing?: {
+            enabled?: boolean;
+            algorithm?: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries?: number;
+            fallbackEnabled?: boolean;
+        } | null;
         builtInAgentConfig?: {
             name: 'openappa-configuration-agent';
         } | {
@@ -19867,6 +20190,8 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -19985,10 +20310,14 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -19996,12 +20325,8 @@ export type UpdateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20040,6 +20365,15 @@ export type UpdateAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20048,6 +20382,8 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20406,14 +20742,6 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
-            fastModel: {
-                id: string;
-                externalId: string;
-            } | null;
-            smartModel: {
-                id: string;
-                externalId: string;
-            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -20421,6 +20749,21 @@ export type GetAgentVersionResponses = {
             } | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
+            subagentLoadBalancing: {
+                enabled: boolean;
+                algorithm: 'round_robin' | 'weighted' | 'random';
+                weights?: {
+                    [key: string]: number;
+                };
+                retries: number;
+                fallbackEnabled: boolean;
+            } | null;
             tools: Array<{
                 toolId: string;
                 name: string;
@@ -20576,10 +20919,14 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20587,12 +20934,8 @@ export type RestoreAgentVersionResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20631,6 +20974,15 @@ export type RestoreAgentVersionResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20639,6 +20991,8 @@ export type RestoreAgentVersionResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -20708,6 +21062,9 @@ export type CloneAgentData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -20822,10 +21179,14 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -20833,12 +21194,8 @@ export type CloneAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20877,6 +21234,15 @@ export type CloneAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -20885,6 +21251,8 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -23307,10 +23675,14 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        networkPolicy?: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
         runtime: {
             image: string;
             command: Array<string> | null;
@@ -23318,12 +23690,8 @@ export type RestoreAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23362,6 +23730,15 @@ export type RestoreAgentResponses = {
         activationSkillMode: 'all' | 'manual';
         activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
+        subagentLoadBalancing?: {
+            enabled: boolean;
+            algorithm: 'round_robin' | 'weighted' | 'random';
+            weights?: {
+                [key: string]: number;
+            };
+            retries: number;
+            fallbackEnabled: boolean;
+        } | null;
         builtInAgentConfig: {
             name: 'openappa-configuration-agent';
         } | {
@@ -23370,6 +23747,8 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'sre-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -24980,6 +25359,16 @@ export type GetAgentRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -24995,7 +25384,12 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         initiatorName: string | null;
+        workspace: {
+            state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
+            expiresAt: string;
+        } | null;
         canAttach?: boolean;
         shareVisibility: 'organization' | 'team' | 'user' | null;
         /**
@@ -25020,6 +25414,14 @@ export type StartAgentRunData = {
             contentType: string;
             contentBase64: string;
         }>;
+        limits?: {
+            tier?: string;
+            minCpu?: number;
+            minMemoryGib?: number;
+            idleTimeoutMinutes?: number;
+            maxDurationHours?: number;
+            maxCostUsd?: number;
+        };
     };
     path: {
         id: string;
@@ -25109,6 +25511,16 @@ export type StartAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
     };
 };
 
@@ -25214,6 +25626,16 @@ export type GetMyAgentRunsResponses = {
             workloadName: string;
             backend: 'kubernetes';
             runtimeScope: string;
+            runtimeLimits: {
+                tier: string | null;
+                idleTimeoutMinutes: number;
+                maxDurationHours: number;
+                maxCostUsd: number | null;
+                /**
+                 * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+                 */
+                workspaceGiB?: number;
+            } | null;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
             gatewayTokenId: string | null;
@@ -25230,6 +25652,10 @@ export type GetMyAgentRunsResponses = {
             hardDeadlineAt: string;
             lastModelActivityAt: string | null;
             sessionId: string;
+            /**
+             * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+             */
+            llmSessionId: string;
             prompt: string;
             agent: {
                 id: string;
@@ -25436,6 +25862,16 @@ export type GetMyAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25452,6 +25888,10 @@ export type GetMyAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25583,6 +26023,16 @@ export type UpdateAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25599,6 +26049,10 @@ export type UpdateAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25709,6 +26163,16 @@ export type ContinueAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
     };
 };
 
@@ -25802,6 +26266,306 @@ export type CancelAgentRunResponses = {
 };
 
 export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
+
+export type BulkDeleteAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk';
+};
+
+export type BulkDeleteAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentRunsError = BulkDeleteAgentRunsErrors[keyof BulkDeleteAgentRunsErrors];
+
+export type BulkDeleteAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentRunsResponse = BulkDeleteAgentRunsResponses[keyof BulkDeleteAgentRunsResponses];
+
+export type BulkDeleteAgentWorkspacesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk/workspace';
+};
+
+export type BulkDeleteAgentWorkspacesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteAgentWorkspacesError = BulkDeleteAgentWorkspacesErrors[keyof BulkDeleteAgentWorkspacesErrors];
+
+export type BulkDeleteAgentWorkspacesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteAgentWorkspacesResponse = BulkDeleteAgentWorkspacesResponses[keyof BulkDeleteAgentWorkspacesResponses];
+
+export type BulkCancelAgentRunsData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runs/bulk-cancel';
+};
+
+export type BulkCancelAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkCancelAgentRunsError = BulkCancelAgentRunsErrors[keyof BulkCancelAgentRunsErrors];
+
+export type BulkCancelAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkCancelAgentRunsResponse = BulkCancelAgentRunsResponses[keyof BulkCancelAgentRunsResponses];
 
 export type StartAgentWorkspaceTransferData = {
     body: {
@@ -26011,6 +26775,615 @@ export type UploadAgentWorkspaceTransferResponses = {
 };
 
 export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
+
+export type ListAgentRuntimeTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates';
+};
+
+export type ListAgentRuntimeTemplatesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListAgentRuntimeTemplatesError = ListAgentRuntimeTemplatesErrors[keyof ListAgentRuntimeTemplatesErrors];
+
+export type ListAgentRuntimeTemplatesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        image: string;
+    }>;
+};
+
+export type ListAgentRuntimeTemplatesResponse = ListAgentRuntimeTemplatesResponses[keyof ListAgentRuntimeTemplatesResponses];
+
+export type GetRuntimeTemplateSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type GetRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRuntimeTemplateSettingsError = GetRuntimeTemplateSettingsErrors[keyof GetRuntimeTemplateSettingsErrors];
+
+export type GetRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type GetRuntimeTemplateSettingsResponse = GetRuntimeTemplateSettingsResponses[keyof GetRuntimeTemplateSettingsResponses];
+
+export type SaveRuntimeTemplateSettingsData = {
+    body: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type SaveRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SaveRuntimeTemplateSettingsError = SaveRuntimeTemplateSettingsErrors[keyof SaveRuntimeTemplateSettingsErrors];
+
+export type SaveRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                tier?: string | null;
+                maxTier?: string | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type SaveRuntimeTemplateSettingsResponse = SaveRuntimeTemplateSettingsResponses[keyof SaveRuntimeTemplateSettingsResponses];
+
+export type GetAgentRuntimeTemplateData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}';
+};
+
+export type GetAgentRuntimeTemplateErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateError = GetAgentRuntimeTemplateErrors[keyof GetAgentRuntimeTemplateErrors];
+
+export type GetAgentRuntimeTemplateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        runtime: {
+            image: string;
+            command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            backend: 'kubernetes';
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: false;
+            tier?: string | null;
+            maxTier?: string | null;
+            ports?: Array<number>;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                credentialId?: string;
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
+            ttlHours: number | null;
+            maxCostUsd: number | null;
+            idleTimeoutMinutes: number | null;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateResponse = GetAgentRuntimeTemplateResponses[keyof GetAgentRuntimeTemplateResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -28251,7 +29624,7 @@ export type GetAppsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -28429,6 +29802,9 @@ export type CreateAppData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -31857,7 +33233,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -31964,7 +33340,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -32189,7 +33565,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.bulk_canceled' | 'agentRun.bulk_deleted' | 'agentRun.bulk_files_deleted' | 'agentRun.reviewDecided' | 'agentRun.terminal_attached' | 'agentRun.terminal_detached' | 'agentRun.terminal_interrupted' | 'agentRun.shared' | 'agentRun.unshared' | 'browserStorageState.deleted' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.reset' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.deleted' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmModel.cost_backfill_started' | 'modelPool.created' | 'modelPool.updated' | 'modelPool.deleted' | 'oauthClient.created' | 'oauthClient.updated' | 'oauthClient.deleted' | 'oauthClient.rotated' | 'oauthClient.bulk_deleted' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'user.password_reset' | 'userToken.rotated' | 'userLimitUsage.reset' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -32587,6 +33963,7 @@ export type GetAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -32611,9 +33988,6 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
-        fastModelId?: string;
-        normalModelId?: string;
-        smartModelId?: string;
     };
     path?: never;
     query?: never;
@@ -32712,6 +34086,7 @@ export type UpdateAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33071,6 +34446,7 @@ export type ReplanAutoRoutingResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33108,6 +34484,14 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
+    } | {
+        /**
+         * An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.
+         */
+        request: {
+            [key: string]: unknown;
+        };
+        client?: string;
     };
     path?: never;
     query?: never;
@@ -35700,6 +37084,21 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -36317,6 +37716,21 @@ export type AzureRealtimeTurnWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -41088,7 +42502,7 @@ export type GetBootstrapResponses = {
      */
     200: {
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         scopedCapabilities: Array<{
             organizationId: string;
@@ -41116,6 +42530,7 @@ export type GetBootstrapResponses = {
             playwrightMcpEnabled: boolean;
             allowChatFileUploads: boolean;
             allowUnauthenticatedLlmProxyRequests: boolean;
+            keepMediaInLogs: boolean;
             allowToolAutoAssignment: boolean;
             embeddingModel: string | null;
             embeddingDimensions: EmbeddingDimensions | null;
@@ -41219,6 +42634,9 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            agentRuntimeTiers: {
+                [key: string]: unknown;
+            } | null;
             defaultEnvironmentValidationRegex: string | null;
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
@@ -41255,11 +42673,6 @@ export type GetBootstrapResponses = {
                     defaultTtlHours: number;
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
-                    resources: {
-                        cpuRequest: string;
-                        memoryRequest: string;
-                        memoryLimit: string;
-                    };
                 };
                 plugins: boolean;
                 sandboxArtifactBytesLimit: number;
@@ -41455,6 +42868,8 @@ export type GetNewChatBootstrapResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'sre-agent';
             } | null;
             runtime: {
                 image: string;
@@ -41463,12 +42878,8 @@ export type GetNewChatBootstrapResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                resources: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -41494,6 +42905,7 @@ export type GetNewChatBootstrapResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            sharedByName: boolean;
         }>;
         apiKeys: Array<{
             id: string;
@@ -41598,6 +43010,17 @@ export type GetNewChatBootstrapResponses = {
                 pricePerMillionCacheRead: string | null;
                 pricePerMillionCacheWrite: string | null;
                 cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                mediaPricing: {
+                    per: 'million_tokens' | 'million_characters' | 'minute';
+                    input: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                    output: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                } | null;
             };
             isBest?: boolean;
             isFree: boolean;
@@ -41628,10 +43051,14 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
+                networkPolicy?: {
+                    egressMode: 'off' | 'restricted' | 'unrestricted';
+                    domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                    allowedDomains: Array<string>;
+                    allowedCidrs: Array<string>;
+                } | null;
                 runtime: {
                     image: string;
                     command: Array<string> | null;
@@ -41639,12 +43066,8 @@ export type GetNewChatBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -41683,6 +43106,15 @@ export type GetNewChatBootstrapResponses = {
                 activationSkillMode: 'all' | 'manual';
                 activationSkillPolicyRevision: number;
                 accessAllSubagents: boolean;
+                subagentLoadBalancing?: {
+                    enabled: boolean;
+                    algorithm: 'round_robin' | 'weighted' | 'random';
+                    weights?: {
+                        [key: string]: number;
+                    };
+                    retries: number;
+                    fallbackEnabled: boolean;
+                } | null;
                 builtInAgentConfig: {
                     name: 'openappa-configuration-agent';
                 } | {
@@ -41691,6 +43123,8 @@ export type GetNewChatBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -41818,6 +43252,17 @@ export type GetNewChatBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42016,6 +43461,8 @@ export type GetConversationBootstrapResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
+                } | {
+                    name: 'sre-agent';
                 } | null;
                 runtime: {
                     image: string;
@@ -42024,12 +43471,8 @@ export type GetConversationBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    resources: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42055,6 +43498,7 @@ export type GetConversationBootstrapResponses = {
                 modelId: string | null;
                 llmApiKeyId: string | null;
                 modelPoolId: string | null;
+                sharedByName: boolean;
             }>;
             apiKeys: Array<{
                 id: string;
@@ -42159,6 +43603,17 @@ export type GetConversationBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42189,10 +43644,14 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
-                    fastModelId: string | null;
-                    smartModelId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
+                    networkPolicy?: {
+                        egressMode: 'off' | 'restricted' | 'unrestricted';
+                        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                        allowedDomains: Array<string>;
+                        allowedCidrs: Array<string>;
+                    } | null;
                     runtime: {
                         image: string;
                         command: Array<string> | null;
@@ -42200,12 +43659,8 @@ export type GetConversationBootstrapResponses = {
                         backend: 'kubernetes';
                         steerMode: 'pipe' | 'tmux_keys';
                         privileged: boolean;
-                        resources: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
+                        tier?: string | null;
+                        maxTier?: string | null;
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;
@@ -42244,6 +43699,15 @@ export type GetConversationBootstrapResponses = {
                     activationSkillMode: 'all' | 'manual';
                     activationSkillPolicyRevision: number;
                     accessAllSubagents: boolean;
+                    subagentLoadBalancing?: {
+                        enabled: boolean;
+                        algorithm: 'round_robin' | 'weighted' | 'random';
+                        weights?: {
+                            [key: string]: number;
+                        };
+                        retries: number;
+                        fallbackEnabled: boolean;
+                    } | null;
                     builtInAgentConfig: {
                         name: 'openappa-configuration-agent';
                     } | {
@@ -42252,6 +43716,8 @@ export type GetConversationBootstrapResponses = {
                         name: 'chat-title-generation-subagent';
                     } | {
                         name: 'app-runtime-llm-agent';
+                    } | {
+                        name: 'sre-agent';
                     } | null;
                     builtIn: boolean | null;
                     latestVersion: number;
@@ -42379,6 +43845,17 @@ export type GetConversationBootstrapResponses = {
                         pricePerMillionCacheRead: string | null;
                         pricePerMillionCacheWrite: string | null;
                         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                        mediaPricing: {
+                            per: 'million_tokens' | 'million_characters' | 'minute';
+                            input: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                            output: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                        } | null;
                     };
                     isBest?: boolean;
                     isFree: boolean;
@@ -50320,7 +51797,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway?: string;
@@ -50586,7 +52063,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway: string | null;
@@ -50687,7 +52164,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -50960,11 +52437,6 @@ export type GetConfigResponses = {
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
-                resources: {
-                    cpuRequest: string;
-                    memoryRequest: string;
-                    memoryLimit: string;
-                };
             };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
@@ -51600,6 +53072,7 @@ export type RenderStartupGuardData = {
                 marketplaceName: string;
                 cloneUrl: 'ARCH_GUARD_PRIVATE_CLONE_URL';
                 hasSkills?: boolean;
+                connectionPlugin?: boolean;
                 pluginNames?: Array<string>;
             } | null;
         };
@@ -51960,6 +53433,7 @@ export type GetConnectionHealthResponses = {
         mcp?: 'ok' | 'down';
         llm?: 'ok' | 'down';
         guardVersion: number;
+        mcpToolPrefix: string;
     };
 };
 
@@ -51967,7 +53441,7 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
@@ -51975,6 +53449,7 @@ export type CreateConnectionSetupData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
+        providerApiKeyId?: string;
         model?: string;
         skills?: {
             skillIds: Array<string>;
@@ -52073,7 +53548,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'chatgpt' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         }>;
     };
 };
@@ -57148,6 +58623,9 @@ export type InstallCopilotGithubAppData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -57262,6 +58740,9 @@ export type ConnectCopilotGithubAppCredentialData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -57562,6 +59043,9 @@ export type ConnectExistingCopilotGithubAppData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -58367,6 +59851,21 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -58977,6 +60476,21 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -60341,6 +61855,12 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -60355,6 +61875,8 @@ export type UpdateGuardrailsDeploymentData = {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
+        humanApprovalMode?: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode?: 'refuse' | 'allow';
         annotatorModelId?: string | null;
         annotatorLlmApiKeyId?: string | null;
     };
@@ -60439,6 +61961,12 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        humanApprovalMode: 'block' | 'unattended' | 'everywhere';
+        unapprovableBlockMode: 'refuse' | 'allow';
+        environmentOverrides: Array<{
+            setting: 'humanApprovalMode' | 'unapprovableBlockMode';
+            variable: string;
+        }>;
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -61773,7 +63301,7 @@ export type DeleteIncomingEmailSubscriptionResponses = {
 
 export type DeleteIncomingEmailSubscriptionResponse = DeleteIncomingEmailSubscriptionResponses[keyof DeleteIncomingEmailSubscriptionResponses];
 
-export type GetInteractionsData = {
+export type GetLlmProxyLogsData = {
     body?: never;
     path?: never;
     query?: {
@@ -61790,7 +63318,7 @@ export type GetInteractionsData = {
          */
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -61806,10 +63334,10 @@ export type GetInteractionsData = {
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions';
+    url: '/api/llm-proxy-logs';
 };
 
-export type GetInteractionsErrors = {
+export type GetLlmProxyLogsErrors = {
     /**
      * Default Response
      */
@@ -61875,9 +63403,9 @@ export type GetInteractionsErrors = {
     };
 };
 
-export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
+export type GetLlmProxyLogsError = GetLlmProxyLogsErrors[keyof GetLlmProxyLogsErrors];
 
-export type GetInteractionsResponses = {
+export type GetLlmProxyLogsResponses = {
     /**
      * Default Response
      */
@@ -61931,11 +63459,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62176,11 +63722,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62296,11 +63860,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62414,11 +63996,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62532,11 +64132,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62650,11 +64268,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62724,7 +64360,11 @@ export type GetInteractionsResponses = {
             attributionLabels: {
                 [key: string]: string;
             } | null;
-            request: GeminiGenerateContentRequest | {
+            request: (GeminiGenerateContentRequest & {
+                input_files?: {
+                    [key: string]: unknown;
+                };
+            }) | {
                 [key: string]: unknown;
             };
             processedRequest?: GeminiGenerateContentRequest | {
@@ -62745,11 +64385,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -62842,11 +64500,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -63394,11 +65070,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64031,11 +65725,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64128,11 +65840,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64225,11 +65955,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64322,11 +66070,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64419,11 +66185,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64516,11 +66300,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64613,11 +66415,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64710,11 +66530,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64807,11 +66645,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -64904,11 +66760,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65001,11 +66875,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65098,11 +66990,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65195,11 +67105,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -65699,6 +67627,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -66150,6 +68093,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -66260,11 +68218,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -66764,6 +68740,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -67215,6 +69206,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -67325,11 +69331,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -67829,6 +69853,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -68280,6 +70319,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -68390,11 +70444,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -68894,6 +70966,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -69347,6 +71434,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -69455,11 +71557,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -69552,11 +71672,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -69717,11 +71855,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70221,6 +72377,21 @@ export type GetInteractionsResponses = {
                         };
                     };
                 };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                };
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
@@ -70672,6 +72843,21 @@ export type GetInteractionsResponses = {
                                 syntax: 'lark' | 'regex';
                             };
                         };
+                    };
+                };
+                response_format?: {
+                    type: 'text';
+                } | {
+                    type: 'json_object';
+                } | {
+                    type: 'json_schema';
+                    json_schema: {
+                        name: string;
+                        description?: string;
+                        schema?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
                     };
                 };
                 temperature?: number | null;
@@ -70782,11 +72968,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70868,6 +73072,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70882,6 +73087,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70893,10 +73099,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -70912,11 +73130,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -70998,6 +73234,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71012,6 +73249,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71023,10 +73261,22 @@ export type GetInteractionsResponses = {
                 content_type: string;
                 bytes: number;
                 usage_available: boolean;
-                cost_available: false;
+                cost_available: boolean;
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -71042,11 +73292,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71180,15 +73448,33 @@ export type GetInteractionsResponses = {
                 reason: string;
                 blockedToolCallCount: number;
             } | null;
-            type: 'azure:images';
+            type: 'azure:images' | 'openai:images';
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71388,11 +73674,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71592,11 +73896,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71796,11 +74118,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71893,11 +74233,29 @@ export type GetInteractionsResponses = {
             model: string | null;
             baselineModel: string | null;
             durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
@@ -71940,6 +74298,291 @@ export type GetInteractionsResponses = {
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                turn: number;
+                session?: {
+                    [key: string]: unknown;
+                };
+                input_text?: string;
+                input_transcript?: string;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                status: string;
+                output_transcript?: string;
+                output_audio?: {
+                    format: 'pcm16';
+                    sample_rate: number;
+                    data: string;
+                };
+                output_audio_omitted?: 'too_large';
+                output?: Array<{
+                    [key: string]: unknown;
+                }>;
+                usage?: {
+                    [key: string]: unknown;
+                };
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:realtime';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
+            inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
+            inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
+            outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                status: number;
+                content_type?: string;
+                bytes: number;
+                body?: unknown;
+                truncated?: boolean;
+                streamed?: boolean;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:passthrough' | 'anthropic:passthrough';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
+            inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
+            inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
+            outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheWriteTokens: number | null;
+            /**
+             * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -71952,9 +74595,9 @@ export type GetInteractionsResponses = {
     };
 };
 
-export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+export type GetLlmProxyLogsResponse = GetLlmProxyLogsResponses[keyof GetLlmProxyLogsResponses];
 
-export type GetInteractionSummariesData = {
+export type GetLlmProxyLogSummariesData = {
     body?: never;
     path?: never;
     query?: {
@@ -71962,20 +74605,24 @@ export type GetInteractionSummariesData = {
         externalAgentId?: string;
         userId?: string;
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         startDate?: string;
         endDate?: string;
+        /**
+         * Only rows created before this log entry, ordered by creation time then ID at the stored precision. Its total is the entry's zero-based position.
+         */
+        beforeId?: string;
         limit?: number;
         offset?: number;
         sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
         sortDirection?: 'asc' | 'desc';
     };
-    url: '/api/interactions/summaries';
+    url: '/api/llm-proxy-logs/summaries';
 };
 
-export type GetInteractionSummariesErrors = {
+export type GetLlmProxyLogSummariesErrors = {
     /**
      * Default Response
      */
@@ -72041,9 +74688,9 @@ export type GetInteractionSummariesErrors = {
     };
 };
 
-export type GetInteractionSummariesError = GetInteractionSummariesErrors[keyof GetInteractionSummariesErrors];
+export type GetLlmProxyLogSummariesError = GetLlmProxyLogSummariesErrors[keyof GetLlmProxyLogSummariesErrors];
 
-export type GetInteractionSummariesResponses = {
+export type GetLlmProxyLogSummariesResponses = {
     /**
      * Default Response
      */
@@ -72056,10 +74703,25 @@ export type GetInteractionSummariesResponses = {
             model: string | null;
             baselineModel: string | null;
             billingMode: 'metered' | 'subscription';
+            /**
+             * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             inputTokens: number | null;
+            /**
+             * True when the input token count was estimated locally rather than reported by the provider.
+             */
             inputTokensEstimated: boolean;
+            /**
+             * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+             */
             outputTokens: number | null;
+            /**
+             * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheReadTokens: number | null;
+            /**
+             * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+             */
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
@@ -72073,12 +74735,16 @@ export type GetInteractionSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'openai:realtime' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             userMessagePreview?: string | null;
             responseToolNames?: Array<string> | null;
+            responseToolCalls?: Array<{
+                id: string;
+                name: string;
+            }> | null;
             responseTextPreview?: string | null;
         }>;
         pagination: {
@@ -72092,9 +74758,9 @@ export type GetInteractionSummariesResponses = {
     };
 };
 
-export type GetInteractionSummariesResponse = GetInteractionSummariesResponses[keyof GetInteractionSummariesResponses];
+export type GetLlmProxyLogSummariesResponse = GetLlmProxyLogSummariesResponses[keyof GetLlmProxyLogSummariesResponses];
 
-export type GetInteractionSessionsData = {
+export type GetLlmProxyLogSessionsData = {
     body?: never;
     path?: never;
     query?: {
@@ -72113,9 +74779,9 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'chatgpt' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
-         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.
          */
         sessionId?: string;
         /**
@@ -72129,10 +74795,10 @@ export type GetInteractionSessionsData = {
         limit?: number;
         cursor?: string;
     };
-    url: '/api/interactions/sessions';
+    url: '/api/llm-proxy-logs/sessions';
 };
 
-export type GetInteractionSessionsErrors = {
+export type GetLlmProxyLogSessionsErrors = {
     /**
      * Default Response
      */
@@ -72198,9 +74864,9 @@ export type GetInteractionSessionsErrors = {
     };
 };
 
-export type GetInteractionSessionsError = GetInteractionSessionsErrors[keyof GetInteractionSessionsErrors];
+export type GetLlmProxyLogSessionsError = GetLlmProxyLogSessionsErrors[keyof GetLlmProxyLogSessionsErrors];
 
-export type GetInteractionSessionsResponses = {
+export type GetLlmProxyLogSessionsResponses = {
     /**
      * Default Response
      */
@@ -72276,18 +74942,18 @@ export type GetInteractionSessionsResponses = {
     };
 };
 
-export type GetInteractionSessionsResponse = GetInteractionSessionsResponses[keyof GetInteractionSessionsResponses];
+export type GetLlmProxyLogSessionsResponse = GetLlmProxyLogSessionsResponses[keyof GetLlmProxyLogSessionsResponses];
 
-export type GetInteractionSessionLineageData = {
+export type GetLlmProxyLogSessionLineageData = {
     body?: never;
     path: {
         sessionId: string;
     };
     query?: never;
-    url: '/api/interactions/sessions/{sessionId}/lineage';
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/lineage';
 };
 
-export type GetInteractionSessionLineageErrors = {
+export type GetLlmProxyLogSessionLineageErrors = {
     /**
      * Default Response
      */
@@ -72353,9 +75019,9 @@ export type GetInteractionSessionLineageErrors = {
     };
 };
 
-export type GetInteractionSessionLineageError = GetInteractionSessionLineageErrors[keyof GetInteractionSessionLineageErrors];
+export type GetLlmProxyLogSessionLineageError = GetLlmProxyLogSessionLineageErrors[keyof GetLlmProxyLogSessionLineageErrors];
 
-export type GetInteractionSessionLineageResponses = {
+export type GetLlmProxyLogSessionLineageResponses = {
     /**
      * Default Response
      */
@@ -72369,16 +75035,16 @@ export type GetInteractionSessionLineageResponses = {
     };
 };
 
-export type GetInteractionSessionLineageResponse = GetInteractionSessionLineageResponses[keyof GetInteractionSessionLineageResponses];
+export type GetLlmProxyLogSessionLineageResponse = GetLlmProxyLogSessionLineageResponses[keyof GetLlmProxyLogSessionLineageResponses];
 
-export type GetUniqueExternalAgentIdsData = {
+export type GetLlmProxyLogExternalAgentIdsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/interactions/external-agent-ids';
+    url: '/api/llm-proxy-logs/external-agent-ids';
 };
 
-export type GetUniqueExternalAgentIdsErrors = {
+export type GetLlmProxyLogExternalAgentIdsErrors = {
     /**
      * Default Response
      */
@@ -72444,9 +75110,9 @@ export type GetUniqueExternalAgentIdsErrors = {
     };
 };
 
-export type GetUniqueExternalAgentIdsError = GetUniqueExternalAgentIdsErrors[keyof GetUniqueExternalAgentIdsErrors];
+export type GetLlmProxyLogExternalAgentIdsError = GetLlmProxyLogExternalAgentIdsErrors[keyof GetLlmProxyLogExternalAgentIdsErrors];
 
-export type GetUniqueExternalAgentIdsResponses = {
+export type GetLlmProxyLogExternalAgentIdsResponses = {
     /**
      * Default Response
      */
@@ -72456,9 +75122,9 @@ export type GetUniqueExternalAgentIdsResponses = {
     }>;
 };
 
-export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsResponses[keyof GetUniqueExternalAgentIdsResponses];
+export type GetLlmProxyLogExternalAgentIdsResponse = GetLlmProxyLogExternalAgentIdsResponses[keyof GetLlmProxyLogExternalAgentIdsResponses];
 
-export type GetUniqueUserIdsData = {
+export type GetLlmProxyLogUserIdsData = {
     body?: never;
     path?: never;
     query?: {
@@ -72466,10 +75132,10 @@ export type GetUniqueUserIdsData = {
         ids?: Array<string>;
         limit?: number;
     };
-    url: '/api/interactions/user-ids';
+    url: '/api/llm-proxy-logs/user-ids';
 };
 
-export type GetUniqueUserIdsErrors = {
+export type GetLlmProxyLogUserIdsErrors = {
     /**
      * Default Response
      */
@@ -72535,9 +75201,9 @@ export type GetUniqueUserIdsErrors = {
     };
 };
 
-export type GetUniqueUserIdsError = GetUniqueUserIdsErrors[keyof GetUniqueUserIdsErrors];
+export type GetLlmProxyLogUserIdsError = GetLlmProxyLogUserIdsErrors[keyof GetLlmProxyLogUserIdsErrors];
 
-export type GetUniqueUserIdsResponses = {
+export type GetLlmProxyLogUserIdsResponses = {
     /**
      * Default Response
      */
@@ -72547,18 +75213,18 @@ export type GetUniqueUserIdsResponses = {
     }>;
 };
 
-export type GetUniqueUserIdsResponse = GetUniqueUserIdsResponses[keyof GetUniqueUserIdsResponses];
+export type GetLlmProxyLogUserIdsResponse = GetLlmProxyLogUserIdsResponses[keyof GetLlmProxyLogUserIdsResponses];
 
-export type GetInteractionData = {
+export type GetLlmProxyLogAutoRoutingData = {
     body?: never;
     path: {
-        interactionId: string;
+        logId: string;
     };
     query?: never;
-    url: '/api/interactions/{interactionId}';
+    url: '/api/llm-proxy-logs/{logId}/auto-routing';
 };
 
-export type GetInteractionErrors = {
+export type GetLlmProxyLogAutoRoutingErrors = {
     /**
      * Default Response
      */
@@ -72624,9 +75290,144 @@ export type GetInteractionErrors = {
     };
 };
 
-export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
+export type GetLlmProxyLogAutoRoutingError = GetLlmProxyLogAutoRoutingErrors[keyof GetLlmProxyLogAutoRoutingErrors];
 
-export type GetInteractionResponses = {
+export type GetLlmProxyLogAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: {
+            id: string;
+            segment: number;
+            tierIndex: number;
+            modelId: string;
+            propensity: number;
+            u: number;
+            planId: string | null;
+            reason: 'planned' | 'cold_start' | 'scorer_error' | 'plan_stale';
+            scorerVersionId: string | null;
+            features: {
+                signals: {
+                    'jev-session': {
+                        version: string;
+                        tier_needed: [
+                            number,
+                            number,
+                            number
+                        ];
+                        p_long: number;
+                    };
+                };
+                client: string;
+                scorerUsage?: {
+                    inputTokens: number | null;
+                    outputTokens: number | null;
+                };
+            } | null;
+            scorerCost: string | null;
+            featuresSchemaVersion: number;
+            coreVersion: string;
+            planFormatVersion: number | null;
+            lambda: number | null;
+            expectedCostUsd: string | null;
+            createdAt: string;
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+            scorerVersion: {
+                id: string;
+                name: string;
+                model: string;
+                specHash: string;
+            } | null;
+        } | null;
+    };
+};
+
+export type GetLlmProxyLogAutoRoutingResponse = GetLlmProxyLogAutoRoutingResponses[keyof GetLlmProxyLogAutoRoutingResponses];
+
+export type GetLlmProxyLogData = {
+    body?: never;
+    path: {
+        logId: string;
+    };
+    query?: never;
+    url: '/api/llm-proxy-logs/{logId}';
+};
+
+export type GetLlmProxyLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogError = GetLlmProxyLogErrors[keyof GetLlmProxyLogErrors];
+
+export type GetLlmProxyLogResponses = {
     /**
      * Default Response
      */
@@ -72679,11 +75480,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -72924,11 +75743,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73044,11 +75881,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73162,11 +76017,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73280,11 +76153,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73398,11 +76289,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73472,7 +76381,11 @@ export type GetInteractionResponses = {
         attributionLabels: {
             [key: string]: string;
         } | null;
-        request: GeminiGenerateContentRequest | {
+        request: (GeminiGenerateContentRequest & {
+            input_files?: {
+                [key: string]: unknown;
+            };
+        }) | {
             [key: string]: unknown;
         };
         processedRequest?: GeminiGenerateContentRequest | {
@@ -73493,11 +76406,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -73590,11 +76521,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74142,11 +77091,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74779,11 +77746,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74876,11 +77861,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -74973,11 +77976,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75070,11 +78091,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75167,11 +78206,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75264,11 +78321,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75361,11 +78436,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75458,11 +78551,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75555,11 +78666,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75652,11 +78781,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75749,11 +78896,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75846,11 +79011,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -75943,11 +79126,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -76447,6 +79648,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -76898,6 +80114,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -77008,11 +80239,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -77512,6 +80761,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -77963,6 +81227,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -78073,11 +81352,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -78577,6 +81874,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -79028,6 +82340,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -79138,11 +82465,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -79642,6 +82987,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -80095,6 +83455,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -80203,11 +83578,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -80300,11 +83693,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -80465,11 +83876,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -80969,6 +84398,21 @@ export type GetInteractionResponses = {
                     };
                 };
             };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            };
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
@@ -81420,6 +84864,21 @@ export type GetInteractionResponses = {
                             syntax: 'lark' | 'regex';
                         };
                     };
+                };
+            };
+            response_format?: {
+                type: 'text';
+            } | {
+                type: 'json_object';
+            } | {
+                type: 'json_schema';
+                json_schema: {
+                    name: string;
+                    description?: string;
+                    schema?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
                 };
             };
             temperature?: number | null;
@@ -81530,11 +84989,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81616,6 +85093,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81630,6 +85108,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81641,10 +85120,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -81660,11 +85151,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81746,6 +85255,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81760,6 +85270,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81771,10 +85282,22 @@ export type GetInteractionResponses = {
             content_type: string;
             bytes: number;
             usage_available: boolean;
-            cost_available: false;
+            cost_available: boolean;
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -81790,11 +85313,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -81928,15 +85469,33 @@ export type GetInteractionResponses = {
             reason: string;
             blockedToolCallCount: number;
         } | null;
-        type: 'azure:images';
+        type: 'azure:images' | 'openai:images';
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82136,11 +85695,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82340,11 +85917,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82544,11 +86139,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82641,11 +86254,29 @@ export type GetInteractionResponses = {
         model: string | null;
         baselineModel: string | null;
         durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
         inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
         outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
         cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
@@ -82688,10 +86319,295 @@ export type GetInteractionResponses = {
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            turn: number;
+            session?: {
+                [key: string]: unknown;
+            };
+            input_text?: string;
+            input_transcript?: string;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            status: string;
+            output_transcript?: string;
+            output_audio?: {
+                format: 'pcm16';
+                sample_rate: number;
+                data: string;
+            };
+            output_audio_omitted?: 'too_large';
+            output?: Array<{
+                [key: string]: unknown;
+            }>;
+            usage?: {
+                [key: string]: unknown;
+            };
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:realtime';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
+        inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
+        inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
+        outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            status: number;
+            content_type?: string;
+            bytes: number;
+            body?: unknown;
+            truncated?: boolean;
+            streamed?: boolean;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:passthrough' | 'anthropic:passthrough';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        /**
+         * Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
+        inputTokens: number | null;
+        /**
+         * True when the input token count was estimated locally rather than reported by the provider.
+         */
+        inputTokensEstimated: boolean;
+        /**
+         * Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.
+         */
+        outputTokens: number | null;
+        /**
+         * Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheReadTokens: number | null;
+        /**
+         * Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheWriteTokens: number | null;
+        /**
+         * Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.
+         */
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
     };
 };
 
-export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+export type GetLlmProxyLogResponse = GetLlmProxyLogResponses[keyof GetLlmProxyLogResponses];
 
 export type TransferMcpCatalogOwnershipData = {
     body: {
@@ -82797,7 +86713,7 @@ export type GetInternalMcpCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -83179,6 +87095,9 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -83433,7 +87352,7 @@ export type SearchMcpRegistryData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -83701,7 +87620,7 @@ export type SearchMcpRegistryIdsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -87299,6 +91218,21 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -87909,6 +91843,21 @@ export type KimiCodeChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -88525,6 +92474,21 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -89137,6 +93101,21 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -89681,7 +93660,7 @@ export type GetKnowledgeBasesData = {
         excludeOtherPersonal?: boolean;
         search?: string;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.
+         * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires [`knowledgeSource:delete`](/docs/reference/permissions#knowledgeSource:delete).
          */
         status?: 'active' | 'deleted';
         /**
@@ -89693,7 +93672,7 @@ export type GetKnowledgeBasesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -89809,6 +93788,7 @@ export type GetKnowledgeBasesResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            uploadedFilesEnvironmentId?: string | null;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -89854,6 +93834,9 @@ export type CreateKnowledgeBaseData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -89966,6 +93949,7 @@ export type CreateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -90164,6 +94148,7 @@ export type GetKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -90173,6 +94158,10 @@ export type UpdateKnowledgeBaseData = {
     body: {
         name?: string;
         description?: string | null;
+        /**
+         * Environment for this knowledge base's indexed uploaded files. Requires uploaded files to have been indexed; omit to leave it unchanged.
+         */
+        uploadedFilesEnvironmentId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -90285,6 +94274,7 @@ export type UpdateKnowledgeBaseResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        uploadedFilesEnvironmentId?: string | null;
     };
 };
 
@@ -90665,7 +94655,7 @@ export type GetConnectorsData = {
         search?: string;
         connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles' | 'file_upload';
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.
+         * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires [`knowledgeSource:delete`](/docs/reference/permissions#knowledgeSource:delete).
          */
         status?: 'active' | 'deleted';
         /**
@@ -90673,7 +94663,7 @@ export type GetConnectorsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -91244,6 +95234,9 @@ export type CreateConnectorData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -94979,7 +98972,7 @@ export type GetKnowledgeFilesData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -95126,6 +99119,9 @@ export type UploadKnowledgeFileData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -95379,6 +99375,9 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -97659,6 +101658,17 @@ export type GetLlmModelsResponses = {
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
             cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+            mediaPricing: {
+                per: 'million_tokens' | 'million_characters' | 'minute';
+                input: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+                output: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+            } | null;
         };
         isBest?: boolean;
         isFree: boolean;
@@ -97771,7 +101781,7 @@ export type GetModelsWithApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -97942,6 +101952,17 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+        mediaPricing: {
+            per: 'million_tokens' | 'million_characters' | 'minute';
+            input: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+            output: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+        } | null;
         isFree: boolean;
         effectiveContextLength: number | null;
         embeddingClientImageCapable: boolean | null;
@@ -98233,6 +102254,94 @@ export type BulkUpdateModelsResponses = {
 };
 
 export type BulkUpdateModelsResponse = BulkUpdateModelsResponses[keyof BulkUpdateModelsResponses];
+
+export type DeleteModelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-models/{id}';
+};
+
+export type DeleteModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteModelError = DeleteModelErrors[keyof DeleteModelErrors];
+
+export type DeleteModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteModelResponse = DeleteModelResponses[keyof DeleteModelResponses];
 
 export type UpdateModelData = {
     body: {
@@ -98913,7 +103022,7 @@ export type GetLlmOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -99025,6 +103134,7 @@ export type GetLlmOauthClientsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            modelPoolIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -99094,6 +103204,9 @@ export type CreateLlmOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -99210,6 +103323,7 @@ export type CreateLlmOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -99455,6 +103569,7 @@ export type UpdateLlmOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -99582,6 +103697,7 @@ export type RotateLlmOauthClientSecretResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -99889,7 +104005,7 @@ export type GetLlmProviderApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -100053,6 +104169,9 @@ export type CreateLlmProviderApiKeyData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -101113,6 +105232,13 @@ export type McpGatewayGetErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     405: {
         jsonrpc: '2.0';
         error: {
@@ -101120,6 +105246,26 @@ export type McpGatewayGetErrors = {
             message: string;
         };
         id: null;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -101136,11 +105282,36 @@ export type McpGatewayPostData = {
     url: '/v1/mcp/{profileId}';
 };
 
+export type McpGatewayPostErrors = {
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type McpGatewayPostError = McpGatewayPostErrors[keyof McpGatewayPostErrors];
+
 export type McpGatewayPostResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    default: unknown;
 };
 
 export type McpGatewaySseMessageData = {
@@ -101167,9 +105338,36 @@ export type McpGatewaySseMessageErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string;
+        message: string;
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string;
         message: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
+            internal_code?: string;
+        };
     };
 };
 
@@ -101255,10 +105453,30 @@ export type ReportAgentRuntimeStatusErrors = {
     /**
      * Default Response
      */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;
             type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    503: {
+        error: {
+            message: string;
+            type: 'api_service_unavailable_error';
             internal_code?: string;
         };
     };
@@ -101464,7 +105682,7 @@ export type GetMcpOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -101609,6 +105827,9 @@ export type CreateMcpOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -104086,7 +108307,7 @@ export type GetMcpToolCallsData = {
          */
         mcpServerName?: string;
         /**
-         * Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.
+         * Filter by the user the call is attributed to. Ignored without [`log:admin`](/docs/reference/permissions#log:admin), which already scopes the listing to the caller.
          */
         userId?: string;
         /**
@@ -105285,6 +109506,21 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -105895,6 +110131,21 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                         syntax: 'lark' | 'regex';
                     };
                 };
+            };
+        };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
             };
         };
         temperature?: number | null;
@@ -107386,11 +111637,785 @@ export type UpdateModelPoolResponses = {
 
 export type UpdateModelPoolResponse = UpdateModelPoolResponses[keyof UpdateModelPoolResponses];
 
+export type ModelRouterImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified-model/images/edits';
+};
+
+export type ModelRouterImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentError = ModelRouterImageEditsWithDefaultAgentErrors[keyof ModelRouterImageEditsWithDefaultAgentErrors];
+
+export type ModelRouterImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithDefaultAgentResponse = ModelRouterImageEditsWithDefaultAgentResponses[keyof ModelRouterImageEditsWithDefaultAgentResponses];
+
+export type ModelRouterImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified-model/{agentId}/images/edits';
+};
+
+export type ModelRouterImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImageEditsWithAgentError = ModelRouterImageEditsWithAgentErrors[keyof ModelRouterImageEditsWithAgentErrors];
+
+export type ModelRouterImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImageEditsWithAgentResponse = ModelRouterImageEditsWithAgentResponses[keyof ModelRouterImageEditsWithAgentResponses];
+
+export type ModelRouterAudioSpeechWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified-model/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioSpeechWithAgentData = {
+    body: {
+        model: string;
+        input: string;
+        voice: string | {
+            id: string;
+        };
+        instructions?: string;
+        response_format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
+        speed?: number;
+        stream_format?: 'audio' | 'sse';
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified-model/{agentId}/audio/speech';
+};
+
+export type ModelRouterAudioSpeechWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified-model/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified-model/{agentId}/audio/transcriptions';
+};
+
+export type ModelRouterAudioTranscriptionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified-model/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterAudioTranslationsWithAgentData = {
+    body: {
+        model: string;
+        language?: string;
+        prompt?: string;
+        response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json';
+        temperature?: number;
+        stream?: boolean;
+        include?: Array<string>;
+        timestamp_granularities?: Array<'word' | 'segment'>;
+        known_speaker_names?: Array<string>;
+        known_speaker_references?: Array<string>;
+        languages?: Array<string>;
+        chunking_strategy?: 'auto' | {
+            type: 'server_vad';
+            threshold?: number;
+            prefix_padding_ms?: number;
+            silence_duration_ms?: number;
+        };
+        /**
+         * Audio file (maximum 25 MiB)
+         */
+        file: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified-model/{agentId}/audio/translations';
+};
+
+export type ModelRouterAudioTranslationsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ModelRouterImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/unified-model/images/generations';
+};
+
+export type ModelRouterImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentError = ModelRouterImagesWithDefaultAgentErrors[keyof ModelRouterImagesWithDefaultAgentErrors];
+
+export type ModelRouterImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithDefaultAgentResponse = ModelRouterImagesWithDefaultAgentResponses[keyof ModelRouterImagesWithDefaultAgentResponses];
+
+export type ModelRouterImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/unified-model/{agentId}/images/generations';
+};
+
+export type ModelRouterImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterImagesWithAgentError = ModelRouterImagesWithAgentErrors[keyof ModelRouterImagesWithAgentErrors];
+
+export type ModelRouterImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type ModelRouterImagesWithAgentResponse = ModelRouterImagesWithAgentResponses[keyof ModelRouterImagesWithAgentResponses];
+
 export type ModelRouterListModelsWithDefaultAgentData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/v1/model-router/models';
+    url: '/v1/unified-model/models';
 };
 
 export type ModelRouterListModelsWithDefaultAgentErrors = {
@@ -107484,7 +112509,7 @@ export type ModelRouterListModelsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/models';
+    url: '/v1/unified-model/{agentId}/models';
 };
 
 export type ModelRouterListModelsWithAgentErrors = {
@@ -107621,7 +112646,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/responses';
+    url: '/v1/unified-model/responses';
 };
 
 export type ModelRouterResponsesWithDefaultAgentErrors = {
@@ -107795,7 +112820,7 @@ export type ModelRouterResponsesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/responses';
+    url: '/v1/unified-model/{agentId}/responses';
 };
 
 export type ModelRouterResponsesWithAgentErrors = {
@@ -107937,7 +112962,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/embeddings';
+    url: '/v1/unified-model/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithDefaultAgentErrors = {
@@ -108016,7 +113041,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -108050,7 +113075,7 @@ export type ModelRouterEmbeddingsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/embeddings';
+    url: '/v1/unified-model/{agentId}/embeddings';
 };
 
 export type ModelRouterEmbeddingsWithAgentErrors = {
@@ -108129,7 +113154,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -108571,6 +113596,21 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -108610,7 +113650,7 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/model-router/chat/completions';
+    url: '/v1/unified-model/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithDefaultAgentErrors = {
@@ -109187,6 +114227,21 @@ export type ModelRouterChatCompletionsWithAgentData = {
                 };
             };
         };
+        response_format?: {
+            type: 'text';
+        } | {
+            type: 'json_object';
+        } | {
+            type: 'json_schema';
+            json_schema: {
+                name: string;
+                description?: string;
+                schema?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        };
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
@@ -109228,7 +114283,7 @@ export type ModelRouterChatCompletionsWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/model-router/{agentId}/chat/completions';
+    url: '/v1/unified-model/{agentId}/chat/completions';
 };
 
 export type ModelRouterChatCompletionsWithAgentErrors = {
@@ -109575,7 +114630,7 @@ export type GetOauthClientsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -109687,6 +114742,7 @@ export type GetOauthClientsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            modelPoolIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -109703,7 +114759,6 @@ export type GetOauthClientsResponses = {
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
-            modelPoolIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -109770,6 +114825,9 @@ export type CreateOauthClientData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -109886,6 +114944,7 @@ export type CreateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -109902,7 +114961,6 @@ export type CreateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -110145,6 +115203,7 @@ export type UpdateOauthClientResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -110161,7 +115220,6 @@ export type UpdateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
     };
 };
 
@@ -110276,6 +115334,7 @@ export type RotateOauthClientSecretResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        modelPoolIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -110292,7 +115351,6 @@ export type RotateOauthClientSecretResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
-        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -111791,6 +116849,520 @@ export type OpenAiAudioTranslationsWithAgentResponses = {
     200: unknown;
 };
 
+export type OpenAiImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/generations';
+};
+
+export type OpenAiImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentError = OpenAiImagesWithDefaultAgentErrors[keyof OpenAiImagesWithDefaultAgentErrors];
+
+export type OpenAiImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentResponse = OpenAiImagesWithDefaultAgentResponses[keyof OpenAiImagesWithDefaultAgentResponses];
+
+export type OpenAiImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/generations';
+};
+
+export type OpenAiImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithAgentError = OpenAiImagesWithAgentErrors[keyof OpenAiImagesWithAgentErrors];
+
+export type OpenAiImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithAgentResponse = OpenAiImagesWithAgentResponses[keyof OpenAiImagesWithAgentResponses];
+
+export type OpenAiImageEditsWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/edits';
+};
+
+export type OpenAiImageEditsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentError = OpenAiImageEditsWithDefaultAgentErrors[keyof OpenAiImageEditsWithDefaultAgentErrors];
+
+export type OpenAiImageEditsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithDefaultAgentResponse = OpenAiImageEditsWithDefaultAgentResponses[keyof OpenAiImageEditsWithDefaultAgentResponses];
+
+export type OpenAiImageEditsWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | unknown;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd' | unknown;
+        background?: 'auto' | 'transparent' | 'opaque' | unknown;
+        output_format?: 'png' | 'jpeg' | 'webp' | unknown;
+        response_format?: 'url' | 'b64_json' | unknown;
+        user?: string;
+        safety_identifier?: unknown;
+        n?: number | unknown;
+        output_compression?: number | unknown;
+        input_fidelity?: 'high' | 'low' | unknown;
+        stream?: false | unknown;
+        /**
+         * PNG/JPEG/WebP reference files, each smaller than 50 MiB.
+         */
+        image: Array<Blob | File>;
+        /**
+         * Optional PNG alpha mask smaller than 4 MiB, matching the first image dimensions.
+         */
+        mask?: Blob | File;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/edits';
+};
+
+export type OpenAiImageEditsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImageEditsWithAgentError = OpenAiImageEditsWithAgentErrors[keyof OpenAiImageEditsWithAgentErrors];
+
+export type OpenAiImageEditsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImageEditsWithAgentResponse = OpenAiImageEditsWithAgentResponses[keyof OpenAiImageEditsWithAgentResponses];
+
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -111889,7 +117461,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -112002,7 +117574,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         object: 'list';
         data: Array<{
             object: 'embedding';
-            embedding: Array<number>;
+            embedding: Array<number> | string;
             index?: number;
         }>;
         model: string;
@@ -118055,6 +123627,8 @@ export type GetOpenAppaYellsResponses = {
             message: string;
             withTrajectory: boolean;
             superyell: boolean;
+            kind: 'agent' | 'approval_waived' | 'block_waived';
+            count: number;
             createdAt: string;
             reportedAt: string | null;
             reportFailed: boolean;
@@ -118268,6 +123842,8 @@ export type GetOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -118390,6 +123966,8 @@ export type UpdateOpenAppaYellResponses = {
         message: string;
         withTrajectory: boolean;
         superyell: boolean;
+        kind: 'agent' | 'approval_waived' | 'block_waived';
+        count: number;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -118717,7 +124295,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -118741,7 +124319,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     };
     path?: never;
@@ -118828,7 +124406,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -119020,7 +124598,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -119035,7 +124613,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     };
     path: {
@@ -119127,7 +124705,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -119236,6 +124814,7 @@ export type GetOrganizationResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119339,6 +124918,9 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119349,6 +124931,118 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type GetOrganizationDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/default-model';
+};
+
+export type GetOrganizationDefaultModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelError = GetOrganizationDefaultModelErrors[keyof GetOrganizationDefaultModelErrors];
+
+export type GetOrganizationDefaultModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        model: {
+            id: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            displayName: string;
+        } | null;
+        autoRouting: {
+            active: false;
+        } | {
+            active: true;
+            tiers: {
+                fast: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                normal: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                smart: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+            };
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelResponse = GetOrganizationDefaultModelResponses[keyof GetOrganizationDefaultModelResponses];
 
 export type GetAppearanceSettingsData = {
     body?: never;
@@ -119577,6 +125271,7 @@ export type UpdateAppearanceSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119680,6 +125375,9 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119696,6 +125394,7 @@ export type UpdateSecuritySettingsData = {
         playwrightMcpEnabled?: boolean;
         allowChatFileUploads?: boolean;
         allowUnauthenticatedLlmProxyRequests?: boolean;
+        keepMediaInLogs?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -119797,6 +125496,7 @@ export type UpdateSecuritySettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -119899,6 +125599,9 @@ export type UpdateSecuritySettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120014,6 +125717,7 @@ export type UpdateMcpSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120116,6 +125820,9 @@ export type UpdateMcpSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120230,6 +125937,7 @@ export type UpdateSkillsSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120333,6 +126041,9 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120344,8 +126055,135 @@ export type UpdateSkillsSettingsResponses = {
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
 
+export type GetAgentRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-runtime-tiers';
+};
+
+export type GetAgentRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTiersError = GetAgentRuntimeTiersErrors[keyof GetAgentRuntimeTiersErrors];
+
+export type GetAgentRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            warmSpares: number;
+            /**
+             * Whether the tier keeps spare containers ready for its runs
+             */
+            pooled: boolean;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+            /**
+             * Explicit memory request in MiB; absent when the request follows CPU
+             */
+            memoryRequestMiBOverride?: number;
+            /**
+             * Explicit memory limit in MiB; absent when the limit follows CPU
+             */
+            memoryLimitMiBOverride?: number;
+            /**
+             * Size of a run's workspace volume in GiB; null means the deployment's default
+             */
+            workspaceGiB: number | null;
+        }>;
+        defaultTier: string;
+        /**
+         * The deployment's workspace volume size in GiB, which a tier that sets none gives its runs
+         */
+        defaultWorkspaceGiB: number;
+    };
+};
+
+export type GetAgentRuntimeTiersResponse = GetAgentRuntimeTiersResponses[keyof GetAgentRuntimeTiersResponses];
+
 export type UpdateAgentSettingsData = {
     body: {
+        agentRuntimeTiers?: {
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                memoryRequestMiB?: number | null;
+                memoryLimitMiB?: number | null;
+                pooled: boolean;
+                workspaceGiB?: number | null;
+                previousName?: string;
+            }>;
+            defaultTier: string;
+        } | null;
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
@@ -120449,6 +126287,7 @@ export type UpdateAgentSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120551,6 +126390,9 @@ export type UpdateAgentSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120688,6 +126530,7 @@ export type UpdateConnectionSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -120790,6 +126633,9 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120952,6 +126798,7 @@ export type UpdateIntegrationSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121054,6 +126901,9 @@ export type UpdateIntegrationSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121178,6 +127028,7 @@ export type UpdateDefaultEnvironmentResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121280,6 +127131,9 @@ export type UpdateDefaultEnvironmentResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121399,6 +127253,7 @@ export type UpdateAuthSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121501,6 +127356,9 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121622,6 +127480,7 @@ export type UpdateKnowledgeSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121724,6 +127583,9 @@ export type UpdateKnowledgeSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121835,6 +127697,7 @@ export type DropEmbeddingConfigResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121937,6 +127800,9 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122410,6 +128276,7 @@ export type CompleteOnboardingResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122512,6 +128379,9 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -123806,7 +129676,7 @@ export type GetPluginsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -123985,6 +129855,9 @@ export type CreatePluginData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -124307,6 +130180,9 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -124615,6 +130491,9 @@ export type ImportGithubPluginData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -126361,7 +132240,7 @@ export type GetProjectsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -126510,6 +132389,9 @@ export type CreateProjectData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -127930,6 +133812,16 @@ export type GetProjectRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: string | null;
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -127946,6 +133838,10 @@ export type GetProjectRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -128612,7 +134508,7 @@ export type ListRuntimeCredentialsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -128742,6 +134638,9 @@ export type CreateRuntimeCredentialData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -131283,6 +137182,9 @@ export type CreateServiceAccountData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -133208,7 +139110,7 @@ export type GetSkillsData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -133421,6 +139323,9 @@ export type CreateSkillData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -135647,6 +141552,9 @@ export type ImportGithubSkillsData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -136580,6 +142488,10 @@ export type GetProxyCostStatisticsData = {
          * Match requests without a snapshot value for labelKey, including older requests. Requires labelKey.
          */
         labelUnassigned?: string;
+        /**
+         * Also return a time series on every returned group: each method, credential, provider key, model pool and label value on the current page.
+         */
+        includeGroupTimeSeries?: string;
         limit?: number;
         offset?: number;
     };
@@ -136701,6 +142613,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         }>;
         credentials: Array<{
@@ -136716,6 +142643,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             credentialId: string | null;
             credentialName: string | null;
@@ -136738,6 +142680,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             providerApiKeyId: string | null;
             providerApiKeyName: string | null;
             provider: string | null;
@@ -136755,6 +142712,21 @@ export type GetProxyCostStatisticsResponses = {
              * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
              */
             failedOverAttempts: number;
+            timeSeries?: Array<{
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                totalTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
+                timestamp: string;
+            }>;
             modelPoolId: string | null;
             modelPoolName: string | null;
         }>;
@@ -136774,6 +142746,21 @@ export type GetProxyCostStatisticsResponses = {
                  * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
                  */
                 failedOverAttempts: number;
+                timeSeries?: Array<{
+                    requests: number;
+                    inputTokens: number;
+                    outputTokens: number;
+                    cacheReadTokens: number;
+                    cacheWriteTokens: number;
+                    totalTokens: number;
+                    billedCost: number;
+                    subscriptionCost: number;
+                    /**
+                     * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                     */
+                    failedOverAttempts: number;
+                    timestamp: string;
+                }>;
                 value: string | null;
             }>;
             pagination: {
@@ -136792,6 +142779,10 @@ export type GetTeamStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/teams';
 };
@@ -137869,6 +143860,10 @@ export type GetCostStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.
+         */
+        teamId?: string;
     };
     url: '/api/statistics/costs';
 };
@@ -138236,6 +144231,197 @@ export type GetMcpToolCallUsageResponses = {
 
 export type GetMcpToolCallUsageResponse = GetMcpToolCallUsageResponses[keyof GetMcpToolCallUsageResponses];
 
+export type GetLlmUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, teamId, agentId, userId, credentialId, provider, model. Defaults to teamId,provider,model.
+         */
+        groupBy?: Array<'day' | 'teamId' | 'agentId' | 'userId' | 'credentialId' | 'provider' | 'model'>;
+        /**
+         * Only this team's usage.
+         */
+        teamId?: string;
+        /**
+         * Only this virtual key, passthrough key or OAuth client.
+         */
+        credentialId?: string;
+        /**
+         * Only this provider, e.g. anthropic.
+         */
+        provider?: string;
+        /**
+         * Only this billed model.
+         */
+        model?: string;
+    };
+    url: '/api/statistics/llm-usage';
+};
+
+export type GetLlmUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmUsageError = GetLlmUsageErrors[keyof GetLlmUsageErrors];
+
+export type GetLlmUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            /**
+             * Team the usage is attributed to: the credential's billing team, otherwise each team the agent is shared with (the same attribution as GET /api/statistics/teams). Present when grouped by teamId.
+             */
+            teamId?: string;
+            teamName?: string;
+            /**
+             * Agent, MCP gateway or LLM proxy that made the requests, as in GET /api/statistics/agents: legacy proxy rows count under the organization's LLM proxy. Present when grouped by agentId.
+             */
+            agentId?: string;
+            agentName?: string;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
+            /**
+             * How the request authenticated, e.g. virtual_key. Present when grouped by credentialId.
+             */
+            authMethod?: string;
+            /**
+             * Virtual key, passthrough key or OAuth client that made the requests. Null when the access method has no individual credential. Present when grouped by credentialId.
+             */
+            credentialId?: string | null;
+            credentialName?: string | null;
+            /**
+             * LLM provider, e.g. anthropic. Present when grouped by provider.
+             */
+            provider?: string;
+            /**
+             * Billed model. A request that billed several models counts its tokens and spend under each one, and its request under the model it asked for. Present when grouped by model.
+             */
+            model?: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            /**
+             * Newly processed input, cache writes and output.
+             */
+            totalTokens: number;
+            /**
+             * Spend on metered API keys.
+             */
+            billedCost: number;
+            /**
+             * Subscription usage valued at API rates; not a bill.
+             */
+            subscriptionCost: number;
+        };
+    };
+};
+
+export type GetLlmUsageResponse = GetLlmUsageResponses[keyof GetLlmUsageResponses];
+
 export type GetAppUsageData = {
     body?: never;
     path?: never;
@@ -138538,6 +144724,242 @@ export type GetSkillUsageResponses = {
 };
 
 export type GetSkillUsageResponse = GetSkillUsageResponses[keyof GetSkillUsageResponses];
+
+export type GetModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/model-usage';
+};
+
+export type GetModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetModelUsageError = GetModelUsageErrors[keyof GetModelUsageErrors];
+
+export type GetModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetModelUsageResponse = GetModelUsageResponses[keyof GetModelUsageResponses];
+
+export type GetMyModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/me/model-usage';
+};
+
+export type GetMyModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyModelUsageError = GetMyModelUsageErrors[keyof GetMyModelUsageErrors];
+
+export type GetMyModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMyModelUsageResponse = GetMyModelUsageResponses[keyof GetMyModelUsageResponses];
 
 export type GetTeamsData = {
     body?: never;
@@ -140356,7 +146778,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
+        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'chatgpt' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
          * Hide built-in Archestra tools
          */
@@ -140587,7 +147009,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
         };
     }>;
 };
@@ -140674,7 +147096,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin' | 'configure-runtime'>;
     };
 };
 
@@ -141242,7 +147664,7 @@ export type GetAllVirtualApiKeysData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
-         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>, oauthClient:<oauthClientId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
         /**
@@ -141422,6 +147844,9 @@ export type CreateVirtualApiKeyData = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -141523,7 +147948,7 @@ export type CreateVirtualApiKeyResponses = {
         billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
-        value: string;
+        value?: string;
         teams: Array<{
             id: string;
             name: string;
@@ -145442,6 +151867,10 @@ export type SearchInitialPermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/creation-subjects';
 };
@@ -145527,6 +151956,9 @@ export type SearchInitialPermissionSubjectsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -145639,6 +152071,10 @@ export type SearchResourcePermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/{scope}/subjects';
 };
@@ -145724,6 +152160,9 @@ export type SearchResourcePermissionSubjectsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -145838,6 +152277,9 @@ export type GetResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -145856,6 +152298,9 @@ export type GetResourcePermissionsResponses = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -145878,6 +152323,9 @@ export type GetResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';
@@ -145903,6 +152351,9 @@ export type UpdateResourcePermissionsData = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -146011,6 +152462,9 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'serviceAccount';
                 id: string;
             } | {
+                type: 'oauthClient';
+                id: string;
+            } | {
                 type: 'role';
                 id: string;
             } | {
@@ -146029,6 +152483,9 @@ export type UpdateResourcePermissionsResponses = {
                 id: string;
             } | {
                 type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'oauthClient';
                 id: string;
             } | {
                 type: 'role';
@@ -146051,6 +152508,9 @@ export type UpdateResourcePermissionsResponses = {
             id: string;
         } | {
             type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'oauthClient';
             id: string;
         } | {
             type: 'role';

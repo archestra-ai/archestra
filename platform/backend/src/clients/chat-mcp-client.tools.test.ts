@@ -1418,6 +1418,34 @@ describe("getChatMcpTools failure and cache gating", () => {
     expect(Object.keys(toolsA)).toEqual(["extsrv__a"]);
     expect(Object.keys(toolsB)).toEqual(["extsrv__b"]);
   });
+
+  test("retains and updates runId and agentRuntimeTier across cache hits", async () => {
+    const { baseParams, conversation } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      runId: "task-1",
+      agentRuntimeTier: "S",
+    });
+    const key = chatClient.__test.getToolCacheKey({
+      agentId: baseParams.agentId,
+      userId: baseParams.userId,
+      isolationKey: conversation!.id,
+    });
+    const cached = chatClient.__test.getToolCacheEntry(key);
+    expect(cached?.context.runId).toBe("task-1");
+    expect(cached?.context.agentRuntimeTier).toBe("S");
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      runId: "task-2",
+      agentRuntimeTier: "M",
+    });
+    expect(cached?.context.runId).toBe("task-2");
+    expect(cached?.context.agentRuntimeTier).toBe("M");
+  });
 });
 
 describe("getChatMcpTools OpenAPPA delegated runs", () => {

@@ -53,8 +53,13 @@ import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import {
   resolveLogContentMode,
   withholdInteractionContent,
+  withoutInteractionMedia,
 } from "@/log-content";
 import logger from "@/logging";
+import {
+  exportSessionSummary,
+  shouldExportSessionSummary,
+} from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
   CopilotCredentialSource,
@@ -84,7 +89,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
-import { hasUnavailableMediaCost } from "@/utils/media-usage";
+import { isMediaUsage } from "@/utils/media-usage";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -98,7 +103,9 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
+import TeamModel from "./team";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -687,6 +694,20 @@ class InteractionModel {
     await InteractionModel.write({ data, auditContext, returnRow: false });
   }
 
+  /** Update only the routing outcome; usage was settled when the failed row was written. */
+  static async markPoolAttemptFailedOver(id: string): Promise<void> {
+    await db
+      .update(schema.interactionsTable)
+      .set({ attemptOutcome: "failed_over" })
+      .where(
+        and(
+          eq(schema.interactionsTable.id, id),
+          isNotNull(schema.interactionsTable.modelPoolId),
+          eq(schema.interactionsTable.attemptOutcome, "failed"),
+        ),
+      );
+  }
+
   /**
    * Find all interactions with pagination, sorting, and filtering support
    */
@@ -876,6 +897,8 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /** Rows before this interaction in (createdAt, id) order. */
+      beforeId?: string;
     };
   }): Promise<PaginatedResult<InteractionSummary>> {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
@@ -919,6 +942,17 @@ class InteractionModel {
     }
     if (filters?.endDate) {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+    if (filters?.beforeId) {
+      // At the stored precision: the API's timestamps stop at milliseconds,
+      // so only the database can rank rows that share one.
+      conditions.push(
+        sql`(${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}) < (
+          SELECT ${schema.interactionsTable.createdAt}, ${schema.interactionsTable.id}
+          FROM ${schema.interactionsTable}
+          WHERE ${schema.interactionsTable.id} = ${filters.beforeId}
+        )`,
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -994,7 +1028,14 @@ class InteractionModel {
           ),
         )
         .where(whereClause)
-        .orderBy(InteractionModel.getOrderByClause(sorting))
+        // Ties on the sort column break by id, so offset pages never swap
+        // rows that share a timestamp and a row's rank is well defined.
+        .orderBy(
+          InteractionModel.getOrderByClause(sorting),
+          sorting?.sortDirection === "asc"
+            ? asc(schema.interactionsTable.id)
+            : desc(schema.interactionsTable.id),
+        )
         .limit(pagination.limit)
         .offset(pagination.offset),
       db
@@ -1034,6 +1075,9 @@ class InteractionModel {
             : null,
           responseToolNames: preview.success
             ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseToolCalls: preview.success
+            ? (preview.data.responseToolCalls ?? null)
             : null,
           responseTextPreview: preview.success
             ? (preview.data.responseTextPreview ?? null)
@@ -1105,6 +1149,23 @@ class InteractionModel {
         (row.cacheWriteTokens ?? 0),
       createdAt: row.createdAt,
     };
+  }
+
+  /** Visibility checks for metadata endpoints must not decrypt or reconstruct conversation payloads. */
+  static async findAccessMetadata(params: {
+    id: string;
+    organizationId: string;
+  }) {
+    const [row] = await db
+      .select({ userId: schema.interactionsTable.userId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.id, params.id),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return row ?? null;
   }
 
   static async findById(
@@ -1500,7 +1561,7 @@ class InteractionModel {
       }
 
       // Audio/image counts cannot be repriced using generic text-token tariffs.
-      if (hasUnavailableMediaCost(interaction.response)) return;
+      if (isMediaUsage(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
@@ -1529,7 +1590,7 @@ class InteractionModel {
       // A credential's billing team takes the place of the agent's teams the
       // caller belongs to.
       const teamIds = interaction.billingTeamId
-        ? [interaction.billingTeamId]
+        ? await TeamModel.getBillingAncestorIds(interaction.billingTeamId)
         : await AgentTeamModel.getCallerTeamsForAgent({
             agentId: interaction.profileId,
             userId: interaction.userId,
@@ -2489,7 +2550,7 @@ class InteractionModel {
       interactionId: string | null;
     }>,
     whereClause: SQL | undefined,
-  ): Promise<SessionSummary[]> {
+  ): Promise<Array<SessionSummary & { totalDurationMs: number | null }>> {
     // Sessionless interactions each form their own group; real sessions group
     // by their shared session id.
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
@@ -2529,6 +2590,7 @@ class InteractionModel {
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
         failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+        totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
         totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
@@ -2692,6 +2754,8 @@ class InteractionModel {
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         failedOverCount: Number(s.failedOverCount),
+        totalDurationMs:
+          s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
@@ -3002,7 +3066,13 @@ class InteractionModel {
             (hasOpenAiContent ||
               hasResponsesContent ||
               hasGeminiContent ||
-              isLogContentNotStored(interaction.request))
+              isLogContentNotStored(interaction.request) ||
+              // Media, realtime and pass-through rows carry no message
+              // array; they are turns when their request summarises to text.
+              buildLastUserMessagePreview(
+                interaction.request,
+                interaction.type,
+              ) !== null)
           ) {
             if (isGuardrail || isOpenCodeSideTurn) {
               if (isGuardrail) guardrailTip ??= interaction;
@@ -3320,28 +3390,43 @@ class InteractionModel {
   }
 
   /**
-   * Number of distinct users with at least one attributed interaction since
-   * `since`. Backs the `llm_active_users` gauge.
+   * Distinct users with an attributed interaction at or after each cutoff.
+   * Computes every rolling window of the `llm_active_users` gauge in one scan.
    *
    * Deliberately an aggregate: per-user identity is not exported to Prometheus
    * (a user_id label would multiply every LLM metric's series count by the size
    * of the org — the same reason external_agent_id is not a label). Per-user
    * detail belongs to the statistics API, which reads this table directly.
    */
-  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
-    const [row] = await db
+  static async countDistinctActiveUsersForWindows(
+    since: Date[],
+  ): Promise<number[]> {
+    if (!since.length) return [];
+    const earliest = new Date(Math.min(...since.map((date) => date.getTime())));
+    // Group once over the widest window. Each user contributes exactly once
+    // to every window containing their most recent interaction.
+    const activeUsers = db
       .select({
-        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+        userId: schema.interactionsTable.userId,
+        lastSeen: max(schema.interactionsTable.createdAt).as("last_seen"),
       })
       .from(schema.interactionsTable)
       .where(
         and(
-          gte(schema.interactionsTable.createdAt, since),
+          gte(schema.interactionsTable.createdAt, earliest),
           isNotNull(schema.interactionsTable.userId),
         ),
-      );
-
-    return Number(row?.activeUsers) || 0;
+      )
+      .groupBy(schema.interactionsTable.userId)
+      .as("active_users");
+    const counts = Object.fromEntries(
+      since.map((date, index) => [
+        `window${index}`,
+        sql<number>`count(*) FILTER (WHERE ${activeUsers.lastSeen} >= ${date})`,
+      ]),
+    );
+    const [row] = await db.select(counts).from(activeUsers);
+    return since.map((_, index) => Number(row?.[`window${index}`]) || 0);
   }
 
   /**
@@ -3530,15 +3615,35 @@ class InteractionModel {
     } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
+    // One cached read of the agent gives its environment and its
+    // organization's media setting.
+    const agentSettings = data.profileId
+      ? await AgentModel.findLogSettings(data.profileId)
+      : null;
     const environmentId = billingAttribution
       ? billingAttribution.environmentId
       : data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
+        ? (agentSettings?.environmentId ?? null)
         : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
-    // the deployment's Log Content mode withholds.
+    // the deployment's Log Content mode withholds, or media the organization
+    // keeps out of its logs, whether the call came from Chat, an agent
+    // session or a client of the proxy.
     const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(columns) : columns;
+    const keepMedia =
+      withheld ||
+      (agentSettings?.keepMediaInLogs ??
+        (await OrganizationModel.keepsMediaInLogs({
+          organizationId: billingAttribution?.organizationId,
+          appId: data.appId,
+          connectorId: data.connectorId,
+          environmentId,
+        })));
+    const record = withheld
+      ? withholdInteractionContent(columns)
+      : keepMedia
+        ? columns
+        : withoutInteractionMedia(columns);
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);
@@ -3751,6 +3856,26 @@ class InteractionModel {
       usedAt: interaction.createdAt,
     });
 
+    // Run after the committed write, without delaying inference. Read the same
+    // bounded session aggregation as the UI, so time ranges/truncated log queries
+    // cannot turn a partial set of requests into misleading totals.
+    if (shouldExportSessionSummary()) {
+      trackBackgroundWork(
+        InteractionModel.summarizeSessionPage(
+          [
+            {
+              sessionId: insertValues.sessionId ?? null,
+              interactionId: insertValues.sessionId ? null : interaction.id,
+            },
+          ],
+          undefined,
+        )
+          .then((rows) => {
+            for (const row of rows) exportSessionSummary(row);
+          })
+          .catch(() => {}),
+      );
+    }
     return interaction;
   }
 }
@@ -3878,6 +4003,9 @@ function isHarnessInjectedUserBlock(text: string): boolean {
   if (!trimmed) return true;
   return (
     trimmed.startsWith("<system-reminder>") ||
+    // Copilot CLI's own notes to the model: deferred tools, background agents.
+    trimmed.startsWith("<system_reminder>") ||
+    trimmed.startsWith("<system_notification>") ||
     trimmed.startsWith("<local-command-stdout>") ||
     trimmed.startsWith("<local-command-stderr>") ||
     trimmed.startsWith("<local-command-caveat>") ||
@@ -3925,9 +4053,73 @@ function extractGenuineAnthropicUserMessage(request: unknown): string | null {
   return null;
 }
 
+/** The datetime line Copilot CLI opens every user message with. */
+const LEADING_DATETIME = /^\s*<current_datetime>[^<]*<\/current_datetime>\s*/;
+
+/**
+ * The last text a person wrote in a Responses request's `input`, past the
+ * notes a client sends as user messages (Copilot CLI's deferred-tools
+ * reminder and background-agent notices), Copilot's leading datetime line and
+ * the labels of attached images and files.
+ */
+function extractGenuineResponsesUserMessage(request: unknown): string | null {
+  const input = (request as { input?: unknown } | null)?.input;
+  if (!Array.isArray(input)) return null;
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i] as {
+      type?: string;
+      role?: string;
+      content?: unknown;
+    } | null;
+    if (
+      item?.role !== "user" ||
+      (item.type !== undefined && item.type !== "message")
+    )
+      continue;
+    const texts = writtenTexts(item.content);
+    for (let j = texts.length - 1; j >= 0; j--) {
+      const text = texts[j].replace(LEADING_DATETIME, "");
+      if (!isHarnessInjectedUserBlock(text)) return text.trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * The text parts of one user message, past the labels of its attachments.
+ * Copilot CLI sends each attached image or file as a text part naming it
+ * (`Image file at path …`, `Document at path "…"`) right before the image or
+ * file part, after the person's prompt. A text part followed by a part that
+ * is not text is such a label, unless the message has no other text.
+ */
+function writtenTexts(content: unknown): string[] {
+  if (typeof content === "string") return [content];
+  if (!Array.isArray(content)) return [];
+  const textOf = (part: unknown) => {
+    const text = (part as { text?: unknown } | null)?.text;
+    return typeof text === "string" ? text : undefined;
+  };
+  const texts: string[] = [];
+  const unlabeled: string[] = [];
+  content.forEach((part, index) => {
+    const text = textOf(part);
+    if (text === undefined) return;
+    texts.push(text);
+    const next = content[index + 1];
+    if (next === undefined || textOf(next) !== undefined) unlabeled.push(text);
+  });
+  return unlabeled.length > 0 ? unlabeled : texts;
+}
+
+/**
+ * The session title's text: the last user message. A media row may keep
+ * what the user said on its response (the text a speech call spoke), so the
+ * response is read too when the caller has it.
+ */
 function buildLastUserMessagePreview(
   request: unknown,
   type: string,
+  response: unknown = {},
 ): string | null {
   try {
     if (type === "anthropic:messages") {
@@ -3936,9 +4128,15 @@ function buildLastUserMessagePreview(
         return truncatePreview(genuine);
       }
     }
+    if (type.endsWith(":responses")) {
+      const genuine = extractGenuineResponsesUserMessage(request);
+      if (genuine) {
+        return truncatePreview(genuine);
+      }
+    }
     const interaction = new DynamicInteraction({
       request,
-      response: {},
+      response: response ?? {},
       type,
     } as never);
     const message = interaction.getLastUserMessage().trim();
@@ -4059,11 +4257,20 @@ function buildSessionPreview(
     : findMarkers(request, SESSION_PREVIEW_MARKERS);
   const isTitleGeneration = hasTitleGenerationMarker(markers);
   const contentNotStored = isLogContentNotStored(request);
+  const lastUserMessagePreview = buildLastUserMessagePreview(
+    data.request,
+    data.type,
+    data.response,
+  );
   return {
     hasContent:
       [request?.messages, request?.input, request?.contents].some(
         (value) => Array.isArray(value) && value.length > 0,
-      ) || contentNotStored,
+      ) ||
+      contentNotStored ||
+      // Media, realtime and pass-through rows carry no message array; they
+      // are turns when their request summarises to text.
+      lastUserMessagePreview !== null,
     isTitleGeneration,
     isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
@@ -4076,15 +4283,16 @@ function buildSessionPreview(
       (isClaudeSessionSource(data.sessionSource ?? null) &&
         hasClaudeSubagentMarker(data.request)),
     contentNotStored,
-    lastUserMessagePreview: buildLastUserMessagePreview(
-      data.request,
-      data.type,
-    ),
+    lastUserMessagePreview,
     claudeCodeTitle: isTitleGeneration
       ? extractClaudeCodeTitle(data.response)
       : null,
     ...(contentNotStored
-      ? { responseToolNames: [], responseTextPreview: null }
+      ? {
+          responseToolNames: [],
+          responseToolCalls: [],
+          responseTextPreview: null,
+        }
       : buildResponsePreview(data)),
   };
 }
@@ -4352,7 +4560,7 @@ function buildResponsePreview(
   data: InsertInteraction,
 ): Pick<
   InteractionSessionPreview,
-  "responseToolNames" | "responseTextPreview"
+  "responseToolNames" | "responseToolCalls" | "responseTextPreview"
 > {
   try {
     const interaction = new DynamicInteraction({
@@ -4363,13 +4571,18 @@ function buildResponsePreview(
     const responseToolNames = interaction.getToolNamesRequested();
     return {
       responseToolNames,
+      responseToolCalls: interaction.getToolCallsRequested(),
       responseTextPreview:
         responseToolNames.length > 0
           ? null
           : truncatePreview(interaction.getLastAssistantResponse()),
     };
   } catch {
-    return { responseToolNames: [], responseTextPreview: null };
+    return {
+      responseToolNames: [],
+      responseToolCalls: [],
+      responseTextPreview: null,
+    };
   }
 }
 

@@ -30,6 +30,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { wordToolCallId } from "../utils/tool-call-ids";
 import {
@@ -550,7 +551,9 @@ function isReasoningContentBlock(
 }
 
 /** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
-function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+export function withBedrockToolCallIds(
+  messages: BedrockMessages,
+): BedrockMessages {
   return messages.map((message) => {
     if (!Array.isArray(message.content)) return message;
     let changed = false;
@@ -1926,7 +1929,10 @@ export const bedrockAdapterFactory: LLMProvider<
     return buildBedrockClient({
       apiKey: apiKey ?? null,
       baseUrl: options?.baseUrl,
-      fetch: fetchWithLlmUpstreamDispatcher,
+      fetch: fetchWithAbortSignal(
+        fetchWithLlmUpstreamDispatcher,
+        options?.abortSignal,
+      ),
     });
   },
 
@@ -2038,8 +2044,20 @@ export const bedrockAdapterFactory: LLMProvider<
     // or "model_context_window_exceeded" on some Nova models. No structured
     // code — read the SDK error's name + message.
     if (!error || typeof error !== "object") return undefined;
-    const awsError = error as { name?: string; message?: string };
-    if (awsError.name !== BedrockErrorTypes.VALIDATION) return undefined;
+    const awsError = error as {
+      name?: string;
+      message?: string;
+      statusCode?: number;
+      responseBody?: string;
+    };
+    // The fetch-based Bedrock client throws a plain Error with statusCode and
+    // responseBody, whereas the SDK throws a named ValidationException.
+    const isValidationError =
+      awsError.name === BedrockErrorTypes.VALIDATION ||
+      (awsError.statusCode === 400 &&
+        (awsError.responseBody?.includes("ValidationException") ||
+          awsError.message?.startsWith("Bedrock API error (400):")));
+    if (!isValidationError) return undefined;
     const msg = awsError.message?.toLowerCase() ?? "";
     if (
       msg.includes("too long") ||

@@ -3,7 +3,7 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as React from "react";
 
-import { DialogContentContext } from "@/components/ui/dialog";
+import { DialogContentContext } from "@/components/ui/dialog-content-context";
 import { cn } from "@/lib/utils/tailwind";
 
 function Popover({

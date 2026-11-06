@@ -4,14 +4,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import * as React from "react";
 
+import { DialogContentContext } from "@/components/ui/dialog-content-context";
 import { cn } from "@/lib/utils/tailwind";
-
-/**
- * True inside modal dialog content (`DialogContent`, `SheetContent`), so
- * portaled popovers know to keep their wheel and touch scrolling from reaching
- * the dialog's document-level scroll lock.
- */
-const DialogContentContext = React.createContext(false);
 
 /**
  * Low-level dialog primitives.
@@ -315,7 +309,6 @@ export {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogContentContext,
   DialogDescription,
   DialogFooter,
   DialogForm,

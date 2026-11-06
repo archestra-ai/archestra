@@ -4,7 +4,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import * as React from "react";
 
-import { DialogContentContext } from "@/components/ui/dialog";
+import { DialogContentContext } from "@/components/ui/dialog-content-context";
 import { cn } from "@/lib/utils/tailwind";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {

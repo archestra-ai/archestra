@@ -35,13 +35,6 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TEAM:
-        required: false
 
 permissions: {}
 
@@ -77,7 +70,3 @@ jobs:
       amd64_runner: ubuntu-24.04-16core
       arm64_runner: ubuntu-24.04-arm-32core
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}
-    secrets:
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

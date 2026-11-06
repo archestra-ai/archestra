@@ -1,0 +1,53 @@
+name: Turbo cache
+description: Restore Turborepo's local cache from main, or save it on a push to main
+
+# Turbo replays cached task logs and outputs instead of running the task, so
+# only main may write entries. Branch-scoped GitHub caches already keep main
+# from reading entries that pull-request or merge-group runs save, and the save
+# gate below keeps those runs from saving at all. Readers therefore only ever
+# see entries a push to main produced.
+#
+# The calling job sets TURBO_CACHE_DIR (an absolute path), so Turbo and this
+# action use the same directory.
+
+inputs:
+  name:
+    description: Cache name shared by the main writer and the jobs that read its entries
+    required: true
+  mode:
+    description: '"restore" restores the newest main entry; "save" saves the directory, on pushes to main only'
+    required: false
+    default: restore
+
+runs:
+  using: composite
+  steps:
+    - name: Require the Turbo cache directory
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        if [ -z "${TURBO_CACHE_DIR:-}" ]; then
+          echo "::error::Set TURBO_CACHE_DIR on the job so Turbo and the cache use the same directory."
+          exit 1
+        fi
+        if [ "$MODE" != restore ] && [ "$MODE" != save ]; then
+          echo "::error::Unknown turbo-cache mode: $MODE"
+          exit 1
+        fi
+
+    - name: Restore Turbo cache from main
+      if: inputs.mode == 'restore'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.TURBO_CACHE_DIR }}
+        key: turbo-${{ runner.os }}-${{ inputs.name }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-${{ inputs.name }}-
+
+    - name: Save Turbo cache
+      if: inputs.mode == 'save' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.TURBO_CACHE_DIR }}
+        key: turbo-${{ runner.os }}-${{ inputs.name }}-${{ github.sha }}

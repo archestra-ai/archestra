@@ -192,6 +192,8 @@ archestra:
 
 The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and URL hostname on every connection (`sslmode=no-verify` is rejected under IAM auth); use an endpoint hostname covered by the server certificate (such as the RDS instance, cluster, or RDS Proxy endpoint, or a custom certificate covering your alias).
 
+When you change the pod's cloud identity, such as `roleArn` or an `iam.gke.io/gcp-service-account` annotation, the migration Job runs before Helm updates the platform ServiceAccount. As a result, the Job still uses the old identity on that upgrade. To avoid this, set `archestra.migrationJob.serviceAccount.create: true`, and the Job uses its own ServiceAccount with the current annotations. It has the platform ServiceAccount's name plus `-migrate`. Before you set it, allow that account name in the role's trust policy, or in the Workload Identity binding on GKE.
+
 ### 3. Non-AWS Kubernetes Clusters (GKE, AKS, OpenShift, on-prem)
 
 When running outside AWS with network connectivity to RDS on port `5432`, you can authenticate using either OIDC federation or Kubernetes Secrets:

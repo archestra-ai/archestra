@@ -635,6 +635,33 @@ File storage PVC claim name
 {{- end }}
 
 {{/*
+Annotations for the platform ServiceAccount, as YAML: the configured
+annotations plus the IRSA role derived from archestra.database.iamAuth. The
+migration Job's hook ServiceAccount carries the same annotations.
+*/}}
+{{- define "archestra-platform.serviceAccountAnnotations" -}}
+{{- $saAnnotations := deepCopy (.Values.archestra.orchestrator.kubernetes.serviceAccount.annotations | default dict) -}}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict -}}
+{{- if and $iamAuth.roleArn (not $iamAuth.injectWebIdentityTokenVolume) (not (hasKey $saAnnotations "eks.amazonaws.com/role-arn")) -}}
+{{- $_ := set $saAnnotations "eks.amazonaws.com/role-arn" $iamAuth.roleArn -}}
+{{- end -}}
+{{- toYaml $saAnnotations -}}
+{{- end }}
+
+{{/*
+ServiceAccount name for the database migration Job: the hook-only
+<fullname>-migrate account when migrationJob.serviceAccount.create is set,
+otherwise the platform ServiceAccount.
+*/}}
+{{- define "archestra-platform.migrationJobServiceAccountName" -}}
+{{- if (.Values.archestra.migrationJob.serviceAccount).create -}}
+{{- printf "%s-migrate" (include "archestra-platform.fullname" .) -}}
+{{- else -}}
+{{- include "archestra-platform.serviceAccountName" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 ServiceAccount name for the Archestra Platform
 */}}
 {{- define "archestra-platform.serviceAccountName" -}}

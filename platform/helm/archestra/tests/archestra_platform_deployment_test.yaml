@@ -1916,6 +1916,101 @@ tests:
             name: ARCHESTRA_AUTH_SECRET
             value: "auth-secret-helm-tests-32-chars!"
 
+  - it: should read chart-injected auth secrets from envFromSecrets instead of the auth Secret
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets:
+        - name: ARCHESTRA_AUTH_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_AUTH_SECRET
+        - name: ARCHESTRA_AUTH_SESSION_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+        - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+        - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: runtime-secrets
+                key: ARCHESTRA_AUTH_SECRET
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: auth-secret
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: session-secret
+                optional: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: secrets-encryption-secret
+                optional: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: offer-signing-secret
+                optional: true
+
+  - it: should keep integration credentials out of the pod spec
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: "outlook-client-secret-value"
+        ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: "mfiles-token-value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-agents-incoming-email-outlook-client-secret
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-knowledge-base-mfiles-vaf-add-on-github-token
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+            value: "outlook-client-secret-value"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            value: "mfiles-token-value"
+
   - it: should set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET from the generated offer-signing-secret key
     documentIndex: 1
     asserts:

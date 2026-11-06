@@ -94,6 +94,41 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://a2a-webhook-wkjbuewj5a-uc.a.run.app/staging/api/webhooks/incoming-email"
+    # Identifiers and endpoints, not credentials. TODO(before merge): replace
+    # each __FILL_ME__ with the value currently held in the matching
+    # ARCHESTRA_STAGING_* repository secret.
+    ARCHESTRA_AUTH_ADMIN_EMAIL: "__FILL_ME__"
+    ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "__FILL_ME__"
+    ARCHESTRA_SENTRY_BACKEND_DSN: "__FILL_ME__"
+    ARCHESTRA_SENTRY_FRONTEND_DSN: "__FILL_ME__"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID: "__FILL_ME__"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID: "__FILL_ME__"
+    ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID: "__FILL_ME__"
+    ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID: "__FILL_ME__"
+
+  # Credentials come from the archestra-platform-runtime Secret, which
+  # archestra-ai/infra syncs from GCP Secret Manager (one key per env var).
+  # Never also set these names under env: an env entry, even "", would
+  # replace the synced value.
+  envFromSecrets:
+    - name: ARCHESTRA_AUTH_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AUTH_SECRET
+    - name: ARCHESTRA_CONTENT_ENCRYPTION_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_CONTENT_ENCRYPTION_SECRET
+    - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD
+    - name: ARCHESTRA_METRICS_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_METRICS_SECRET
+    - name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   diagnostics:
     enabled: true

@@ -19,6 +19,10 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
+import {
+  resolveNativeDatabaseConnectionString,
+  withNativeStorageRetry,
+} from "@/database/rds-iam";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
@@ -299,16 +303,18 @@ export async function getOpenappaStatus(params: {
     const status = await retryWhilePolicyMoved({
       run: async () => {
         const policy = await effectivePolicy(params.organizationId);
-        return withOpenappaContentEncryption(
-          params.organizationId,
-          params.sessionId,
-          (encryption) =>
-            module.getOpenappaStatus(
-              params.organizationId,
-              params.sessionId,
-              policy,
-              encryption,
-            ),
+        return withNativeStorageRetry(() =>
+          withOpenappaContentEncryption(
+            params.organizationId,
+            params.sessionId,
+            (encryption) =>
+              module.getOpenappaStatus(
+                params.organizationId,
+                params.sessionId,
+                policy,
+                encryption,
+              ),
+          ),
         );
       },
     });
@@ -568,7 +574,15 @@ async function binding() {
   openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
-    const url = new URL(getDatabaseConnectionString());
+    const url = new URL(
+      await resolveNativeDatabaseConnectionString(
+        getDatabaseConnectionString(),
+        {
+          iamAuthEnabled: config.database.iamAuthEnabled,
+          awsRegion: config.database.awsRegion || undefined,
+        },
+      ),
+    );
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
     await module.initializeOpenappa(
@@ -2089,10 +2103,12 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = await module.loadChildReturns(
-      params.organizationId,
-      params.parentSessionId,
-      lookup,
+    const records = await withNativeStorageRetry(() =>
+      module.loadChildReturns(
+        params.organizationId,
+        params.parentSessionId,
+        lookup,
+      ),
     );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
@@ -2124,9 +2140,8 @@ export async function loadChildAddresses(params: {
 }): Promise<Array<{ parentSessionId: string; value: string }>> {
   try {
     const module = await binding();
-    return await module.loadChildAddresses(
-      params.organizationId,
-      params.childSessionId,
+    return await withNativeStorageRetry(() =>
+      module.loadChildAddresses(params.organizationId, params.childSessionId),
     );
   } catch (error) {
     logger.warn(
@@ -2266,15 +2281,17 @@ export async function listPeerMessages(params: {
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
-      module.listPeerMessages(
-        JSON.stringify({
-          ...peerActor(params.session),
-          ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-          tool: archestraMcpBranding.getToolName(
-            TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
-          ),
-        }),
-        policy,
+      withNativeStorageRetry(() =>
+        module.listPeerMessages(
+          JSON.stringify({
+            ...peerActor(params.session),
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            tool: archestraMcpBranding.getToolName(
+              TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+            ),
+          }),
+          policy,
+        ),
       ),
     z.object({ notices: z.array(PeerNoticeWireSchema) }),
   );
@@ -2432,16 +2449,18 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.loadOfferReview(
-          params.organizationId,
-          params.sessionId,
-          params.offerId,
-          encryption,
-        ),
+    const result = await withNativeStorageRetry(() =>
+      withOpenappaContentEncryption(
+        params.organizationId,
+        params.sessionId,
+        (encryption) =>
+          module.loadOfferReview(
+            params.organizationId,
+            params.sessionId,
+            params.offerId,
+            encryption,
+          ),
+      ),
     );
     if (!result) return null;
     const scope = parseReviewScope(result.scope);

@@ -23,9 +23,10 @@ Background worker:
 Background worker: running in-process (worker Deployment disabled)
 {{- end }}
 
-{{- if .Values.postgresql.external_database_url }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- if or .Values.postgresql.external_database_url (not .Values.postgresql.enabled) }}
 
-Using external PostgreSQL database
+Using external PostgreSQL database{{- if $iamAuth.enabled }} (RDS IAM authentication enabled){{- end }}
 {{- else }}
 
 Using internal PostgreSQL database:

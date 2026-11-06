@@ -53,8 +53,7 @@ concurrency:
 
 jobs:
   # workflow_call path (release-please / deploy-dev): callers always pass a
-  # version, so gate on it — `github.event_name` is the CALLER's event here and
-  # can itself be pull_request (deploy-dev's label trigger).
+  # version, so gate on it — `github.event_name` is the CALLER's event here.
   build-p4-shim-image:
     name: Build p4 Shim Image
     if: ${{ inputs.version != '' }}

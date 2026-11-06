@@ -2,6 +2,14 @@
 
 import { AlertTriangle } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -9,6 +17,7 @@ import {
   useAutoRoutingPlan,
   useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
+import { formatDate } from "@/lib/utils/date-time";
 import { AddJevKeyLink } from "./_parts/add-jev-key";
 import { useFittedTierModels } from "./_parts/fitted-tier-models";
 import { PastSessions } from "./_parts/past-sessions";
@@ -52,11 +61,8 @@ export default function AutoRoutingOverviewPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <PlanStatus settings={settings} />
-        <UsageLine settings={settings} />
-      </div>
+    <div className="space-y-4">
+      <PlanStatus settings={settings} />
       <PastSessions
         routingEnabled={settings.enabled}
         hasActivePlan={settings.status.activePlan !== null}
@@ -68,67 +74,92 @@ export default function AutoRoutingOverviewPage() {
   );
 }
 
+/** Where routing stands, and what runs on Auto. */
 function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
   const { activePlan, coldStart, lastFitError, scorer } = settings.status;
   const fitError = lastFitError ? describeFitError(lastFitError) : null;
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span
-          className="flex items-center gap-2"
-          data-testid="auto-routing-status"
-        >
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="text-sm">
           <span
-            aria-hidden
-            className={
-              activePlan
-                ? "size-2 rounded-full bg-primary"
-                : "size-2 rounded-full border border-muted-foreground"
-            }
-          />
-          {activePlan ? (
-            <span className="font-medium">Active plan</span>
-          ) : coldStart.sessions < coldStart.required ? (
-            <span>
-              <span className="font-medium">Cold start</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · {count(coldStart.sessions)} of {count(coldStart.required)}{" "}
-                sessions scored
+            className="flex flex-wrap items-center gap-2"
+            data-testid="auto-routing-status"
+          >
+            <span
+              aria-hidden
+              className={
+                activePlan
+                  ? "size-2 rounded-full bg-primary"
+                  : "size-2 rounded-full border border-muted-foreground"
+              }
+            />
+            {activePlan ? (
+              <span>
+                <span>Active plan</span>
+                <span className="font-normal text-muted-foreground">
+                  {" "}
+                  · fitted{" "}
+                  {formatDate({
+                    date: activePlan.createdAt,
+                    dateFormat: "MMM d, HH:mm",
+                  })}
+                </span>
               </span>
-            </span>
-          ) : (
-            <span>
-              <span className="font-medium">
-                {!settings.enabled
-                  ? "Auto routing is off"
-                  : fitError
-                    ? "No plan yet"
-                    : "Fitting the first plan"}
+            ) : coldStart.sessions < coldStart.required ? (
+              <span>
+                <span>Cold start</span>
+                <span className="font-normal text-muted-foreground">
+                  {" "}
+                  · {count(coldStart.sessions)} of {count(coldStart.required)}{" "}
+                  sessions scored
+                </span>
               </span>
-              <span className="text-muted-foreground">
-                {" "}
-                · {count(coldStart.sessions)} sessions scored, enough for a plan
+            ) : (
+              <span>
+                <span>
+                  {!settings.enabled
+                    ? "Auto routing is off"
+                    : fitError
+                      ? "No plan yet"
+                      : "Fitting the first plan"}
+                </span>
+                <span className="font-normal text-muted-foreground">
+                  {" "}
+                  · {count(coldStart.sessions)} sessions scored, enough for a
+                  plan
+                </span>
               </span>
-            </span>
-          )}
-        </span>
-        {!activePlan && scorer === "no_jev_key" && <AddJevKeyLink />}
-      </div>
-      {fitError && (
-        <InlineNotice variant="error">
-          <AlertTriangle />
-          <span className="font-medium">Last fit failed</span>
-          <InlineNoticeText>
-            {fitError.message}
-            {fitError.code && (
-              <span className="ml-1 font-mono text-xs">({fitError.code})</span>
             )}
-          </InlineNoticeText>
-        </InlineNotice>
+          </span>
+        </CardTitle>
+        <CardDescription>
+          <UsageLine settings={settings} />
+        </CardDescription>
+        {!activePlan && scorer === "no_jev_key" && (
+          <CardAction>
+            <AddJevKeyLink />
+          </CardAction>
+        )}
+      </CardHeader>
+      {fitError && (
+        <CardContent className="px-4">
+          <InlineNotice variant="error">
+            <AlertTriangle />
+            <span className="font-medium">Last fit failed</span>
+            <InlineNoticeText>
+              {fitError.message}
+              {fitError.code && (
+                <span className="ml-1 font-mono text-xs">
+                  ({fitError.code})
+                </span>
+              )}
+            </InlineNoticeText>
+          </InlineNotice>
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }
 

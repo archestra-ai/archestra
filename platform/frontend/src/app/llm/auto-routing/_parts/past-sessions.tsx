@@ -8,6 +8,14 @@ import { AlertTriangle } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Dialog,
   DialogBody,
   DialogContent,
@@ -37,7 +45,8 @@ type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
 /**
  * Past sessions from the interaction log the plan can learn from: a free scan
  * counts them, then an explicit, capped scoring run reads a sample with the
- * session scorer. Beside an active plan it folds into one line until opened.
+ * session scorer. Beside an active plan it is one card with its action until
+ * a run starts.
  */
 export function PastSessions({
   routingEnabled,
@@ -56,106 +65,92 @@ export function PastSessions({
   if (!data) return null;
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
+  const scoreAction =
+    scoreOffer &&
+    (scorer === "no_jev_key" ? (
+      <AddJevKeyLink />
+    ) : (
+      canUpdate && (
+        <ScoreDialogTrigger offer={scoreOffer}>
+          {(open) => (
+            <Button size="sm" onClick={open}>
+              {scoreLabel(scoreOffer)}
+            </Button>
+          )}
+        </ScoreDialogTrigger>
+      )
+    ));
+  const scanButton = (label: string) => (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={scan.isPending}
+      onClick={() => scan.mutate()}
+    >
+      {label}
+    </Button>
+  );
+
   if (hasActivePlan && !running) {
-    if (!scoreOffer) {
-      return canUpdate ? (
-        <Button
-          size="xs"
-          variant="link"
-          className="h-auto p-0 text-sm text-muted-foreground"
-          disabled={scan.isPending}
-          onClick={() => scan.mutate()}
-        >
-          Scan past sessions
-        </Button>
-      ) : null;
-    }
+    if (!scoreOffer && !canUpdate) return null;
     return (
-      <p
-        className="flex items-center gap-2 text-sm text-muted-foreground"
-        data-testid="auto-routing-past-traffic"
-      >
-        <span className="tabular-nums">
-          {scoreOffer.rescore
-            ? `The session scorer changed: ${count(scoreOffer.remaining)} past sessions need re-scoring`
-            : `${count(scoreOffer.remaining)} past sessions not scored yet`}
-        </span>
-        {scorer === "no_jev_key" ? (
-          <AddJevKeyLink />
-        ) : (
-          canUpdate && (
-            <ScoreDialogTrigger offer={scoreOffer}>
-              {(open) => (
-                <Button
-                  size="xs"
-                  variant="link"
-                  className="h-auto p-0 text-sm"
-                  onClick={open}
-                >
-                  {scoreOffer.rescore ? "Re-score…" : "Score…"}
-                </Button>
-              )}
-            </ScoreDialogTrigger>
-          )
-        )}
-      </p>
+      <Card className="gap-3 py-4" data-testid="auto-routing-past-traffic">
+        <CardHeader className="px-4">
+          <CardTitle className="text-sm">Past sessions</CardTitle>
+          <CardDescription className="tabular-nums">
+            {!scoreOffer
+              ? "Scan the interaction log for past sessions the plan could learn from. It reads the database only and costs nothing."
+              : scoreOffer.rescore
+                ? `The session scorer changed, so ${count(scoreOffer.remaining)} past sessions need re-scoring before the plan can use them.`
+                : `${count(scoreOffer.remaining)} past sessions are not scored yet. Scoring them lets the plan learn from your real traffic.`}
+          </CardDescription>
+          <CardAction>
+            {scoreOffer ? scoreAction : scanButton("Scan past sessions")}
+          </CardAction>
+        </CardHeader>
+      </Card>
     );
   }
 
   return (
-    <section
-      className="space-y-3 rounded-md border p-4"
-      data-testid="auto-routing-past-sessions"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-medium">Past sessions</h3>
-        {canUpdate && !running && (
-          <Button
-            size="xs"
-            variant="link"
-            className="ml-auto h-auto p-0 text-sm"
-            disabled={scan.isPending}
-            onClick={() => scan.mutate()}
-          >
-            {backfill ? "Scan again" : "Scan past sessions"}
-          </Button>
+    <Card className="gap-3 py-4" data-testid="auto-routing-past-sessions">
+      <CardHeader className="px-4">
+        <CardTitle className="text-sm">Past sessions</CardTitle>
+        {!backfill && (
+          <CardDescription>
+            Scanning finds the past sessions in the interaction log the plan
+            could learn from. It reads the database only and costs nothing.
+          </CardDescription>
         )}
-        {canUpdate && running && (
-          <Button
-            size="xs"
-            variant="link"
-            className="ml-auto h-auto p-0 text-sm"
-            disabled={cancel.isPending}
-            onClick={() => cancel.mutate()}
-          >
-            Cancel
-          </Button>
+        {canUpdate && (
+          <CardAction className="flex flex-wrap items-center gap-2">
+            {running ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={cancel.isPending}
+                onClick={() => cancel.mutate()}
+              >
+                Cancel
+              </Button>
+            ) : (
+              <>
+                {backfill && scoreAction}
+                {scanButton(backfill ? "Scan again" : "Scan past sessions")}
+              </>
+            )}
+          </CardAction>
         )}
-      </div>
-      {backfill ? (
-        <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Scanning finds the past sessions in the interaction log the plan could
-          learn from. It reads the database only and costs nothing.
-        </p>
+      </CardHeader>
+      {backfill && (
+        <CardContent className="space-y-3 px-4">
+          <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
+          {scoreOffer && !canUpdate && scorer === "no_jev_key" && (
+            <AddJevKeyLink />
+          )}
+        </CardContent>
       )}
-      {backfill &&
-        scoreOffer &&
-        (scorer === "no_jev_key" ? (
-          <AddJevKeyLink />
-        ) : (
-          canUpdate && (
-            <ScoreDialogTrigger offer={scoreOffer}>
-              {(open) => (
-                <Button size="sm" onClick={open}>
-                  {scoreLabel(scoreOffer)}
-                </Button>
-              )}
-            </ScoreDialogTrigger>
-          )
-        ))}
-    </section>
+    </Card>
   );
 }
 

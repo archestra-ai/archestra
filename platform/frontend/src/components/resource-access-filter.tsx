@@ -156,30 +156,35 @@ export function ResourceAccessFilter({
         updateParams={updateParams}
         reset={reset}
       />
-      {offerAdminAccess && (access.includes("others") || sharedWith) && (
-        <ResourceSharedWithFilter
-          resource={resource}
-          value={sharedWith ?? []}
-          onChange={(next) =>
-            updateParams({
-              [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
-            })
-          }
-          footer={reset}
-        />
-      )}
-      {offerAdminAccess && owned && (access.includes("others") || owner) && (
-        <ResourceOwnerFilter
-          resource={resource}
-          value={owner ?? []}
-          onChange={(next) =>
-            updateParams({
-              [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
-            })
-          }
-          footer={reset}
-        />
-      )}
+      {!builtInOnly &&
+        offerAdminAccess &&
+        (access.includes("others") || sharedWith) && (
+          <ResourceSharedWithFilter
+            resource={resource}
+            value={sharedWith ?? []}
+            onChange={(next) =>
+              updateParams({
+                [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
+              })
+            }
+            footer={reset}
+          />
+        )}
+      {!builtInOnly &&
+        offerAdminAccess &&
+        owned &&
+        (access.includes("others") || owner) && (
+          <ResourceOwnerFilter
+            resource={resource}
+            value={owner ?? []}
+            onChange={(next) =>
+              updateParams({
+                [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
+              })
+            }
+            footer={reset}
+          />
+        )}
     </>
   );
 }
@@ -308,10 +313,9 @@ function AccessRelationFilter({
       ...(builtInOnly && { [BUILT_IN_PARAM]: "true" }),
       // "Shared with" and "Owner" are shown only with "Admin access"; never
       // leave them filtering the list while hidden.
-      ...(!next.includes("others") && {
-        [SHARED_WITH_PARAM]: null,
-        [OWNER_PARAM]: null,
-      }),
+      ...(builtInOnly || !next.includes("others")
+        ? { [SHARED_WITH_PARAM]: null, [OWNER_PARAM]: null }
+        : {}),
     });
   };
 

@@ -3070,8 +3070,16 @@ export function AgentForm({
                 />
               </div>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Select a provider API key first
+            <TooltipContent side="bottom" className="max-w-xs text-xs">
+              {/* The trigger truncates a long organization default (e.g.
+                  "Auto routed: …"), so the tooltip carries the full name. */}
+              {!(isClaudeCodeRuntime && !agent) &&
+                organizationDefaultModel.label && (
+                  <p className="font-medium">
+                    {organizationDefaultModel.label}
+                  </p>
+                )}
+              <p>Select a provider API key first</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

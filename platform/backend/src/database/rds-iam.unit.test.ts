@@ -593,7 +593,9 @@ describe("rds-iam native bridge & retry helpers", () => {
     fs.writeFileSync(certFile, serverCert, "utf8");
 
     const receivedPasswords: string[] = [];
+    let upstreamConnectionCount = 0;
     const mockPgServer = net.createServer((rawSocket) => {
+      upstreamConnectionCount += 1;
       rawSocket.once("data", (sslReq) => {
         const reqBuf = Buffer.isBuffer(sslReq) ? sslReq : Buffer.from(sslReq);
         // Expect 8-byte PostgreSQL SSLRequest (80877103) and reply 'S' (0x53)
@@ -661,6 +663,7 @@ describe("rds-iam native bridge & retry helpers", () => {
           iamAuthEnabled: true,
           awsRegion: "eu-central-1",
           credentials: credentialsSpy,
+          handshakeTimeoutMs: 100,
           env: {},
         },
       );
@@ -677,13 +680,14 @@ describe("rds-iam native bridge & retry helpers", () => {
         await client.end().catch(() => {});
       }
 
+      expect(upstreamConnectionCount).toBe(2);
       expect(credentialsSpy).toHaveBeenCalledTimes(2);
       expect(receivedPasswords).toHaveLength(2);
       expect(receivedPasswords[0]).toContain("native-token-1");
       expect(receivedPasswords[1]).toContain("native-token-2");
       expect(receivedPasswords[0]).not.toBe(receivedPasswords[1]);
 
-      // Unauthenticated local connection with wrong secret is rejected without calling credentialsSpy
+      // Unauthenticated local connection with wrong secret is rejected before opening an upstream socket or signing a token
       const badUrl = new URL(bridgeUrl);
       badUrl.password = "wrong-bridge-secret";
       const badClient = new pg.Client({
@@ -692,6 +696,27 @@ describe("rds-iam native bridge & retry helpers", () => {
       await expect(badClient.connect()).rejects.toThrow();
       await badClient.end().catch(() => {});
 
+      // Oversized startup frame is rejected immediately without opening an upstream socket
+      const bridgePort = Number(parsedBridgeUrl.port);
+      await new Promise<void>((resolve) => {
+        const oversizedSock = net.connect(bridgePort, "127.0.0.1", () => {
+          const badHeader = Buffer.alloc(8);
+          badHeader.writeInt32BE(1024 * 1024, 0);
+          badHeader.writeInt32BE(0x00030000, 4);
+          oversizedSock.write(badHeader);
+        });
+        oversizedSock.on("close", () => resolve());
+        oversizedSock.on("error", () => resolve());
+      });
+
+      // Stalled client that withholds startup data is destroyed by handshakeTimeoutMs without opening an upstream socket
+      await new Promise<void>((resolve) => {
+        const idleSock = net.connect(bridgePort, "127.0.0.1");
+        idleSock.on("close", () => resolve());
+        idleSock.on("error", () => resolve());
+      });
+
+      expect(upstreamConnectionCount).toBe(2);
       expect(credentialsSpy).toHaveBeenCalledTimes(2);
       expect(receivedPasswords).toHaveLength(2);
     } finally {

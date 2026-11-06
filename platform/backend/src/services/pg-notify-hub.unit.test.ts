@@ -392,6 +392,7 @@ describe("createDefaultPgClient", () => {
       _connectionTimeoutMillis?: number;
     };
 
+    expect(client._connectionTimeoutMillis).toBe(10_000);
     expect(typeof client.password).toBe("function");
     const token = await client.password();
     expect(token).toContain("db.internal.example.com:5432/?");

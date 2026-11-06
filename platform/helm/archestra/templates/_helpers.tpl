@@ -102,21 +102,27 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
   value: postgresql://{{ .Values.postgresql.auth.username }}:$(PGPASSWORD)@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
 {{- end }}
 {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
-{{- $migrationEnv := .migrationJobEnvOverride | default dict }}
-{{- if and $iamAuth.enabled (not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) (not (hasKey $migrationEnv "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) }}
+{{- $envOverrides := merge (dict) (.Values.archestra.env | default dict) (.migrationJobEnvOverride | default dict) }}
+{{- range .Values.archestra.envFromSecrets }}
+{{- $_ := set $envOverrides .name true }}
+{{- end }}
+{{- range .Values.archestra.envWithValueFrom }}
+{{- $_ := set $envOverrides .name true }}
+{{- end }}
+{{- if and $iamAuth.enabled (not (hasKey $envOverrides "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) }}
 - name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
   value: "true"
 {{- end }}
-{{- if and $iamAuth.awsRegion (not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_AWS_REGION")) (not (hasKey $migrationEnv "ARCHESTRA_DATABASE_AWS_REGION")) }}
+{{- if and $iamAuth.awsRegion (not (hasKey $envOverrides "ARCHESTRA_DATABASE_AWS_REGION")) }}
 - name: ARCHESTRA_DATABASE_AWS_REGION
   value: {{ $iamAuth.awsRegion | quote }}
 {{- end }}
 {{- if $iamAuth.injectWebIdentityTokenVolume }}
-{{- if and $iamAuth.roleArn (not (hasKey .Values.archestra.env "AWS_ROLE_ARN")) (not (hasKey $migrationEnv "AWS_ROLE_ARN")) }}
+{{- if and $iamAuth.roleArn (not (hasKey $envOverrides "AWS_ROLE_ARN")) }}
 - name: AWS_ROLE_ARN
   value: {{ $iamAuth.roleArn | quote }}
 {{- end }}
-{{- if and (not (hasKey .Values.archestra.env "AWS_WEB_IDENTITY_TOKEN_FILE")) (not (hasKey $migrationEnv "AWS_WEB_IDENTITY_TOKEN_FILE")) }}
+{{- if not (hasKey $envOverrides "AWS_WEB_IDENTITY_TOKEN_FILE") }}
 - name: AWS_WEB_IDENTITY_TOKEN_FILE
   value: "/var/run/secrets/aws-iam-token/serviceaccount/token"
 {{- end }}

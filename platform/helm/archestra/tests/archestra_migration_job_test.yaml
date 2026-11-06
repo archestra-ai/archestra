@@ -484,3 +484,70 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-migrate-auth
                 key: aws-session-token
+
+  - it: lets migrationJob.envFromSecrets and migrationJob.envWithValueFrom override shared IAM settings from archestra.env and archestra.database.iamAuth
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-central-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+        AWS_REGION: eu-west-1
+        AWS_SECRET_ACCESS_KEY: shared-secret-key
+      archestra.migrationJob.envFromSecrets:
+        - name: AWS_REGION
+          secretName: migration-aws-creds
+          secretKey: region
+        - name: AWS_SECRET_ACCESS_KEY
+          secretName: migration-aws-creds
+          secretKey: secret-access-key
+      archestra.migrationJob.envWithValueFrom:
+        - name: ARCHESTRA_DATABASE_AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: migration-aws-creds
+              key: db-region
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: region
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: secret-access-key
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: aws-secret-access-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: db-region
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1

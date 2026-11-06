@@ -116,17 +116,43 @@ On Amazon RDS or Aurora PostgreSQL, enable IAM database authentication so each n
 
 ### 1. Prepare the PostgreSQL Database and IAM Role
 
-Enable IAM database authentication on your RDS or Aurora PostgreSQL instance, then connect as the master user and create the IAM-enabled database user and required extensions:
+Enable IAM database authentication on your RDS or Aurora PostgreSQL instance, then connect as the master user to configure the `archestra` application database, required extensions, and IAM database role.
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE USER archestra_iam WITH LOGIN;
-GRANT rds_iam TO archestra_iam;
-GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
-\c archestra
-GRANT ALL ON SCHEMA public TO archestra_iam;
-```
+- **New database**: Switch to the `archestra` database first so `vector` and `pg_trgm` are installed in the application database, then create the IAM-enabled role and grant database and schema privileges:
+
+  ```sql
+  \c archestra
+  CREATE EXTENSION IF NOT EXISTS vector;
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  CREATE USER archestra_iam WITH LOGIN;
+  GRANT rds_iam TO archestra_iam;
+  GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
+  GRANT ALL ON SCHEMA public TO archestra_iam;
+  ```
+
+- **Existing Archestra database**: Grant `rds_iam` directly to the existing database role that owns Archestra's tables and sequences (for example, `archestra`) and keep that username in `ARCHESTRA_DATABASE_URL` and the `rds-db:connect` policy so table ownership and migration DDL (`ALTER TABLE`) privileges remain intact:
+
+  ```sql
+  \c archestra
+  CREATE EXTENSION IF NOT EXISTS vector;
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  GRANT rds_iam TO archestra;
+  ```
+
+  If you must switch an existing database from its original owner role (`archestra`) to a separate `archestra_iam` role, also transfer object ownership and privileges in the `archestra` database so both application DML and migration DDL succeed:
+
+  ```sql
+  \c archestra
+  CREATE USER archestra_iam WITH LOGIN;
+  GRANT rds_iam TO archestra_iam;
+  GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
+  GRANT ALL ON SCHEMA public TO archestra_iam;
+  GRANT archestra TO archestra_iam;
+  REASSIGN OWNED BY archestra TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO archestra_iam;
+  ```
 
 Attach an IAM policy to the pod's IAM role allowing `rds-db:connect` for the RDS resource ID (`DbiResourceId`) and database username:
 

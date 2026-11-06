@@ -7,7 +7,17 @@ schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
 */}}
-{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom "migrationJobEnvOverride" .Values.archestra.migrationJob.env) . -}}
+{{- $migrationOverrides := dict -}}
+{{- range $key, $_ := .Values.archestra.migrationJob.env -}}
+{{- $_ := set $migrationOverrides $key true -}}
+{{- end -}}
+{{- range .Values.archestra.migrationJob.envFromSecrets -}}
+{{- $_ := set $migrationOverrides .name true -}}
+{{- end -}}
+{{- range .Values.archestra.migrationJob.envWithValueFrom -}}
+{{- $_ := set $migrationOverrides .name true -}}
+{{- end -}}
+{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom "migrationJobEnvOverride" $migrationOverrides) . -}}
 {{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
 {{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) $migrationContext -}}
 {{- end }}
@@ -109,18 +119,18 @@ spec:
               valueFrom:
                 {{- toYaml .valueFrom | nindent 16 }}
             {{- end }}
-            {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) }}
+            {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) (not (hasKey $migrationOverrides "ARCHESTRA_DATABASE_URL")) }}
             - name: ARCHESTRA_DATABASE_URL
               value: {{ index .Values.archestra.env "ARCHESTRA_DATABASE_URL" | quote }}
             {{- end }}
             {{- range $dbEnvKey := list "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED" "ARCHESTRA_DATABASE_AWS_REGION" "AWS_REGION" "AWS_DEFAULT_REGION" "AWS_ROLE_ARN" "AWS_WEB_IDENTITY_TOKEN_FILE" "AWS_ROLE_SESSION_NAME" "AWS_SHARED_CREDENTIALS_FILE" "AWS_CONFIG_FILE" "AWS_PROFILE" "AWS_SDK_LOAD_CONFIG" "AWS_ACCESS_KEY_ID" "PGSSLMODE" "PGSSLROOTCERT" "NODE_EXTRA_CA_CERTS" }}
-            {{- if and (hasKey $.Values.archestra.env $dbEnvKey) (not (hasKey $.Values.archestra.migrationJob.env $dbEnvKey)) }}
+            {{- if and (hasKey $.Values.archestra.env $dbEnvKey) (not (hasKey $migrationOverrides $dbEnvKey)) }}
             - name: {{ $dbEnvKey }}
               value: {{ index $.Values.archestra.env $dbEnvKey | quote }}
             {{- end }}
             {{- end }}
             {{- range $awsSecretEnvKey := list "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN" }}
-            {{- if and (hasKey $.Values.archestra.env $awsSecretEnvKey) (not (hasKey $.Values.archestra.migrationJob.env $awsSecretEnvKey)) }}
+            {{- if and (hasKey $.Values.archestra.env $awsSecretEnvKey) (not (hasKey $migrationOverrides $awsSecretEnvKey)) }}
             {{- $awsSecretVal := index $.Values.archestra.env $awsSecretEnvKey }}
             {{- if $awsSecretVal }}
             - name: {{ $awsSecretEnvKey }}
@@ -140,9 +150,10 @@ spec:
             lock would block that traffic until the lock is granted. Rendered
             after the operator-supplied env blocks so hook-only env stays
             first for $(VAR) expansion; skipped entirely when the operator
-            provides their own PGOPTIONS through migrationJob.env.
+            provides their own PGOPTIONS through migrationJob.env,
+            migrationJob.envFromSecrets, or migrationJob.envWithValueFrom.
             */}}
-            {{- if and .Values.archestra.migrationJob.lockTimeout (not (hasKey .Values.archestra.migrationJob.env "PGOPTIONS")) }}
+            {{- if and .Values.archestra.migrationJob.lockTimeout (not (hasKey $migrationOverrides "PGOPTIONS")) }}
             - name: PGOPTIONS
               value: {{ printf "-c lock_timeout=%s" (toString .Values.archestra.migrationJob.lockTimeout) | quote }}
             {{- end }}

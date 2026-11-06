@@ -49,6 +49,7 @@ export interface RdsIamConnectionOptions {
   awsRegion?: string;
   credentials?: AwsCredentialsInput;
   env?: NodeJS.ProcessEnv;
+  handshakeTimeoutMs?: number;
 }
 
 const RDS_HOSTNAME_REGION_PATTERN =
@@ -582,10 +583,16 @@ export function configurePgDefaultsForRdsIam(
   return parsedUrl.toString();
 }
 
+const PG_SSL_REQUEST_CODE = 80877103;
+const PG_STARTUP_PROTOCOL_V3 = 0x00030000;
 const PG_SSL_REQUEST_PACKET = Buffer.from([
   0x00, 0x00, 0x00, 0x08, 0x04, 0xd2, 0x16, 0x2f,
 ]);
-const PG_CANCEL_REQUEST_CODE = 80877102;
+const PG_AUTH_CLEARTEXT_REQUEST_PACKET = Buffer.from([
+  0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03,
+]);
+const DEFAULT_BRIDGE_HANDSHAKE_TIMEOUT_MS = 10_000;
+const MAX_BRIDGE_HANDSHAKE_BYTES = 16 * 1024;
 const nativeBridgePromises = new Map<string, Promise<string>>();
 const nativeBridgeServers = new Set<net.Server>();
 
@@ -615,7 +622,11 @@ export async function resolveNativeDatabaseConnectionString(
 
   const cacheKey = `${connectionString}|${options.awsRegion ?? env.ARCHESTRA_DATABASE_AWS_REGION ?? ""}`;
   const existing = nativeBridgePromises.get(cacheKey);
-  if (existing && options.credentials === undefined) {
+  if (
+    existing &&
+    options.credentials === undefined &&
+    options.handshakeTimeoutMs === undefined
+  ) {
     return existing;
   }
 
@@ -624,6 +635,8 @@ export async function resolveNativeDatabaseConnectionString(
   const rdsPort = Number(pgConfig.port || 5432);
   const sslConfig = pgConfig.ssl;
   const passwordCallback = pgConfig.password;
+  const handshakeTimeoutMs =
+    options.handshakeTimeoutMs ?? DEFAULT_BRIDGE_HANDSHAKE_TIMEOUT_MS;
 
   if (!rdsHost || typeof passwordCallback !== "function") {
     return connectionString;
@@ -635,16 +648,18 @@ export async function resolveNativeDatabaseConnectionString(
 
     const server = net.createServer((clientSocket) => {
       clientSocket.unref();
-      const upstreamTcp = net.connect(rdsPort, rdsHost);
-      upstreamTcp.unref();
       let clientBuf = Buffer.alloc(0);
+      let startupMsg: Buffer | null = null;
+      let localAuthenticated = false;
+      let upstreamStarted = false;
+      let upstreamTcp: net.Socket | null = null;
       let upstreamSocket: net.Socket | tls.TLSSocket | null = null;
-      let upstreamReady = false;
-      let startupForwarded = false;
-      let passwordIntercepted = false;
+      let upstreamBuf = Buffer.alloc(0);
+      let upstreamChallengeConsumed = false;
       let passthrough = false;
 
       const destroyBoth = (err?: Error) => {
+        clearTimeout(handshakeTimer);
         if (err) {
           clientSocket.destroy(err);
         } else {
@@ -652,37 +667,173 @@ export async function resolveNativeDatabaseConnectionString(
         }
         if (upstreamSocket) {
           upstreamSocket.destroy();
-        } else {
+        } else if (upstreamTcp) {
           upstreamTcp.destroy();
         }
       };
 
-      const pumpClient = () => {
-        if (!upstreamReady || !upstreamSocket) {
+      const handshakeTimer = setTimeout(() => {
+        destroyBoth(new Error("RDS IAM loopback bridge handshake timed out."));
+      }, handshakeTimeoutMs);
+      handshakeTimer.unref();
+
+      const startUpstreamConnection = () => {
+        if (upstreamStarted || !startupMsg) {
           return;
         }
-        if (!startupForwarded) {
+        upstreamStarted = true;
+        const validatedStartupMsg = startupMsg;
+        const tokenPromise = Promise.resolve().then(() => passwordCallback());
+        tokenPromise.catch(() => {});
+
+        const tcpSock = net.connect(rdsPort, rdsHost);
+        tcpSock.unref();
+        upstreamTcp = tcpSock;
+
+        tcpSock.once("connect", () => {
+          tcpSock.write(PG_SSL_REQUEST_PACKET);
+          tcpSock.once("data", (resp: Buffer) => {
+            if (resp[0] !== 0x53) {
+              destroyBoth(
+                new Error(
+                  "Upstream PostgreSQL server rejected SSLRequest required for RDS IAM authentication.",
+                ),
+              );
+              return;
+            }
+            const tlsSock = tls.connect({
+              socket: tcpSock,
+              host: rdsHost,
+              ...(net.isIP(rdsHost) === 0 ? { servername: rdsHost } : {}),
+              ...(typeof sslConfig === "object" ? sslConfig : {}),
+            });
+            tlsSock.unref();
+            upstreamSocket = tlsSock;
+            tlsSock.once("secureConnect", () => {
+              tlsSock.write(validatedStartupMsg);
+              tlsSock.on("data", (d: Buffer) => {
+                if (passthrough) {
+                  clientSocket.write(d);
+                  return;
+                }
+                if (
+                  upstreamBuf.length + d.length >
+                  MAX_BRIDGE_HANDSHAKE_BYTES
+                ) {
+                  destroyBoth(
+                    new Error(
+                      "Upstream PostgreSQL handshake buffer limit exceeded.",
+                    ),
+                  );
+                  return;
+                }
+                upstreamBuf = Buffer.concat([upstreamBuf, d]);
+                if (upstreamChallengeConsumed || upstreamBuf.length < 5) {
+                  return;
+                }
+                const msgType = upstreamBuf[0];
+                const msgLen = upstreamBuf.readInt32BE(1);
+                if (msgLen < 4 || 1 + msgLen > MAX_BRIDGE_HANDSHAKE_BYTES) {
+                  destroyBoth(
+                    new Error(
+                      "Invalid upstream PostgreSQL handshake message length.",
+                    ),
+                  );
+                  return;
+                }
+                if (upstreamBuf.length < 1 + msgLen) {
+                  return;
+                }
+                upstreamChallengeConsumed = true;
+                if (
+                  msgType === 0x52 &&
+                  msgLen === 8 &&
+                  upstreamBuf.readInt32BE(5) === 3
+                ) {
+                  upstreamBuf = upstreamBuf.subarray(9);
+                  tokenPromise
+                    .then((token) => {
+                      clearTimeout(handshakeTimer);
+                      const tokenBytes = Buffer.from(`${token}\0`, "utf8");
+                      const msg = Buffer.allocUnsafe(1 + 4 + tokenBytes.length);
+                      msg[0] = 0x70;
+                      msg.writeInt32BE(4 + tokenBytes.length, 1);
+                      tokenBytes.copy(msg, 5);
+                      tlsSock.write(msg);
+                      if (upstreamBuf.length > 0) {
+                        clientSocket.write(upstreamBuf);
+                        upstreamBuf = Buffer.alloc(0);
+                      }
+                      if (clientBuf.length > 0) {
+                        tlsSock.write(clientBuf);
+                        clientBuf = Buffer.alloc(0);
+                      }
+                      passthrough = true;
+                    })
+                    .catch((err: unknown) => {
+                      destroyBoth(
+                        err instanceof Error ? err : new Error(String(err)),
+                      );
+                    });
+                } else {
+                  clearTimeout(handshakeTimer);
+                  passthrough = true;
+                  clientSocket.write(upstreamBuf);
+                  upstreamBuf = Buffer.alloc(0);
+                }
+              });
+              tlsSock.on("end", () => clientSocket.end());
+              tlsSock.on("close", () => clientSocket.destroy());
+            });
+            tlsSock.on("error", (err) => destroyBoth(err));
+          });
+        });
+
+        tcpSock.on("error", (err) => destroyBoth(err));
+      };
+
+      const processLocalHandshake = () => {
+        if (!startupMsg) {
+          if (
+            clientBuf.length >= 8 &&
+            clientBuf.readInt32BE(0) === 8 &&
+            clientBuf.readInt32BE(4) === PG_SSL_REQUEST_CODE
+          ) {
+            clientBuf = clientBuf.subarray(8);
+            clientSocket.write(Buffer.from([0x4e]));
+          }
           if (clientBuf.length < 4) {
             return;
           }
           const startupLen = clientBuf.readInt32BE(0);
-          if (startupLen < 8 || clientBuf.length < startupLen) {
+          if (startupLen < 8 || startupLen > MAX_BRIDGE_HANDSHAKE_BYTES) {
+            destroyBoth(
+              new Error(
+                "Rejected RDS IAM loopback bridge client: invalid StartupMessage length.",
+              ),
+            );
             return;
           }
-          const startupMsg = clientBuf.subarray(0, startupLen);
-          clientBuf = clientBuf.subarray(startupLen);
-          startupForwarded = true;
-          upstreamSocket.write(startupMsg);
-
-          if (
-            startupLen === 16 &&
-            startupMsg.readInt32BE(4) === PG_CANCEL_REQUEST_CODE
-          ) {
-            passthrough = true;
+          if (clientBuf.length < 8) {
+            return;
           }
+          if (clientBuf.readInt32BE(4) !== PG_STARTUP_PROTOCOL_V3) {
+            destroyBoth(
+              new Error(
+                "Rejected RDS IAM loopback bridge client: unsupported startup protocol.",
+              ),
+            );
+            return;
+          }
+          if (clientBuf.length < startupLen) {
+            return;
+          }
+          startupMsg = Buffer.from(clientBuf.subarray(0, startupLen));
+          clientBuf = clientBuf.subarray(startupLen);
+          clientSocket.write(PG_AUTH_CLEARTEXT_REQUEST_PACKET);
         }
 
-        if (startupForwarded && !passwordIntercepted && !passthrough) {
+        if (startupMsg && !localAuthenticated) {
           if (clientBuf.length < 5) {
             return;
           }
@@ -695,7 +846,15 @@ export async function resolveNativeDatabaseConnectionString(
             return;
           }
           const msgLen = clientBuf.readInt32BE(1);
-          if (msgLen < 4 || clientBuf.length < 1 + msgLen) {
+          if (msgLen < 4 || 1 + msgLen > MAX_BRIDGE_HANDSHAKE_BYTES) {
+            destroyBoth(
+              new Error(
+                "Rejected RDS IAM loopback bridge client: invalid PasswordMessage length.",
+              ),
+            );
+            return;
+          }
+          if (clientBuf.length < 1 + msgLen) {
             return;
           }
           const rawPasswordPayload = clientBuf.subarray(5, 1 + msgLen);
@@ -705,7 +864,6 @@ export async function resolveNativeDatabaseConnectionString(
               ? rawPasswordPayload.subarray(0, nullIndex)
               : rawPasswordPayload;
           clientBuf = clientBuf.subarray(1 + msgLen);
-          passwordIntercepted = true;
 
           if (
             clientSecretBytes.length !== expectedSecretBytes.length ||
@@ -719,23 +877,8 @@ export async function resolveNativeDatabaseConnectionString(
             return;
           }
 
-          Promise.resolve(passwordCallback())
-            .then((token) => {
-              const tokenBytes = Buffer.from(`${token}\0`, "utf8");
-              const msg = Buffer.allocUnsafe(1 + 4 + tokenBytes.length);
-              msg[0] = 0x70;
-              msg.writeInt32BE(4 + tokenBytes.length, 1);
-              tokenBytes.copy(msg, 5);
-              upstreamSocket?.write(msg);
-              if (clientBuf.length > 0) {
-                upstreamSocket?.write(clientBuf);
-                clientBuf = Buffer.alloc(0);
-              }
-              passthrough = true;
-            })
-            .catch((err: unknown) => {
-              destroyBoth(err instanceof Error ? err : new Error(String(err)));
-            });
+          localAuthenticated = true;
+          startUpstreamConnection();
         }
       };
 
@@ -744,42 +887,18 @@ export async function resolveNativeDatabaseConnectionString(
           upstreamSocket.write(chunk);
           return;
         }
+        if (clientBuf.length + chunk.length > MAX_BRIDGE_HANDSHAKE_BYTES) {
+          destroyBoth(
+            new Error(
+              "Rejected RDS IAM loopback bridge client: handshake buffer limit exceeded.",
+            ),
+          );
+          return;
+        }
         clientBuf = Buffer.concat([clientBuf, chunk]);
-        pumpClient();
+        processLocalHandshake();
       });
 
-      upstreamTcp.once("connect", () => {
-        upstreamTcp.write(PG_SSL_REQUEST_PACKET);
-        upstreamTcp.once("data", (resp: Buffer) => {
-          if (resp[0] !== 0x53) {
-            destroyBoth(
-              new Error(
-                "Upstream PostgreSQL server rejected SSLRequest required for RDS IAM authentication.",
-              ),
-            );
-            return;
-          }
-          const tlsSock = tls.connect({
-            socket: upstreamTcp,
-            host: rdsHost,
-            ...(net.isIP(rdsHost) === 0 ? { servername: rdsHost } : {}),
-            ...(typeof sslConfig === "object" ? sslConfig : {}),
-          });
-          tlsSock.unref();
-          upstreamSocket = tlsSock;
-          tlsSock.once("secureConnect", () => {
-            upstreamReady = true;
-            tlsSock.on("data", (d) => clientSocket.write(d));
-            tlsSock.on("end", () => clientSocket.end());
-            tlsSock.on("close", () => clientSocket.destroy());
-            tlsSock.on("error", () => clientSocket.destroy());
-            pumpClient();
-          });
-          tlsSock.on("error", () => clientSocket.destroy());
-        });
-      });
-
-      upstreamTcp.on("error", () => clientSocket.destroy());
       clientSocket.on("error", () => destroyBoth());
       clientSocket.on("close", () => destroyBoth());
     });
@@ -827,7 +946,10 @@ export async function resolveNativeDatabaseConnectionString(
     throw err;
   });
 
-  if (options.credentials === undefined) {
+  if (
+    options.credentials === undefined &&
+    options.handshakeTimeoutMs === undefined
+  ) {
     nativeBridgePromises.set(cacheKey, createBridgePromise);
   }
   return createBridgePromise;

@@ -208,7 +208,7 @@ export async function buildModelMessages(params: {
       messages: compactionResult.messages,
       provider,
       conversationId,
-      ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
+      ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities, provider),
       anthropicNativeEndpoint,
       sandboxAvailable,
       conversationKey,

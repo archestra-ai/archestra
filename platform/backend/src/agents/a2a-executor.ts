@@ -480,6 +480,7 @@ export async function executeA2AMessage(
     ).catch(() => null);
     const ingestibleMimeTypes = getModelReadableMimeTypes(
       modelRow?.inputModalities ?? null,
+      provider,
     );
 
     // A file the model cannot read inline is staged into the agent's sandbox when

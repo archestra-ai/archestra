@@ -100,6 +100,7 @@ export async function summarizeInContext(params: {
       conversationId: params.conversationId,
       ingestibleMimeTypes: getModelReadableMimeTypes(
         compactionModelRow?.inputModalities ?? null,
+        params.provider,
       ),
       applyAnthropicCacheControl:
         params.provider !== "anthropic" || anthropicNativeEndpoint,

@@ -1,3 +1,5 @@
+import { ApiError } from "@archestra/shared/types";
+
 export function stringifyTextContent(
   content: unknown,
   separator = "\n",
@@ -51,6 +53,7 @@ export type NormalizedContentPart =
 // empty text and unrecognized parts are skipped.
 export function normalizeOpenAiContentParts(
   content: unknown,
+  options: { rejectUnsupported?: boolean } = {},
 ): NormalizedContentPart[] {
   if (typeof content === "string") {
     return content ? [{ kind: "text", text: content }] : [];
@@ -59,7 +62,14 @@ export function normalizeOpenAiContentParts(
 
   const parts: NormalizedContentPart[] = [];
   for (const raw of content) {
-    if (!raw || typeof raw !== "object") continue;
+    if (!raw || typeof raw !== "object") {
+      if (options.rejectUnsupported)
+        throw new ApiError(
+          400,
+          "Cross-provider translation does not support this content part",
+        );
+      continue;
+    }
     const part = raw as Record<string, unknown>;
 
     if (part.type === "text") {
@@ -77,7 +87,17 @@ export function normalizeOpenAiContentParts(
       const filename = readStringField(part.file, "filename");
       if (fileData) {
         parts.push({ kind: "file", fileData, filename: filename || undefined });
+      } else if (options.rejectUnsupported) {
+        throw new ApiError(
+          400,
+          "Cross-provider translation requires inline file data; provider file references cannot be transferred",
+        );
       }
+    } else if (options.rejectUnsupported) {
+      throw new ApiError(
+        400,
+        "Cross-provider translation does not support this content part",
+      );
     }
   }
   return parts;

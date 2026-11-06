@@ -85,7 +85,6 @@ import {
   UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
@@ -140,6 +139,7 @@ import type {
   ToolOwner,
 } from "@/types";
 import { agentOwner } from "@/types";
+import type { A2AOAuthExecution } from "@/types/a2a-actor";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -219,6 +219,41 @@ class McpServerUnreachableError extends Error {
     super(message);
     this.name = "McpServerUnreachableError";
   }
+}
+
+type McpDiscoveryHttpFailure = {
+  status: number;
+  authError?: "invalid_token" | "insufficient_scope" | "invalid_request";
+};
+
+function getMcpDiscoveryAuthError(
+  challenge: string | null,
+): McpDiscoveryHttpFailure["authError"] {
+  if (!challenge || !/^\s*Bearer(?:\s|$)/i.test(challenge)) return undefined;
+  const code =
+    /\berror\s*=\s*"?(invalid_token|insufficient_scope|invalid_request)(?="|,|\s|$)/i
+      .exec(challenge)?.[1]
+      ?.toLowerCase();
+  if (
+    code === "invalid_token" ||
+    code === "insufficient_scope" ||
+    code === "invalid_request"
+  ) {
+    return code;
+  }
+  return undefined;
+}
+
+function describeMcpDiscoveryHttpFailure(
+  failure: McpDiscoveryHttpFailure,
+  operation: "connecting" | "listing tools",
+): string {
+  const detail = failure.authError ? ` (${failure.authError})` : "";
+  const guidance =
+    failure.status === 401 || failure.status === 403
+      ? " Check the MCP server's credentials and provider configuration."
+      : " Check the MCP server URL and configuration.";
+  return `Upstream MCP server returned HTTP ${failure.status}${detail} while ${operation}.${guidance}`;
 }
 
 /**
@@ -371,7 +406,12 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 
 /** The caller fields that decide which installation a tool call runs through. */
 export type TargetInstallCaller = InstallCallerContext &
-  Partial<Pick<TokenAuthContext, "isOrganizationToken" | "isExternalIdp">>;
+  Partial<
+    Pick<
+      TokenAuthContext,
+      "tokenId" | "isOrganizationToken" | "isExternalIdp" | "oauthClientId"
+    >
+  >;
 
 /** The installation a tool call resolved to. */
 type TargetInstall = {
@@ -2520,7 +2560,11 @@ class McpClient {
         const installs = serverLookup
           ? (serverLookup.byCatalogId.get(catalogItem.id) ?? [])
           : await McpServerModel.findByCatalogId(catalogItem.id);
-        const resolved = await this.pickInstallForCaller(installs, tokenAuth);
+        const resolved = await this.pickInstallForCaller(
+          installs,
+          tokenAuth,
+          serverLookup,
+        );
         if (resolved) {
           return {
             targetMcpServerId: resolved.id,
@@ -2639,6 +2683,7 @@ class McpClient {
     const resolvedServer = await this.pickInstallForCaller(
       allServers,
       tokenAuth,
+      serverLookup,
     );
     if (resolvedServer) {
       logger.info(
@@ -2706,6 +2751,7 @@ class McpClient {
   private async pickInstallForCaller(
     allServers: McpServer[],
     tokenAuth: InstallCallerContext | undefined,
+    serverLookup?: ListingServerLookup,
   ): Promise<McpServer | undefined> {
     if (tokenAuth?.userId) {
       const userServer = allServers.find(
@@ -2713,13 +2759,22 @@ class McpClient {
       );
       if (userServer) return userServer;
 
-      const userTeamIds = new Set(
-        await TeamModel.getUserTeamIds(tokenAuth.userId),
-      );
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
-      );
-      if (teamServer) return teamServer;
+      // Only team-owned installs require membership. Share that lookup across
+      // this listing's catalogs, never across calls or authenticated callers.
+      if (allServers.some((server) => server.teamId)) {
+        let membership = serverLookup?.userTeamIds.get(tokenAuth.userId);
+        if (!membership) {
+          membership = TeamModel.getUserTeamIds(tokenAuth.userId);
+          const userId = tokenAuth.userId;
+          serverLookup?.userTeamIds.set(userId, membership);
+          membership.catch(() => serverLookup?.userTeamIds.delete(userId));
+        }
+        const userTeamIds = new Set(await membership);
+        const teamServer = allServers.find(
+          (s) => s.teamId && userTeamIds.has(s.teamId),
+        );
+        if (teamServer) return teamServer;
+      }
 
       const orgServer = allServers.find((s) => s.scope === "org");
       if (orgServer) return orgServer;
@@ -2804,6 +2859,7 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
   ): Promise<Transport> {
     await assertMayConnect(catalogItem.id, caller);
     // Also covers queued calls and retry paths that bypass getTransport().
@@ -2944,6 +3000,22 @@ class McpClient {
           new URL(catalogItem.serverUrl),
           {
             requestInit: { headers: new Headers(headers) },
+            // Discovery diagnostics are deliberately limited to status and a
+            // known Bearer error code. Never retain an upstream body or header.
+            fetch: onHttpFailure
+              ? async (url, init) => {
+                  const response = await fetch(url, init);
+                  if (!response.ok) {
+                    onHttpFailure({
+                      status: response.status,
+                      authError: getMcpDiscoveryAuthError(
+                        response.headers.get("www-authenticate"),
+                      ),
+                    });
+                  }
+                  return response;
+                }
+              : undefined,
           },
         );
       }
@@ -3162,6 +3234,7 @@ class McpClient {
       headerName: string;
       headerValue: string;
     },
+    onHttpFailure?: (failure: McpDiscoveryHttpFailure) => void,
   ): Promise<Transport> {
     if (
       PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
@@ -3197,6 +3270,7 @@ class McpClient {
       connectionKey,
       tokenAuth,
       enterpriseTransportCredential,
+      onHttpFailure,
     );
   }
 
@@ -4252,6 +4326,8 @@ class McpClient {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       let client: Client | undefined;
+      let operation: "connecting" | "listing tools" = "connecting";
+      let httpFailure: McpDiscoveryHttpFailure | undefined;
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
@@ -4263,6 +4339,9 @@ class McpClient {
           undefined,
           undefined,
           enterpriseTransportCredential ?? undefined,
+          (failure) => {
+            httpFailure = failure;
+          },
         );
 
         // No `roots` — see the identical omission above.
@@ -4288,6 +4367,7 @@ class McpClient {
         // server through the normal tool-assignment path.
         let tools: Tool[];
         try {
+          operation = "listing tools";
           tools = await this.discoverToolsOrResourceTools(client);
         } catch (error) {
           // A Skills-only server may intentionally expose neither tools/list
@@ -4317,6 +4397,18 @@ class McpClient {
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
+        const httpStatus =
+          error instanceof StreamableHTTPError ? error.code : undefined;
+        const safeHttpFailure =
+          httpStatus && httpStatus > 0
+            ? {
+                status: httpStatus,
+                authError:
+                  httpFailure?.status === httpStatus
+                    ? httpFailure.authError
+                    : undefined,
+              }
+            : undefined;
 
         // Only the success path closed the client; a failure after connect
         // (e.g. tool discovery threw) would otherwise leak its transport.
@@ -4343,7 +4435,11 @@ class McpClient {
 
         // Last attempt failed, throw error
         throw new McpServerUnreachableError(
-          `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
+          `Failed to connect to MCP server ${catalogItem.name}: ${
+            safeHttpFailure
+              ? describeMcpDiscoveryHttpFailure(safeHttpFailure, operation)
+              : lastError.message
+          }`,
         );
       }
     }
@@ -6577,6 +6673,7 @@ function buildDefaultAuthorizationHeaders(
 }
 
 type ListingServerLookup = {
+  userTeamIds: Map<string, Promise<string[]>>;
   byId: ReadonlyMap<string, McpServer>;
   byCatalogId: ReadonlyMap<string, McpServer[]>;
 };
@@ -6594,6 +6691,7 @@ function buildListingServerLookup(
     byCatalogId.set(server.catalogId, siblings);
   }
   return {
+    userTeamIds: new Map(),
     byId: new Map(
       [...catalogServers, ...pinnedServers].map((server) => [
         server.id,

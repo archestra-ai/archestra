@@ -3,12 +3,13 @@ import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { spyOnLogger } from "@/test/logging";
 import {
   readGuardrailsV2Activation,
   setGuardrailsDeployment,
 } from "./guardrails-deployment";
 
-vi.mock("@/logging");
+spyOnLogger();
 
 describe("readGuardrailsV2Activation", () => {
   test("a stored false is inactive, and a thrown read is not that result", async () => {

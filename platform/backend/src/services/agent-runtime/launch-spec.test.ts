@@ -8,13 +8,16 @@ import { assert, vi } from "vitest";
 import config from "@/config";
 import {
   AgentModel,
+  AgentWorkspaceModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
   SkillModel,
   TeamTokenModel,
   ToolModel,
   UserCredentialModel,
+  UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -40,6 +43,8 @@ import {
 } from "@/types";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
+import { agentRunUrl } from "./run-handle";
+import { agentRunGatewayTokenId } from "./runtime-contract";
 
 /** The default tiers, as an organization without settings has them. */
 const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
@@ -147,6 +152,106 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(launch()).rejects.toMatchObject({ statusCode: 401 });
   });
 
+  test("a user run receives an expiring, agent-scoped gateway token instead of the personal user token", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const otherAgent = await makeAgent({
+      organizationId: setup.agent.organizationId,
+      authorId: setup.user.id,
+      agentType: "agent",
+    });
+    const personalToken = await UserTokenModel.ensureUserToken(
+      setup.user.id,
+      setup.agent.organizationId,
+    );
+    const personalTokenValue = await UserTokenModel.getTokenValue(
+      personalToken.id,
+    );
+
+    const runId = crypto.randomUUID();
+    const launchedAt = Date.now();
+    const result = await buildAgentRunLaunchSpec({
+      runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+      limits: resolveAgentRunLimits({
+        tiers: TIERS,
+        runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+      }),
+      taskId: crypto.randomUUID(),
+      runId,
+      agentId: setup.agent.id,
+      actor: {
+        kind: "user",
+        id: setup.user.id,
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+
+    const token = result.spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN;
+    expect(token).not.toBe(personalTokenValue);
+    expect(token).not.toMatch(/^arch_/);
+
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(token);
+    const stored = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(stored).toMatchObject({
+      id: agentRunGatewayTokenId(runId),
+      userId: setup.user.id,
+      referenceId: `mcp-resource:${setup.agent.id}`,
+      scopes: ["mcp"],
+    });
+    expect(stored?.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      launchedAt + 3600000,
+    );
+    expect(stored?.expiresAt.getTime()).toBeLessThan(Date.now() + 3600001);
+
+    const validated = await validateMCPGatewayToken(setup.agent.id, token);
+    expect(validated).toEqual({
+      tokenId: agentRunGatewayTokenId(runId),
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: setup.agent.organizationId,
+      isUserToken: true,
+      userId: setup.user.id,
+    });
+
+    // Cannot be used on any other Agent or MCP Gateway in the organization
+    expect(await validateMCPGatewayToken(otherAgent.id, token)).toBeNull();
+
+    // Expired token is rejected
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() - 1),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+
+    // Revoked token is deleted by runId
+    await OAuthAccessTokenModel.updateExpiresAtByTokenHash({
+      tokenHash,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).not.toBeNull();
+    await OAuthAccessTokenModel.deleteById(agentRunGatewayTokenId(runId));
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+  });
+
   test("tells the client when Guardrails v2 governs the run", async ({
     makeOrganization,
     makeAdmin,
@@ -204,6 +309,77 @@ describe("buildAgentRunLaunchSpec", () => {
     } finally {
       config.openappa.enabled = previousOpenAppa;
     }
+  });
+
+  test("names the run by the id its page and the run tools use, on every turn", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const launch = (taskId: string, workspaceId?: string) =>
+      buildAgentRunLaunchSpec({
+        limits: resolveAgentRunLimits({
+          tiers: TIERS,
+          runtime: runtime(setup.agent, "openai_responses"),
+        }),
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId,
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        ...(workspaceId ? { workspaceId } : {}),
+      });
+
+    const firstTaskId = crypto.randomUUID();
+    const first = await launch(firstTaskId);
+    expect(first.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: firstTaskId,
+    });
+
+    // A follow-up is a new task in the workspace the first turn created.
+    await AgentWorkspaceModel.create({
+      id: firstTaskId,
+      organizationId: setup.agent.organizationId,
+      agentId: setup.agent.id,
+      actorKind: "user",
+      actorId: setup.user.id,
+      backend: "kubernetes",
+      runtimeScope: "agent-tests",
+      workloadName: `agent-run-test-${firstTaskId.slice(0, 8)}`,
+      state: "idle",
+      lastTaskId: firstTaskId,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const followUpTaskId = crypto.randomUUID();
+    const followUp = await launch(followUpTaskId, firstTaskId);
+    expect(followUp.spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: firstTaskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(firstTaskId),
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: followUpTaskId,
+    });
   });
 
   test("tells the run its size and the largest tier it may move to, and offers it the larger warm pool", async ({
@@ -314,6 +490,7 @@ describe("buildAgentRunLaunchSpec", () => {
     });
     const systemPrompt = "Review the repository's release instructions.";
     await AgentModel.update(setup.agent.id, { systemPrompt });
+    const taskId = crypto.randomUUID();
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
@@ -333,9 +510,13 @@ describe("buildAgentRunLaunchSpec", () => {
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
           { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
+          {
+            key: "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
+            value: "https://bypass.invalid/run",
+          },
         ],
       },
-      taskId: crypto.randomUUID(),
+      taskId,
       runId,
       agentId: setup.agent.id,
       actor: {
@@ -357,10 +538,11 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "gemini",
       ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "16384",
-      ARCHESTRA_AGENT_RUNTIME_RUN_ID: runId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: taskId,
+      ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(taskId),
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
-      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
-      OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
+      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
+      OPENAI_BASE_URL: `https://platform.example.test/v1/unified-model/${setup.agent.id}`,
       ARCHESTRA_MCP_GATEWAY_URL: `https://platform.example.test/v1/mcp/${setup.agent.id}`,
       ARCHESTRA_AGENT_RUNTIME_BANNER:
         "Example AI\nSecure access to your AI tools",
@@ -381,6 +563,9 @@ describe("buildAgentRunLaunchSpec", () => {
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "Files under /home/node persist across this conversation's turns",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page",
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "The user can forward ports 3000, 9000 from this workspace",
@@ -848,13 +1033,18 @@ describe("buildAgentRunLaunchSpec", () => {
       runMode: "one_shot",
     });
 
+    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
       "managed-subscription-token",
     );
+    expect(JSON.stringify(spec)).not.toContain("managed-subscription-token");
+    expect(JSON.stringify(spec)).not.toContain("claude-subscription-token");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
-    expect(spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toMatch(/^arch_/);
     expect(spec.env.ANTHROPIC_BASE_URL).toBe(
       `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
     );
@@ -868,7 +1058,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe(expectedModel);
     expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
-    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
+    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(taskId);
 
     expect(virtualApiKeyId).toBeTruthy();
     expect(
@@ -888,6 +1078,34 @@ describe("buildAgentRunLaunchSpec", () => {
         userId: setup.user.id,
         runtime: configuredRuntime,
       }),
+    );
+
+    const secondLaunch = await buildAgentRunLaunchSpec({
+      runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+    expect(secondLaunch.virtualApiKeyId).not.toBe(virtualApiKeyId);
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      secondLaunch.spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(secondLaunch.spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).not.toBe(
+      spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN,
     );
   });
 

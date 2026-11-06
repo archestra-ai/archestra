@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
@@ -25,6 +26,8 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  OAuthAccessTokenModel,
+  OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
@@ -33,6 +36,7 @@ import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-a
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { modelSyncService } from "@/services/model-sync";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
@@ -54,6 +58,7 @@ import {
   getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
+import { agentRunUrl } from "./run-handle";
 import {
   AGENT_RUNTIME_CPU_LIMIT_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
@@ -61,11 +66,13 @@ import {
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_MEMORY_REQUEST_ENV,
+  AGENT_RUNTIME_OAUTH_CLIENT_ID,
   AGENT_RUNTIME_SIZED_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
+  agentRunGatewayTokenId,
   constructStableRunName,
 } from "./runtime-contract";
 import {
@@ -107,7 +114,10 @@ export async function buildAgentRunLaunchSpec(params: {
   tiers?: ResolvedAgentRuntimeTiers;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
-  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  /**
+   * This turn's run record id. It names the turn's service-account token; the
+   * run's own id (`ARCHESTRA_AGENT_RUNTIME_RUN_ID`) is its workspace id.
+   */
   runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
@@ -130,6 +140,8 @@ export async function buildAgentRunLaunchSpec(params: {
     OpenAppaSession,
     "session_id" | "caller_id" | "parent_id"
   >;
+  /** Ephemeral per-run credentials redeemed from a one-time `transfer_credential` grant. */
+  ephemeralCredentials?: Record<string, string>;
 }): Promise<{
   spec: AgentRunLaunchSpec;
   virtualApiKeyId: string | null;
@@ -162,6 +174,7 @@ export async function buildAgentRunLaunchSpec(params: {
       params.actor.kind === "serviceAccount"
         ? serviceAccountUserId(params.actor.id)
         : actorUserId,
+    ephemeralCredentials: params.ephemeralCredentials,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
@@ -238,7 +251,8 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
   const isClaudeCodeRuntime =
-    params.runtime.command?.[0] === "archestra-claude-code";
+    params.runtime.command?.[0] === "archestra-claude-code" ||
+    params.runtime.command?.[0] === "archestra-claude-code-runtime";
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
@@ -252,17 +266,17 @@ export async function buildAgentRunLaunchSpec(params: {
       "A personal Claude subscription requires a run acting as a signed-in user.",
     );
   }
-  const claudeCodeToken =
-    usesClaudeCodeSubscription && actorUserId
-      ? await claudeCodeAccountManager.requireConnection({
-          runtime: params.runtime,
-          userId: actorUserId,
-          runtimeScope: params.runtimeScope,
-        })
-      : undefined;
-  // Claude Code supplies its own OAuth token. A personal passthrough key
-  // authenticates the actor to the proxy without storing that token as a
-  // provider key, so subscription requests retain usage and run attribution.
+  if (usesClaudeCodeSubscription && actorUserId) {
+    await claudeCodeAccountManager.requireConnection({
+      runtime: params.runtime,
+      userId: actorUserId,
+      runtimeScope: params.runtimeScope,
+    });
+  }
+  // Claude Code subscription runs receive a one-off per-run passthrough virtual
+  // key in CLAUDE_CODE_OAUTH_TOKEN (and X-Archestra-Virtual-Key); the proxy
+  // swaps it for the user's connected Claude subscription token server-side so
+  // the raw OAuth token never enters the runtime pod.
   const virtualKey = usesClaudeCodeSubscription
     ? await VirtualApiKeyModel.create({
         organizationId: params.organizationId,
@@ -296,7 +310,7 @@ export async function buildAgentRunLaunchSpec(params: {
     }
   }
 
-  const modelRouterUrl = `${platformBaseUrl}/v1/model-router/${params.agentId}`;
+  const modelRouterUrl = `${platformBaseUrl}/v1/unified-model/${params.agentId}`;
   const anthropicUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
   const bedrockUrl = `${platformBaseUrl}/v1/bedrock/${params.agentId}`;
   const proxyUrl = isClaudeCodeBedrock
@@ -330,6 +344,8 @@ export async function buildAgentRunLaunchSpec(params: {
   const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
   const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
   const sizeEnv = tierResourceEnv(resources);
+  // The run's stable id: its page, its workspace and the run tools' run_id.
+  const stableRunId = boundWorkspace?.id ?? params.taskId;
   const nonSecretEnv: Record<string, string> = {
     // Toolchain thread counts follow the run's size unless the Agent's own
     // environment, next, sets them.
@@ -347,12 +363,16 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: params.runtime.agentId,
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
-    ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
+    // The run's id for its page (/chat/runs/:id) and the run tools' run_id:
+    // the first turn's task id, which names its workspace. Every turn keeps it.
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: stableRunId,
+    // Nothing else in the Pod names the Archestra address a person opens.
+    ARCHESTRA_AGENT_RUNTIME_RUN_URL: agentRunUrl(stableRunId),
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
     // capability detection. Their single-provider virtual key keeps this
-    // unambiguous at the Model Router while the generic Agent Runtime client retains the
+    // unambiguous at the Unified Model API while the generic Agent Runtime client retains the
     // qualified model id above.
     ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: nativeModel,
     ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: llm.selectedProvider,
@@ -440,9 +460,16 @@ export async function buildAgentRunLaunchSpec(params: {
         actor: params.actor,
         agentId: params.agentId,
         organizationId: params.organizationId,
+        runId: params.runId,
+        expiresIn: deadline,
       }));
   } catch (error) {
     if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
+    if (params.actor.kind === "user") {
+      await OAuthAccessTokenModel.deleteById(
+        agentRunGatewayTokenId(params.runId),
+      );
+    }
     throw error;
   }
   // The volume sentence sits between two fixed parts, so a run served from a
@@ -463,6 +490,10 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
+      // Static text, so the prompt stays the same for every run of the Agent.
+      "ARCHESTRA_AGENT_RUNTIME_RUN_URL is this run's page, and ARCHESTRA_AGENT_RUNTIME_RUN_ID is its id, " +
+        "which the run tools take as run_id; follow-ups keep both. " +
+        "Read a variable by name (printenv NAME): the environment also holds this run's credentials.",
     ],
     runtime: params.runtime,
     // After the workspace facts: kept as written when the volume sentence
@@ -473,7 +504,9 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
-    ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
+    ...(usesClaudeCodeSubscription
+      ? { CLAUDE_CODE_OAUTH_TOKEN: virtualKeyValue }
+      : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
@@ -602,6 +635,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
   "ARCHESTRA_AGENT_RUNTIME_OPENAPPA",
   "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
+  "ARCHESTRA_AGENT_RUNTIME_RUN_URL",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
   "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT",
@@ -738,13 +772,34 @@ async function resolveGatewayToken(params: {
   actor: A2AActor;
   agentId: string;
   organizationId: string;
+  runId: string;
+  expiresIn: number;
 }): Promise<string> {
+  if (params.actor.kind === "user") {
+    await OAuthClientModel.ensurePlatformIssuedClient({
+      id: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      name: "Agent Runtime",
+    });
+    const value = randomBytes(32).toString("base64url");
+    const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(value);
+    await OAuthAccessTokenModel.create({
+      id: agentRunGatewayTokenId(params.runId),
+      tokenHash,
+      clientId: AGENT_RUNTIME_OAUTH_CLIENT_ID,
+      userId: params.actor.id,
+      expiresAt: new Date(Date.now() + params.expiresIn * 1000),
+      scopes: ["mcp"],
+      referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${params.agentId}`,
+    });
+    return value;
+  }
   // Team tokens are retired, so a team actor (only left on runs started
   // before then) has nothing to act with.
   if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
-      params.actor.kind === "user" ? params.actor.id : "system",
+      "system",
       params.organizationId,
     );
     if (selected?.tokenValue) return selected.tokenValue;

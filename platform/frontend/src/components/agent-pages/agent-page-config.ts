@@ -223,6 +223,10 @@ const TOOLS_STEP: AgentSetupStep = {
   id: "tools",
   title: "Tools & Knowledge",
 };
+const BUILT_IN_TOOLS_STEP: AgentSetupStep = {
+  id: "tools",
+  title: "Tools",
+};
 const TOOLS_SKILLS_STEP: AgentSetupStep = {
   id: "tools",
   title: "Tools, Skills & Knowledge",
@@ -252,7 +256,7 @@ export function getAgentSetupSteps({
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
-  if (builtIn) return [CONFIGURATION_STEP, TOOLS_STEP];
+  if (builtIn) return [CONFIGURATION_STEP, BUILT_IN_TOOLS_STEP];
   return [
     CONFIGURATION_STEP,
     agentType === "agent" ? TOOLS_SKILLS_STEP : TOOLS_STEP,

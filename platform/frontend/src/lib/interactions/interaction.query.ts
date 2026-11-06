@@ -7,19 +7,25 @@ import {
   type InteractionSource,
   isUuid,
 } from "@archestra/shared";
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
-  getInteraction,
-  getInteractionSummaries,
-  getInteractions,
-  getInteractionSessionLineage,
-  getInteractionSessions,
-  getUniqueExternalAgentIds,
-  getUniqueUserIds,
+  getLlmProxyLog,
+  getLlmProxyLogSummaries,
+  getLlmProxyLogs,
+  getLlmProxyLogSessionLineage,
+  getLlmProxyLogSessions,
+  getLlmProxyLogExternalAgentIds,
+  getLlmProxyLogUserIds,
 } = archestraApiSdk;
 
 /**
@@ -60,12 +66,12 @@ export function useInteractions({
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
+    archestraApiTypes.GetLlmProxyLogsData["query"]
   >["sortBy"];
   sortDirection?: NonNullable<
-    archestraApiTypes.GetInteractionsData["query"]
+    archestraApiTypes.GetLlmProxyLogsData["query"]
   >["sortDirection"];
-  initialData?: archestraApiTypes.GetInteractionsResponses["200"];
+  initialData?: archestraApiTypes.GetLlmProxyLogsResponses["200"];
   enabled?: boolean;
   refetchInterval?: number | false;
 } = {}) {
@@ -84,7 +90,7 @@ export function useInteractions({
       sortDirection,
     ],
     queryFn: async () => {
-      const response = await getInteractions({
+      const response = await getLlmProxyLogs({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(externalAgentId ? { externalAgentId } : {}),
@@ -131,6 +137,96 @@ export function useInteractions({
   });
 }
 
+/**
+ * The requests of a session that asked for some tool calls, found by reading
+ * the session backwards from `endDate`. A client runs such a tool, so only
+ * the asking request's stored preview knows the call id; previews are
+ * decrypted on read, so the match happens here. Reading stops once every id
+ * is found or the session's start is reached: rows without recorded call ids
+ * (older, or written mid-deploy) can sit between ones that have them.
+ */
+export function useSessionToolCallAskers({
+  sessionId,
+  callIds,
+  endDate,
+}: {
+  sessionId: string;
+  callIds: string[];
+  endDate: string | null;
+}): {
+  byCallId: Map<string, { requestId: string; name: string }>;
+  /** Still reading: a call not found yet may be found. */
+  pending: boolean;
+  /** A read failed: calls not found may exist. */
+  failed: boolean;
+  retry: () => void;
+} {
+  const wanted = callIds.join(",");
+  const query = useInfiniteQuery({
+    queryKey: ["interaction-tool-call-askers", sessionId, endDate, wanted],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const response = await getLlmProxyLogSummaries({
+        query: {
+          sessionId,
+          endDate: endDate ?? undefined,
+          limit: ASKER_BATCH,
+          offset: pageParam,
+          sortBy: "createdAt",
+          sortDirection: "desc",
+        },
+      });
+      throwOnApiError(response.error);
+      return response.data ?? null;
+    },
+    getNextPageParam: (last, all) => {
+      if (!last?.pagination.hasNext) return undefined;
+      const found = new Set(
+        all.flatMap((page) =>
+          (page?.data ?? []).flatMap((row) =>
+            (row.responseToolCalls ?? []).map((call) => call.id),
+          ),
+        ),
+      );
+      if (callIds.every((id) => found.has(id))) return undefined;
+      return all.length * ASKER_BATCH;
+    },
+    enabled: callIds.length > 0 && endDate !== null,
+  });
+  const { hasNextPage, isFetchingNextPage, fetchNextPage, isError } = query;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isError) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isError, fetchNextPage]);
+
+  const pages = query.data?.pages;
+  const byCallId = useMemo(() => {
+    const ids = new Set(wanted ? wanted.split(",") : []);
+    const found = new Map<string, { requestId: string; name: string }>();
+    for (const page of pages ?? []) {
+      for (const row of page?.data ?? []) {
+        for (const call of row.responseToolCalls ?? []) {
+          if (ids.has(call.id) && !found.has(call.id)) {
+            found.set(call.id, { requestId: row.id, name: call.name });
+          }
+        }
+      }
+    }
+    return found;
+  }, [pages, wanted]);
+  const enabled = callIds.length > 0 && endDate !== null;
+  return {
+    byCallId,
+    pending:
+      enabled &&
+      !isError &&
+      (query.isPending || hasNextPage || isFetchingNextPage),
+    failed: enabled && isError,
+    retry: () => {
+      query.refetch();
+    },
+  };
+}
+
 export function useInteractionSummaries({
   profileId,
   externalAgentId,
@@ -138,6 +234,7 @@ export function useInteractionSummaries({
   sessionId,
   startDate,
   endDate,
+  beforeId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   sortBy,
@@ -150,13 +247,15 @@ export function useInteractionSummaries({
   sessionId?: string;
   startDate?: string;
   endDate?: string;
+  /** Only rows before this interaction; the total is its position. */
+  beforeId?: string;
   limit?: number;
   offset?: number;
   sortBy?: NonNullable<
-    archestraApiTypes.GetInteractionSummariesData["query"]
+    archestraApiTypes.GetLlmProxyLogSummariesData["query"]
   >["sortBy"];
   sortDirection?: NonNullable<
-    archestraApiTypes.GetInteractionSummariesData["query"]
+    archestraApiTypes.GetLlmProxyLogSummariesData["query"]
   >["sortDirection"];
   enabled?: boolean;
 } = {}) {
@@ -169,13 +268,14 @@ export function useInteractionSummaries({
       sessionId,
       startDate,
       endDate,
+      beforeId,
       limit,
       offset,
       sortBy,
       sortDirection,
     ],
     queryFn: async () => {
-      const response = await getInteractionSummaries({
+      const response = await getLlmProxyLogSummaries({
         query: {
           profileId,
           externalAgentId,
@@ -183,6 +283,7 @@ export function useInteractionSummaries({
           sessionId,
           startDate,
           endDate,
+          beforeId,
           limit,
           offset,
           sortBy,
@@ -220,8 +321,8 @@ export function useInteraction({
   return useQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
-      const response = await getInteraction({
-        path: { interactionId: interactionId as string },
+      const response = await getLlmProxyLog({
+        path: { logId: interactionId as string },
       });
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
@@ -235,7 +336,7 @@ export function useUniqueExternalAgentIds() {
   return useQuery({
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
-      const response = await getUniqueExternalAgentIds();
+      const response = await getLlmProxyLogExternalAgentIds();
       throwOnApiError(response.error);
       return response.data ?? [];
     },
@@ -256,7 +357,7 @@ export function useInteractionUserOptions({
   return useQuery({
     queryKey: ["interactions", "userIds", "options", search],
     queryFn: async ({ signal }) => {
-      const response = await getUniqueUserIds({
+      const response = await getLlmProxyLogUserIds({
         signal,
         query: { search: search || undefined, limit: LOG_USER_OPTIONS_LIMIT },
       });
@@ -276,7 +377,7 @@ export function useInteractionUserReferences({ ids }: { ids: string[] }) {
   return useQuery({
     queryKey: ["interactions", "userIds", "references", uniqueIds],
     queryFn: async ({ signal }) => {
-      const response = await getUniqueUserIds({
+      const response = await getLlmProxyLogUserIds({
         signal,
         query: { ids: uniqueIds, limit: 100 },
       });
@@ -301,7 +402,7 @@ export function useSessionLineage({
   return useQuery({
     queryKey: ["interactions", "sessions", sessionId, "lineage"],
     queryFn: async () => {
-      const response = await getInteractionSessionLineage({
+      const response = await getLlmProxyLogSessionLineage({
         path: { sessionId },
       });
       const none = { forkedFrom: null, forks: [], forksTruncated: false };
@@ -338,7 +439,7 @@ export function useInteractionSessions({
   endDate?: string;
   limit?: number;
   cursor?: string;
-  initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+  initialData?: archestraApiTypes.GetLlmProxyLogSessionsResponses["200"];
   toastOnError?: boolean;
   enabled?: boolean;
 } = {}) {
@@ -360,7 +461,7 @@ export function useInteractionSessions({
     // answer lands, so the table never blanks and loses its scroll.
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const response = await getInteractionSessions({
+      const response = await getLlmProxyLogSessions({
         query: {
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
@@ -410,11 +511,11 @@ export function useInteractionSessions({
 export function useExportSessionInteractions() {
   return useMutation({
     mutationFn: async ({ sessionId }: { sessionId: string }) => {
-      const interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"] =
+      const interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"] =
         [];
       let offset = 0;
       for (;;) {
-        const response = await getInteractions({
+        const response = await getLlmProxyLogs({
           query: {
             sessionId,
             limit: EXPORT_PAGE_SIZE,
@@ -451,7 +552,7 @@ const EXPORT_PAGE_SIZE = 100;
 
 function downloadSessionInteractionsFile(
   sessionId: string,
-  interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"],
+  interactions: archestraApiTypes.GetLlmProxyLogsResponses["200"]["data"],
 ) {
   const payload = {
     sessionId,
@@ -478,3 +579,6 @@ function downloadSessionInteractionsFile(
 }
 
 const LOG_USER_OPTIONS_LIMIT = 50;
+
+/** Rows read per step of the backward search for tool-call askers. */
+const ASKER_BATCH = 100;

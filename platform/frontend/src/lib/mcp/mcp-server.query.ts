@@ -315,9 +315,41 @@ export function useInstallMcpServer() {
           stage: "request",
           errorMessage: clipErrorMessage(getApiErrorMessage(error)),
         });
-        handleApiError(error);
+        handleApiError(error, { toastOnError: false });
+        const rawErrorMessage = getApiErrorMessage(error);
+        // Some MCP servers return an entire tool schema in a malformed
+        // discovery response. It is neither useful nor safe in a dialog.
+        const boundedErrorMessage = rawErrorMessage.includes(
+          "Streamable HTTP error: Error POSTing to endpoint: {",
+        )
+          ? "The upstream MCP server returned an unexpected response while listing tools."
+          : rawErrorMessage.length > 1000
+            ? `${rawErrorMessage.slice(0, 1000)}…`
+            : rawErrorMessage;
+        const redundantPrefix = `Failed to connect to MCP server ${data.name}: `;
+        const errorMessage = boundedErrorMessage.startsWith(redundantPrefix)
+          ? boundedErrorMessage.slice(redundantPrefix.length)
+          : boundedErrorMessage;
+        toast.error(`Failed to install ${data.name}`, {
+          description: errorMessage.includes(
+            "Upstream MCP server returned HTTP 401",
+          )
+            ? "The MCP server rejected the connection (HTTP 401)."
+            : errorMessage.includes("Upstream MCP server returned HTTP 403")
+              ? "The MCP server denied access (HTTP 403)."
+              : "Check the server configuration and try again.",
+        });
+        return {
+          installedServer,
+          errorMessage,
+          dontShowToast: data.dontShowToast,
+        };
       }
-      return { installedServer, dontShowToast: data.dontShowToast };
+      return {
+        installedServer,
+        errorMessage: null,
+        dontShowToast: data.dontShowToast,
+      };
     },
     onSuccess: async ({ installedServer, dontShowToast }, variables) => {
       if (installedServer) {

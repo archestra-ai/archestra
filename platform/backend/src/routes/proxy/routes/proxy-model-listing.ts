@@ -97,6 +97,7 @@ export async function resolveProxyModelsApiKey(params: {
       tokenValue: token,
       expectedProvider: provider,
       expectedOrganizationId: null,
+      agentId,
     });
     if (!resolved.apiKey && !allowKeyless) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
@@ -117,7 +118,9 @@ export async function resolveProxyModelsApiKey(params: {
     // back to the provider default (undefined) when no base is configured.
     return {
       apiKey: resolved.apiKey ?? "",
-      baseUrl: providerKey?.baseUrl ?? undefined,
+      baseUrl:
+        providerKey?.baseUrl ??
+        (resolved.passthroughVirtualKeyId ? resolved.baseUrl : undefined),
       extraHeaders: providerKey?.extraHeaders ?? null,
       providerApiKeyId: providerKey?.id,
     };
@@ -235,7 +238,7 @@ export function toAnthropicModelsList(models: ModelInfo[]) {
  * `ownedBy` is the provider actually serving the models. It used to be
  * hardcoded to "openai" — right on the OpenAI route by coincidence, wrong on
  * the GitHub Copilot and Microsoft 365 Copilot routes, and contradicting the
- * model router, which reports `owned_by: <provider>` for the same models.
+ * unified model API, which reports `owned_by: <provider>` for the same models.
  */
 export function toOpenAiModelsList(
   models: ModelInfo[],

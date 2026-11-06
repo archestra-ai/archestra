@@ -40,9 +40,9 @@ If the service requires authentication, set `token_env` to an environment variab
 
 Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
 
-The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. Each OpenAPPA instance runs at most eight such programs at once.
+The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` gives the program the milliseconds it has left: `timeout_ms` less the wait for a free slot. Each OpenAPPA instance runs at most eight such programs at once.
 
-If the program needs a credential, set `token_env` to an environment variable whose name starts with `APPA_PROVIDER_`. OpenAPPA passes that variable to the program. It does not pass other `APPA_*` variables, including its own credentials.
+If the program needs a credential, set `token_env` to an environment variable whose name starts with `APPA_PROVIDER_`. OpenAPPA passes that variable to the program. It does not pass other `APPA_*` variables, including its own credentials, except `APPA_CONSULT_TIMEOUT_MS`.
 
 OpenAPPA does not require this variable when loading the policy. The program must handle a missing credential when it runs.
 

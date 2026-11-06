@@ -1,4 +1,3 @@
-import "@/lib/limits-access";
 import type { Permissions } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
@@ -6,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
@@ -101,6 +101,20 @@ describe("WithPagePermissions", () => {
     signInAs(null);
     renderAt(pathname);
     expect(screen.getByText("Page content")).toBeVisible();
+  });
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])("opens Costs to a member when they administer a team (%s)", (isTeamAdmin, opens) => {
+    signInAs(predefinedPermissionsMap.member);
+    vi.mocked(useTeamLimitAccess).mockReturnValue({
+      isTeamAdmin,
+      isTeamAdminPending: false,
+    } as ReturnType<typeof useTeamLimitAccess>);
+    renderAt("/llm/costs");
+    if (opens) expect(screen.getByText("Page content")).toBeVisible();
+    else expect(screen.queryByText("Page content")).not.toBeInTheDocument();
   });
 
   it("keeps the other chat pages behind the check", () => {

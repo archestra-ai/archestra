@@ -124,16 +124,10 @@ vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   },
 }));
 vi.mock("@/lib/organization.query");
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      getSkills: vi.fn(async () => ({ data: null })),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getSkills: vi.fn(async () => ({ data: null })),
+}));
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({
     children,
@@ -1029,6 +1023,77 @@ describe("ConnectPage (no connect request)", () => {
       "data-exclude",
       "skills",
     );
+  });
+
+  it("offers ChatGPT one desktop command and keeps web plugin setup separate", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=chatgpt") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProfile).mockReturnValue({
+      data: { id: "gw-1", name: "Team gateway", slug: "team", tools: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    mockOrganization({ data: { connectionDefaultMcpGatewayId: "gw-1" } });
+    render(<ConnectionPage />);
+    const band = screen.getByRole("region", { name: "Connect" });
+    expect(band).toHaveTextContent("Run the command in your terminal");
+    expect(band).toHaveTextContent("--client chatgpt");
+    expect(band).not.toHaveTextContent("--exclude plugins");
+    expect(band).toHaveTextContent("Quit ChatGPT");
+    expect(
+      within(band).queryByRole("button", { name: "Download ChatGPT plugin" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    expect(
+      within(band).getByRole("heading", {
+        name: "Download the plugin for ChatGPT",
+      }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(band).getByRole("button", { name: "Download ChatGPT plugin" }),
+    ).toBeVisible();
+    expect(
+      within(band).queryByRole("button", {
+        name: "Use the Windows command",
+      }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(within(band).getByRole("button", { name: "Copy" })).toBeVisible();
+    await userEvent.click(
+      within(band).getByRole("button", { name: "Use the Windows command" }),
+    );
+    expect(band).toHaveTextContent("irm ");
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using ChatGPT on the web? Download the plugin",
+      }),
+    );
+    await userEvent.click(
+      within(band).getByRole("button", {
+        name: "Using the desktop app? Use terminal setup",
+      }),
+    );
+    expect(
+      within(band).getByRole("button", {
+        name: "Use the macOS / Linux command",
+      }),
+    ).toBeVisible();
   });
 
   it("re-reads the connection settings when the tab comes back", () => {

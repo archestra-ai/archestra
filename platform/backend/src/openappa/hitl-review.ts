@@ -5,18 +5,18 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
-import {
-  isCommandExecutionTool,
-  withoutArgumentCopies,
-} from "./command-normalization";
+import { isCommandExecutionTool } from "./command-normalization";
+import { withoutProxyCopies } from "./derived-arguments";
 import {
   type HitlReviewCard,
   hitlInspectionDigest,
   hitlReviewCard,
   renderHitlReviewText,
+  toolDescriptionLine,
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
+  displayedReview,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -165,6 +165,11 @@ type PendingHitlReview = {
   remedyArguments?: Record<string, unknown>;
   /** Generated reading aid, never part of the approved tool arguments. */
   summary?: string;
+  /**
+   * The reviewed tool's own definition text, resolved when the review is
+   * staged. Cards show it when the call carries no description of its own.
+   */
+  toolDescription?: string;
 };
 
 type HitlAskUserArguments = HitlReviewCard;
@@ -310,7 +315,8 @@ export async function stageHitlReview(params: {
       // Another request may have staged this offer while we generated the
       // reading aid. An already-issued presentation of the same call wins,
       // even without a summary. The remedy plan is not part of the
-      // presentation: a repeated remedy call keeps the stage it finds.
+      // presentation: a repeated remedy call keeps the stage it finds. Nor is
+      // the tool description: the stage keeps the one it was issued with.
       const issued = await cache.get<PendingHitlReview>(
         stagePresenceKey(params.session, params.review.offerId),
       );
@@ -506,7 +512,8 @@ export async function getHitlAskUserArguments(params: {
  * the shape read here, the full text is shown and nothing it covers is left
  * out.
  */
-function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
+function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
+  const review = displayedReview(staged);
   const offerId = review.offerId;
   const options = [
     { label: "Approve", description: "Allow this exact tool call." },
@@ -528,16 +535,22 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
   const parsed = parseReviewedArguments(review.arguments);
   if (review.arguments && !parsed) {
     return {
-      question: `${formatReviewQuestion(review.text)}\n\nExact arguments (unparsed):\n${review.arguments}`,
+      question: `${formatReviewQuestion(review.text)}\n\nArguments (unparsed, credential values hidden):\n${review.arguments}`,
       header: "Approval",
       options,
       allowMultiple: false,
       remedy_offer_ids: [offerId],
     };
   }
-  const args = withoutArgumentCopies(review.tool, parsed ?? {});
+  const args = withoutProxyCopies(review.tool, parsed ?? {});
   const accepted = acceptedCoverage(review.text);
-  const preview = callPreview(review.tool, args);
+  const called = callPreview(review.tool, args);
+  // A call that says nothing about itself shows its tool's description.
+  const described =
+    called.summary === undefined && review.toolDescription
+      ? toolDescriptionLine(review.toolDescription)
+      : undefined;
+  const preview = described ? { ...called, summary: described } : called;
   return {
     question:
       approvalQuestion({
@@ -560,7 +573,7 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
 
 /**
  * The inspectable card for a review: the call in the preview pane, with
- * Allow, Deny and Inspect. When a signed Inspect answer is still pending, the
+ * Inspect, Allow and Deny. When a signed Inspect answer is still pending, the
  * card carries the complete review text for the transport to place above
  * it; the pending state is not consumed here, only when an answer to that
  * very card comes back. Returns undefined when the review is already ruled

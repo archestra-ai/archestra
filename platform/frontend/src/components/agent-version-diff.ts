@@ -583,6 +583,44 @@ function renderBoolean(value: boolean): string {
   return value ? "Yes" : "No";
 }
 
+function renderNetworkPolicy(
+  policy: Snapshot["networkPolicy"] | undefined,
+): string | null {
+  if (!policy) return null;
+  const parts: string[] = [policy.egressMode];
+  if (policy.domainPreset !== "none") {
+    parts.push(`preset: ${policy.domainPreset}`);
+  }
+  if (policy.allowedDomains.length > 0) {
+    parts.push(`domains: ${policy.allowedDomains.join(", ")}`);
+  }
+  if (policy.allowedCidrs.length > 0) {
+    parts.push(`CIDRs: ${policy.allowedCidrs.join(", ")}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderSubagentLoadBalancing(
+  policy: Snapshot["subagentLoadBalancing"] | undefined,
+): string | null {
+  if (!policy) return null;
+  if (!policy.enabled) return "Disabled";
+  const parts: string[] = [policy.algorithm];
+  parts.push(`retries: ${policy.retries}`);
+  parts.push(
+    policy.fallbackEnabled ? "fallback: enabled" : "fallback: disabled",
+  );
+  const weightEntries = Object.entries(policy.weights ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  if (weightEntries.length > 0) {
+    parts.push(
+      `weights: ${weightEntries.map(([id, w]) => `${id}=${w}`).join(", ")}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
 /**
  * Every scalar setting a snapshot carries, in the order the configuration pane
  * reads them. Each renders to a display string, and a setting neither side
@@ -670,6 +708,37 @@ const CONFIGURATION_FIELDS: {
   },
   { label: "Identity provider", render: (s) => s.identityProviderId },
   { label: "Environment", render: (s) => s.environmentId },
+  {
+    label: "Network egress",
+    render: (s) => renderNetworkPolicy(s.networkPolicy),
+    identity: (s) =>
+      s.networkPolicy
+        ? JSON.stringify({
+            egressMode: s.networkPolicy.egressMode,
+            domainPreset: s.networkPolicy.domainPreset,
+            allowedDomains: s.networkPolicy.allowedDomains,
+            allowedCidrs: s.networkPolicy.allowedCidrs,
+          })
+        : null,
+  },
+  {
+    label: "Subagent load balancing",
+    render: (s) => renderSubagentLoadBalancing(s.subagentLoadBalancing),
+    identity: (s) =>
+      s.subagentLoadBalancing
+        ? JSON.stringify({
+            enabled: s.subagentLoadBalancing.enabled,
+            algorithm: s.subagentLoadBalancing.algorithm,
+            weights: Object.fromEntries(
+              Object.entries(s.subagentLoadBalancing.weights ?? {}).sort(
+                ([a], [b]) => a.localeCompare(b),
+              ),
+            ),
+            retries: s.subagentLoadBalancing.retries,
+            fallbackEnabled: s.subagentLoadBalancing.fallbackEnabled,
+          })
+        : null,
+  },
   {
     // A managed blob rather than a setting anyone edits, and one a restore
     // does not replay — captured, so shown rather than hidden. Rendered as

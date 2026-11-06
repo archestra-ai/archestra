@@ -805,6 +805,59 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { body, organizationId } = request;
       const viewer = await resolveViewer(request);
 
+      // Indexing a file into a knowledge base shares its indexed content with
+      // the knowledge base's audience, so the caller must hold permission to
+      // share every file they index.
+      const explicit = await KbFileModel.findManyByIds({
+        ids: body.fileIds,
+        organizationId,
+        viewer,
+      });
+      for (const file of explicit) {
+        await ResourcePermissions.require({
+          organizationId,
+          userId: viewer.userId,
+          resource: "knowledgeFile",
+          scope: file.id,
+          action: "manage-permissions",
+        });
+      }
+
+      // Resolve directories to their files here rather than in the model: the
+      // caller's visibility and sharing filter has to apply to expanded files
+      // too, or selecting a directory would index documents the caller cannot
+      // see or share.
+      const directoryFileIds: string[] = [];
+      for (const directoryId of body.directoryIds) {
+        const { items } = await KbFileModel.findPaginated({
+          organizationId,
+          viewer,
+          directoryId,
+          limit: config.knowledgeFiles.maxFilesPerIndexRequest,
+          offset: 0,
+        });
+        for (const file of items) {
+          if (
+            await ResourcePermissions.allows({
+              organizationId,
+              userId: viewer.userId,
+              resource: "knowledgeFile",
+              scope: file.id,
+              action: "manage-permissions",
+            })
+          ) {
+            directoryFileIds.push(file.id);
+          }
+        }
+      }
+
+      const fileIds = [
+        ...new Set([...explicit.map((file) => file.id), ...directoryFileIds]),
+      ];
+      if (fileIds.length === 0) {
+        throw new ApiError(400, "No readable files were selected");
+      }
+
       const knowledgeBaseId = body.newKnowledgeBaseName
         ? (
             await KnowledgeBaseModel.create({
@@ -818,33 +871,6 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: viewer.userId,
             organizationId,
           });
-
-      // Resolve directories to their files here rather than in the model: the
-      // caller's visibility filter has to apply to expanded files too, or
-      // selecting a directory would index documents the caller cannot see.
-      const directoryFileIds: string[] = [];
-      for (const directoryId of body.directoryIds) {
-        const { items } = await KbFileModel.findPaginated({
-          organizationId,
-          viewer,
-          directoryId,
-          limit: config.knowledgeFiles.maxFilesPerIndexRequest,
-          offset: 0,
-        });
-        directoryFileIds.push(...items.map((file) => file.id));
-      }
-
-      const explicit = await KbFileModel.findManyByIds({
-        ids: body.fileIds,
-        organizationId,
-        viewer,
-      });
-      const fileIds = [
-        ...new Set([...explicit.map((file) => file.id), ...directoryFileIds]),
-      ];
-      if (fileIds.length === 0) {
-        throw new ApiError(400, "No readable files were selected");
-      }
 
       const result = await indexFilesIntoKnowledgeBase({
         fileIds,

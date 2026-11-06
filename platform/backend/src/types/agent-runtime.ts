@@ -10,8 +10,9 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
+import type { NetworkPolicy } from "./environment";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -288,7 +289,7 @@ export type AgentRuntimeEnvironmentEntry = z.infer<
 export const AgentRuntimeSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
-  /** Wire protocol the image uses to reach Archestra's model router. */
+  /** Wire protocol the image uses to reach Archestra's unified model API. */
   inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
   backend: AgentRuntimeBackendSchema,
   steerMode: AgentRuntimeSteerModeSchema,
@@ -354,6 +355,8 @@ export type ResolvedAgentRuntime = AgentRuntime & {
   organizationId: string;
   environmentId: string | null;
   secretId: string | null;
+  /** The Agent's own egress override; absent or null inherits the environment. */
+  agentNetworkPolicy?: NetworkPolicy | null;
 };
 
 export const SelectAgentRunRecordSchema = createSelectSchema(
@@ -411,7 +414,13 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
+  /** The run's stable id across turns: its workspace, or its only task. */
+  sessionId: z.string().uuid(),
   initiatorName: z.string().nullable(),
+  /** The run's saved files; null for a run that never had a workspace. */
+  workspace: z
+    .object({ state: AgentWorkspaceStateSchema, expiresAt: z.date() })
+    .nullable(),
   canAttach: z.boolean().optional(),
   /** Who the run is shared with, derived from its permission policy. */
   shareVisibility: z.union([

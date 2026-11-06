@@ -175,13 +175,9 @@ RUN apk add --no-cache \
    # stale cache.
    apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
        "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
-   # CVE-2026-76641, CVE-2026-66046: expat vulnerabilities (HIGH) fixed in 2.8.4-r0.
-   # CVE-2026-93990: expat vulnerability (HIGH) fixed in 2.8.5-r0.
-   # CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0.
-   # expat is pulled in transitively (python), never named in an `apk add` here, so it
-   # needs its own floor for the same reason the openssl ones above do: the cached layer
-   # never re-runs against a newer index on its own.
-   apk add --no-cache --upgrade "expat>=2.9.0-r0" && \
+   # Require patched expat and invalidate cached package layers that retain the
+   # older XML parser. Python brings this package in transitively.
+   apk add --no-cache --upgrade "expat>=2.10.0-r0" && \
    # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
    # package layer, which otherwise retains the vulnerable 10.48-r0 build.
    apk add --no-cache --upgrade "pcre2>=10.49-r0" && \

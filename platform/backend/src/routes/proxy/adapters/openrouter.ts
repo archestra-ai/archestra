@@ -1,3 +1,4 @@
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 /**
  * OpenRouter LLM Proxy Adapter - OpenAI-compatible
  *
@@ -58,7 +59,7 @@ class OpenrouterRequestAdapter
   implements LLMRequestAdapter<OpenrouterRequest, OpenrouterMessages>
 {
   readonly provider = "openrouter" as const;
-  private delegate: OpenAIRequestAdapter;
+  private delegate: OpenAIRequestAdapter<OpenrouterRequest>;
   private readonly request: OpenrouterRequest;
 
   constructor(request: OpenrouterRequest) {
@@ -102,8 +103,10 @@ class OpenrouterRequestAdapter
   convertToolResultContent(messages: OpenrouterMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest(): OpenrouterRequest {
-    const request = this.delegate.toProviderRequest();
+  toProviderRequest(options?: {
+    preserveToolCallIds?: boolean;
+  }): OpenrouterRequest {
+    const request = this.delegate.toProviderRequest(options);
     const messages: OpenrouterMessages = request.messages;
     // A tool-result update replaces the whole content, dropping a marker that
     // sat on one of its parts; carry it over from the original message.
@@ -244,7 +247,7 @@ class OpenrouterStreamAdapter
   private delegate: OpenAIStreamAdapter;
 
   constructor(request?: OpenrouterRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {
@@ -360,7 +363,7 @@ export const openrouterAdapterFactory: LLMProvider<
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: rawApiKey,
       baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
-      fetch: customFetch,
+      fetch: fetchWithAbortSignal(customFetch, options.abortSignal),
       defaultHeaders: openRouterAttributionHeaders(options.defaultHeaders),
     });
   },

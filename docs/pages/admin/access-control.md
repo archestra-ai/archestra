@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-05
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -52,7 +52,7 @@ Give people **Can use** on an agent to let them run it without changing it. Give
 Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
 
 1. Open the item's **Permissions** control.
-2. Add a person, team, role, service account, or **Everyone in the organization**.
+2. Add a person, team, role, service account, OAuth client (on Knowledge Bases, knowledge connectors, and files), or **Everyone in the organization**.
 3. Choose their level, then save.
 
 | Level | Allows |
@@ -105,7 +105,9 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 ## Team Member and Admin Roles
 
-Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage that team's members and settings, and its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) and their usage. Team admin status does not pass to descendant teams.
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage only that team's members and settings.
+
+Team admins can manage [child-team allocations and member key caps](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) across their team hierarchy, and see [those teams' costs](/docs/llm-proxy/costs-and-limits/costs#view-your-teams-costs). Their own team's ceiling stays protected unless they also administer a parent team.
 
 <span id="delegation-and-concurrent-edits"></span>
 
@@ -127,4 +129,4 @@ Choose **Make owner** on another person's row in the permissions editor. You nee
 
 The new owner receives **Full access**. The previous owner keeps their grant until you remove it separately. An owner's grant cannot be removed while they still own the resource.
 
-For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api#/Permissions/getResourcePermissions).
+For request and audit-log access, see [Logs and Auditing](/docs/admin/logs#who-can-read-them). For automated permission changes, use the [Permissions API](/docs/reference/api/organization).

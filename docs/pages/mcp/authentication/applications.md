@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,7 +33,7 @@ For LLM Proxy access, enable **LLM Proxy** on the same client and select provide
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
-For [knowledge search](/docs/knowledge#permissions), an app without a service-account binding can search assigned sources published to everyone. A bound app uses the service account’s knowledge permissions. This applies to both MCP and A2A.
+For [knowledge search](/docs/knowledge#permissions), an app without a service-account binding can search assigned sources shared with everyone or granted to that OAuth client (including files and connectors in a Knowledge Base granted to the client). On connectors with **Sync permissions from the source** on, document access follows the user who created the OAuth client. A bound app uses the service account’s knowledge permissions. This applies to both MCP and A2A.
 
 1. Create an OAuth client. Under **What can it access?**, select **MCP Gateway** for tools, **A2A** for agent calls, or both. Pick **As itself**. On **Access**, select the gateways and agents it may reach and optionally open **Advanced** to select a service account.
 2. Save the client ID and secret in your secret store. The secret shows only once.
@@ -71,7 +71,7 @@ Ask for only the enabled capabilities each token needs:
 | --- | --- |
 | `mcp` | MCP Gateway |
 | `a2a` | Agent A2A endpoints |
-| `llm:proxy` | LLM Proxy and Model Router |
+| `llm:proxy` | LLM Proxy and Unified Model API |
 
 For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each requested scope must be enabled on the client. Omitting `scope` in a client credentials request grants all its configured capabilities. A token cannot gain a capability added after it was issued; request a new token. Removing a capability or disabling the client blocks its use immediately.
 

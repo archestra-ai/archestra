@@ -60,7 +60,7 @@ import {
 // xAI's CLI chat proxy rejects a Grok CLI version below its minimum with
 // HTTP 426, and xAI raises that minimum without notice. An hourly workflow
 // proposes updates from the stable Grok CLI release channel.
-const GROK_CLI_CLIENT_VERSION = "1.0.70";
+const GROK_CLI_CLIENT_VERSION = "1.0.77";
 
 const MAX_CACHED_TOKENS = 1000;
 

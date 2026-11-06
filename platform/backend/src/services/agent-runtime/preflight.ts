@@ -1,47 +1,46 @@
+import {
+  providerDisplayNames,
+  providerRequiresPerUserCredential,
+  SUBSCRIPTION_CREDENTIALS,
+} from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import { LlmProviderApiKeyModel } from "@/models";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { prepareAgentRuntimeBackendDriver } from "./backends";
 import { claudeCodeAccountManager } from "./claude-code-account";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
 
-/** Reject actionable setup failures before returning a detached task handle. */
-export async function preflightAgentRuntimeLaunch(params: {
+type RuntimeModelReadinessInput = {
   runtime: ResolvedAgentRuntime;
-  agent: Agent;
+  agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   actor: A2AActor;
-}) {
+};
+
+/**
+ * Validate that the Agent's LLM model selection and LLM/subscription credential
+ * can be resolved for the acting principal without launching a container.
+ */
+export async function preflightAgentRuntimeModelReadiness(
+  params: RuntimeModelReadinessInput,
+  resolvedCompatibility?: Awaited<
+    ReturnType<typeof preflightAgentRuntimeModelCompatibility>
+  >,
+) {
   const { runtime, agent, actor } = params;
   const userId = actor.kind === "user" ? actor.id : null;
-  await prepareAgentRuntimeBackendDriver(runtime.backend);
-  const { usesClaudeCodeSubscription } =
-    await preflightAgentRuntimeModelCompatibility({
+  const { llm, usesClaudeCodeSubscription } =
+    resolvedCompatibility ??
+    (await preflightAgentRuntimeModelCompatibility({
       runtime,
       agent,
       organizationId: actor.organizationId,
       userId: userId ?? "system",
-    });
-  const credentials = await preflightAgentRuntimeCredentials({
-    runtime,
-    organizationId: actor.organizationId,
-    userId,
-    authorizationUserId:
-      actor.kind === "serviceAccount" ? serviceAccountUserId(actor.id) : userId,
-  });
-  if (credentials.misconfigured.length > 0) {
-    throw new ApiError(
-      409,
-      `This Agent's Agent Runtime is missing shared credentials an administrator must configure: ${credentials.misconfigured.map((entry) => entry.label).join(", ")}`,
-    );
-  }
-  if (credentials.missing.length > 0) {
-    throw new AgentRuntimeCredentialsRequiredError(
-      runtime.agentId,
-      credentials.missing,
-    );
-  }
+    }));
+
   if (usesClaudeCodeSubscription) {
     if (!userId) {
       throw new ApiError(
@@ -64,5 +63,123 @@ export async function preflightAgentRuntimeLaunch(params: {
         },
       ]);
     }
+    return;
   }
+
+  if (runtime.command?.[0] === "archestra-codex") {
+    const requiredSubscription = userId
+      ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
+          organizationId: actor.organizationId,
+          userId,
+          kind: "chatgpt",
+        })
+      : null;
+    if (!requiredSubscription) {
+      throw new ApiError(
+        409,
+        `Connect your own ${SUBSCRIPTION_CREDENTIALS.chatgpt.label} before starting this Agent. The maintained runtime never falls back to usage-based API billing.`,
+      );
+    }
+    return;
+  }
+
+  if (
+    llm.modelId !== null ||
+    agent.llmApiKeyId !== null ||
+    llm.chatApiKeyId !== null ||
+    providerRequiresPerUserCredential(llm.selectedProvider)
+  ) {
+    const resolvedProviderCredential = await resolveProviderApiKey({
+      organizationId: actor.organizationId,
+      userId:
+        actor.kind === "serviceAccount"
+          ? serviceAccountUserId(actor.id)
+          : (userId ?? undefined),
+      provider: llm.selectedProvider,
+      agentLlmApiKeyId: agent.llmApiKeyId ?? undefined,
+      modelName: llm.selectedModel,
+    });
+    if (resolvedProviderCredential.authRequired) {
+      throw new ApiError(
+        409,
+        `Connect your own ${resolvedProviderCredential.authRequired.providerLabel} before starting this Agent's Agent Runtime. Subscription credentials are never shared between users.`,
+      );
+    }
+    const providerApiKey = resolvedProviderCredential.chatApiKeyId
+      ? await LlmProviderApiKeyModel.findById(
+          resolvedProviderCredential.chatApiKeyId,
+        )
+      : null;
+    if (!providerApiKey) {
+      throw new ApiError(
+        409,
+        `No ${providerDisplayNames[llm.selectedProvider]} credential is available for this Agent and user, so the Agent Runtime run cannot use its selected model.`,
+      );
+    }
+  }
+}
+
+/**
+ * Returns whether the acting principal can satisfy the Agent's LLM model and
+ * subscription/provider credential requirements. Used by load-balanced subagent
+ * selection to skip candidates for which the actor lacks subscription/provider
+ * credentials before claiming a slot or creating a failed run record.
+ */
+export async function canLaunchAgentRuntimeModel(
+  params: RuntimeModelReadinessInput,
+): Promise<boolean> {
+  try {
+    await preflightAgentRuntimeModelReadiness(params);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof ApiError ||
+      error instanceof AgentRuntimeCredentialsRequiredError
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** Reject actionable setup failures before returning a detached task handle. */
+export async function preflightAgentRuntimeLaunch(params: {
+  runtime: ResolvedAgentRuntime;
+  agent: Agent;
+  actor: A2AActor;
+  ephemeralCredentials?: Record<string, string>;
+}) {
+  const { runtime, agent, actor } = params;
+  const userId = actor.kind === "user" ? actor.id : null;
+  await prepareAgentRuntimeBackendDriver(runtime.backend);
+  const modelCompatibility = await preflightAgentRuntimeModelCompatibility({
+    runtime,
+    agent,
+    organizationId: actor.organizationId,
+    userId: userId ?? "system",
+  });
+  const credentials = await preflightAgentRuntimeCredentials({
+    runtime,
+    organizationId: actor.organizationId,
+    userId,
+    authorizationUserId:
+      actor.kind === "serviceAccount" ? serviceAccountUserId(actor.id) : userId,
+    ephemeralCredentials: params.ephemeralCredentials,
+  });
+  if (credentials.misconfigured.length > 0) {
+    throw new ApiError(
+      409,
+      `This Agent's Agent Runtime is missing shared credentials an administrator must configure: ${credentials.misconfigured.map((entry) => entry.label).join(", ")}`,
+    );
+  }
+  if (credentials.missing.length > 0) {
+    throw new AgentRuntimeCredentialsRequiredError(
+      runtime.agentId,
+      credentials.missing,
+    );
+  }
+  await preflightAgentRuntimeModelReadiness(
+    { runtime, agent, actor },
+    modelCompatibility,
+  );
 }

@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
 import config from "@/config";
+import { withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  ConnectionSetupModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
   SkillMarketplaceRepoModel,
@@ -419,6 +421,97 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       expect(skillMd).toContain("name: clone-me");
       expect(skillMd).toContain("# Clone Me");
     }, 30_000);
+
+    for (const withSkills of [false, true]) {
+      test(`ChatGPT clone contains the connection plugin with shared skills: ${withSkills}`, async ({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        const gateway = await makeAgent({
+          organizationId: org.id,
+          agentType: "mcp_gateway",
+          name: "Team Gateway",
+        });
+        const { setup, rawToken: setupToken } =
+          await ConnectionSetupModel.create({
+            organizationId: org.id,
+            userId: user.id,
+            clientId: "chatgpt",
+            baseUrl: `${baseUrl}/v1`,
+            mcpGatewayId: gateway.id,
+            includeSkills: withSkills,
+            expiresAt: new Date(Date.now() + 60_000),
+          });
+        const params = {
+          organizationId: org.id,
+          createdByUserId: user.id,
+          skillIds: [] as string[],
+          marketplaceName: "org-connection",
+          connectionSetupId: setup.id,
+        };
+        await expect(SkillShareLinkModel.create(params)).rejects.toThrow(
+          "claimed ChatGPT setup",
+        );
+        await ConnectionSetupModel.claimByToken({ rawToken: setupToken });
+        if (withSkills)
+          params.skillIds.push(
+            (
+              await seedSkill({
+                organizationId: org.id,
+                name: "connection-setup",
+              })
+            ).id,
+          );
+        const { link, rawToken } = await SkillShareLinkModel.create(params);
+        await withDbTransaction((tx) =>
+          ConnectionSetupModel.attachSkillShareLink({
+            connectionSetupId: setup.id,
+            skillShareLinkId: link.id,
+            tx,
+          }),
+        );
+        const target = path.join(cloneDir, "connection");
+        const result = await runGitClone(
+          `${baseUrl}/skills/m/${rawToken}/repo.git`,
+          target,
+        );
+        expect(result.code).toBe(0);
+        const root = path.join(target, "plugins/org-connection");
+        const manifest = JSON.parse(
+          await fs.readFile(
+            path.join(root, ".codex-plugin/plugin.json"),
+            "utf8",
+          ),
+        );
+        expect(manifest.interface.displayName).toBe("Archestra");
+        const mcp = JSON.parse(
+          await fs.readFile(path.join(root, ".mcp.json"), "utf8"),
+        );
+        expect(mcp.mcpServers.team_gateway.url).toBe(
+          `${baseUrl}/v1/mcp/${gateway.slug ?? gateway.id}`,
+        );
+        const onboarding = await fs.readFile(
+          path.join(root, manifest.extensions["com.openai"].onboardingSkill),
+          "utf8",
+        );
+        expect(onboarding).toContain("approved terminal installer");
+        expect(
+          await fs.readFile(path.join(root, "assets/logo.svg"), "utf8"),
+        ).toContain("<svg");
+        if (withSkills)
+          expect(
+            await fs.readFile(
+              path.join(root, "skills/connection-setup/SKILL.md"),
+              "utf8",
+            ),
+          ).toContain("# connection-setup");
+      }, 30_000);
+    }
 
     test("git clone preserves hookless Claude plugin components and executable modes", async ({
       makeOrganization,

@@ -15,7 +15,7 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
 vi.mock("@/clients/bedrock-credentials", () => ({
   isBedrockIamAuthEnabled: vi.fn(),
 }));
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 vi.mock("@/routes/chat/model-fetchers/anthropic", () => ({
@@ -40,7 +40,7 @@ import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import {
   LlmProviderApiKeyModel,

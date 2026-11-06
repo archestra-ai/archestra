@@ -1,10 +1,14 @@
-import type { OpenCodeFamilyTurnKind } from "@archestra/shared";
+import {
+  isCodexClientAgentId,
+  type OpenCodeFamilyTurnKind,
+} from "@archestra/shared";
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import {
   isOpenCodeFamilyClient,
   type OpenCodeFamilyClientId,
 } from "@archestra/shared/opencode-family";
 import {
+  detectChatGptClientId,
   detectClaudeClientId,
   detectCodexClientId,
   detectCursorClientId,
@@ -41,16 +45,25 @@ export interface AutoRoutingSessionMetadata extends SessionInfo {
 
 /**
  * Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
- * X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client app
- * (Claude from the body; Codex from client_metadata or its originator/User-Agent;
+ * X-Archestra-Meta segment 0) wins, except that a Codex id on a ChatGPT
+ * desktop request becomes ChatGPT's; otherwise auto-discover a known client app
+ * (Claude from the body; ChatGPT from the desktop app's originator or
+ * User-Agent; Codex from client_metadata or its originator/User-Agent;
  * OpenCode, Kilo Code, Kimi Code and Cursor from their identity headers).
  */
 export function detectClientApp(
   headers: Headers,
   body: RequestBodyForExtraction,
 ): string | undefined {
+  const explicit = getExternalAgentId(headers);
+  // The ChatGPT desktop app reads Codex's config.toml, so it sends the agent
+  // id the Codex setup wrote there. Its originator tells the two apart.
+  if (!explicit || isCodexClientAgentId(explicit)) {
+    const chatGpt = detectChatGptClientId(headers);
+    if (chatGpt) return chatGpt;
+  }
   return (
-    getExternalAgentId(headers) ??
+    explicit ??
     detectClaudeClientId(body) ??
     detectCodexClientId(headers, body) ??
     detectOpenCodeClientId(headers) ??

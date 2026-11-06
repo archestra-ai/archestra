@@ -11,6 +11,7 @@ import {
   SkillShareLinkModel,
 } from "@/models";
 import { lastDays } from "@/models/connected-client";
+import { AGENT_RUNTIME_OAUTH_CLIENT_ID } from "@/services/agent-runtime/runtime-contract";
 import {
   ApiError,
   type ConnectedClientId,
@@ -63,6 +64,7 @@ export async function listConnectedClients(params: {
   // any other under its own OAuth client.
   const signedIn = new Map<string, typeof oauthClients>();
   for (const c of oauthClients) {
+    if (c.clientId === AGENT_RUNTIME_OAUTH_CLIENT_ID) continue;
     const id = connectClientForOAuthClient(c) ?? signedInAgentId(c.clientId);
     signedIn.set(id, [...(signedIn.get(id) ?? []), c]);
   }

@@ -8,25 +8,24 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 
 vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getApps: vi.fn(),
-    getApp: vi.fn(),
-    getExternalApp: vi.fn(),
-    getAppVersions: vi.fn(),
-    getAppTools: vi.fn(),
-    createApp: vi.fn(),
-    updateApp: vi.fn(),
-    deleteApp: vi.fn(),
-    assignToolToApp: vi.fn(),
-    unassignToolFromApp: vi.fn(),
-    openAppInChat: vi.fn(),
-    openExternalAppInChat: vi.fn(),
-    pinApp: vi.fn(),
-    unpinApp: vi.fn(),
-    pinExternalApp: vi.fn(),
-    unpinExternalApp: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getApps: vi.fn(),
+  getApp: vi.fn(),
+  getExternalApp: vi.fn(),
+  getAppVersions: vi.fn(),
+  getAppTools: vi.fn(),
+  createApp: vi.fn(),
+  updateApp: vi.fn(),
+  deleteApp: vi.fn(),
+  assignToolToApp: vi.fn(),
+  unassignToolFromApp: vi.fn(),
+  openAppInChat: vi.fn(),
+  openExternalAppInChat: vi.fn(),
+  pinApp: vi.fn(),
+  unpinApp: vi.fn(),
+  pinExternalApp: vi.fn(),
+  unpinExternalApp: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({

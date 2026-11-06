@@ -24,25 +24,19 @@ import { isReportedApiError } from "@/lib/utils/api";
 
 // Partial: `@/consts` (pulled in by agent.query.ts) reads real exports of this
 // module at import time, so only the two SDK calls under test are replaced.
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      createAgent: vi.fn(),
-      getAgents: vi.fn(),
-      getChatAgentRoster: vi.fn(),
-      getAgent: vi.fn(),
-      getChatAgentMcpTools: vi.fn(),
-      getMemberDefaultAgent: vi.fn(),
-      getOrganization: vi.fn(),
-      pinAgent: vi.fn(),
-      unpinAgent: vi.fn(),
-      updateAgent: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  createAgent: vi.fn(),
+  getAgents: vi.fn(),
+  getChatAgentRoster: vi.fn(),
+  getAgent: vi.fn(),
+  getChatAgentMcpTools: vi.fn(),
+  getMemberDefaultAgent: vi.fn(),
+  getOrganization: vi.fn(),
+  pinAgent: vi.fn(),
+  unpinAgent: vi.fn(),
+  updateAgent: vi.fn(),
+}));
 
 vi.mock("sonner");
 

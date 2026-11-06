@@ -261,14 +261,25 @@ export const RouteId = {
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
 
-  // Interaction Routes
+  // Legacy interaction route IDs remain for backwards-compatible URLs.
   GetInteractions: "getInteractions",
   GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
+  GetInteractionAutoRouting: "getInteractionAutoRouting",
   GetInteractionSessions: "getInteractionSessions",
   GetInteractionSessionLineage: "getInteractionSessionLineage",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
   GetUniqueUserIds: "getUniqueUserIds",
+
+  // LLM Proxy Logs
+  GetLlmProxyLogs: "getLlmProxyLogs",
+  GetLlmProxyLogSummaries: "getLlmProxyLogSummaries",
+  GetLlmProxyLog: "getLlmProxyLog",
+  GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
+  GetLlmProxyLogSessions: "getLlmProxyLogSessions",
+  GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
+  GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
@@ -626,6 +637,9 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  BulkDeleteAgentRuns: "bulkDeleteAgentRuns",
+  BulkCancelAgentRuns: "bulkCancelAgentRuns",
+  BulkDeleteAgentWorkspaces: "bulkDeleteAgentWorkspaces",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -676,6 +690,7 @@ export const RouteId = {
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  DeleteModel: "deleteModel",
   PreviewModelCostBackfill: "previewModelCostBackfill",
   StartModelCostBackfill: "startModelCostBackfill",
   GetModelCostBackfill: "getModelCostBackfill",
@@ -827,6 +842,7 @@ export const RouteId = {
   GetMcpToolCallUsage: "getMcpToolCallUsage",
   GetAppUsage: "getAppUsage",
   GetSkillUsage: "getSkillUsage",
+  GetLlmUsage: "getLlmUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",

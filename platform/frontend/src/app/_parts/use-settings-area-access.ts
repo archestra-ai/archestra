@@ -42,6 +42,7 @@ export function useNavPermissionMap(): Record<string, boolean> | null {
   if (needsCredentials && credentials.isPending) return null;
   return {
     ...pageMap,
+    "/llm/costs": !!pageMap["/llm/costs"] || limitsAccess.isTeamAdmin,
     "/llm/limits": !!pageMap["/llm/limits"] || !!limitsAccess.canRead,
     "/settings": canSeeSettingsArea({
       permissionMap,

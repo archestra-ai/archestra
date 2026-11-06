@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -78,11 +79,16 @@ export function useCreateVirtualApiKey() {
     onSuccess: () => {
       toast.success("Virtual API key created");
       queryClient.invalidateQueries({
+        queryKey: authQueryKeys.scopedCapabilities(),
+      });
+      queryClient.invalidateQueries({
         queryKey: ["all-virtual-api-keys"],
       });
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys"],
       });
+      // A key's pools are read from each pool's list of keys.
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
     },
   });
 }
@@ -135,11 +141,16 @@ export function useUpdateVirtualApiKey() {
     onSuccess: () => {
       toast.success("Virtual API key updated");
       queryClient.invalidateQueries({
+        queryKey: authQueryKeys.scopedCapabilities(),
+      });
+      queryClient.invalidateQueries({
         queryKey: ["all-virtual-api-keys"],
       });
       queryClient.invalidateQueries({
         queryKey: ["virtual-api-keys"],
       });
+      // A key's pools are read from each pool's list of keys.
+      queryClient.invalidateQueries({ queryKey: ["model-pools"] });
     },
   });
 }

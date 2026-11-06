@@ -120,7 +120,7 @@ describe("Model pools - LLM Proxy", () => {
             customPricePerMillionOutput: "1",
           });
         }
-        await ModelPoolModel.create({
+        const pool = await ModelPoolModel.create({
           organizationId: proxy.organizationId,
           input: {
             name: "pool-alias",
@@ -132,6 +132,11 @@ describe("Model pools - LLM Proxy", () => {
               enabled: true,
             })),
           },
+        });
+        await ModelPoolModel.setPoolsForVirtualApiKey({
+          organizationId: proxy.organizationId,
+          virtualApiKeyId: virtualKey.id,
+          poolIds: [pool.id],
         });
         await LimitModel.create({
           entityType: "virtual_key",

@@ -1,5 +1,6 @@
 import {
   and,
+  desc,
   eq,
   inArray,
   isNotNull,
@@ -27,6 +28,41 @@ const table = schema.openappaSessionsTable;
  * attach a new session to an existing history.
  */
 class OpenAppaSessionModel {
+  /** Reads retained bytes only for their authenticated recipient after enforcement is waived. */
+  static async waivedPeerBody(params: {
+    organizationId: string;
+    callerId: string;
+    sessionId: string;
+    parentId?: string;
+    messageId: string;
+  }): Promise<string | null> {
+    const peer = schema.openappaEmbeddedPeerMessagesTable;
+    const [row] = await db
+      .select({ body: peer.body })
+      .from(peer)
+      .innerJoin(
+        table,
+        and(
+          eq(table.root, peer.root),
+          sql`${peer.recipient} = CASE WHEN ${table.parentId} IS NULL THEN ${table.root} ELSE ${table.actor} END`,
+        ),
+      )
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.callerId, params.callerId),
+          eq(table.sessionId, params.sessionId),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(peer.id, params.messageId),
+          sql`${peer.expiresAt} > ${Math.floor(Date.now() / 1000)}`,
+        ),
+      )
+      .limit(1);
+    return row?.body ?? null;
+  }
+
   static async hasAncestor(params: {
     organizationId: string;
     callerId: string;
@@ -283,6 +319,55 @@ class OpenAppaSessionModel {
     return row ?? null;
   }
 
+  /** Retained denial for an offer, including expired or already resolved offers. */
+  static async recordedOfferDecisions(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId: string;
+    parentId?: string;
+    offerId: string;
+  }): Promise<Array<{ operationId: string; decision: unknown }>> {
+    const operations = schema.openappaOperationsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          eq(operations.callerId, params.callerId),
+          eq(table.callerId, params.callerId),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(operations.status, "complete"),
+          // Encrypted and plaintext-escaped receipts must be opened by the
+          // native storage cipher before their offers can be inspected.
+          sql`(${operations.decision}->'offers' @> ${JSON.stringify([{ offer_id: params.offerId }])}::jsonb OR ${operations.decision} ? '__appa_encrypted')`,
+        ),
+      )
+      .orderBy(desc(operations.createdAt))
+      .limit(10_001);
+    if (rows.length > 10_000) {
+      throw new ApiError(
+        503,
+        "OpenAPPA offer lookup exceeds the retained receipt budget",
+      );
+    }
+    return rows;
+  }
+
   /** Call rulings recorded by this exact session, never inherited fork history. */
   static async recordedToolCallDecisions(params: {
     organizationId: string;
@@ -464,6 +549,43 @@ class OpenAppaSessionModel {
       openPlainJson(row?.decision),
       openPlainText(row?.approvedOutput ?? null),
     );
+  }
+
+  /**
+   * The sessions of a root's family whose own client-native id is
+   * `nativeId`. A child at any depth counts; the root does not.
+   */
+  static async familyMembersByNativeId(params: {
+    organizationId: string;
+    rootSessionId: string;
+    nativeId: string;
+  }): Promise<Array<{ sessionId: string; parentId: string | null }>> {
+    const [root] = await db
+      .select({ root: table.root })
+      .from(table)
+      .where(
+        and(
+          eq(table.actor, openappaActor(params.rootSessionId)),
+          eq(table.organizationId, params.organizationId),
+          isNull(table.parentId),
+        ),
+      )
+      .limit(1);
+    if (!root) return [];
+    // A child's own id is all of its id after its parent's and a colon; an
+    // id can itself hold a colon, so the parent decides where it starts.
+    return db
+      .select({ sessionId: table.sessionId, parentId: table.parentId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.root, root.root),
+          sql`starts_with(${table.sessionId}, ${`${params.rootSessionId}:`})`,
+          sql`${table.sessionId} = ${table.parentId} || ${`:${params.nativeId}`}`,
+        ),
+      )
+      .limit(2);
   }
 
   /**

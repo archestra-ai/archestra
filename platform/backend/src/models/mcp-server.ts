@@ -28,7 +28,7 @@ import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
-import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
+import { constructFrozenMcpDeploymentName } from "@/k8s/deployment-names";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -54,6 +54,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
+import { port } from "./ports";
 import TeamModel from "./team";
 import { toolUiResourceUriSql } from "./tool";
 
@@ -2032,19 +2033,17 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
-      // Lazy (here and for `mcp-client` below): the runtime and client import
-      // the service layer, which would otherwise load with every model.
-      const { McpServerRuntimeManager } = await import(
-        "@/k8s/mcp-server-runtime"
-      );
+      // Through ports (here and for tool discovery below): the runtime and
+      // the MCP client sit above the models and load on first use.
+      const runtime = await port("mcpServerRuntime");
       try {
         if (opts?.strictCleanup) {
-          await McpServerRuntimeManager.removeMcpServer(id, {
+          await runtime.removeMcpServer(id, {
             strictCleanup: true,
             requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
           });
         } else {
-          await McpServerRuntimeManager.removeMcpServer(id);
+          await runtime.removeMcpServer(id);
         }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
@@ -2405,7 +2404,7 @@ class McpServerModel {
       }
     }
 
-    const { default: mcpClient } = await import("@/clients/mcp-client");
+    const mcpClient = await port("mcpToolDiscovery");
     try {
       // Use the new structured API for all server types
       const tools = await mcpClient.connectAndGetTools({
@@ -2611,7 +2610,7 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote") {
-          const { default: mcpClient } = await import("@/clients/mcp-client");
+          const mcpClient = await port("mcpToolDiscovery");
           // Use a temporary ID for validation (we don't have a real server ID yet)
           const tools = await mcpClient.connectAndGetTools({
             catalogItem,
@@ -2823,11 +2822,9 @@ class McpServerModel {
       // Tear the deployment (and its live K8s Secret) down before dropping the
       // row — `removeMcpServer` resolves the deployment through the DB row.
       if (server.serverType === "local") {
-        const { McpServerRuntimeManager } = await import(
-          "@/k8s/mcp-server-runtime"
-        );
+        const runtime = await port("mcpServerRuntime");
         try {
-          await McpServerRuntimeManager.removeMcpServer(server.id);
+          await runtime.removeMcpServer(server.id);
         } catch (error) {
           logger.error(
             { err: error, userId, mcpServerId: server.id },

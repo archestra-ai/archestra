@@ -7,9 +7,10 @@ const { searchMcpRegistryMock, sdkCalls } = vi.hoisted(() => ({
 }));
 
 // Every SDK call is recorded; only the page's search answers.
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  const sdk = new Proxy(actual.archestraApiSdk, {
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@archestra/shared/api-sdk")>();
+  return new Proxy(actual, {
     get(target, name: string) {
       if (name === "searchMcpRegistry") return searchMcpRegistryMock;
       const original = target[name as keyof typeof target];
@@ -20,7 +21,6 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       };
     },
   });
-  return { ...actual, archestraApiSdk: sdk };
 });
 
 const { requestCookies, requestHeaders } = vi.hoisted(() => ({

@@ -37,7 +37,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
     cd / && rm -rf /kind
 
@@ -59,9 +60,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
-    # x/net@v0.60.0 requires x/sys >= v0.48.0 and x/term >= v0.46.0.
-    go get golang.org/x/sys@v0.48.0 && \
-    go get golang.org/x/term@v0.46.0 && \
+    # x/net@v0.62.0 requires x/sys >= v0.49.0 and x/term >= v0.47.0.
+    go get golang.org/x/sys@v0.49.0 && \
+    go get golang.org/x/term@v0.47.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
@@ -71,7 +72,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
     # transitively pull older x/net and grpc versions and would otherwise override these requirements.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
-    go get golang.org/x/net@v0.60.0 google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -104,16 +106,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
-    # Keep >= 0.57.0 to satisfy x/net@v0.60.0 without downgrading it.
-    go get golang.org/x/crypto@v0.57.0 && \
+    # Keep >= 0.58.0 to satisfy x/net@v0.62.0 without downgrading it.
+    go get golang.org/x/crypto@v0.58.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
-    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    # Keep the patched x/mod floor when updating transitive dependencies.
     go get golang.org/x/mod@v0.41.0 && \
     # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
     # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
@@ -128,7 +131,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
     # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get google.golang.org/grpc@v1.83.2 && \
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -152,11 +155,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
-    go get golang.org/x/net@v0.60.0 && \
+    # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
+    go get golang.org/x/net@v0.62.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
-    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    # Keep the patched x/mod floor when updating transitive dependencies.
     go get golang.org/x/mod@v0.41.0 && \
+    # Keep the patched x/net after all transitive dependency updates.
+    go get golang.org/x/net@v0.62.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl && \
@@ -327,6 +333,9 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
          --filter @archestra/openappa-rs \
          --filter @archestra/router-rs build
 
+# The constrained frontend build uses the dev-lite Bash entrypoint.
+RUN apk add --no-cache bash
+
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
 # VERSION even when the Rust workspace is unchanged.
@@ -336,6 +345,9 @@ COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY turbo.json ./
+COPY vitest.resources.ts ./
+COPY Tiltfile .env.example ./
+COPY scripts ./scripts
 COPY patches ./patches
 COPY backend ./backend
 COPY frontend ./frontend
@@ -549,9 +561,9 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
 # supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
 # before python3 is installed and cannot lift it.
-# CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
-# transitively with python3 here, so it needs the same explicit floor.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
+# Expat 2.10.0-r0 fixes the high-severity XML parser advisories. It arrives
+# transitively with python3, so require the patched version explicitly.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.10.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

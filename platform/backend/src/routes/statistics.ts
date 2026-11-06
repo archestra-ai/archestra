@@ -17,6 +17,7 @@ import {
   UsageStatisticsModel,
 } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
+import { getCostAccess } from "@/services/cost-access";
 import {
   AgentStatisticsSchema,
   APP_STATISTICS_SORT_BY,
@@ -29,6 +30,8 @@ import {
   CostStatisticsSchema,
   constructResponseSchema,
   createSortingQuerySchema,
+  LLM_USAGE_DIMENSIONS,
+  LlmUsageResponseSchema,
   MCP_TOOL_CALL_USAGE_DIMENSIONS,
   McpToolCallUsageResponseSchema,
   ModelStatisticsSchema,
@@ -50,6 +53,16 @@ import {
 
 const StatisticsQuerySchema = z.object({
   timeframe: StatisticsTimeFrameSchema.optional().default("24h"),
+});
+
+const TeamCostQuerySchema = StatisticsQuerySchema.extend({
+  teamId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Only requests charged to this team: those billed to it or a sub-team, and those its members made through agents shared with it.",
+    ),
 });
 
 const AppStatisticsQuerySchema = StatisticsQuerySchema.merge(
@@ -102,7 +115,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProxyCostStatistics,
         description:
-          "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.",
+          "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. Callers without `member:read` see only their own usage. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema.merge(ProxyCostQuerySchema).merge(
           PaginationQuerySchema,
@@ -110,7 +123,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ProxyCostStatisticsSchema),
       },
     },
-    async ({ query, organizationId }) => {
+    async (request) => {
+      const { query, organizationId } = request;
       if ((query.labelValue || query.labelUnassigned) && !query.labelKey)
         throw new ApiError(400, "A label key is required for a label filter");
       if (query.labelValue && query.labelUnassigned)
@@ -121,6 +135,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         includeModelPools:
           query.includeModelPools && config.llmProxy.modelPoolsEnabled,
         organizationId,
+        ...(await ownProxyUsageScope(request)),
       });
     },
   );
@@ -131,17 +146,22 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetTeamStatistics,
         description:
-          "Get usage statistics for every team in the active organization.",
+          "Get usage statistics for every team in the active organization. A caller without `llmCost:read` who administers a team gets only the teams they administer and their sub-teams; each request then counts for the teams whose spend limits it charges. Filtering by `teamId` does the same for one team.",
         tags: ["Statistics"],
-        querystring: StatisticsQuerySchema,
+        querystring: TeamCostQuerySchema,
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        query: { timeframe, teamId },
+        organizationId,
+      } = request;
       return reply.send(
         await StatisticsModel.getTeamStatistics({
           timeframe,
           organizationId,
+          teamIds: (await getCostAccess(request, teamId)).teamIds,
         }),
       );
     },
@@ -153,17 +173,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentStatistics,
         description:
-          "Get usage statistics for every agent in the active organization.",
+          "Get usage statistics for every agent in the active organization. Callers without `member:read` see only their own usage of each agent.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(AgentStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, organizationId }, reply) => {
+    async (request, reply) => {
       return reply.send(
         await StatisticsModel.getAgentStatistics({
-          timeframe,
-          organizationId,
+          timeframe: request.query.timeframe,
+          organizationId: request.organizationId,
+          ...(await ownUsageScope(request)),
         }),
       );
     },
@@ -397,17 +418,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetOverviewStatistics,
         description:
-          "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required.",
+          "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required. Without `member:read`, the top agent reflects only the caller's own usage, since an agent can be someone's personal one.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(OverviewStatisticsSchema),
       },
     },
-    async ({ query: { timeframe }, organizationId }, reply) => {
+    async (request, reply) => {
       return reply.send(
         await StatisticsModel.getOverviewStatistics({
-          timeframe,
-          organizationId,
+          timeframe: request.query.timeframe,
+          organizationId: request.organizationId,
+          topAgentScope: await ownUsageScope(request),
         }),
       );
     },
@@ -419,30 +441,36 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetCostStatistics,
         description:
-          "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.",
+          "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned. A caller without `llmCost:read` who administers a team gets only the requests charged to the teams they administer and their sub-teams, with active users counted within them. Filtering by `teamId` does the same for one team.",
         tags: ["Statistics"],
-        querystring: StatisticsQuerySchema,
+        querystring: TeamCostQuerySchema,
         response: constructResponseSchema(CostStatisticsSchema),
       },
     },
-    async ({
-      query: { timeframe },
-      organizationId,
-      user,
-      headers,
-      serviceAccount,
-    }) => {
-      const { success: canReadAllUsers } = await hasPermission(
-        { member: ["read"] },
+    async (request) => {
+      const {
+        query: { timeframe, teamId },
+        organizationId,
+        user,
         headers,
         serviceAccount,
-        { userId: user.id, organizationId },
-      );
+      } = request;
+      const { teamIds, teamAdmin } = await getCostAccess(request, teamId);
+      // A team admin may count who is active within their own teams.
+      const canReadAllUsers =
+        teamAdmin ||
+        (
+          await hasPermission({ member: ["read"] }, headers, serviceAccount, {
+            userId: user.id,
+            organizationId,
+          })
+        ).success;
       return StatisticsModel.getCostStatistics({
         timeframe,
         organizationId,
         requestingUserId: user.id,
         canReadAllUsers,
+        teamIds,
       });
     },
   );
@@ -501,6 +529,68 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pagination: { limit, offset },
           ...(await usageScope(request)),
           organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/llm-usage",
+    {
+      schema: {
+        operationId: RouteId.GetLlmUsage,
+        description:
+          "Get LLM requests, tokens and spend grouped by any combination of `day`, `teamId`, `agentId`, `userId`, `credentialId` (virtual key, passthrough key or OAuth client), `provider` and `model` — one row per group. For example `groupBy=teamId,provider,model` answers which providers and models each team used and what they cost, `groupBy=agentId,userId` who used each agent, and `groupBy=day,credentialId` gives a daily series per virtual key. Each dimension is attributed as on its own statistics endpoint: team as in GET /api/statistics/teams, agent as in GET /api/statistics/agents, credential as in GET /api/statistics/llm-proxy, model as the billed model of GET /api/statistics/models. Grouped by agent, person or credential, or filtered by credential, callers without `member:read` see only their own usage.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema.merge(PaginationQuerySchema).extend({
+          groupBy: groupByQuerySchema(LLM_USAGE_DIMENSIONS, [
+            "teamId",
+            "provider",
+            "model",
+          ]),
+          teamId: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this team's usage."),
+          credentialId: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              "Only this virtual key, passthrough key or OAuth client.",
+            ),
+          provider: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this provider, e.g. anthropic."),
+          model: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this billed model."),
+        }),
+        response: constructResponseSchema(LlmUsageResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        query: { limit, offset, ...filters },
+        organizationId,
+      } = request;
+      // Per-person and per-credential rows can expose one member's activity,
+      // and the agent view is already scoped this way on its own endpoint.
+      const ownUsageOnly =
+        filters.groupBy.some((dimension) =>
+          ["credentialId", "agentId", "userId"].includes(dimension),
+        ) || filters.credentialId !== undefined;
+      return reply.send(
+        await UsageStatisticsModel.getLlmUsage({
+          ...filters,
+          pagination: { limit, offset },
+          organizationId,
+          ...(ownUsageOnly ? await ownUsageScope(request) : {}),
         }),
       );
     },
@@ -596,7 +686,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         schema: {
           operationId: own ? RouteId.GetMyModelUsage : RouteId.GetModelUsage,
           description:
-            "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.",
+            "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity. Callers without `member:read` see only their own usage, since a key or agent can be someone's personal one.",
           tags: ["Statistics"],
           querystring: StatisticsQuerySchema.merge(
             ModelUsageQuerySchema.extend({
@@ -610,25 +700,17 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         },
       },
-      async ({ query, user, organizationId, headers, serviceAccount }) => {
+      async (request) => {
+        const { query, user, organizationId } = request;
         if (own && query.groupBy !== "client")
           throw new ApiError(
             400,
             "Personal model usage can be grouped by client.",
           );
-        const canReadPeople =
-          own ||
-          query.groupBy !== "person" ||
-          (
-            await hasPermission({ member: ["read"] }, headers, serviceAccount, {
-              userId: user.id,
-              organizationId,
-            })
-          ).success;
         return StatisticsModel.getModelUsage({
           ...query,
           organizationId,
-          userId: own || !canReadPeople ? user.id : undefined,
+          ...(own ? { userId: user.id } : await ownUsageScope(request)),
         });
       },
     );
@@ -685,4 +767,37 @@ async function usageScope({
     { userId: user.id, organizationId },
   );
   return canReadAllUsers ? {} : { restrictToUserId: user.id };
+}
+
+/**
+ * Narrows a breakdown to the caller's own usage when they lack `member:read`;
+ * empty when they may see everyone's. Breakdowns by agent or credential count
+ * here too: an agent or virtual key can be one person's own, and its row would
+ * then be that person's spend. A service account's own usage is recorded
+ * against the account, not a user, so it is matched by account.
+ */
+async function ownUsageScope({
+  user,
+  organizationId,
+  headers,
+  serviceAccount,
+}: FastifyRequest): Promise<{ userId?: string; serviceAccountId?: string }> {
+  const { success } = await hasPermission(
+    { member: ["read"] },
+    headers,
+    serviceAccount,
+    { userId: user.id, organizationId },
+  );
+  if (success) return {};
+  return serviceAccount
+    ? { serviceAccountId: serviceAccount.id }
+    : { userId: user.id };
+}
+
+/** {@link ownUsageScope}, keeping the proxy query's own `serviceAccountId` filter. */
+async function ownProxyUsageScope(
+  request: FastifyRequest,
+): Promise<{ userId?: string; ownServiceAccountId?: string }> {
+  const { userId, serviceAccountId } = await ownUsageScope(request);
+  return { userId, ownServiceAccountId: serviceAccountId };
 }

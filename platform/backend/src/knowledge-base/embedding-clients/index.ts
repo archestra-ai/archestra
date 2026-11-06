@@ -3,7 +3,13 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
+import ModelModel from "@/models/model";
+import {
+  fireworksModelAliases,
+  isFireworksEndpoint,
+  resolveFireworksModel,
+} from "@/services/fireworks-model";
 import { isConnectionErrno, isTimeoutErrno } from "@/utils/network-errors";
 import {
   KnowledgeBaseError,
@@ -75,6 +81,19 @@ export async function callEmbedding(params: {
   if (!adapter) {
     throw new UnsupportedEmbeddingProviderError(provider, params.model);
   }
+
+  const resolved = await resolveFireworksModel({
+    provider,
+    model: params.model,
+    baseUrl: params.baseUrl ?? undefined,
+  });
+  await ModelModel.assertAvailable({
+    provider,
+    modelId: resolved.model,
+    aliases: isFireworksEndpoint(params.baseUrl)
+      ? fireworksModelAliases(resolved.model)
+      : undefined,
+  });
 
   const response = await adapter.call(rest);
   validateEmbeddingResponse(response, {

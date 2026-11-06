@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 
 /**
  * A time range as people write it: each end is either an exact time

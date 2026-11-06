@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { KILO_CLIENT } from "../opencode-family";
 import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
 import { openCodePrimaryConfig } from "./opencode-primary-config";
@@ -230,7 +230,7 @@ describe("managed catalog plugin", () => {
         "archestra-vendor": {
           name: "Vendor (Archestra)",
           options: {
-            baseURL: "https://deployment.example/v1/model-router/agent",
+            baseURL: "https://deployment.example/v1/unified-model/agent",
             apiKey: "{file:~/.archestra/opencode-primary.key}",
           },
           models: { "fixture/model": { id: "vendor:fixture/model" } },
@@ -1004,6 +1004,177 @@ describe("managed catalog plugin", () => {
     const result = await runManagedOpenAi(true, installed);
     expect(result.hook.Authorization).toBe("Bearer native-openai-token");
     expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
+  });
+
+  test("V1 keeps native OpenAI sign-in methods when an OAuth credential is already stored at startup", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-v1-openai-startup-oauth-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    await mkdir(path.join(root, "data", "opencode"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "opencode", "auth.json"),
+      JSON.stringify({
+        openai: {
+          type: "oauth",
+          access: "native-openai-token",
+          refresh: "r",
+          accountId: "acct",
+        },
+      }),
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "opencode" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          routes: { openai: openAiRoute },
+          managed: { openai: ["gpt-x"] },
+          passthrough: ["openai"],
+          legacy: { "archestra-openai": "openai" },
+        },
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    expect(await module.ArchestraOpenAiOAuth({ client: {} })).toEqual({});
+  });
+
+  test("V1 sends the passthrough key after mid-session ChatGPT sign-in alongside a managed OpenAI catalog entry", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    const calls: Request[] = [];
+    globals[directFetch] = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      calls.push(new Request(input, init));
+      return new Response("ok");
+    };
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-v1-openai-signin-"),
+    );
+    roots.push(root);
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.HOME = root;
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "opencode-primary.key"),
+      "managed-secret\n",
+      { mode: 0o600 },
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: { "X-Archestra-Agent-Id": "opencode" },
+        routeHeaders: {
+          openai: { "X-Archestra-Virtual-Key": "passthrough-secret" },
+        },
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        skipRelpath: ".archestra/skip",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: {
+          routes: { openai: openAiRoute },
+          managed: { openai: ["gpt-x"] },
+          passthrough: ["openai"],
+          legacy: { "archestra-openai": "openai" },
+        },
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config: {
+      provider: Record<string, { options?: Record<string, unknown> }>;
+    } = { provider: {} };
+    // Before the user signs in to ChatGPT, the managed OpenAI entry is active
+    // and clears effectiveRouteHeaders.openai so managed requests do not carry
+    // the passthrough key.
+    await hooks.config(config);
+    expect(config.provider.openai.options).toMatchObject({
+      apiKey: "managed-secret",
+      baseURL: openAiRoute,
+    });
+
+    // The user signs in to ChatGPT Pro/Plus mid-session via /connect.
+    await mkdir(path.join(root, "data", "opencode"), { recursive: true });
+    await writeFile(
+      path.join(root, "data", "opencode", "auth.json"),
+      JSON.stringify({
+        openai: {
+          type: "oauth",
+          access: "native-openai-token",
+          refresh: "r",
+          accountId: "acct",
+        },
+      }),
+    );
+
+    await hooks["chat.params"]({
+      provider: { id: "openai", options: {} },
+    });
+    const output: { headers: Record<string, string> } = { headers: {} };
+    await hooks["chat.headers"](
+      {
+        sessionID: "ses_mid_signin",
+        agent: "build",
+        provider: { id: "openai", options: {} },
+      },
+      output,
+    );
+    expect(output.headers["X-Archestra-Virtual-Key"]).toBe(
+      "passthrough-secret",
+    );
+    expect(output.headers["x-archestra-managed-alias"]).toBeUndefined();
+
+    await globalThis.fetch("https://chatgpt.com/backend-api/codex/responses", {
+      method: "POST",
+      headers: {
+        ...output.headers,
+        Authorization: "Bearer native-openai-token",
+      },
+      body: "{}",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`${openAiRoute}/responses`);
+    expect(calls[0].headers.get("authorization")).toBe(
+      "Bearer native-openai-token",
+    );
+    expect(calls[0].headers.get("x-archestra-virtual-key")).toBe(
+      "passthrough-secret",
+    );
+    expect(calls[0].headers.get("chatgpt-account-id")).toBe("acct");
   });
 });
 

@@ -44,17 +44,14 @@ import type {
   AgentRunLimits,
   AgentRunRecord,
 } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
   type OutboundUrlRejection,
   validateOutboundUrl,
 } from "@/utils/outbound-url";
 import type { InteractionSource } from "../../../../shared";
-import {
-  type A2AAttachment,
-  type A2AExecuteResult,
-  executeA2AMessage,
-} from "../a2a-executor";
+import { type A2AExecuteResult, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AContextCompactionEvent,
@@ -214,6 +211,12 @@ export interface A2ASystemParams {
    * Protocol requests cannot set this.
    */
   runtimeCrossing?: import("@/services/agent-runtime/runtime-crossing").RuntimeCrossing;
+  /** Ephemeral per-run credentials redeemed from a one-time `transfer_credential` grant. */
+  ephemeralCredentials?: Record<string, string>;
+  /** Supervisor retry and subagent failover policy for this run. */
+  subagentExecutionPolicy?: import("@/services/agent-runtime/pod-run").SubagentExecutionPolicy;
+  /** Called if a detached runtime launch fails before any workload starts. */
+  onRuntimeLaunchFailed?: () => Promise<void>;
 }
 
 /**
@@ -513,6 +516,7 @@ export class A2AManager {
           runtime,
           agent,
           actor,
+          ephemeralCredentials: systemParams?.ephemeralCredentials,
         });
       }
 
@@ -672,6 +676,7 @@ export class A2AManager {
       // Agent Runtime belongs to the Agent itself and is selected only
       // for a durable task. Invocation surfaces decide whether a plain send
       // should remain a Message or be promoted to that task lifecycle.
+      let runtimeExecutionEntered = false;
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
         onTextDelta?: (delta: string) => void;
@@ -684,6 +689,7 @@ export class A2AManager {
           agentId,
           agentType: agent.agentType ?? undefined,
           sessionId,
+          labels: agent.labels,
           teams,
           userTeams,
           routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
@@ -695,6 +701,7 @@ export class A2AManager {
             // decision independent from the protocol surface: A2A can promote
             // a direct send, while foreground Chat can remain message-based.
             if (runtime && runOpts.taskId) {
+              runtimeExecutionEntered = true;
               return runTaskInAgentRuntime({
                 resumeFromTaskId,
                 runtime,
@@ -715,6 +722,9 @@ export class A2AManager {
                 runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
                 runtimeCrossing: systemParams?.runtimeCrossing,
+                ephemeralCredentials: systemParams?.ephemeralCredentials,
+                subagentExecutionPolicy: systemParams?.subagentExecutionPolicy,
+                onLaunchFailed: systemParams?.onRuntimeLaunchFailed,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });
@@ -798,14 +808,26 @@ export class A2AManager {
           };
         }
 
-        const lifecycle = () =>
-          this.runTaskLifecycle({
-            task: runTask,
-            contextId: runContextId,
-            organizationId: actor.organizationId,
-            executeRun,
-            survivesRestart: Boolean(runtime),
-          });
+        const lifecycle = async () => {
+          try {
+            const response = await this.runTaskLifecycle({
+              task: runTask,
+              contextId: runContextId,
+              organizationId: actor.organizationId,
+              executeRun,
+              survivesRestart: Boolean(runtime),
+            });
+            if (runtime && !runtimeExecutionEntered) {
+              await systemParams?.onRuntimeLaunchFailed?.();
+            }
+            return response;
+          } catch (error) {
+            if (!runtimeExecutionEntered) {
+              await systemParams?.onRuntimeLaunchFailed?.();
+            }
+            throw error;
+          }
+        };
 
         if (params.taskRun?.detached) {
           const snapshot = A2ATaskManager.toProtocolTask(runTask);

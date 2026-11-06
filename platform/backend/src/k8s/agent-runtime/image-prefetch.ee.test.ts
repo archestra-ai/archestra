@@ -37,6 +37,7 @@ beforeEach(() => {
     tag: "v1",
   });
   config.agentRuntime.nodeSelector = { runtime: "true" };
+  config.agentRuntime.imagePrefetchEnabled = true;
   config.orchestrator.kubernetes.helmReleaseName = "test-release";
   config.orchestrator.kubernetes.runtimeOwnerRoleName = undefined;
   fleet = new Map();
@@ -162,4 +163,12 @@ test("does no cluster work until the Agent Sandbox controller is installed", asy
   vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
   await agentImagePrefetcher.reconcile();
   expect(writes).toBe(0);
+});
+
+test("disabled, it pulls nothing and removes the DaemonSets an earlier run created", async () => {
+  await agentImagePrefetcher.reconcile();
+  expect(fleet.size).toBeGreaterThan(0);
+  config.agentRuntime.imagePrefetchEnabled = false;
+  await agentImagePrefetcher.reconcile();
+  expect(fleet.size).toBe(0);
 });

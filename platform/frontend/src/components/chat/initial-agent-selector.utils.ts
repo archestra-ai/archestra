@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import { type archestraApiTypes, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 
 type InternalAgent =
   archestraApiTypes.GetChatAgentRosterResponses["200"][number];
@@ -13,6 +13,8 @@ type InitialAgentListItem = Pick<
   | "icon"
   | "runtime"
   | "builtIn"
+  | "builtInAgentConfig"
+  | "sharedByName"
 >;
 
 export function filterAndSortInitialAgents<
@@ -26,11 +28,19 @@ export function filterAndSortInitialAgents<
   const { allAgents, currentAgentId, search, userId } = params;
 
   let result = allAgents.filter((agent) => {
-    if (agent.builtIn) return false;
-    if (agent.scope === "personal") {
-      return agent.authorId === userId;
-    }
-    return true;
+    if (agent.builtIn)
+      return (
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.SRE ||
+        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
+      );
+    // Another user's personal agent is offered only when it is shared with
+    // this user by name. Admin oversight can read any personal agent, and a
+    // saved reference can outlive a revoked share; neither is a share.
+    return (
+      agent.scope !== "personal" ||
+      agent.authorId === userId ||
+      agent.sharedByName
+    );
   });
 
   if (search) {

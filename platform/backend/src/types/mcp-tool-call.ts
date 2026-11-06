@@ -1,7 +1,7 @@
 import { ENCRYPTED_CHAT_REDACTED_VALUES } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { CommonToolCallSchema } from "./common-llm-format";
 import { ToolOwnerTypeSchema } from "./tool-owner";
 

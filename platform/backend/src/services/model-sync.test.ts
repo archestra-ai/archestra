@@ -30,6 +30,37 @@ beforeEach(() => modelsDevClient.clearFetchCache());
 afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
+  test("keeps custom Jev endpoint prices unknown during model synchronization", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-custom-jev" } });
+    const baseUrl = "https://openrouter.ai/api/alpha/decisions";
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "jev",
+      baseUrl,
+    });
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "jev",
+      apiKeyValue: "test-custom-jev",
+      baseUrl,
+    });
+
+    const model = await ModelModel.findByProviderAndModelId(
+      "jev",
+      "jev-1.13.0",
+    );
+    expect(model).toMatchObject({
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      cacheReadPricePerToken: null,
+    });
+  });
+
   test("keeps the original Nano Banana name searchable without registry metadata", () => {
     const [model] = buildModelsToUpsert({
       provider: "gemini",

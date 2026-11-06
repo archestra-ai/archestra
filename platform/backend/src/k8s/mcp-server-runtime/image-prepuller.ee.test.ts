@@ -17,7 +17,7 @@ import { vi } from "vitest";
 
 // The 403 path's whole contract is the WARNING it produces, and the real
 // export is a Proxy no spy can intercept (see test/mocks/logging.ts).
-vi.mock("@/logging");
+spyOnLogger();
 
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -27,6 +27,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { spyOnLogger } from "@/test/logging";
 import {
   buildPrepullDaemonSet,
   McpImagePrepuller,

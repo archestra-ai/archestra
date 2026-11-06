@@ -43,6 +43,7 @@ describe("OAuth metadata validation", () => {
     "issuer",
     "resource",
     "valid",
+    "origin-resource",
   ] as const)("validates %s metadata before registration and authorization", async (variant, {
     makeInternalMcpCatalog,
   }) => {
@@ -57,9 +58,13 @@ describe("OAuth metadata validation", () => {
           resource:
             variant === "resource"
               ? "https://other.example.com/mcp"
-              : `${origin}/mcp`,
+              : variant === "origin-resource"
+                ? origin
+                : `${origin}/mcp`,
           authorization_servers: [origin],
         });
+      } else if (request.url === "/.well-known/oauth-protected-resource") {
+        send({ resource: origin, authorization_servers: [origin] });
       } else if (request.url === "/.well-known/oauth-authorization-server") {
         send({
           issuer: variant === "issuer" ? "https://other.example.com" : origin,
@@ -132,7 +137,7 @@ describe("OAuth metadata validation", () => {
       expect(requests).toContain(
         "GET /.well-known/oauth-protected-resource/mcp",
       );
-      if (variant !== "valid") {
+      if (variant !== "valid" && variant !== "origin-resource") {
         expect(initiation.statusCode, initiation.body).toBe(502);
         expect(initiation.json().error.message).toMatch(/issuer|resource/i);
         expect(requests).not.toContain("POST /register");
@@ -141,6 +146,9 @@ describe("OAuth metadata validation", () => {
         return;
       }
       expect(initiation.statusCode, initiation.body).toBe(200);
+      if (variant === "origin-resource") {
+        expect(requests).toContain("GET /.well-known/oauth-protected-resource");
+      }
       const authorization = await fetch(initiation.json().authorizationUrl, {
         redirect: "manual",
       });
@@ -213,6 +221,7 @@ describe("OAuth metadata identities", () => {
     "https://other.example.com/mcp",
     "https://mcp.example.com/other",
     `${serverUrl}/`,
+    "https://mcp.example.com",
   ])("rejects an invalid resource %s from an explicit metadata URL", async (resource) => {
     const requests: string[] = [];
     await expect(
@@ -233,6 +242,97 @@ describe("OAuth metadata identities", () => {
     ).rejects.toThrow("resource does not match");
     expect(requests).toEqual([
       "https://metadata.example.com/protected-resource",
+    ]);
+  });
+
+  test("uses independently validated root metadata when the path document advertises the origin", async () => {
+    const requests: string[] = [];
+    const scopes = await discoverScopes(serverUrl, true, [], {
+      fetchFn: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.endsWith("oauth-protected-resource/mcp")) {
+          return Response.json({
+            resource: "https://mcp.example.com",
+            authorization_servers: ["https://unused.example.com"],
+            scopes_supported: ["unused:scope"],
+          });
+        }
+        if (url.endsWith("oauth-protected-resource")) {
+          return Response.json({
+            resource: "https://mcp.example.com",
+            authorization_servers: [issuer],
+          });
+        }
+        return Response.json({
+          issuer,
+          authorization_endpoint: `${issuer}/authorize`,
+          token_endpoint: `${issuer}/token`,
+          scopes_supported: ["tools:read"],
+        });
+      },
+    });
+    expect(scopes).toEqual(["tools:read"]);
+    expect(requests).toEqual([
+      "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+      "https://mcp.example.com/.well-known/oauth-protected-resource",
+      "https://auth.example.com/.well-known/oauth-authorization-server/tenant",
+    ]);
+  });
+
+  test.for([
+    "unavailable",
+    "malformed",
+    "mismatched",
+  ] as const)("rejects origin-only path metadata when root metadata is %s", async (variant) => {
+    const requests: string[] = [];
+    await expect(
+      discoverOAuthEndpoints(
+        {
+          server_url: serverUrl,
+          supports_resource_metadata: true,
+          authorization_endpoint: "https://configured.example.com/authorize",
+          token_endpoint: "https://configured.example.com/token",
+        },
+        {
+          fetchFn: async (input) => {
+            const url = String(input);
+            requests.push(url);
+            if (url.endsWith("oauth-protected-resource/mcp")) {
+              return Response.json({ resource: "https://mcp.example.com" });
+            }
+            if (variant === "unavailable") {
+              return new Response(null, { status: 404 });
+            }
+            if (variant === "malformed") return new Response("not JSON");
+            return Response.json({ resource: "https://other.example.com" });
+          },
+        },
+      ),
+    ).rejects.toThrow("resource does not match");
+    expect(requests).toEqual([
+      "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+      "https://mcp.example.com/.well-known/oauth-protected-resource",
+    ]);
+  });
+
+  test.for([
+    undefined,
+    "",
+    "https://other.example.com",
+    "https://mcp.example.com/other",
+  ])("rejects invalid path resource %s without trying root metadata", async (resource) => {
+    const requests: string[] = [];
+    await expect(
+      discoverScopes(serverUrl, true, [], {
+        fetchFn: async (input) => {
+          requests.push(String(input));
+          return Response.json({ resource });
+        },
+      }),
+    ).rejects.toThrow("resource does not match");
+    expect(requests).toEqual([
+      "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
     ]);
   });
 

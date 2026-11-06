@@ -7,10 +7,8 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel, AgentToolModel, AgentVersionModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
-import {
-  type PrefetchedMcpServer,
-  validateAssignment,
-} from "@/services/agent-tool-assignment";
+import { validateAssignment } from "@/services/agent-tool-assignment";
+import type { PrefetchedMcpServer } from "@/services/mcp-server-assignability";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, Tool, User } from "@/types";
 import { MAX_BULK_AGENT_TOOL_ENTRIES } from "@/types";

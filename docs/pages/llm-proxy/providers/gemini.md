@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -119,6 +119,6 @@ For models that support explicit context caching, pass the provider-created cach
 
 It does not create cache objects or manage their storage lifetime. Model eligibility and cache storage charges follow [Gemini’s caching rules](https://ai.google.dev/gemini-api/docs/caching).
 
-The [Model Router](/docs/llm-proxy/model-router) also accepts `cachedContent` alongside Chat Completions or Responses input when targeting Gemini. Reference a cache created for that Gemini model, and follow Google's restrictions on supplying system instructions or tools alongside cached content.
+The [Unified Model API](/docs/llm-proxy/unified-model) also accepts `cachedContent` alongside Chat Completions or Responses input when targeting Gemini. Reference a cache created for that Gemini model, and follow Google's restrictions on supplying system instructions or tools alongside cached content.
 
 Anthropic-style `cache_control` markers and OpenAI-specific cache options cannot be translated to Gemini; the router rejects them with a 400 error instead of silently ignoring them.

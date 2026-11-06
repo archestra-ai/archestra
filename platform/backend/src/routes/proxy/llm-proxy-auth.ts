@@ -44,6 +44,7 @@ import {
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { configCache } from "@/services/config-cache";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
@@ -57,6 +58,7 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
+import { ANTHROPIC_SUBSCRIPTION_UPSTREAM } from "./common";
 import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
 import type { PassthroughIdentity } from "./passthrough-log";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
@@ -120,6 +122,8 @@ export interface VirtualKeyValidationResult {
    * the pool the requested model names. No provider key is resolved.
    */
   modelPoolId?: string;
+  /** Set when a Claude Code subscription run's passthrough key is used in Authorization. */
+  passthroughVirtualKeyId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -186,6 +190,10 @@ export async function validateVirtualApiKey(params: {
    * model names.
    */
   allowModelPool?: boolean;
+  /** Requested agent ID from the route path, if any. */
+  agentId?: string;
+  /** Resolved gateway agent when already available to the caller. */
+  agent?: GatewayAgent;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -204,6 +212,32 @@ export async function validateVirtualApiKey(params: {
       organizationId: resolved.virtualKey.organizationId,
     });
   if (resolved.virtualKey.keyType === "passthrough") {
+    if (
+      expectedProvider === "anthropic" &&
+      resolved.virtualKey.scope === "personal" &&
+      resolved.virtualKey.authorId &&
+      params.agentId
+    ) {
+      const targetAgent = params.agent ?? (await resolveAgent(params.agentId));
+      await validatePassthroughVirtualKey({
+        tokenValue,
+        agent: targetAgent,
+      });
+      const claudeCodeToken = await claudeCodeAccountManager.resolveProxyToken({
+        virtualKeyId: resolved.virtualKey.id,
+        organizationId: resolved.virtualKey.organizationId,
+        userId: resolved.virtualKey.authorId,
+        agentId: targetAgent.id,
+      });
+      if (claudeCodeToken) {
+        return {
+          apiKey: `Bearer:${claudeCodeToken}`,
+          baseUrl: ANTHROPIC_SUBSCRIPTION_UPSTREAM,
+          ...(await virtualKeyIdentity(resolved.virtualKey)),
+          passthroughVirtualKeyId: resolved.virtualKey.id,
+        };
+      }
+    }
     throw new ApiError(
       400,
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
@@ -1441,6 +1475,29 @@ async function authenticatePassthroughProxyRequest(params: {
         tokenValue: passthroughToken,
         agent,
       });
+      if (
+        provider === "anthropic" &&
+        bearerToken &&
+        hasArchestraTokenPrefix(bearerToken)
+      ) {
+        authenticatedBearer = true;
+        if (bearerToken === passthroughToken) {
+          const claudeCodeToken =
+            await claudeCodeAccountManager.resolveProxyToken({
+              virtualKeyId: resolved.passthroughVirtualKeyId,
+              organizationId: agent.organizationId,
+              userId: resolved.userId,
+              agentId,
+            });
+          if (claudeCodeToken) {
+            providerApiKey = `Bearer:${claudeCodeToken}`;
+            passthroughUpstreamOverrides.set(
+              request,
+              ANTHROPIC_SUBSCRIPTION_UPSTREAM,
+            );
+          }
+        }
+      }
       return {
         agent,
         authMethod: "passthrough_virtual_key",
@@ -1480,6 +1537,35 @@ async function authenticatePassthroughProxyRequest(params: {
       const { virtualKey } = await validateVirtualApiKeyToken(bearerToken);
       authenticatedBearer = true;
       const agent = await resolveAgent(agentId);
+      if (virtualKey.keyType === "passthrough") {
+        const resolved = await validatePassthroughVirtualKey({
+          tokenValue: bearerToken,
+          agent,
+        });
+        if (agentId && provider === "anthropic") {
+          const claudeCodeToken =
+            await claudeCodeAccountManager.resolveProxyToken({
+              virtualKeyId: resolved.passthroughVirtualKeyId,
+              organizationId: agent.organizationId,
+              userId: resolved.userId,
+              agentId: agent.id,
+            });
+          if (claudeCodeToken) {
+            providerApiKey = `Bearer:${claudeCodeToken}`;
+            passthroughUpstreamOverrides.set(
+              request,
+              ANTHROPIC_SUBSCRIPTION_UPSTREAM,
+            );
+          }
+        }
+        return {
+          agent,
+          authMethod: "passthrough_virtual_key",
+          userId: resolved.userId,
+          passthroughVirtualKeyId: resolved.passthroughVirtualKeyId,
+          billingTeamId: resolved.billingTeamId,
+        };
+      }
       providerApiKey = await passthroughProviderApiKey({
         tokenValue: bearerToken,
         provider,
@@ -1596,6 +1682,8 @@ async function passthroughProviderApiKey(params: {
   return apiKey;
 }
 
+const CLAUDE_OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
 /**
  * Puts the mapped provider key on the request in the header the provider
  * reads, unless the caller already sent its own provider credential there.
@@ -1606,17 +1694,42 @@ function forwardPassthroughProviderApiKey(params: {
   apiKey: string;
 }) {
   const { request, provider, apiKey } = params;
-  const [name, value] =
-    provider === "anthropic"
+  const [name, value] = apiKey.startsWith("Bearer:")
+    ? ["authorization", `Bearer ${apiKey.slice(7)}`]
+    : provider === "anthropic"
       ? ["x-api-key", apiKey]
       : ["authorization", `Bearer ${apiKey}`];
   if (request.raw.headers[name] !== undefined) return;
   request.headers[name] = value;
   request.raw.headers[name] = value;
+  if (provider === "anthropic" && apiKey.startsWith("Bearer:sk-ant-oat")) {
+    const rawBeta = request.raw.headers["anthropic-beta"];
+    const existing = (Array.isArray(rawBeta) ? rawBeta.join(",") : rawBeta)
+      ?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (!existing?.includes(CLAUDE_OAUTH_BETA_HEADER)) {
+      const nextBeta =
+        existing && existing.length > 0
+          ? `${existing.join(",")},${CLAUDE_OAUTH_BETA_HEADER}`
+          : CLAUDE_OAUTH_BETA_HEADER;
+      request.headers["anthropic-beta"] = nextBeta;
+      request.raw.headers["anthropic-beta"] = nextBeta;
+    }
+  }
 }
 
 function trimTrailingSlash(url: string | undefined): string | undefined {
   return url?.replace(/\/+$/, "");
+}
+
+const passthroughUpstreamOverrides = new WeakMap<object, string>();
+
+export function getPassthroughUpstream(
+  request: object,
+  defaultUpstream: string,
+): string {
+  return passthroughUpstreamOverrides.get(request) ?? defaultUpstream;
 }
 
 /**

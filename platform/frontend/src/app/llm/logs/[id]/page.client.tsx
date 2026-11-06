@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
@@ -38,7 +38,10 @@ import {
   useInteractionSummaries,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
-import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
+import {
+  LLM_LOG_FOCUS_PARAM,
+  llmSessionHref,
+} from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import {
   GuardrailsProvider,
@@ -77,17 +80,29 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
-  // Past page one, the read also takes the previous page's newest row: it
-  // bounds this page's tool-call window, and a second read would delay them.
-  const hasNewerPage = offset > 0;
+  // Requests run oldest first, so page one is where the session began.
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: hasNewerPage ? pageSize + 1 : pageSize,
-      offset: hasNewerPage ? offset - 1 : offset,
+      limit: pageSize,
+      offset,
       sortBy: "createdAt",
-      sortDirection: "desc",
+      sortDirection: "asc",
     });
+  // The next page's oldest row bounds this page's tool-call window. It is its
+  // own read: the list endpoint caps a page at 100 rows, so a 100-row page
+  // has no room for it.
+  const hasNextPage =
+    interactionsResponse !== undefined &&
+    offset + pageSize < interactionsResponse.pagination.total;
+  const nextPageHead = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: offset + pageSize,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: hasNextPage,
+  });
 
   // Fetch session metadata (profile name, user names, etc.)
   const {
@@ -100,11 +115,46 @@ export default function SessionDetailPage({
     toastOnError: false,
   });
 
-  const pageRows = interactionsResponse?.data ?? [];
-  const newerRequest = hasNewerPage ? (pageRows[0] ?? null) : null;
+  // Past page one, the session's first request: the axis counts from it.
+  // Should it fail, the axis falls back to counting from this page's start.
+  const firstPageHead = useInteractionSummaries({
+    sessionId,
+    limit: 1,
+    offset: 0,
+    sortBy: "createdAt",
+    sortDirection: "asc",
+    enabled: offset > 0,
+  });
+  const firstRow = offset > 0 ? (firstPageHead.data?.data[0] ?? null) : null;
+  const sessionStartPending = offset > 0 && firstPageHead.isPending;
+  const sessionStartFailed = offset > 0 && firstPageHead.isError;
+  const sessionStart = firstRow
+    ? new Date(firstRow.createdAt).getTime() -
+      Math.max(0, firstRow.durationMs ?? 0)
+    : null;
+
   const interactions = useMemo(
-    () => (hasNewerPage ? pageRows.slice(1) : pageRows),
-    [hasNewerPage, pageRows],
+    () => interactionsResponse?.data ?? [],
+    [interactionsResponse],
+  );
+  const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
+  // Where this page's records end: the next page's first request's start.
+  // Without that boundary, the page's own last request bounds it.
+  const pageEndsAt = nextRequest
+    ? new Date(nextRequest.createdAt).getTime() -
+      Math.max(0, nextRequest.durationMs ?? 0)
+    : hasNextPage && interactions.length > 0
+      ? Math.max(
+          ...interactions.map((row) => new Date(row.createdAt).getTime()),
+        )
+      : null;
+  const requestsReady =
+    interactionsResponse !== undefined &&
+    !interactionsLoading &&
+    (!hasNextPage || !nextPageHead.isPending);
+  const lastPageIndex = Math.max(
+    0,
+    Math.ceil((interactionsResponse?.pagination.total ?? 0) / pageSize) - 1,
   );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
@@ -153,13 +203,28 @@ export default function SessionDetailPage({
       setPagination({ pageIndex: nextPageIndex, pageSize }),
     [setPagination, pageSize],
   );
+  // A request on another page opens as a link, which finds its page.
+  const router = useRouter();
+  const openRequest = useCallback(
+    (requestId: string) =>
+      router.push(
+        `${llmSessionHref(sessionId, { request: requestId })}&pageSize=${pageSize}`,
+        { scroll: false },
+      ),
+    [router, sessionId, pageSize],
+  );
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
-    newerRequest,
-    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    nextRequest,
+    boundary: {
+      failed: hasNextPage && nextPageHead.isError,
+      retry: () => nextPageHead.refetch(),
+    },
+    requestsReady,
     pageIndex,
     pageSize,
+    lastPageIndex,
     onLocatePage: goToPage,
     targetToolCallId,
   });
@@ -178,7 +243,10 @@ export default function SessionDetailPage({
   // link points at. Drawing each as it lands reflows the rows and moves the
   // selection.
   const traceLoading =
-    interactionsLoading || !sessionToolCalls.ready || !linkedRequest.ready;
+    interactionsLoading ||
+    sessionStartPending ||
+    !sessionToolCalls.ready ||
+    !linkedRequest.ready;
 
   // Whether the latest main request captured a thread: its thread is the
   // whole conversation, so the list marks it and the details offer a way to
@@ -198,8 +266,8 @@ export default function SessionDetailPage({
   );
 
   const timeline = useMemo(
-    () => buildTimeline({ requests: interactions, toolCalls }),
-    [interactions, toolCalls],
+    () => buildTimeline({ requests: interactions, toolCalls, sessionStart }),
+    [interactions, toolCalls, sessionStart],
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
@@ -287,15 +355,15 @@ export default function SessionDetailPage({
     setPickedKey(spans[next].key);
   };
 
-  // Requests are listed newest first, so the latest one lives on page one.
+  // Requests run oldest first, so the latest one lives on the last page.
   const jumpToConversation =
     latestHasConversation && conversationRowId
       ? conversationOnPage
         ? () => setPickedKey(conversationKey)
-        : pageIndex > 0
+        : pageIndex !== lastPageIndex
           ? () => {
               setPickedKey(conversationKey);
-              goToPage(0);
+              goToPage(lastPageIndex);
             }
           : null
       : null;
@@ -356,10 +424,12 @@ export default function SessionDetailPage({
           >
             <GuardrailsProvider
               timeline={timeline}
+              pageEndsAt={pageEndsAt}
               sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >
               <TraceWaterfall
+                onOpenRequest={openRequest}
                 timeline={timeline}
                 loading={traceLoading}
                 profileName={profileName}
@@ -379,6 +449,12 @@ export default function SessionDetailPage({
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
                     missingRequest={linkedRequest.targetMissing}
+                    requestLookupFailed={linkedRequest.rankFailed}
+                    onRetryRequestLookup={linkedRequest.retry}
+                    toolCallLookupFailed={sessionToolCalls.rankFailed}
+                    onRetryToolCallLookup={sessionToolCalls.retryRank}
+                    sessionStartFailed={sessionStartFailed}
+                    onRetrySessionStart={() => firstPageHead.refetch()}
                   />
                 }
                 pagination={
@@ -446,14 +522,37 @@ function ToolCallsNotice({
   truncated,
   missingToolCallId,
   missingRequest,
+  requestLookupFailed,
+  onRetryRequestLookup,
+  toolCallLookupFailed,
+  onRetryToolCallLookup,
+  sessionStartFailed,
+  onRetrySessionStart,
 }: {
   failed: boolean;
   onRetry: () => void;
   truncated: boolean;
   missingToolCallId: string | null;
   missingRequest: boolean;
+  /** Finding the linked request's page failed. */
+  requestLookupFailed: boolean;
+  onRetryRequestLookup: () => void;
+  /** Finding the linked tool call's page failed. */
+  toolCallLookupFailed: boolean;
+  onRetryToolCallLookup: () => void;
+  /** The session's first request didn't load, so the axis counts from this page. */
+  sessionStartFailed: boolean;
+  onRetrySessionStart: () => void;
 }) {
-  if (!failed && !truncated && !missingToolCallId && !missingRequest) {
+  if (
+    !failed &&
+    !truncated &&
+    !missingToolCallId &&
+    !missingRequest &&
+    !requestLookupFailed &&
+    !toolCallLookupFailed &&
+    !sessionStartFailed
+  ) {
     return null;
   }
   return (
@@ -471,6 +570,54 @@ function ToolCallsNotice({
             size="xs"
             className="ml-auto"
             onClick={onRetry}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {requestLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked request.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryRequestLookup}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {toolCallLookupFailed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <InlineNoticeText>
+            Couldn't find the page that holds the linked tool call.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetryToolCallLookup}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {sessionStartFailed ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            Times on the axis count from this page's first request: the
+            session's start didn't load.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetrySessionStart}
           >
             <span>Retry</span>
           </Button>

@@ -1,7 +1,7 @@
 ---
 title: Secret Storage
 description: Choose database or Vault storage and rotate credential encryption keys
-order: 5
+order: 6
 lastUpdated: 2026-10-27
 ---
 

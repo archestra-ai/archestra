@@ -81,7 +81,7 @@ clone, or its skills folder, the way the app expects.`);
 Only if the app lets you change its model provider's base URL. Keep the provider, model
 and API key the user already has, and set the base URL to ${base}/<provider>, for
 example ${base}/openai, ${base}/anthropic or ${base}/gemini. An app that speaks the
-OpenAI API can instead use ${base}/model-router with provider-qualified model IDs such
+OpenAI API can instead use ${base}/unified-model with provider-qualified model IDs such
 as openai:gpt-5.4. Do not switch providers or models.`);
   }
 

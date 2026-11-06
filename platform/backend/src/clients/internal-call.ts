@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { drainScopeHeaders } from "@/utils/drain-scope";
 
 /**
  * Two per-process proofs, each under its own header name and with its own
@@ -19,12 +20,12 @@ const GUARDRAIL: Proof = {
 
 /** Proof that a proxy call came from this process. */
 export function internalCallHeader(): Record<string, string> {
-  return proofHeader(IN_PROCESS);
+  return { ...proofHeader(IN_PROCESS), ...drainScopeHeaders() };
 }
 
 /** Proof that a proxy call is one of the platform's own guardrail calls. */
 export function guardrailCallHeader(): Record<string, string> {
-  return proofHeader(GUARDRAIL);
+  return { ...proofHeader(GUARDRAIL), ...drainScopeHeaders() };
 }
 
 type Headers = Record<string, string | string[] | undefined>;

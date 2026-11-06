@@ -1,9 +1,7 @@
-import {
-  differenceInCalendarDays,
-  format,
-  isToday,
-  isYesterday,
-} from "date-fns";
+import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
+import { format } from "date-fns/format";
+import { isToday } from "date-fns/isToday";
+import { isYesterday } from "date-fns/isYesterday";
 
 /**
  * Human label for a chat's date bucket: "Today", "Yesterday", a "Jul 14"-style

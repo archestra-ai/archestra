@@ -12,7 +12,10 @@ import { vi } from "vitest";
 import { queryService } from "@/knowledge-base";
 import { UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
+
+setupTestCacheManager();
 
 /**
  * An external MCP client reaches `query_knowledge_sources` through this route,

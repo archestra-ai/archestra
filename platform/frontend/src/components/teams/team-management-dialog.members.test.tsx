@@ -25,16 +25,14 @@ vi.mock("@/lib/config/config", () => ({
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: useTeamsMock,
 }));
-vi.mock("@archestra/shared", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: {
-    addTeamMember: vi.fn(),
-    getTeamMembers: vi.fn(),
-    getTeamMembersPage: vi.fn(),
-    removeTeamMember: vi.fn(),
-    updateTeamMember: vi.fn(),
-    updateTeam: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  addTeamMember: vi.fn(),
+  getTeamMembers: vi.fn(),
+  getTeamMembersPage: vi.fn(),
+  removeTeamMember: vi.fn(),
+  updateTeamMember: vi.fn(),
+  updateTeam: vi.fn(),
 }));
 
 const team = {

@@ -2,10 +2,12 @@
 title: Audit log export
 description: Send administrative audit events to your SIEM through an OpenTelemetry Collector
 order: 3
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-04
 ---
 
-Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs.
+Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs. To inspect these events in Archestra's **Audit** tab, see [Logs and Auditing](/docs/admin/logs).
+
+Invalid LLM Proxy credentials and malformed proxy requests are recorded in [proxy request log events](/docs/admin/observability/tracing#proxy-request-log-events). Search both `archestra.llm_proxy.request` for credentials rejected inside an inference handler and `archestra.llm_proxy.rejected` for requests rejected before the handler. They are not administrative audit events and do not appear in the Audit tab or audit API. For requests blocked before reaching Archestra, use ingress access logs.
 
 ## Connect Your Collector
 
@@ -38,7 +40,7 @@ service:
       exporters: [debug]
 ```
 
-Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs). Backend logs also use this endpoint; filter by the audit scope to separate them.
+Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs). Backend logs also use this endpoint; filter by the audit scope to separate them.
 
 ## Route Events to Your SIEM
 
@@ -73,7 +75,7 @@ Missing values are omitted. Behind a trusted reverse proxy, configure [`ARCHESTR
 
 ## Retrieve Events Through the API
 
-Use [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).
+Use [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).
 
 Authenticate with a dedicated [service account](/docs/reference/api#service-accounts) whose role has [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) for organization-wide collection. Pass `pagination.nextCursor` as the next request's `cursor` until `pagination.hasNext` is false. Pages are newest first; use `limit=100` for 100 events per page (the default is 20).
 

@@ -9,7 +9,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { CredentialResolutionModeSchema } from "@/types/enterprise-managed-credentials";
 
 import { OpenAi } from "./llm-providers";

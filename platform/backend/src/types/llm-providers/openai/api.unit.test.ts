@@ -7,6 +7,51 @@ import {
 
 describe("ChatCompletionRequestSchema", () => {
   test.each([
+    { type: "text" },
+    { type: "json_object" },
+    {
+      type: "json_schema",
+      json_schema: {
+        name: "nested_result",
+        description: "Preserve all JSON Schema keywords",
+        strict: true,
+        schema: {
+          type: "object",
+          $defs: { value: { type: "string", enum: ["ready"] } },
+          properties: { status: { $ref: "#/$defs/value" } },
+          required: ["status"],
+          additionalProperties: false,
+        },
+      },
+    },
+  ])("preserves response_format $type through chat validation", (responseFormat) => {
+    const parsed = ChatCompletionRequestSchema.parse({
+      model: "structured-model",
+      messages: [{ role: "user", content: "Reply OK." }],
+      response_format: responseFormat,
+      arbitrary_field: "must still be stripped",
+    });
+    expect(parsed).toMatchObject({ response_format: responseFormat });
+    expect(parsed).not.toHaveProperty("arbitrary_field");
+  });
+
+  test.each([
+    { type: "unsupported" },
+    { type: "json_schema" },
+    { type: "json_schema", json_schema: { schema: {} } },
+    { type: "json_schema", json_schema: { name: "result", schema: "bad" } },
+    { type: "json_schema", json_schema: { name: "result", strict: "true" } },
+  ])("rejects malformed response_format %j", (responseFormat) => {
+    expect(
+      ChatCompletionRequestSchema.safeParse({
+        model: "structured-model",
+        messages: [{ role: "user", content: "Reply OK." }],
+        response_format: responseFormat,
+      }).success,
+    ).toBe(false);
+  });
+
+  test.each([
     "none",
     "max",
   ])("keeps reasoning_effort %s and max_completion_tokens through validation", (effort) => {

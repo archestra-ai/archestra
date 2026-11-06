@@ -116,6 +116,22 @@ beforeEach(() => {
 });
 
 describe("CreateVirtualKeyDialog", () => {
+  it("finishes management-only creation without displaying a member's bearer value", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    mutateAsync.mockResolvedValueOnce({
+      id: "member-key",
+      name: "Member key",
+      keyType: "passthrough",
+    });
+    renderDialog("passthrough", { onOpenChange });
+    await user.type(screen.getByLabelText("Name"), "Member key");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.queryByRole("button", { name: "Copy key" }),
+    ).not.toBeInTheDocument();
+  });
   it("creates the passthrough type supplied by its resource tab without a type selector", async () => {
     const user = userEvent.setup();
     renderDialog("passthrough");
@@ -381,7 +397,7 @@ describe("CreateVirtualKeyDialog", () => {
     ).not.toBeInTheDocument();
     // The default model is linked to this key and gets a Responses example.
     expect(dialog).toHaveTextContent(
-      "https://proxy.example.com/model-router/responses",
+      "https://proxy.example.com/unified-model/responses",
     );
     expect(dialog).toHaveTextContent('"model": "openai:gpt-5.6-sol"');
     expect(dialog).not.toHaveTextContent("gpt-5.4-unmapped");
@@ -441,7 +457,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("standard");
     await createFromAnyStep(user);
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
-    expect(dialog).not.toHaveTextContent("/model-router/images");
+    expect(dialog).not.toHaveTextContent("/unified-model/images");
     expect(dialog).toHaveTextContent(
       "Choose the native provider API for image generation examples.",
     );
@@ -505,7 +521,7 @@ describe("CreateVirtualKeyDialog", () => {
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(
-      within(dialog).getByRole("radio", { name: /Model Router/ }),
+      within(dialog).getByRole("radio", { name: /Unified Model API/ }),
     ).toBeDisabled();
     expect(dialog).toHaveTextContent("Authorization: Bearer $OPENAI_API_KEY");
     expect(dialog).toHaveTextContent("X-Archestra-Virtual-Key: arch_created");
@@ -584,6 +600,7 @@ function createdKey(
 function renderDialog(
   keyType: "standard" | "passthrough",
   options: {
+    onOpenChange?: (open: boolean) => void;
     existingKeys?: Array<{
       authorId: string;
       keyType: "standard" | "passthrough";
@@ -601,7 +618,7 @@ function renderDialog(
     <QueryClientProvider client={new QueryClient()}>
       <CreateVirtualKeyDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={options.onOpenChange ?? vi.fn()}
         keyType={keyType}
         parentableKeys={
           options.parentableKeys ?? [

@@ -282,7 +282,7 @@ OpenAPPA checks declarations in the root file first, then declarations from incl
 
 - An included file cannot include another file.
 - An included file cannot replace settings that apply to the whole deployment. The one exception is `confined_results` under `[policy.deployment]`: an included file can list tools it declares itself, and the names join the root's list. An included file that sets `[policy.deployment] hint` is refused.
-- A root `[[policy.annotator]]` replaces an included annotator with the same name. Fields omitted from the replacement are not inherited.
+- A root `[[policy.annotator]]` replaces an included annotator with the same name. A root `[[policy.sanitizer]]` replaces an included sanitizer with the same name. Fields omitted from the replacement are not inherited.
 - Two included files cannot declare the same annotator.
 - Two files cannot configure the same external component name within the same kind, such as two `[externals.sanitizers.clean]` sections.
 

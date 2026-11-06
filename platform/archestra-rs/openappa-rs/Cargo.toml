@@ -41,11 +41,13 @@ crate-type = ["cdylib"]
 # confined (#786); then Google Drive sharing settings for Google Workspace
 # audiences (#750), the project's own toolchain releases kept out of the
 # label-guide trust gate (#788), every Archestra built-in tool labeled (#789),
-# and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c77025f0373af360c29ef5b3cb754197e9d5d57e", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c77025f0373af360c29ef5b3cb754197e9d5d57e" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c77025f0373af360c29ef5b3cb754197e9d5d57e", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c77025f0373af360c29ef5b3cb754197e9d5d57e" }
+# and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
+# then battery sanitizers the deployment binds, and model and archestra
+# builtins named on a sanitizer's declaration (#791).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "852eec920201bc898af69699e58bf488950aab75", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "852eec920201bc898af69699e58bf488950aab75" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "852eec920201bc898af69699e58bf488950aab75", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "852eec920201bc898af69699e58bf488950aab75" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

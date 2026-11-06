@@ -95,13 +95,13 @@ pub(crate) fn open_fault(error: OpenError) -> Fault {
         | OpenError::NonCanonicalTool { .. }
         | OpenError::UnboundExternal { .. }
         | OpenError::UndeclaredExternal { .. }
-        | OpenError::BoundBuiltinAnnotator(_)
+        | OpenError::BoundBuiltin { .. }
         | OpenError::JevInputs(_)
         | OpenError::JevTrustRanks(_) => BindingFailure::PolicyRefused,
-        OpenError::LlmNotConfigured(_)
+        OpenError::LlmNotConfigured { .. }
         | OpenError::ModelKeyMissing { .. }
         | OpenError::JevNotConfigured(_)
-        | OpenError::ArchestraNotConfigured(_) => BindingFailure::RuntimeMisconfigured,
+        | OpenError::ArchestraNotConfigured { .. } => BindingFailure::RuntimeMisconfigured,
         // The binding's adapter or its own use of the runtime, not the policy.
         OpenError::UnspelledControlTool | OpenError::KeysDeferred => BindingFailure::InvalidInput,
         OpenError::Damaged(_)

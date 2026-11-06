@@ -26,7 +26,7 @@ The available settings depend on the component's role:
 | `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
 | `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
 
-OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
+OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. A sanitizer binding is the exception: one with no declaration stays idle, so a root can bind the sanitizers of a battery it may include. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
 
 Included files can add bindings and annotator builtins. An included file may add `[externals.jev]`, and the section combines field by field: each field is declared by one file only. They cannot replace root settings: `timeout_ms`, `max_body_bytes`, `review_timeout_ms`, `[externals.claude_code]`, or `[externals.llm]`.
 

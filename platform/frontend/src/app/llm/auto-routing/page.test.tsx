@@ -1291,7 +1291,9 @@ describe("past sessions", () => {
     });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("button", { name: "Re-score…" }));
+    await user.click(
+      await screen.findByRole("button", { name: /^Re-score 240 sessions/ }),
+    );
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
         name: /sessions$/,

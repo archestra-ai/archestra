@@ -1,6 +1,7 @@
 "use client";
 
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import type { PlanSummary } from "./plan-document";
@@ -74,43 +75,52 @@ function TierSplit({
   ];
 
   return (
-    <div className="space-y-2">
-      <ChartContainer config={config} className="aspect-auto h-24 w-full">
-        <BarChart data={data} layout="vertical" margin={{ left: 4, right: 12 }}>
-          <XAxis type="number" domain={[0, 1]} hide />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={72}
-            tickLine={false}
-            axisLine={false}
-          />
-          {TIER_NAMES.map((tier) => (
-            <Bar
-              key={tier}
-              dataKey={tier}
-              stackId="share"
-              fill={`var(--color-${tier})`}
-              isAnimationActive={false}
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="text-sm">Where sessions go</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 px-4">
+        <ChartContainer config={config} className="aspect-auto h-24 w-full">
+          <BarChart
+            data={data}
+            layout="vertical"
+            margin={{ left: 4, right: 12 }}
+          >
+            <XAxis type="number" domain={[0, 1]} hide />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={72}
+              tickLine={false}
+              axisLine={false}
             />
-          ))}
-        </BarChart>
-      </ChartContainer>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        {TIER_NAMES.map((tier, i) => (
-          <span key={tier} className="flex items-center gap-1.5">
-            <span
-              className={`size-2.5 rounded-sm ${TIER_COLOR[tier].swatch}`}
-            />
-            <span>
-              {config[tier].label}:{" "}
-              {formatPercent(summary.tier_session_share[i])} sessions,{" "}
-              {formatPercent(summary.tier_token_share[i])} tokens
+            {TIER_NAMES.map((tier) => (
+              <Bar
+                key={tier}
+                dataKey={tier}
+                stackId="share"
+                fill={`var(--color-${tier})`}
+                isAnimationActive={false}
+              />
+            ))}
+          </BarChart>
+        </ChartContainer>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {TIER_NAMES.map((tier, i) => (
+            <span key={tier} className="flex items-center gap-1.5">
+              <span
+                className={`size-2.5 rounded-sm ${TIER_COLOR[tier].swatch}`}
+              />
+              <span>
+                {config[tier].label}:{" "}
+                {formatPercent(summary.tier_session_share[i])} sessions,{" "}
+                {formatPercent(summary.tier_token_share[i])} tokens
+              </span>
             </span>
-          </span>
-        ))}
-      </div>
-    </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -122,12 +132,12 @@ function SummaryTile({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-md border p-4">
+    <Card className="gap-1 px-4 py-4">
       <span className="text-muted-foreground text-xs uppercase tracking-wide">
         {label}
       </span>
       {children}
-    </div>
+    </Card>
   );
 }
 

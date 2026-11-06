@@ -58,12 +58,12 @@ export function SetupCards({ settings }: { settings: AutoRoutingSettings }) {
 /** Where Auto is picked, for the routing-at-a-glance view. */
 export function UsageLine({ settings }: { settings: AutoRoutingSettings }) {
   return (
-    <p className="text-sm text-muted-foreground">
+    <span>
       <span>{usageText(settings.usage)}</span>{" "}
       <Link href="/settings/agents" className="text-primary hover:underline">
         Change the organization default
       </Link>
-    </p>
+    </span>
   );
 }
 

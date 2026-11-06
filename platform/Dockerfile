@@ -377,9 +377,6 @@ FROM builder-base AS builder
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
-# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-#
 # SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 # SENTRY_URL points to the EU region where the archestra org is hosted
 #
@@ -390,8 +387,6 @@ FROM builder-base AS builder
 # backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
-    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
-    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
     pnpm exec turbo build --filter=@backend --filter=@frontend \

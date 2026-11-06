@@ -41,8 +41,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_REPOSITORY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/frontend-dev-cache";
+const DEFAULT_REPOSITORY = "ghcr.io/archestra-ai/ci/frontend-dev-cache";
 const MANIFEST_TYPES = [
   "application/vnd.oci.image.index.v1+json",
   "application/vnd.oci.image.manifest.v1+json",

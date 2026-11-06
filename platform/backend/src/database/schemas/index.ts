@@ -192,6 +192,7 @@ export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyLabelsTable } from "./llm-provider-api-key-label";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export {
+  llmUsageDailyTable,
   llmUsageHourlyTable,
   llmUsageRollupDirtyTable,
   llmUsageRollupStateTable,

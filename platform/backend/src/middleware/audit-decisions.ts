@@ -1166,6 +1166,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "derived hourly totals of interactions for cost statistics",
   },
+  llmUsageDailyTable: {
+    audited: false,
+    reason: "derived daily totals of interactions for cost statistics",
+  },
   llmUsageRollupStateTable: {
     audited: false,
     reason: "internal rollup progress marker",

@@ -7,8 +7,9 @@ import UsageStatisticsModel from "./usage-statistics";
 
 /**
  * Every statistic reads the same numbers whether its hours come from raw
- * interactions or from the hourly rollup: each view is read before the rollup
- * has rolled anything (all raw) and again once it has rolled every hour.
+ * interactions or from the rollup (hourly rows, and daily rows for the 30d
+ * and multi-day custom windows): each view is read before the rollup has
+ * rolled anything (all raw) and again once it has rolled every hour.
  */
 describe("cost statistics over the hourly rollup", () => {
   test("every view matches its raw-row result", async ({
@@ -115,12 +116,13 @@ describe("cost statistics over the hourly rollup", () => {
     await drain();
     const rolled = await Promise.all(timeframes.map(read));
 
-    const [{ rows }] = await Promise.all([
-      db.execute<{ hours: number }>(
-        "SELECT COUNT(DISTINCT hour)::int AS hours FROM llm_usage_hourly",
-      ),
-    ]);
+    const { rows } = await db.execute<{ hours: number; days: number }>(
+      `SELECT (SELECT COUNT(DISTINCT hour) FROM llm_usage_hourly)::int AS hours,
+        (SELECT COUNT(DISTINCT hour) FROM llm_usage_daily)::int AS days`,
+    );
+    // Both tiers serve some of the windows read above.
     expect(rows[0].hours).toBeGreaterThan(0);
+    expect(rows[0].days).toBeGreaterThan(0);
     expect(rolled).toEqual(raw);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  getStatisticsBucketIntervalMinutes,
   parseCustomStatisticsTimeframe,
   type StatisticsTimeFrame,
 } from "@archestra/shared";
@@ -17,10 +18,12 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { AttributionLabels } from "@/types/attribution-label";
 
 /**
- * Reads and writes of the hourly LLM usage rollup (`llm_usage_hourly`).
+ * Reads and writes of the LLM usage rollup (`llm_usage_hourly`, and its daily
+ * sums in `llm_usage_daily`).
  *
  * Cost statistics read {@link LlmUsageRollupModel.facts}: rollup rows for the
- * hours of a window the rollup serves, and the same rows computed from
+ * hours of a window the rollup serves (daily rows for its whole, unmarked days
+ * when it buckets by days or longer), and the same rows computed from
  * `interactions` for everything else (the window's partial first and last
  * hours, hours not rolled yet, hours marked for recompute). Both halves come
  * from {@link usageFactsQuery}, so a statistic is the same whichever half a
@@ -48,6 +51,8 @@ class LlmUsageRollupModel {
       end: string | null;
       served_from: string | null;
       served_to: string | null;
+      days_from: string | null;
+      days_to: string | null;
     }>(sql`
       WITH bounds AS (
         SELECT (${bounds.start})::timestamp AS start, (${bounds.end})::timestamp AS "end"
@@ -61,7 +66,10 @@ class LlmUsageRollupModel {
         LEFT JOIN ${schema.llmUsageRollupStateTable} AS state ON state.id = ${STATE_ID}
       )
       SELECT bounds.start::text AS start, bounds."end"::text AS "end",
-        served.served_from::text AS served_from, served.served_to::text AS served_to
+        served.served_from::text AS served_from, served.served_to::text AS served_to,
+        (CASE WHEN date_trunc('day', served.served_from) = served.served_from THEN served.served_from
+          ELSE date_trunc('day', served.served_from) + interval '1 day' END)::text AS days_from,
+        date_trunc('day', served.served_to)::text AS days_to
       FROM bounds, served`);
     const [row] = result.rows;
     // Minute buckets need raw rows: the rollup only has hours.
@@ -70,12 +78,26 @@ class LlmUsageRollupModel {
       row.served_from !== null &&
       row.served_to !== null &&
       row.served_from < row.served_to;
+    // Daily rows only fit buckets made of whole UTC days.
+    const servesDays =
+      serves &&
+      DAY_BUCKETS.has(statisticsTimeBucket(timeframe)) &&
+      getStatisticsBucketIntervalMinutes(timeframe) % MINUTES_PER_DAY === 0 &&
+      row.days_from !== null &&
+      row.days_to !== null &&
+      row.days_from < row.days_to;
     return {
       start: row.start,
       end: row.end,
       grain,
       served: serves
-        ? { from: row.served_from as string, to: row.served_to as string }
+        ? {
+            from: row.served_from as string,
+            to: row.served_to as string,
+            days: servesDays
+              ? { from: row.days_from as string, to: row.days_to as string }
+              : null,
+          }
         : null,
     };
   }
@@ -85,7 +107,6 @@ class LlmUsageRollupModel {
    * the columns). Aggregate them; a group can span several rows.
    */
   static facts(window: UsageWindow | null) {
-    const h = schema.llmUsageHourlyTable;
     const i = schema.interactionsTable;
     // An unparseable range matches nothing, as in timeframeConditions.
     if (!window) return usageFactsQuery(sql`FALSE`, "hour").as("usage_facts");
@@ -98,7 +119,7 @@ class LlmUsageRollupModel {
     if (!window.served) {
       return usageFactsQuery(inWindow, window.grain).as("usage_facts");
     }
-    const { from, to } = window.served;
+    const { from, to, days } = window.served;
     const d = schema.llmUsageRollupDirtyTable;
     // Marked hours are read from raw rows. The rolled and raw halves test the
     // same marks because one statement reads them under one snapshot.
@@ -112,16 +133,17 @@ class LlmUsageRollupModel {
         ),
       )
       .as("marked");
-    const rolled = db
-      .select(rollupSelection)
-      .from(h)
-      .where(
-        and(
-          gte(h.hour, sql`${from}::timestamp`),
-          lt(h.hour, sql`${to}::timestamp`),
-          sql`NOT EXISTS (SELECT 1 FROM ${d} WHERE ${d.hour} = ${h.hour})`,
-        ),
-      );
+    // Every part selects the rollup's columns in one order; their types differ
+    // only in the table each column is read from.
+    type Part = ReturnType<typeof rolledHours>;
+    const rolled = days
+      ? [
+          rolledHours(from, days.from),
+          rolledHours(days.to, to),
+          rolledDays(days) as unknown as Part,
+          hoursOfMarkedDays(days) as unknown as Part,
+        ]
+      : [rolledHours(from, to)];
     // The window's parts outside the served hours, each its own range so
     // each is an index range scan.
     const head = usageFactsQuery(
@@ -154,17 +176,11 @@ class LlmUsageRollupModel {
       .offset(0)
       .as("marked_usage");
     const remarked = db
-      .select(
-        Object.fromEntries(
-          Object.keys(rollupSelection).map((key) => [
-            key,
-            markedHour[key as keyof typeof rollupSelection],
-          ]),
-        ) as { [K in keyof typeof rollupSelection]: (typeof markedHour)[K] },
-      )
+      .select(columnsOf(markedHour))
       .from(marked)
       .innerJoinLateral(markedHour, sql`true`);
-    return unionAll(rolled, head, tail, remarked).as("usage_facts");
+    const [first, ...others] = rolled;
+    return unionAll(first, head, tail, remarked, ...others).as("usage_facts");
   }
 
   /**
@@ -275,9 +291,14 @@ export type UsageWindow = {
   grain: "hour" | "minute";
   /**
    * Rolled hours `[from, to)` inside the window, if any. Its marked hours are
-   * read from raw rows.
+   * read from raw rows. `days`: the whole days `[from, to)` among them read
+   * from daily rows, when the window buckets by whole days.
    */
-  served: { from: string; to: string } | null;
+  served: {
+    from: string;
+    to: string;
+    days: { from: string; to: string } | null;
+  } | null;
 };
 
 /**
@@ -396,6 +417,8 @@ export function statisticsTimeBucket(timeframe: StatisticsTimeFrame): string {
 type MarkedHour = { hour: string; version: string; settling: boolean };
 
 const STATE_ID = 1;
+const MINUTES_PER_DAY = 24 * 60;
+const DAY_BUCKETS = new Set(["day", "week", "month"]);
 /**
  * How long after an hour ends it is rolled. An interaction is stamped with
  * its transaction's start; a transaction that writes later than this after
@@ -434,10 +457,139 @@ async function recompute(tx: Transaction, hour: string): Promise<string> {
         tx,
       ),
     );
+  await recomputeDay(tx, hour);
   const horizon = await tx.execute<{ xmax: string }>(
     sql`SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS xmax`,
   );
   return horizon.rows[0].xmax;
+}
+
+/**
+ * Replace the daily rows of the hour's day with its hourly rows summed, once
+ * every hour of the day is rolled.
+ */
+async function recomputeDay(tx: Transaction, hour: string): Promise<void> {
+  const h = schema.llmUsageHourlyTable;
+  const daily = schema.llmUsageDailyTable;
+  const day = sql`date_trunc('day', ${hour}::timestamp)`;
+  await tx.delete(daily).where(eq(daily.hour, day));
+  const keys = KEY_COLUMNS.map((key) => h[key]);
+  const summed = Object.fromEntries(
+    Object.keys(rollupColumns(h)).map((key) => {
+      const column = h[key as keyof typeof rollupSelection];
+      if (key === "hour")
+        return [key, sql`date_trunc('day', ${h.hour})`.as("hour")];
+      if ((KEY_COLUMNS as string[]).includes(key)) return [key, column];
+      if (key === "maxCreatedAt")
+        return [key, sql`MAX(${column})`.as(column.name)];
+      const cast =
+        column.columnType === "PgInteger"
+          ? "integer"
+          : column.columnType === "PgNumeric"
+            ? "numeric"
+            : "bigint";
+      return [key, sql`SUM(${column})::${sql.raw(cast)}`.as(column.name)];
+    }),
+  ) as typeof rollupSelection;
+  await tx.insert(daily).select(
+    tx
+      .select(summed)
+      .from(h)
+      .where(
+        and(
+          gte(h.hour, day),
+          lt(h.hour, sql`${day} + interval '1 day'`),
+          sql`EXISTS (SELECT 1 FROM ${schema.llmUsageRollupStateTable} AS state
+            WHERE state.id = ${STATE_ID} AND state.rolled_through >= ${day} + interval '1 day')`,
+        ),
+      )
+      .groupBy(sql`date_trunc('day', ${h.hour})`, ...keys),
+  );
+}
+
+/** Rolled, unmarked hours `[from, to)`. */
+function rolledHours(from: string, to: string) {
+  const h = schema.llmUsageHourlyTable;
+  return db
+    .select(rollupSelection)
+    .from(h)
+    .where(
+      and(
+        gte(h.hour, sql`${from}::timestamp`),
+        lt(h.hour, sql`${to}::timestamp`),
+        notMarked(h.hour),
+      ),
+    );
+}
+
+/** Daily rows of the whole days `[from, to)` with no marked hour. */
+function rolledDays(days: { from: string; to: string }) {
+  const daily = schema.llmUsageDailyTable;
+  return db
+    .select(rollupColumns(daily))
+    .from(daily)
+    .where(
+      and(
+        gte(daily.hour, sql`${days.from}::timestamp`),
+        lt(daily.hour, sql`${days.to}::timestamp`),
+        sql`${daily.hour} NOT IN (SELECT date_trunc('day', ${schema.llmUsageRollupDirtyTable.hour}) FROM ${schema.llmUsageRollupDirtyTable})`,
+      ),
+    );
+}
+
+/**
+ * The unmarked hours of the days `[from, to)` that have a marked hour, each
+ * day its own index range scan (fenced, as in the marked hours' raw read).
+ */
+function hoursOfMarkedDays(days: { from: string; to: string }) {
+  const d = schema.llmUsageRollupDirtyTable;
+  const h = schema.llmUsageHourlyTable;
+  const markedDay = db
+    .selectDistinct({
+      day: sql<Date>`date_trunc('day', ${d.hour})`.as("marked_day"),
+    })
+    .from(d)
+    .where(
+      and(
+        gte(d.hour, sql`${days.from}::timestamp`),
+        lt(d.hour, sql`${days.to}::timestamp`),
+      ),
+    )
+    .as("marked_days");
+  const dayHours = db
+    .select(rollupSelection)
+    .from(h)
+    .where(
+      and(
+        gte(h.hour, markedDay.day),
+        lt(h.hour, sql`${markedDay.day} + interval '1 day'`),
+        notMarked(h.hour),
+      ),
+    )
+    .offset(0)
+    .as("marked_day_hours");
+  return db
+    .select(columnsOf(dayHours))
+    .from(markedDay)
+    .innerJoinLateral(dayHours, sql`true`);
+}
+
+/** Not a marked hour: a hashed set of the marks, read once per statement. */
+function notMarked(hour: SQLWrapper) {
+  const d = schema.llmUsageRollupDirtyTable;
+  return sql`${hour} NOT IN (SELECT ${d.hour} FROM ${d})`;
+}
+
+/** The rollup columns of a subquery, in {@link rollupSelection}'s order. */
+function columnsOf<S extends Record<keyof typeof rollupSelection, unknown>>(
+  subquery: S,
+) {
+  return Object.fromEntries(
+    Object.keys(rollupSelection).map((key) => [
+      key,
+      subquery[key as keyof typeof rollupSelection],
+    ]),
+  ) as { [K in keyof typeof rollupSelection]: S[K] };
 }
 
 function timeframeBounds(
@@ -612,9 +764,10 @@ function usageFactsQuery(
     );
 }
 
-/** The rollup's own columns, in {@link usageFactsQuery}'s shape. */
-const rollupSelection = (() => {
-  const h = schema.llmUsageHourlyTable;
+/** A rollup table's columns, in {@link usageFactsQuery}'s shape. */
+function rollupColumns(
+  h: typeof schema.llmUsageHourlyTable | typeof schema.llmUsageDailyTable,
+) {
   return {
     hour: h.hour,
     profileId: h.profileId,
@@ -656,4 +809,29 @@ const rollupSelection = (() => {
     modelBaselineCost: h.modelBaselineCost,
     modelCacheSavings: h.modelCacheSavings,
   };
-})();
+}
+
+const rollupSelection = rollupColumns(schema.llmUsageHourlyTable);
+
+/** The columns a rollup row is keyed by (every column but the measures). */
+const KEY_COLUMNS = [
+  "profileId",
+  "connectorId",
+  "appId",
+  "billingTeamId",
+  "userId",
+  "serviceAccountId",
+  "authMethod",
+  "virtualKeyId",
+  "passthroughVirtualKeyId",
+  "authenticatedAppId",
+  "authenticatedAppName",
+  "providerApiKeyId",
+  "modelPoolId",
+  "externalAgentId",
+  "type",
+  "model",
+  "billedModel",
+  "billingMode",
+  "attributionLabels",
+] as const satisfies (keyof typeof rollupSelection)[];

@@ -44,7 +44,60 @@ import type { InteractionAuthMethod } from "@/types/interaction";
  */
 export const llmUsageHourlyTable = pgTable(
   "llm_usage_hourly",
-  {
+  usageColumns(),
+  (table) => [index("llm_usage_hourly_hour_idx").on(table.hour)],
+);
+
+/**
+ * `llm_usage_hourly` summed by UTC day, so long windows read a few rows per
+ * day. `hour` holds the start of the day. A day's rows exist once all of its
+ * hours are rolled, and are computed again with any of its hours, in the same
+ * transaction. Readers skip a day with a marked hour and read its hours
+ * instead.
+ */
+export const llmUsageDailyTable = pgTable(
+  "llm_usage_daily",
+  usageColumns(),
+  (table) => [index("llm_usage_daily_hour_idx").on(table.hour)],
+);
+
+/**
+ * How far `llm_usage_hourly` reaches: every hour before `rolled_through` has
+ * been computed at least once. One row, written by the first roll; no row
+ * means nothing is rolled yet.
+ */
+export const llmUsageRollupStateTable = pgTable("llm_usage_rollup_state", {
+  id: integer("id").primaryKey(),
+  rolledThrough: timestamp("rolled_through", { mode: "date" }),
+});
+
+/**
+ * Rolled hours to compute again.
+ *
+ * Database triggers on `interactions` and `interaction_billing` mark an hour
+ * when a row in it changes after the hour was rolled, bumping `version`; the
+ * rollup clears a mark only if `version` is still what it read before the
+ * recompute, so a change racing a recompute keeps its mark. Readers take
+ * marked hours from raw rows until then.
+ *
+ * `settle_after` (a transaction id) is set once an hour has been computed: the
+ * hour is computed one final time when every transaction that was running at
+ * that point has ended, so a row committed late by one of them is included.
+ * Readers take every marked hour, settling or not, from raw rows.
+ */
+export const llmUsageRollupDirtyTable = pgTable("llm_usage_rollup_dirty", {
+  hour: timestamp("hour", { mode: "date" }).primaryKey(),
+  version: bigint("version", { mode: "number" }).notNull().default(1),
+  settleAfter: bigint("settle_after", { mode: "number" }),
+});
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/** The columns of both rollup tables (fresh builders for each table). */
+function usageColumns() {
+  return {
     hour: timestamp("hour", { mode: "date" }).notNull(),
     profileId: uuid("profile_id"),
     connectorId: uuid("connector_id"),
@@ -103,36 +156,5 @@ export const llmUsageHourlyTable = pgTable(
     modelCost: numeric("model_cost").notNull(),
     modelBaselineCost: numeric("model_baseline_cost").notNull(),
     modelCacheSavings: numeric("model_cache_savings").notNull(),
-  },
-  (table) => [index("llm_usage_hourly_hour_idx").on(table.hour)],
-);
-
-/**
- * How far `llm_usage_hourly` reaches: every hour before `rolled_through` has
- * been computed at least once. One row, written by the first roll; no row
- * means nothing is rolled yet.
- */
-export const llmUsageRollupStateTable = pgTable("llm_usage_rollup_state", {
-  id: integer("id").primaryKey(),
-  rolledThrough: timestamp("rolled_through", { mode: "date" }),
-});
-
-/**
- * Rolled hours to compute again.
- *
- * Database triggers on `interactions` and `interaction_billing` mark an hour
- * when a row in it changes after the hour was rolled, bumping `version`; the
- * rollup clears a mark only if `version` is still what it read before the
- * recompute, so a change racing a recompute keeps its mark. Readers take
- * marked hours from raw rows until then.
- *
- * `settle_after` (a transaction id) is set once an hour has been computed: the
- * hour is computed one final time when every transaction that was running at
- * that point has ended, so a row committed late by one of them is included.
- * Readers take every marked hour, settling or not, from raw rows.
- */
-export const llmUsageRollupDirtyTable = pgTable("llm_usage_rollup_dirty", {
-  hour: timestamp("hour", { mode: "date" }).primaryKey(),
-  version: bigint("version", { mode: "number" }).notNull().default(1),
-  settleAfter: bigint("settle_after", { mode: "number" }),
-});
+  };
+}

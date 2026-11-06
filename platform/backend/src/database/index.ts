@@ -216,6 +216,8 @@ async function doInitializeDatabase(): Promise<void> {
  * - statement_timeout: ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS (default 30s);
  *   kills runaway queries so a single slow query can't hang a connection forever.
  *
+ * - jit: off for every connection (see the "connect" handler).
+ *
  * Connection keepalive configuration:
  * - keepAlive: true (enable TCP keepalive probes)
  * - keepAliveInitialDelayMillis: 10s (start probes after 10s of idle)
@@ -247,6 +249,16 @@ function createPool(connectionString: string): pg.Pool {
    */
   newPool.on("error", (err) => {
     logger.error({ err }, "Unexpected error on idle database client");
+  });
+
+  // No JIT compilation: it adds hundreds of milliseconds to every query whose
+  // estimated cost passes jit_above_cost (cost statistics over usage rows,
+  // most of all), and the queries here are short-lived. Queued before the
+  // client's first query.
+  newPool.on("connect", (client) => {
+    client.query("SET jit = off").catch((err) => {
+      logger.warn({ err }, "Could not turn off JIT for a database connection");
+    });
   });
 
   /**

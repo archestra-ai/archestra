@@ -181,6 +181,41 @@ describe("LlmUsageRollupModel", () => {
     expect(await markedHours()).toEqual([hourOf(current.createdAt)]);
   });
 
+  test("a whole day is read from daily rows, and its hours while one is marked", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+  }) => {
+    const { id: organizationId } = await makeOrganization();
+    const agent = await makeAgent({ organizationId });
+    const day = new Date();
+    day.setUTCHours(0, 0, 0, 0);
+    day.setUTCDate(day.getUTCDate() - 2);
+    const at = (hours: number) => new Date(day.getTime() + hours * 3600_000);
+    const early = await makeInteraction(agent.id, {
+      createdAt: at(3),
+      cost: "1",
+    });
+    await makeInteraction(agent.id, { createdAt: at(15), cost: "2" });
+    await drain();
+
+    const window = (await LlmUsageRollupModel.window("30d")) as UsageWindow;
+    expect(window.served?.days).not.toBeNull();
+    expect(await dailyCost(day)).toBe(3);
+    expect(await totalCost(window)).toBe(3);
+
+    await db
+      .update(schema.interactionsTable)
+      .set({ cost: "5" })
+      .where(eq(schema.interactionsTable.id, early.id));
+    expect(await totalCost(window)).toBe(7);
+
+    await drain();
+    expect(await markedHours()).toEqual([]);
+    expect(await dailyCost(day)).toBe(7);
+    expect(await totalCost(window)).toBe(7);
+  });
+
   test("a custom range reads its partial first and last hours raw", async ({
     makeAgent,
     makeInteraction,
@@ -211,6 +246,7 @@ describe("LlmUsageRollupModel", () => {
     expect(window.served).toEqual({
       from: hourOf(new Date(start.getTime() + 3600_000)),
       to: hourOf(end),
+      days: null,
     });
     expect(await factRows(window)).toEqual(await factRows(rawOnly(window)));
     expect(await requestCount(window)).toBe(3 * MIXED_ROWS_PER_INSTANT);
@@ -354,6 +390,15 @@ async function totalCost(window: UsageWindow) {
   const [row] = await db
     .select({ cost: sql<string>`SUM(${facts.cost})` })
     .from(facts);
+  return Number(row.cost);
+}
+
+async function dailyCost(day: Date) {
+  const daily = schema.llmUsageDailyTable;
+  const [row] = await db
+    .select({ cost: sql<string>`SUM(${daily.cost})` })
+    .from(daily)
+    .where(eq(daily.hour, day));
   return Number(row.cost);
 }
 

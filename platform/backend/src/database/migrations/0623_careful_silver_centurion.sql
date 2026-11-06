@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=Creates three new, empty tables and adds triggers on interactions and interaction_billing. CREATE TRIGGER takes SHARE ROW EXCLUSIVE on each table: it waits for in-flight writes and blocks new ones until this transaction commits. It is O(1) catalog work issued last, and lock_timeout bounds the wait, so a long-running transaction fails this migration (retried on the next deploy) instead of stalling the LLM proxy. History is rolled up by the periodic llm_usage_rollup task, never in this transaction.
+-- drizzle-migration-linter: reason=Creates four new, empty tables and adds triggers on interactions and interaction_billing. CREATE TRIGGER takes SHARE ROW EXCLUSIVE on each table: it waits for in-flight writes and blocks new ones until this transaction commits. It is O(1) catalog work issued last, and lock_timeout bounds the wait, so a long-running transaction fails this migration (retried on the next deploy) instead of stalling the LLM proxy. History is rolled up by the periodic llm_usage_rollup task, never in this transaction.
 SET LOCAL lock_timeout = '5s';
 --> statement-breakpoint
 CREATE TABLE "llm_usage_hourly" (
@@ -56,6 +56,50 @@ CREATE TABLE "llm_usage_rollup_state" (
 );
 --> statement-breakpoint
 CREATE INDEX "llm_usage_hourly_hour_idx" ON "llm_usage_hourly" USING btree ("hour");
+--> statement-breakpoint
+CREATE TABLE "llm_usage_daily" (
+	"hour" timestamp NOT NULL,
+	"profile_id" uuid,
+	"connector_id" uuid,
+	"app_id" uuid,
+	"billing_team_id" text,
+	"user_id" text,
+	"service_account_id" uuid,
+	"auth_method" varchar,
+	"virtual_key_id" uuid,
+	"passthrough_virtual_key_id" uuid,
+	"authenticated_app_id" text,
+	"authenticated_app_name" varchar,
+	"provider_api_key_id" uuid,
+	"model_pool_id" uuid,
+	"external_agent_id" varchar,
+	"type" varchar NOT NULL,
+	"model" varchar,
+	"billed_model" varchar,
+	"billing_mode" varchar NOT NULL,
+	"attribution_labels" jsonb,
+	"requests" integer NOT NULL,
+	"input_tokens" bigint NOT NULL,
+	"reported_input_tokens" bigint NOT NULL,
+	"output_tokens" bigint NOT NULL,
+	"cache_read_tokens" bigint NOT NULL,
+	"cache_write_tokens" bigint NOT NULL,
+	"cost" numeric NOT NULL,
+	"baseline_cost" numeric NOT NULL,
+	"cache_savings" numeric NOT NULL,
+	"failed_over_attempts" integer NOT NULL,
+	"max_created_at" timestamp,
+	"model_input_tokens" bigint NOT NULL,
+	"model_reported_input_tokens" bigint NOT NULL,
+	"model_output_tokens" bigint NOT NULL,
+	"model_cache_read_tokens" bigint NOT NULL,
+	"model_cache_write_tokens" bigint NOT NULL,
+	"model_cost" numeric NOT NULL,
+	"model_baseline_cost" numeric NOT NULL,
+	"model_cache_savings" numeric NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX "llm_usage_daily_hour_idx" ON "llm_usage_daily" USING btree ("hour");
 
 --> statement-breakpoint
 -- Mark hours for recompute. Bumps the version (never DO NOTHING): the rollup

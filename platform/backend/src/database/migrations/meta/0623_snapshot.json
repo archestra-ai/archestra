@@ -16956,6 +16956,269 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.llm_usage_daily": {
+      "name": "llm_usage_daily",
+      "schema": "",
+      "columns": {
+        "hour": {
+          "name": "hour",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "app_id": {
+          "name": "app_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "billing_team_id": {
+          "name": "billing_team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "service_account_id": {
+          "name": "service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auth_method": {
+          "name": "auth_method",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "virtual_key_id": {
+          "name": "virtual_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "passthrough_virtual_key_id": {
+          "name": "passthrough_virtual_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authenticated_app_id": {
+          "name": "authenticated_app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authenticated_app_name": {
+          "name": "authenticated_app_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_api_key_id": {
+          "name": "provider_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model_pool_id": {
+          "name": "model_pool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_agent_id": {
+          "name": "external_agent_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "billed_model": {
+          "name": "billed_model",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "billing_mode": {
+          "name": "billing_mode",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attribution_labels": {
+          "name": "attribution_labels",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requests": {
+          "name": "requests",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reported_input_tokens": {
+          "name": "reported_input_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_read_tokens": {
+          "name": "cache_read_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_write_tokens": {
+          "name": "cache_write_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cost": {
+          "name": "cost",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "baseline_cost": {
+          "name": "baseline_cost",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_savings": {
+          "name": "cache_savings",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "failed_over_attempts": {
+          "name": "failed_over_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_created_at": {
+          "name": "max_created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model_input_tokens": {
+          "name": "model_input_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_reported_input_tokens": {
+          "name": "model_reported_input_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_output_tokens": {
+          "name": "model_output_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_cache_read_tokens": {
+          "name": "model_cache_read_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_cache_write_tokens": {
+          "name": "model_cache_write_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_cost": {
+          "name": "model_cost",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_baseline_cost": {
+          "name": "model_baseline_cost",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_cache_savings": {
+          "name": "model_cache_savings",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "llm_usage_daily_hour_idx": {
+          "name": "llm_usage_daily_hour_idx",
+          "columns": [
+            {
+              "expression": "hour",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.llm_usage_hourly": {
       "name": "llm_usage_hourly",
       "schema": "",

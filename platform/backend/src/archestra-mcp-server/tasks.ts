@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   DEFAULT_APP_NAME,
   normalizeSubagentLoadBalancingConfig,
+  resolveSubagentLoadBalancerScopeKey,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -384,12 +385,23 @@ export async function startDelegatedTask(params: {
     }
   }
 
+  const scopeKey = resolveSubagentLoadBalancerScopeKey({
+    userId: params.context.userId ?? params.context.tokenAuth?.userId,
+    serviceAccountId: params.context.tokenAuth?.serviceAccountId,
+    teamId: params.context.tokenAuth?.teamId,
+    organizationId:
+      params.context.organizationId ??
+      params.context.tokenAuth?.organizationId ??
+      callerAgent.organizationId,
+  });
+
   const { candidateIds, claimedPrimaryAgentId, dispatchCount } =
     await subagentLoadBalancer.planCandidates({
       callerAgentId: callerAgent.id,
       assignedAgentIds: assignedIds,
       excludedAgentIds: planningExcludedSet,
       config: lbConfig,
+      scopeKey,
     });
   if (candidateIds.length === 0) {
     const { result, outcome } = failedLaunch(
@@ -416,6 +428,7 @@ export async function startDelegatedTask(params: {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
         callerAgentId: callerAgent.id,
         claimedAgentId: claimedPrimaryAgentId,
+        scopeKey,
       });
       const { result, outcome } = failedLaunch(
         "refused",
@@ -437,6 +450,7 @@ export async function startDelegatedTask(params: {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
         callerAgentId: callerAgent.id,
         claimedAgentId: claimedPrimaryAgentId,
+        scopeKey,
       });
       const { result, outcome } = failedLaunch(
         "refused",
@@ -451,8 +465,7 @@ export async function startDelegatedTask(params: {
   }
 
   const retries = lbConfig?.enabled ? (lbConfig.retries ?? 0) : 0;
-  const trackDistributedRotation =
-    lbConfig?.enabled === true && lbConfig.algorithm === "round_robin";
+  const trackDistributedRotation = lbConfig?.enabled === true;
 
   let lastAttempt: {
     result: CallToolResult;
@@ -472,6 +485,7 @@ export async function startDelegatedTask(params: {
         ...(trackDistributedRotation
           ? {
               callerAgentId: callerAgent.id,
+              scopeKey,
               assignedAgentIds: assignedIds,
               plannedDispatchCount: currentPlannedDispatchCount,
             }
@@ -497,6 +511,7 @@ export async function startDelegatedTask(params: {
         await subagentLoadBalancer.releaseUnlaunchedClaim({
           callerAgentId: callerAgent.id,
           claimedAgentId: claimedPrimaryAgentId,
+          scopeKey,
         });
       }
       await recordRuntimeLaunch(params.context, attempt.outcome);
@@ -508,9 +523,11 @@ export async function startDelegatedTask(params: {
     if (trackDistributedRotation) {
       const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
         callerAgentId: callerAgent.id,
+        scopeKey,
         remainingCandidateIds: remainingFallbackIds,
         assignedAgentIds: assignedIds,
         plannedDispatchCount: currentPlannedDispatchCount,
+        failedAgentId: currentCandidateId,
       });
       currentCandidateId = claimed.claimedAgentId;
       remainingFallbackIds = claimed.remainingCandidateIds;

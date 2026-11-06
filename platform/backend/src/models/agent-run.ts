@@ -140,6 +140,89 @@ class AgentRunModel {
     });
   }
 
+  /**
+   * Records the LLM session that handed this run its work. The first writer
+   * wins: a retried launch replaces the row and records it again, and nothing
+   * later may re-point a run at another session.
+   */
+  static async setOriginLlmSessionId(params: {
+    taskId: string;
+    originLlmSessionId: string;
+  }): Promise<void> {
+    await db
+      .update(schema.agentRunsTable)
+      .set({ originLlmSessionId: params.originLlmSessionId })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, params.taskId),
+          isNull(schema.agentRunsTable.originLlmSessionId),
+        ),
+      );
+  }
+
+  /**
+   * Handoffs that touch an LLM session, oldest first: runs it handed work to
+   * (it is their origin) and the run whose own session it is (it was handed
+   * work). `actorUserId` limits them to that user's own runs.
+   */
+  static async findHandoffsForLlmSession(params: {
+    organizationId: string;
+    llmSessionId: string;
+    actorUserId?: string;
+    limit: number;
+  }): Promise<
+    {
+      runId: string;
+      originLlmSessionId: string;
+      llmSessionId: string;
+      agentName: string;
+      title: string;
+      startedAt: Date;
+    }[]
+  > {
+    const runs = schema.agentRunsTable;
+    const rows = await db
+      .select({
+        runId: runs.taskId,
+        originLlmSessionId: runs.originLlmSessionId,
+        workloadName: runs.workloadName,
+        agentName: schema.agentsTable.name,
+        title: runs.title,
+        startedAt: runs.startedAt,
+      })
+      .from(runs)
+      .innerJoin(schema.agentsTable, eq(runs.agentId, schema.agentsTable.id))
+      .where(
+        and(
+          eq(runs.organizationId, params.organizationId),
+          isNotNull(runs.originLlmSessionId),
+          or(
+            eq(runs.originLlmSessionId, params.llmSessionId),
+            eq(runs.workloadName, params.llmSessionId),
+          ),
+          ...(params.actorUserId
+            ? [eq(runs.actorUserId, params.actorUserId)]
+            : []),
+        ),
+      )
+      .orderBy(asc(runs.startedAt))
+      .limit(params.limit);
+    return rows.flatMap((row) =>
+      row.originLlmSessionId
+        ? [
+            {
+              runId: row.runId,
+              originLlmSessionId: row.originLlmSessionId,
+              llmSessionId: agentRunLlmSessionId(row),
+              agentName: row.agentName,
+              title: row.title,
+              startedAt: row.startedAt,
+            },
+          ]
+        : [],
+    );
+  }
+
   static async findByTaskId(taskId: string): Promise<AgentRunRecord | null> {
     const [run] = await db
       .select()

@@ -825,6 +825,13 @@ export const handlers: HttpHandler[] = [
     forks: [],
     forksTruncated: false,
   }),
+  // No handoff to Agent Runtime, and no auto-routing decision, by default.
+  ...getJson("/api/llm-proxy-logs/sessions/:sessionId/handoffs", {
+    handedTo: [],
+    handedFrom: null,
+    moves: [],
+  }),
+  ...getJson("/api/llm-proxy-logs/:logId/auto-routing", { decision: null }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting

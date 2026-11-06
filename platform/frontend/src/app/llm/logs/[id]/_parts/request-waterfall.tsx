@@ -51,6 +51,15 @@ import {
 } from "./guardrail-rows";
 import type { GuardrailsData, TraceYell } from "./guardrails";
 import { LabelChangeNote, LabelRail } from "./label-rail";
+import { poolFailureLabel, poolFailureText } from "./pool-attempts";
+import type { RanOnKnob, RanOnView } from "./ran-on";
+import {
+  RanOnHeader,
+  RanOnLane,
+  RanOnMoveLines,
+  type RanOnParties,
+  RuntimeGlyph,
+} from "./ran-on-strip";
 import {
   type InteractionSummary,
   type RequestSpan,
@@ -110,7 +119,16 @@ export function RequestWaterfall({
   selectedConsultKey = null,
   onSelectConsult,
   onOpenRequest,
+  ranOn = null,
+  poolKeyNames,
 }: {
+  /**
+   * Where the session's work ran, when it was handed to Agent Runtime: its
+   * header above the list, and each row's place in it.
+   */
+  ranOn?: { view: RanOnView; parties: RanOnParties } | null;
+  /** Pool members' key names by provider key id, to name a pooled row's key. */
+  poolKeyNames?: Map<string, string>;
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
   /** The consult open in the details pane below, if any. */
@@ -421,6 +439,13 @@ export function RequestWaterfall({
         />
       ) : null}
       {notice}
+      {ranOn ? (
+        <RanOnHeader
+          view={ranOn.view}
+          parties={ranOn.parties}
+          layout={layout}
+        />
+      ) : null}
 
       {/* Only sideways scrolling is contained: containing vertical overscroll
           swallowed the wheel even when the list had nothing to scroll, so the
@@ -530,6 +555,7 @@ export function RequestWaterfall({
                       }}
                     />
                   ))}
+                  {ranOn ? <RanOnMoveLines view={ranOn.view} /> : null}
                   {edges ? (
                     <>
                       <span
@@ -588,6 +614,16 @@ export function RequestWaterfall({
                     yell: yellByKey.get(span.key) ?? null,
                     guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
                     highlighted: span.key === highlightedKey,
+                    ranOn: ranOn
+                      ? {
+                          runtime: ranOn.view.runtimeKeys.has(span.key),
+                          knob: ranOn.view.knobs.get(span.key),
+                          // The run's own session is all runtime: no glyph.
+                          glyph:
+                            ranOn.view.side === "client" &&
+                            ranOn.view.runtimeKeys.has(span.key),
+                        }
+                      : null,
                     buttonRef: (el: HTMLButtonElement | null) => {
                       if (el) rowRefs.current.set(span.key, el);
                       else rowRefs.current.delete(span.key);
@@ -600,6 +636,11 @@ export function RequestWaterfall({
                       span={span}
                       profileName={profileName}
                       isConversation={span.row.id === conversationRowId}
+                      poolKeyName={
+                        span.row.providerApiKeyId
+                          ? poolKeyNames?.get(span.row.providerApiKeyId)
+                          : undefined
+                      }
                       {...rowProps}
                     />
                   ) : (
@@ -831,6 +872,12 @@ type RowProps = {
   /** When a superyell turned guardrails off, epoch ms. */
   guardrailsOffAt?: number | null;
   highlighted: boolean;
+  /** Where this row ran, when the session was handed to Agent Runtime. */
+  ranOn?: {
+    runtime: boolean;
+    knob: RanOnKnob | undefined;
+    glyph: boolean;
+  } | null;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
 };
@@ -847,6 +894,7 @@ function RowShell({
   yell = null,
   guardrailsOffAt = null,
   highlighted,
+  ranOn = null,
   buttonRef,
   onSelect,
   name,
@@ -855,6 +903,8 @@ function RowShell({
   latency,
   tokens,
   cost,
+  edge = null,
+  barClassName,
 }: RowProps & {
   span: TimelineSpan;
   /** The row's accessible name. */
@@ -866,6 +916,9 @@ function RowShell({
   latency: { text: string; label: string } | null;
   tokens: ReactNode;
   cost: ReactNode;
+  /** Drawn at the row's left edge, over the gutter. */
+  edge?: ReactNode;
+  barClassName?: string;
 }) {
   const style = SPAN_KINDS[span.kind];
   const grid = GRIDS[layout];
@@ -876,6 +929,8 @@ function RowShell({
     (guardrailsOffAt !== null && span.start >= guardrailsOffAt);
   return (
     <li className="relative">
+      {ranOn ? <RanOnLane runtime={ranOn.runtime} knob={ranOn.knob} /> : null}
+      {edge}
       {yell || off ? (
         <YellRowMarks
           yell={yell}
@@ -936,6 +991,7 @@ function RowShell({
                 selected ? "text-foreground/70" : "text-muted-foreground",
               )}
             >
+              {ranOn?.glyph ? <RuntimeGlyph /> : null}
               {detail}
               <span
                 aria-hidden="true"
@@ -966,6 +1022,7 @@ function RowShell({
               style.bar,
               selected && "ring-2 ring-offset-1 ring-offset-card",
               selected && style.ring,
+              barClassName,
             )}
             style={{
               left: `${span.x * 100}%`,
@@ -1029,11 +1086,14 @@ function RequestRow({
   span,
   profileName,
   isConversation,
+  poolKeyName,
   ...rowProps
 }: RowProps & {
   span: RequestSpan;
   profileName: string | null;
   isConversation: boolean;
+  /** The pool member key this attempt went to, when known. */
+  poolKeyName?: string;
 }) {
   const { row, kind } = span;
   const label = requestLabel(row, profileName);
@@ -1048,14 +1108,18 @@ function RequestRow({
   const onPlan = row.billingMode === "subscription";
   const latency = formatLatency(row.durationMs);
   // A model pool writes one row per attempt; a failed one was retried on the
-  // next member, in the row after it.
+  // next member, in the row after it, which reads as its retry.
   const failedOver = row.attemptOutcome === "failed_over";
+  const failure = failedOver ? poolFailureLabel(row.failureReason) : null;
+  const retry = Boolean(row.modelPoolId) && (row.attempt ?? 0) > 1;
 
   return (
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${failedOver ? ", failed over" : ""}${isConversation ? ", latest conversation" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
+      barClassName={failedOver ? FAILED_ATTEMPT_BAR : undefined}
+      edge={retry ? <RetryBracket /> : null}
       name={
         <>
           <span
@@ -1069,10 +1133,18 @@ function RequestRow({
           {kind !== "main" ? <KindChip kind={kind} /> : null}
           {failedOver ? (
             <span
-              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 dark:text-red-400"
-              title={row.failureReason ?? undefined}
+              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 tabular-nums dark:text-red-400"
+              title={`Failed over to the next pool member${row.failureReason ? `: ${row.failureReason}` : ""}`}
             >
-              Failed over
+              {failure ? poolFailureText(failure) : "Failed over"}
+            </span>
+          ) : null}
+          {retry ? (
+            <span
+              className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground"
+              title={`Attempt ${row.attempt}: the next pool member after a failover`}
+            >
+              Retry
             </span>
           ) : null}
           {isConversation ? (
@@ -1101,12 +1173,31 @@ function RequestRow({
               ring={false}
             />
           </span>
+          {row.autoRouted ? (
+            <span
+              className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground"
+              title="Auto routing chose this model"
+            >
+              auto→
+            </span>
+          ) : null}
           <span
-            className="min-w-0 truncate lg:ml-0.5"
+            className={cn(
+              "min-w-0 truncate lg:ml-0.5",
+              poolKeyName && "max-w-[60%] shrink-0",
+            )}
             title={row.model ?? undefined}
           >
             {modelName}
           </span>
+          {poolKeyName ? (
+            <span
+              className="min-w-0 shrink-[4] truncate text-muted-foreground/70 max-sm:hidden"
+              title={`Sent with the pool member key ${poolKeyName}`}
+            >
+              via <span className="text-muted-foreground">{poolKeyName}</span>
+            </span>
+          ) : null}
         </>
       }
       time={formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" })}
@@ -1142,6 +1233,20 @@ function RequestRow({
           )}
         </span>
       }
+    />
+  );
+}
+
+/** A failed pool attempt's bar: hatched, so its retry below reads as the answer. */
+const FAILED_ATTEMPT_BAR =
+  "bg-red-500/20 bg-[repeating-linear-gradient(135deg,rgb(239_68_68/0.7)_0_2px,transparent_2px_4px)] dark:bg-red-400/20 dark:bg-[repeating-linear-gradient(135deg,rgb(248_113_113/0.7)_0_2px,transparent_2px_4px)]";
+
+/** Joins a pool retry to the failed attempt in the row above it. */
+function RetryBracket() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute top-[-22px] left-[10px] z-[1] h-11 w-[5px] rounded-l-[4px] border-y border-l border-muted-foreground/40 lg:top-[-20px] lg:h-10"
     />
   );
 }

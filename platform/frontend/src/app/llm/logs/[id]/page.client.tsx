@@ -27,15 +27,18 @@ import {
 } from "@/components/ui/empty";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useExportSessionInteractions,
+  useHandedOffRecords,
   useInteraction,
   useInteractionSessions,
   useInteractionSummaries,
+  useSessionHandoffs,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
 import {
@@ -43,11 +46,14 @@ import {
   llmSessionHref,
 } from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
+import { useModelPools } from "@/lib/model-pools.query";
 import {
   GuardrailsProvider,
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
+import { buildRanOn } from "./_parts/ran-on";
+import type { RanOnParties } from "./_parts/ran-on-strip";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,
@@ -229,6 +235,17 @@ export default function SessionDetailPage({
     targetToolCallId,
   });
   const { toolCalls } = sessionToolCalls;
+  // Work this session handed to Agent Runtime ran under the run's own
+  // session; its requests and calls in this page's time range join the trace.
+  const { data: handoffs } = useSessionHandoffs({ sessionId });
+  const handedOff = useHandedOffRecords({
+    sessionIds: (handoffs?.handedTo ?? [])
+      .slice(0, MAX_MERGED_RUNS)
+      .map((run) => run.llmSessionId),
+    startDate: offset > 0 ? interactions[0]?.createdAt : undefined,
+    endDate:
+      pageEndsAt !== null ? new Date(pageEndsAt).toISOString() : undefined,
+  });
   const linkedRequest = useLinkedRequest({
     sessionId,
     requests: interactions,
@@ -244,6 +261,7 @@ export default function SessionDetailPage({
   // selection.
   const traceLoading =
     interactionsLoading ||
+    handedOff.pending ||
     sessionStartPending ||
     !sessionToolCalls.ready ||
     !linkedRequest.ready;
@@ -265,9 +283,74 @@ export default function SessionDetailPage({
     [lastMainRequest],
   );
 
+  const traceRequests = useMemo(
+    () => byCreatedAt([...interactions, ...handedOff.requests]),
+    [interactions, handedOff.requests],
+  );
+  const traceToolCalls = useMemo(
+    () => byCreatedAt([...toolCalls, ...handedOff.toolCalls]),
+    [toolCalls, handedOff.toolCalls],
+  );
+
   const timeline = useMemo(
-    () => buildTimeline({ requests: interactions, toolCalls, sessionStart }),
-    [interactions, toolCalls, sessionStart],
+    () =>
+      buildTimeline({
+        requests: traceRequests,
+        toolCalls: traceToolCalls,
+        sessionStart,
+      }),
+    [traceRequests, traceToolCalls, sessionStart],
+  );
+  const ranOnView = useMemo(
+    () => buildRanOn({ timeline, handoffs: handoffs ?? undefined, sessionId }),
+    [timeline, handoffs, sessionId],
+  );
+  // The run's own session names the client it came from.
+  const originSessionId = handoffs?.handedFrom?.originLlmSessionId;
+  const { data: originSession } = useInteractionSessions({
+    sessionId: originSessionId ?? "",
+    limit: 1,
+    toastOnError: false,
+    enabled: originSessionId !== undefined,
+  });
+  const handoffRun = handoffs?.handedTo[0] ?? handoffs?.handedFrom ?? null;
+  const ranOn =
+    ranOnView && handoffRun
+      ? {
+          view: ranOnView,
+          parties: {
+            clientLabel:
+              (ranOnView.side === "client"
+                ? sessionData?.externalAgentIdLabels[0]
+                : originSession?.data[0]?.externalAgentIdLabels[0]) ?? "Client",
+            agentName: handoffRun.agentName,
+            runHref: `/chat/runs/${handoffRun.runId}`,
+            clientSessionHref: originSessionId
+              ? llmSessionHref(originSessionId)
+              : null,
+          } satisfies RanOnParties,
+        }
+      : null;
+
+  // A pooled row names the member key it went to.
+  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
+  const { data: canReadPools } = useHasPermissions({ llmModel: ["read"] });
+  const hasPooledRows = traceRequests.some((row) => row.modelPoolId);
+  const { data: pools } = useModelPools({
+    enabled: poolsEnabled && Boolean(canReadPools) && hasPooledRows,
+    toastOnError: false,
+  });
+  const poolKeyNames = useMemo(
+    () =>
+      new Map(
+        (pools ?? []).flatMap((pool) =>
+          pool.members.map(
+            (member) =>
+              [member.providerApiKeyId, member.providerApiKeyName] as const,
+          ),
+        ),
+      ),
+    [pools],
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
@@ -440,11 +523,14 @@ export default function SessionDetailPage({
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
                 onSelect={setPickedKey}
+                ranOn={ranOn}
+                poolKeyNames={poolKeyNames}
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}
                     onRetry={() => sessionToolCalls.refetch()}
                     truncated={sessionToolCalls.truncated}
+                    handedOffTruncated={handedOff.truncated}
                     missingToolCallId={
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
@@ -502,6 +588,7 @@ export default function SessionDetailPage({
                 onStep={step}
                 latestRequestId={conversationRowId}
                 onJumpToLatest={jumpToConversation}
+                requests={traceRequests}
               />
             </GuardrailsProvider>
           </section>
@@ -520,6 +607,7 @@ function ToolCallsNotice({
   failed,
   onRetry,
   truncated,
+  handedOffTruncated,
   missingToolCallId,
   missingRequest,
   requestLookupFailed,
@@ -532,6 +620,8 @@ function ToolCallsNotice({
   failed: boolean;
   onRetry: () => void;
   truncated: boolean;
+  /** The Agent Runtime records merged into this page were capped. */
+  handedOffTruncated: boolean;
   missingToolCallId: string | null;
   missingRequest: boolean;
   /** Finding the linked request's page failed. */
@@ -547,6 +637,7 @@ function ToolCallsNotice({
   if (
     !failed &&
     !truncated &&
+    !handedOffTruncated &&
     !missingToolCallId &&
     !missingRequest &&
     !requestLookupFailed &&
@@ -633,6 +724,15 @@ function ToolCallsNotice({
           </span>
         </p>
       ) : null}
+      {handedOffTruncated ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Showing the first 100 Agent Runtime requests in this page's time
+            range. The run's own session has them all.
+          </span>
+        </p>
+      ) : null}
       {missingToolCallId ? (
         <InlineNotice variant="neutral">
           <InlineNoticeText>
@@ -654,5 +754,14 @@ function ToolCallsNotice({
         </InlineNotice>
       ) : null}
     </div>
+  );
+}
+
+/** Runs whose records join a client's trace; later ones stay one click away. */
+const MAX_MERGED_RUNS = 3;
+
+function byCreatedAt<T extends { createdAt: string }>(records: T[]): T[] {
+  return [...records].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
 }

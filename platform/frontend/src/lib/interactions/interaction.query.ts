@@ -11,6 +11,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
 } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -23,6 +24,9 @@ const {
   getLlmProxyLogSummaries,
   getLlmProxyLogs,
   getLlmProxyLogSessionLineage,
+  getLlmProxyLogSessionHandoffs,
+  getLlmProxyLogAutoRouting,
+  getMcpToolCalls,
   getLlmProxyLogSessions,
   getLlmProxyLogExternalAgentIds,
   getLlmProxyLogUserIds,
@@ -416,6 +420,113 @@ export function useSessionLineage({
   });
 }
 
+/**
+ * Where a session's work moved between its client and Agent Runtime: the runs
+ * it started, or the run whose own session it is, and the moves between them.
+ */
+export function useSessionHandoffs({
+  sessionId,
+  enabled = true,
+}: {
+  sessionId: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["interactions", "sessions", sessionId, "handoffs"],
+    queryFn: async () => {
+      const response = await getLlmProxyLogSessionHandoffs({
+        path: { sessionId },
+      });
+      // The trace reads fine without it; its absence is not worth a toast.
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? null;
+    },
+    enabled,
+  });
+}
+
+/**
+ * The requests and gateway calls of the runs a session handed work to, within
+ * one page's time window, so the client's trace can show them in place.
+ * Each run reads at most one page of each; `truncated` says when there was
+ * more.
+ */
+export function useHandedOffRecords({
+  sessionIds,
+  startDate,
+  endDate,
+}: {
+  sessionIds: string[];
+  startDate?: string;
+  endDate?: string;
+}) {
+  return useQueries({
+    queries: sessionIds.map((sessionId) => ({
+      queryKey: [
+        "interactions",
+        "sessions",
+        sessionId,
+        "handed-off-records",
+        startDate,
+        endDate,
+      ],
+      queryFn: async () => {
+        const window = {
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
+        };
+        const [requests, toolCalls] = await Promise.all([
+          getLlmProxyLogSummaries({
+            query: {
+              sessionId,
+              limit: HANDED_OFF_RECORDS_LIMIT,
+              offset: 0,
+              sortBy: "createdAt",
+              sortDirection: "asc",
+              ...window,
+            },
+          }),
+          getMcpToolCalls({
+            query: { sessionId, limit: HANDED_OFF_RECORDS_LIMIT, ...window },
+          }),
+        ]);
+        throwOnApiError(requests.error, { toastOnError: false });
+        throwOnApiError(toolCalls.error, { toastOnError: false });
+        return {
+          requests: requests.data?.data ?? [],
+          toolCalls: toolCalls.data?.data ?? [],
+          truncated: Boolean(
+            requests.data?.pagination.hasNext ||
+              toolCalls.data?.pagination.hasNext,
+          ),
+        };
+      },
+    })),
+    combine: combineHandedOffRecords,
+  });
+}
+
+/** The saved auto-routing decision behind one request, or null. */
+export function useInteractionAutoRouting({
+  interactionId,
+  enabled = true,
+}: {
+  interactionId: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["interactions", interactionId, "auto-routing"],
+    queryFn: async () => {
+      const response = await getLlmProxyLogAutoRouting({
+        path: { logId: interactionId },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data?.decision ?? null;
+    },
+    enabled,
+  });
+}
+
 export function useInteractionSessions({
   profileId,
   userId,
@@ -582,3 +693,25 @@ const LOG_USER_OPTIONS_LIMIT = 50;
 
 /** Rows read per step of the backward search for tool-call askers. */
 const ASKER_BATCH = 100;
+
+/** The largest page the summaries and tool-call lists serve. */
+const HANDED_OFF_RECORDS_LIMIT = 100;
+
+/** Module-level, so the merged lists keep their identity between renders. */
+function combineHandedOffRecords(
+  results: {
+    data?: {
+      requests: archestraApiTypes.GetLlmProxyLogSummariesResponses["200"]["data"];
+      toolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"]["data"];
+      truncated: boolean;
+    };
+    isPending: boolean;
+  }[],
+) {
+  return {
+    requests: results.flatMap((r) => r.data?.requests ?? []),
+    toolCalls: results.flatMap((r) => r.data?.toolCalls ?? []),
+    truncated: results.some((r) => r.data?.truncated === true),
+    pending: results.some((r) => r.isPending),
+  };
+}

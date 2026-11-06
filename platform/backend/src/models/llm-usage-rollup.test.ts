@@ -130,7 +130,7 @@ describe("LlmUsageRollupModel", () => {
     const agent = await makeAgent({ organizationId });
     // Rows of two hours, interleaved.
     const hour = new Date(hoursAgo(8).setUTCMinutes(0, 0, 0));
-    const rows = [];
+    const rows: { id: string }[] = [];
     for (const minutes of [10, 130, 20, 140, 30, 150]) {
       rows.push(
         await makeInteraction(agent.id, {

@@ -376,6 +376,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   "openai_chat",
                   "anthropic",
                 ]),
+                claudeCodeAuthentication: z
+                  .enum(["provider", "subscription"])
+                  .nullable(),
               }),
             ),
           }),

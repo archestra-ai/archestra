@@ -383,6 +383,7 @@ describe("Default model blocked by Agent Runtime agents", () => {
           name: "Release Notes Writer",
           runtimeCommand: ["archestra-claude-code"],
           inferenceProtocol: "anthropic",
+          claudeCodeAuthentication: "provider",
         },
       ],
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
@@ -437,6 +438,7 @@ describe("Default model blocked by Agent Runtime agents", () => {
           name: "Chat Completions Agent",
           runtimeCommand: null,
           inferenceProtocol: "openai_chat",
+          claudeCodeAuthentication: null,
         },
       ],
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
@@ -446,6 +448,26 @@ describe("Default model blocked by Agent Runtime agents", () => {
     expect(
       screen.getByRole("button", { name: "1 agent can't run this" }),
     ).toBeVisible();
+  });
+
+  it("does not count a Claude Code agent on subscription authentication, which runs on the person's Claude account instead", () => {
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: [
+        {
+          id: "agent-1",
+          name: "Release Notes Writer",
+          runtimeCommand: ["archestra-claude-code"],
+          inferenceProtocol: "anthropic",
+          claudeCodeAuthentication: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows no warning when every runtime agent can run the default", () => {

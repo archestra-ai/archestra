@@ -326,6 +326,68 @@ describe("organization routes", () => {
       expect(message).toContain("Set a model on that agent");
     });
 
+    test.for([
+      ["subscription", 200],
+      ["automatic", 200],
+      ["provider", 409],
+    ] as const)("checks the default model against a Claude Code runtime using %s authentication", async ([
+      authentication,
+      expectedStatus,
+    ], { makeAgent, makeLlmProviderApiKey, makeSecret }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      const model = await ModelModel.create({
+        externalId: "openai/gateway-model",
+        provider: "openai",
+        modelId: "gateway-model",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+        access: "personal",
+        runtime: {
+          image: "example.com/claude-code:latest",
+          command: ["archestra-claude-code"],
+          inferenceProtocol: "anthropic",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+          ...(authentication !== "automatic" && {
+            claudeCode: { authentication },
+          }),
+        },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+      });
+
+      expect(response.statusCode).toBe(expectedStatus);
+      if (expectedStatus === 200) {
+        expect(response.json()).toMatchObject({
+          defaultModelId: model.id,
+          defaultLlmApiKeyId: key.id,
+        });
+      }
+    });
+
     test("does not apply the default compatibility check to explicit runtime overrides", async ({
       makeAgent,
       makeLlmProviderApiKey,
@@ -473,6 +535,7 @@ describe("organization routes", () => {
             name: "Inherits the default",
             runtimeCommand: ["archestra-claude-code"],
             inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: null,
           },
         ],
       });

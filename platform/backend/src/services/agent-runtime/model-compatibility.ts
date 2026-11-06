@@ -1,5 +1,6 @@
 import {
   DEFAULT_CLAUDE_CODE_MODEL,
+  getAgentRuntimeDefaultModelCompatibility,
   getAgentRuntimeModelCompatibility,
   isClaudeCodeRuntimeCommand,
   type SupportedProvider,
@@ -165,6 +166,7 @@ export async function listRuntimeAgentsInheritingOrganizationDefault(
     name: string;
     runtimeCommand: string[] | null;
     inferenceProtocol: NonNullable<Agent["runtime"]>["inferenceProtocol"];
+    claudeCodeAuthentication: "provider" | "subscription" | null;
   }>
 > {
   const agents =
@@ -179,6 +181,8 @@ export async function listRuntimeAgentsInheritingOrganizationDefault(
             name: agent.name,
             runtimeCommand: agent.runtime.command ?? null,
             inferenceProtocol: agent.runtime.inferenceProtocol,
+            claudeCodeAuthentication:
+              agent.runtime.claudeCode?.authentication ?? null,
           },
         ]
       : [],
@@ -199,9 +203,10 @@ export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
     throw new ApiError(404, "Default model not found");
   }
   const incompatible = agents.flatMap((agent) => {
-    const result = getAgentRuntimeModelCompatibility({
+    const result = getAgentRuntimeDefaultModelCompatibility({
       inferenceProtocol: agent.inferenceProtocol,
       runtimeCommand: agent.runtimeCommand,
+      claudeCodeAuthentication: agent.claudeCodeAuthentication,
       provider: model.provider,
       modelId: model.modelId,
       supportedEndpoints: model.supportedEndpoints,

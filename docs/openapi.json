@@ -490321,13 +490321,22 @@
                               "openai_chat",
                               "anthropic"
                             ]
+                          },
+                          "claudeCodeAuthentication": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "provider",
+                              "subscription"
+                            ]
                           }
                         },
                         "required": [
                           "id",
                           "name",
                           "runtimeCommand",
-                          "inferenceProtocol"
+                          "inferenceProtocol",
+                          "claudeCodeAuthentication"
                         ],
                         "additionalProperties": false
                       }

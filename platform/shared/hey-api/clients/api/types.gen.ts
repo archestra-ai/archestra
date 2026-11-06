@@ -126254,6 +126254,7 @@ export type GetDefaultModelRuntimeDependentsResponses = {
             name: string;
             runtimeCommand: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            claudeCodeAuthentication: 'provider' | 'subscription';
         }>;
     };
 };

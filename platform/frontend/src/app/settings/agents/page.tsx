@@ -2,7 +2,7 @@
 
 import {
   DocsPage,
-  getAgentRuntimeModelCompatibility,
+  getAgentRuntimeDefaultModelCompatibility,
   getDocsUrl,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
@@ -210,9 +210,10 @@ export default function AgentSettingsPage() {
     }) =>
       (runtimeDependents ?? []).filter(
         (agent) =>
-          !getAgentRuntimeModelCompatibility({
+          !getAgentRuntimeDefaultModelCompatibility({
             inferenceProtocol: agent.inferenceProtocol,
             runtimeCommand: agent.runtimeCommand,
+            claudeCodeAuthentication: agent.claudeCodeAuthentication,
             provider: model.provider,
             modelId: model.id,
             supportedEndpoints: model.capabilities?.supportedEndpoints,

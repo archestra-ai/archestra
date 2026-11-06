@@ -1,5 +1,6 @@
 "use client";
 
+import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
 import { ChevronDown, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -27,8 +28,8 @@ export function DefaultModelBlockedBadge({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dialogAgents, setDialogAgents] = useState<RuntimeAgent[] | null>(null);
   const count = agents.length;
-  const allClaudeCode = agents.every(
-    (agent) => agent.runtimeCommand?.[0] === "archestra-claude-code",
+  const allClaudeCode = agents.every((agent) =>
+    isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
   );
   const one = count === 1;
   const reason = allClaudeCode

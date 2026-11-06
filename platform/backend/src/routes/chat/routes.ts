@@ -3351,9 +3351,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         body.modelPoolId = null;
       }
+      // Any explicit pool, `null` included, leaves `auto`: the menu leaves a
+      // pool, and `auto`, by picking the key it already runs on.
       if (
         body.autoModel === undefined &&
-        (body.modelPoolId ||
+        (body.modelPoolId !== undefined ||
           body.modelId !== undefined ||
           body.chatApiKeyId !== undefined ||
           nextAgent)

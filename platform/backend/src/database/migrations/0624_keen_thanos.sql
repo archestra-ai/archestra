@@ -14,6 +14,18 @@ ALTER TABLE "organization" ADD COLUMN "default_auto_model" boolean DEFAULT false
 ALTER TABLE "auto_routing_tiers" ADD CONSTRAINT "auto_routing_tiers_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "auto_routing_tiers" ADD CONSTRAINT "auto_routing_tiers_provider_api_key_id_chat_api_keys_id_fk" FOREIGN KEY ("provider_api_key_id") REFERENCES "public"."chat_api_keys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "auto_routing_tiers" ADD CONSTRAINT "auto_routing_tiers_model_id_models_id_fk" FOREIGN KEY ("model_id") REFERENCES "public"."models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- An organization the org-trio migration switched off to wait for the startup
+-- check this migration removes, and still off, was routing: it routes again,
+-- and the steps below copy its tiers, or switch it off when one is missing.
+UPDATE "agents" AS a
+SET "auto_routing_enabled" = true
+FROM "org_trio_pending_normal_tier" AS p
+WHERE p."organization_id" = a."organization_id"
+  AND p."auto_routing_was_enabled"
+  AND a."agent_type" = 'llm_proxy'
+  AND a."is_default" = true
+  AND a."deleted_at" IS NULL
+  AND NOT a."auto_routing_enabled";--> statement-breakpoint
 -- Auto routing gets its own tiers again instead of the organization's default
 -- model trio, which stays what forked subagents and built-in tasks run on.
 -- Organizations that configured auto routing (enabled, or a budget set) keep

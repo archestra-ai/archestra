@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -501,6 +501,77 @@ describe.each(MODULES)("rds-iam (%s)", (_moduleName, rdsIam) => {
   });
 });
 
+function asn1Len(len: number): Buffer {
+  if (len < 128) {
+    return Buffer.from([len]);
+  }
+  const bytes: number[] = [];
+  let n = len;
+  while (n > 0) {
+    bytes.unshift(n & 0xff);
+    n >>= 8;
+  }
+  return Buffer.from([0x80 | bytes.length, ...bytes]);
+}
+
+function asn1Tag(tag: number, content: Buffer): Buffer {
+  return Buffer.concat([Buffer.from([tag]), asn1Len(content.length), content]);
+}
+
+function asn1Seq(...items: Buffer[]): Buffer {
+  return asn1Tag(0x30, Buffer.concat(items));
+}
+
+function asn1Set(...items: Buffer[]): Buffer {
+  return asn1Tag(0x31, Buffer.concat(items));
+}
+
+function createLoopbackTlsCredentials(): {
+  certPem: string;
+  keyPem: string;
+} {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+  });
+  const spki = publicKey.export({ type: "spki", format: "der" });
+  const sha256WithRsaAlg = Buffer.from("300d06092a864886f70d01010b0500", "hex");
+  const cnAttr = asn1Set(
+    asn1Seq(
+      Buffer.from("0603550403", "hex"),
+      asn1Tag(0x0c, Buffer.from("127.0.0.1")),
+    ),
+  );
+  const name = asn1Seq(cnAttr);
+  const validity = asn1Seq(
+    asn1Tag(0x17, Buffer.from("240101000000Z")),
+    asn1Tag(0x17, Buffer.from("491231235959Z")),
+  );
+  const sanExt = asn1Seq(
+    Buffer.from("0603551d11", "hex"),
+    asn1Tag(0x04, asn1Seq(Buffer.from("87047f000001", "hex"))),
+  );
+  const tbs = asn1Seq(
+    asn1Tag(0xa0, Buffer.from("020102", "hex")),
+    asn1Tag(0x02, Buffer.from([0x01])),
+    sha256WithRsaAlg,
+    name,
+    validity,
+    name,
+    spki,
+    asn1Tag(0xa3, asn1Seq(sanExt)),
+  );
+  const sig = crypto.sign("sha256", tbs, privateKey);
+  const certDer = asn1Seq(
+    tbs,
+    sha256WithRsaAlg,
+    asn1Tag(0x03, Buffer.concat([Buffer.from([0x00]), sig])),
+  );
+  const b64Lines = certDer.toString("base64").match(/.{1,64}/g) ?? [];
+  const certPem = `-----BEGIN CERTIFICATE-----\n${b64Lines.join("\n")}\n-----END CERTIFICATE-----\n`;
+  const keyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  return { certPem, keyPem };
+}
+
 describe("rds-iam native bridge & retry helpers", () => {
   afterEach(async () => {
     await tsRdsIam.closeRdsIamNativeBridges();
@@ -516,31 +587,10 @@ describe("rds-iam native bridge & retry helpers", () => {
     ).toBe(rawUrl);
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-bridge-tls-"));
-    const keyFile = path.join(tempDir, "server.key");
     const certFile = path.join(tempDir, "server.crt");
-    execFileSync(
-      "openssl",
-      [
-        "req",
-        "-x509",
-        "-newkey",
-        "rsa:2048",
-        "-nodes",
-        "-keyout",
-        keyFile,
-        "-out",
-        certFile,
-        "-days",
-        "1",
-        "-subj",
-        "/CN=127.0.0.1",
-        "-addext",
-        "subjectAltName=IP:127.0.0.1,DNS:localhost",
-      ],
-      { stdio: "ignore" },
-    );
-    const serverKey = fs.readFileSync(keyFile, "utf8");
-    const serverCert = fs.readFileSync(certFile, "utf8");
+    const { certPem: serverCert, keyPem: serverKey } =
+      createLoopbackTlsCredentials();
+    fs.writeFileSync(certFile, serverCert, "utf8");
 
     const receivedPasswords: string[] = [];
     const mockPgServer = net.createServer((rawSocket) => {

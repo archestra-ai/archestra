@@ -177,6 +177,7 @@
     "src/openappa/policy-moved.ts",
     "src/openappa/policy-text.ts",
     "src/openappa/replay-owner.ts",
+    "src/openappa/rule-targets.ts",
     "src/openappa/template.generated.ts",
     "src/services/agent-runtime/runtime-credentials.ts",
     "src/services/github-app-manifest-setup.ts",

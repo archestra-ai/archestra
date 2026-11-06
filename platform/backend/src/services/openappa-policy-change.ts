@@ -93,6 +93,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     return {
       delivery: "revision" as const,
       revision: saved.revision,
+      warnings: saved.warnings,
       before: before.content,
       after: saved.content,
     };
@@ -125,6 +126,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
 
   const validation = await guardrailsPolicyService.validate(content, {
     organizationId: params.organizationId,
+    userId: params.userId,
     previous: before.content,
   });
   if (!validation.valid) throw new ApiError(400, validation.errors.join("\n"));

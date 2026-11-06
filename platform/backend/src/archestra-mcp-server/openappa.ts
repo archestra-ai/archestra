@@ -67,6 +67,11 @@ import {
   reviewedToolLabel,
 } from "@/openappa/review-display";
 import {
+  type RuleTarget,
+  ruleTargetWarning,
+  touchedToolMetadata,
+} from "@/openappa/rule-targets";
+import {
   chatOpenAppaSession,
   executeRemedyByOffer,
   executeYell,
@@ -885,6 +890,7 @@ const registry = defineArchestraTools([
         });
         const validation = await guardrailsPolicyService.validate(after, {
           organizationId,
+          userId,
           previous: before.content,
         });
         const [sync, validations] = await Promise.all([
@@ -903,6 +909,17 @@ const registry = defineArchestraTools([
             : null,
         ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
+        const targets = validation.valid
+          ? await guardrailsPolicyService.touchedRuleTargets({
+              organizationId,
+              userId,
+              content: after,
+              previous: before.content,
+            })
+          : [];
+        const unresolvedTargets = targets.some(
+          (target) => ruleTargetWarning(target) !== null,
+        );
         return policyChangeResult({
           stage: "preview",
           validations,
@@ -924,8 +941,17 @@ const registry = defineArchestraTools([
           // the next step is repeated here, where it decides what to do next.
           ...(validation.valid &&
           (after !== before.content || before.revision === 0)
-            ? { instruction: PREVIEW_APPROVAL_INSTRUCTION }
+            ? {
+                instruction: unresolvedTargets
+                  ? `${UNRESOLVED_TOOL_INSTRUCTION} ${PREVIEW_APPROVAL_INSTRUCTION}`
+                  : PREVIEW_APPROVAL_INSTRUCTION,
+              }
             : {}),
+          touchedTools: await touchedToolsMetadata({
+            userId,
+            organizationId,
+            targets,
+          }),
         });
       }),
   }),
@@ -1650,6 +1676,9 @@ function organization(context: ArchestraContext): string {
   return context.organizationId;
 }
 
+const UNRESOLVED_TOOL_INSTRUCTION =
+  "`warnings` says a tool rule names a tool that does not exist, so that rule governs nothing. Before anything else, tell the user plainly and kindly which rule names a missing tool and that it will not protect anything as written, offer the suggested existing names, and ask whether they meant one of them or are preparing for a server that is not installed yet. Do not present the change as covering that tool.";
+
 const PREVIEW_APPROVAL_INSTRUCTION =
   "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
@@ -1827,9 +1856,14 @@ function result(value: object) {
  * of two copies of the whole policy.
  */
 function policyChangeResult<
-  T extends { before: string; after: string; path?: string },
+  T extends {
+    before: string;
+    after: string;
+    path?: string;
+    touchedTools?: object | null;
+  },
 >(value: T) {
-  const { before, after, ...rest } = value;
+  const { before, after, touchedTools, ...rest } = value;
   const diff = policyDiff({
     before,
     after,
@@ -1837,7 +1871,11 @@ function policyChangeResult<
   });
   return {
     content: [
-      { type: "text" as const, text: JSON.stringify({ ...rest, ...diff }) },
+      {
+        type: "text" as const,
+        // Last, so a capped result keeps the diff and warnings before it.
+        text: JSON.stringify({ ...rest, ...diff, touchedTools }),
+      },
     ],
     structuredContent: { ...value, ...diff },
   };
@@ -2118,6 +2156,40 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   if (contentAction === "approve") return "approve";
   if (contentAction === "deny") return "deny";
   return undefined;
+}
+
+/**
+ * The stored metadata of the existing tools a previewed change names, from
+ * the catalogs the caller can read; null when it names none.
+ */
+async function touchedToolsMetadata(params: {
+  userId: string;
+  organizationId: string;
+  targets: RuleTarget[];
+}) {
+  const names = [
+    ...new Set(
+      params.targets.flatMap((target) =>
+        target.kind === "known" ? [target.tool] : [],
+      ),
+    ),
+  ];
+  if (names.length === 0) return null;
+  const { visibleCatalogIds } = await coverageVisibility(
+    params.userId,
+    params.organizationId,
+  );
+  const described = await ToolModel.findDescribedByNames({
+    catalogIds: visibleCatalogIds,
+    names,
+  });
+  const byName = new Map(described.map((tool) => [tool.name, tool]));
+  return touchedToolMetadata(
+    names.flatMap((name) => {
+      const tool = byName.get(name);
+      return tool ? [tool] : [];
+    }),
+  );
 }
 
 /** Assigned and Auto-discovered rows allowed by RBAC and conversation selection. */

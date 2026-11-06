@@ -3,7 +3,7 @@ name: Benchmark
 # Runs archestra-bench once per day against staging-grade infrastructure: the currently-deployed
 # platform image, an ephemeral Postgres sidecar, and a short-lived benchmark-owned Dagger engine. Never
 # mutates the live staging Deployment, its DB, or its data. See .github/bench/README.md for the
-# one-time prerequisites (GCS bucket + IAM, ZAI_API_KEY / Slack secrets).
+# one-time prerequisites (GCS bucket + IAM, Secret Manager secrets).
 
 on:
   schedule:
@@ -47,6 +47,24 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # Model-provider keys and the Slack webhook live in GCP Secret Manager. A
+      # dedicated service account reads only these secrets; it authenticates
+      # first so the deploy identity below replaces it for GAR and GKE access.
+      - name: Authenticate to read benchmark secrets
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          service_account: ${{ vars.CI_BENCHMARK_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read benchmark secrets
+        id: bench-secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        with:
+          secrets: |-
+            zai_api_key:friendly-path-465518-r6/ci-benchmark-zai-api-key
+            openrouter_api_key:friendly-path-465518-r6/ci-benchmark-openrouter-api-key
+            slack_bench_webhook_url:friendly-path-465518-r6/ci-benchmark-slack-webhook-url
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
@@ -165,9 +183,9 @@ jobs:
 
       - name: Create bench secret
         env:
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          SLACK_BENCH_WEBHOOK_URL: ${{ secrets.SLACK_BENCH_WEBHOOK_URL }}
+          ZAI_API_KEY: ${{ steps.bench-secrets.outputs.zai_api_key }}
+          OPENROUTER_API_KEY: ${{ steps.bench-secrets.outputs.openrouter_api_key }}
+          SLACK_BENCH_WEBHOOK_URL: ${{ steps.bench-secrets.outputs.slack_bench_webhook_url }}
         run: |
           set -euo pipefail
           # The pod reads: the glm lane key, the OpenRouter key for the OR-served lanes, and (optionally,

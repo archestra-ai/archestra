@@ -730,11 +730,27 @@ jobs:
       - publish-github-release
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
     steps:
+      # The webhook lives in GCP Secret Manager. A dedicated service account
+      # reads only the alerting secrets, so no repository secret holds it.
+      - name: Authenticate to read the alerting webhook
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the alerting webhook
+        id: alerting
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        with:
+          secrets: |-
+            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
+
       - name: Post failure alert to Slack
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           VERSION: ${{ needs.release-please.outputs.platform_version }}
           RP_RESULT: ${{ needs.release-please.result }}
@@ -747,7 +763,7 @@ jobs:
           PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
         run: |
           if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack alert."
+            echo "::warning::The alerting webhook secret is empty; skipping Slack alert."
             exit 0
           fi
           TEXT=":rotating_light: *Platform release failed* — \`${VERSION:-unknown}\`

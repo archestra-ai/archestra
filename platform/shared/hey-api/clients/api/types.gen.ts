@@ -126255,11 +126255,7 @@ export type GetDefaultModelRuntimeDependentsResponses = {
             claudeCodeAuthentication?: 'provider' | 'subscription';
             id: string;
             name: string;
-        }>;
-        hidden: Array<{
-            runtimeCommand: Array<string> | null;
-            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
-            claudeCodeAuthentication?: 'provider' | 'subscription';
+            canUpdate: boolean;
         }>;
     };
 };

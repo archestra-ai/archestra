@@ -10901,7 +10901,7 @@ export const updateSkillsSettings = <ThrowOnError extends boolean = false>(optio
 export const getAgentRuntimeTiers = <ThrowOnError extends boolean = false>(options?: Options<GetAgentRuntimeTiersData, ThrowOnError>) => (options?.client ?? client).get<GetAgentRuntimeTiersResponses, GetAgentRuntimeTiersErrors, ThrowOnError>({ url: '/api/organization/agent-runtime-tiers', ...options });
 
 /**
- * Agent Runtime agents with no model of their own, which run on the organization's default model, with the runtime each one uses
+ * Agent Runtime agents the caller can read that run on the organization's default model (no usable model of their own), with the runtime each one uses and whether the caller may give it a model
  *
  * Authentication:
  *

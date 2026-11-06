@@ -158,17 +158,19 @@ export function getClaudeCodeCloudProvider(params: {
 }
 
 /**
- * Agent Runtime agents with no model or key of their own: they run on the
- * organization's default model, so a new default must suit their runtimes.
- * `agents` are the ones `userId` can read (all of them for a system check
- * with no user); `hidden` describes only the runtimes of the rest, so a
- * caller can count them without learning names.
+ * Agent Runtime agents that run on the organization's default model, so a
+ * new default must suit their runtimes. `agents` are the ones `userId` can
+ * read (all of them for a system check with no user), each with whether
+ * `userId` may give it a model of its own; `hidden` are the rest, which a
+ * caller may count but never see.
  */
 export async function listRuntimeAgentsInheritingOrganizationDefault(params: {
   organizationId: string;
   userId?: string;
 }): Promise<{
-  agents: Array<RuntimeDependent & { id: string; name: string }>;
+  agents: Array<
+    RuntimeDependent & { id: string; name: string; canUpdate: boolean }
+  >;
   hidden: RuntimeDependent[];
 }> {
   const rows = (
@@ -178,14 +180,16 @@ export async function listRuntimeAgentsInheritingOrganizationDefault(params: {
   ).flatMap((agent) =>
     agent.runtime ? [{ ...agent, runtime: agent.runtime }] : [],
   );
-  const readable = params.userId
-    ? await readableAgentIds({
+  const access = params.userId
+    ? await agentAccess({
         organizationId: params.organizationId,
         userId: params.userId,
         agents: rows,
       })
-    : new Set(rows.map((row) => row.id));
-  const agents: Array<RuntimeDependent & { id: string; name: string }> = [];
+    : null;
+  const agents: Array<
+    RuntimeDependent & { id: string; name: string; canUpdate: boolean }
+  > = [];
   const hidden: RuntimeDependent[] = [];
   for (const row of rows) {
     const runtime: RuntimeDependent = {
@@ -195,8 +199,13 @@ export async function listRuntimeAgentsInheritingOrganizationDefault(params: {
         claudeCodeAuthentication: row.runtime.claudeCode.authentication,
       }),
     };
-    if (readable.has(row.id)) {
-      agents.push({ id: row.id, name: row.name, ...runtime });
+    if (!access || access.readable.has(row.id)) {
+      agents.push({
+        id: row.id,
+        name: row.name,
+        canUpdate: !access || access.updatable.has(row.id),
+        ...runtime,
+      });
     } else {
       hidden.push(runtime);
     }
@@ -254,7 +263,7 @@ export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   const reason = named[0]?.reason ?? hiddenReasons[0];
   throw new ApiError(
     409,
-    `Can't use "${model.modelId}" as the default model. ${who} ${one ? "has" : "have"} no model of ${one ? "its" : "their"} own, so ${one ? "it" : "they"} would run on it, and ${one ? "it" : "they"} can't: ${reason} Set a model on ${one ? "that agent" : "those agents"}, or choose a compatible default model.`,
+    `Can't use "${model.modelId}" as the default model. ${who} ${one ? "runs" : "run"} on the default model and can't run this one: ${reason} Give ${one ? "that agent a model of its own" : "those agents models of their own"}, or choose a compatible default model.`,
   );
 }
 
@@ -269,16 +278,18 @@ type RuntimeDependent = {
 };
 
 /**
- * The agents among `agents` that `userId` can read, by the same checks as
- * reading one agent: gated agents, per-type permissions, and (for anyone who
- * doesn't administer that type) team visibility.
+ * Which of `agents` `userId` can read, by the same checks as reading one
+ * agent (gated agents, per-type permissions, and team visibility for anyone
+ * who doesn't administer that type), and which of those it may update.
  */
-async function readableAgentIds(params: {
+async function agentAccess(params: {
   agents: Array<Pick<Agent, "id" | "agentType">>;
   userId: string;
   organizationId: string;
-}): Promise<Set<string>> {
-  if (params.agents.length === 0) return new Set();
+}): Promise<{ readable: Set<string>; updatable: Set<string> }> {
+  if (params.agents.length === 0) {
+    return { readable: new Set(), updatable: new Set() };
+  }
   const [checker, gatedHidden, teamVisible] = await Promise.all([
     getAgentTypePermissionChecker(params),
     hiddenAgentsAmong(
@@ -300,14 +311,21 @@ async function readableAgentIds(params: {
       return false;
     }
   };
-  return new Set(
-    params.agents
-      .filter(
-        (agent) =>
-          !gatedHidden.has(agent.id) &&
-          mayRead(agent) &&
-          (checker.isAdmin(agent.agentType) || visible.has(agent.id)),
-      )
-      .map(({ id }) => id),
+  const readable = params.agents.filter(
+    (agent) =>
+      !gatedHidden.has(agent.id) &&
+      mayRead(agent) &&
+      (checker.isAdmin(agent.agentType) || visible.has(agent.id)),
   );
+  return {
+    readable: new Set(readable.map(({ id }) => id)),
+    // The same check the agent update route makes.
+    updatable: new Set(
+      readable
+        .filter(({ id, agentType }) =>
+          checker.allowsScoped({ agentType, agentId: id, action: "update" }),
+        )
+        .map(({ id }) => id),
+    ),
+  };
 }

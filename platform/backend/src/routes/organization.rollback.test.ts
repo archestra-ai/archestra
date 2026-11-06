@@ -323,7 +323,7 @@ describe("organization routes", () => {
       // default and how to fix them.
       const message = response.json().error.message;
       expect(message).toContain('"Inheriting Codex Agent"');
-      expect(message).toContain("Set a model on that agent");
+      expect(message).toContain("Give that agent a model of its own");
     });
 
     test.for([
@@ -465,7 +465,7 @@ describe("organization routes", () => {
   });
 
   describe("GET /api/organization/agent-settings/default-model-dependents", () => {
-    test("lists only Agent Runtime agents that inherit the default model", async ({
+    test("lists the Agent Runtime agents that run on the default model, including ones whose own pair resolution skips", async ({
       makeAgent,
       makeLlmProviderApiKey,
       makeSecret,
@@ -483,18 +483,15 @@ describe("organization routes", () => {
         maxCostUsd: null,
         idleTimeoutMinutes: null,
       };
-      const inheriting = await makeAgent({
-        organizationId,
-        authorId: user.id,
-        name: "Inherits the default",
-        agentType: "agent",
-        access: "personal",
-        runtime,
-      });
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
       const key = await makeLlmProviderApiKey(organizationId, secret.id, {
         provider: "anthropic",
       });
+      const unlinkedKey = await makeLlmProviderApiKey(
+        organizationId,
+        secret.id,
+        { provider: "anthropic" },
+      );
       const model = await ModelModel.create({
         externalId: "anthropic/organization-dependents-test",
         provider: "anthropic",
@@ -504,15 +501,33 @@ describe("organization routes", () => {
         supportsToolCalling: true,
         lastSyncedAt: new Date(),
       });
-      await makeAgent({
-        organizationId,
-        authorId: user.id,
-        name: "Has its own model",
-        agentType: "agent",
-        access: "personal",
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      const agent = (
+        name: string,
+        own: { llmApiKeyId?: string; modelId?: string } = {},
+      ) =>
+        makeAgent({
+          organizationId,
+          authorId: user.id,
+          name,
+          agentType: "agent",
+          access: "personal",
+          runtime,
+          ...own,
+        });
+      const noPair = await agent("No model of its own");
+      const halfPair = await agent("Model without a key", {
+        modelId: model.id,
+      });
+      const unlinkedPair = await agent("Model no longer on its key", {
+        llmApiKeyId: unlinkedKey.id,
+        modelId: model.id,
+      });
+      await agent("Has its own model", {
         llmApiKeyId: key.id,
         modelId: model.id,
-        runtime,
       });
       await makeAgent({
         organizationId,
@@ -528,17 +543,70 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
-        agents: [
-          {
-            id: inheriting.id,
-            name: "Inherits the default",
-            runtimeCommand: ["archestra-claude-code"],
-            inferenceProtocol: "anthropic",
-          },
-        ],
-        hidden: [],
+      const dependent = (id: string, name: string) => ({
+        id,
+        name,
+        canUpdate: true,
+        runtimeCommand: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
       });
+      expect(response.json()).toEqual({
+        agents: expect.arrayContaining([
+          dependent(noPair.id, "No model of its own"),
+          dependent(halfPair.id, "Model without a key"),
+          dependent(unlinkedPair.id, "Model no longer on its key"),
+        ]),
+      });
+      expect(response.json().agents).toHaveLength(3);
+    });
+
+    test("marks agents the caller can read but not update", async ({
+      makeAgent,
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        name: "Read-only to this role",
+        agentType: "agent",
+        access: "org",
+        runtime: {
+          image: "example.com/coding-agent:latest",
+          command: ["archestra-claude-code"],
+          inferenceProtocol: "anthropic",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+        },
+      });
+      await makeCustomRole(organizationId, {
+        role: "settings_reader",
+        permission: {
+          organizationSettings: ["read", "update"],
+          agent: ["read"],
+        },
+      });
+      const admin = user;
+      user = await makeUser();
+      await makeMember(user.id, organizationId, { role: "settings_reader" });
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/organization/agent-settings/default-model-dependents",
+        });
+        expect(response.json().agents).toEqual([
+          expect.objectContaining({ id: agent.id, canUpdate: false }),
+        ]);
+      } finally {
+        user = admin;
+      }
     });
 
     test("names every blocking agent the caller can read, and only counts the ones it can't", async ({
@@ -617,8 +685,8 @@ describe("organization routes", () => {
           method: "GET",
           url: "/api/organization/agent-settings/default-model-dependents",
         });
-        expect(dependents.json().agents).toEqual([]);
-        expect(dependents.json().hidden).toHaveLength(4);
+        // Nothing about agents the caller can't read: not even their runtimes.
+        expect(dependents.json()).toEqual({ agents: [] });
       } finally {
         user = admin;
       }

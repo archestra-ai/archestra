@@ -19,15 +19,12 @@ import { UpdateAgentModelsDialog } from "./update-agent-models-dialog";
  */
 export function DefaultModelBlockedBadge({
   agents,
-  hiddenCount,
   reason,
   allClaudeCode,
   modelName,
 }: {
   /** The blocking agents the viewer can read. */
   agents: RuntimeAgent[];
-  /** Blocking agents the viewer can't read: counted, never named. */
-  hiddenCount: number;
   /** Why they can't run the model, in one sentence. */
   reason: string;
   allClaudeCode: boolean;
@@ -35,10 +32,12 @@ export function DefaultModelBlockedBadge({
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dialogAgents, setDialogAgents] = useState<RuntimeAgent[] | null>(null);
-  const count = agents.length + hiddenCount;
+  const count = agents.length;
   const one = count === 1;
   const shown = agents.slice(0, PREVIEW_LIMIT);
-  const more = agents.length - shown.length;
+  const more = count - shown.length;
+  // Only agents the viewer may update can be given a model from here.
+  const editable = agents.filter((agent) => agent.canUpdate);
 
   const openDialog = (forAgents: RuntimeAgent[]) => {
     setPopoverOpen(false);
@@ -89,24 +88,23 @@ export function DefaultModelBlockedBadge({
                 className="flex items-center gap-3 px-3.5 py-1.5 text-sm"
               >
                 <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                <UnstyledButton
-                  onClick={() => openDialog([agent])}
-                  className="shrink-0 text-xs text-muted-foreground underline decoration-muted-foreground/40 underline-offset-2 transition-colors hover:text-foreground hover:decoration-foreground"
-                >
-                  Set model
-                </UnstyledButton>
+                {agent.canUpdate ? (
+                  <UnstyledButton
+                    onClick={() => openDialog([agent])}
+                    className="shrink-0 text-xs text-muted-foreground underline decoration-muted-foreground/40 underline-offset-2 transition-colors hover:text-foreground hover:decoration-foreground"
+                  >
+                    Set model
+                  </UnstyledButton>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Ask an agent admin
+                  </span>
+                )}
               </li>
             ))}
             {more > 0 && (
               <li className="px-3.5 py-1.5 text-xs text-muted-foreground">
                 and {more} more
-              </li>
-            )}
-            {hiddenCount > 0 && (
-              <li className="px-3.5 py-1.5 text-xs text-muted-foreground">
-                {hiddenCount === 1
-                  ? "1 agent you can't view"
-                  : `${hiddenCount} agents you can't view`}
               </li>
             )}
           </ul>
@@ -115,12 +113,14 @@ export function DefaultModelBlockedBadge({
             <span className="text-muted-foreground">
               Or choose a different default.
             </span>
-            {agents.length > 1 && (
+            {editable.length > 1 && (
               <UnstyledButton
-                onClick={() => openDialog(agents)}
+                onClick={() => openDialog(editable)}
                 className="shrink-0 font-medium underline decoration-foreground/30 underline-offset-2 transition-colors hover:decoration-foreground"
               >
-                Set models for all {agents.length}
+                {editable.length === count
+                  ? `Set models for all ${count}`
+                  : `Set models for ${editable.length}`}
               </UnstyledButton>
             )}
           </div>

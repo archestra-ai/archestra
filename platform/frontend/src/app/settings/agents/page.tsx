@@ -59,7 +59,7 @@ import {
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { DefaultModelBlockedBadge } from "./_parts/default-model-blocked-badge";
-import type { RuntimeDependent } from "./_parts/runtime-agent";
+import type { RuntimeAgent } from "./_parts/runtime-agent";
 import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
@@ -210,7 +210,7 @@ export default function AgentSettingsPage() {
       id: string;
       capabilities?: { supportedEndpoints?: string[] | null };
     }) => {
-      const reasonFor = (agent: RuntimeDependent) => {
+      const reasonFor = (agent: RuntimeAgent) => {
         const result = getAgentRuntimeDefaultModelCompatibility({
           ...agent,
           provider: model.provider,
@@ -219,19 +219,13 @@ export default function AgentSettingsPage() {
         });
         return result.compatible ? null : result.message;
       };
-      const agents = (runtimeDependents?.agents ?? []).filter(
+      const agents = (runtimeDependents ?? []).filter(
         (agent) => reasonFor(agent) !== null,
       );
-      const hidden = (runtimeDependents?.hidden ?? []).filter(
-        (agent) => reasonFor(agent) !== null,
-      );
-      const first = agents[0] ?? hidden[0];
       return {
         agents,
-        hiddenCount: hidden.length,
-        total: agents.length + hidden.length,
-        reason: first ? reasonFor(first) : null,
-        allClaudeCode: [...agents, ...hidden].every((agent) =>
+        reason: agents[0] ? reasonFor(agents[0]) : null,
+        allClaudeCode: agents.every((agent) =>
           isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
         ),
       };
@@ -242,7 +236,7 @@ export default function AgentSettingsPage() {
   const modelItems = useMemo(() => {
     if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => {
-      const blocking = blockedBy(model).total;
+      const blocking = blockedBy(model).agents.length;
       return {
         value: model.dbId,
         model: model.displayName ?? model.id,
@@ -366,7 +360,6 @@ export default function AgentSettingsPage() {
                   {selectedModel && (
                     <DefaultModelBlockedBadge
                       agents={blocked?.agents ?? []}
-                      hiddenCount={blocked?.hiddenCount ?? 0}
                       reason={
                         blocked?.allClaudeCode
                           ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
@@ -515,7 +508,7 @@ export default function AgentSettingsPage() {
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={
           (selectedApiKeyId !== "" && defaultModel === "") ||
-          (changes.hasModelChanges && (blocked?.total ?? 0) > 0)
+          (changes.hasModelChanges && (blocked?.agents.length ?? 0) > 0)
         }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}

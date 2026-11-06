@@ -362,7 +362,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDefaultModelRuntimeDependents,
         description:
-          "Agent Runtime agents with no model of their own, which run on the organization's default model, with the runtime each one uses",
+          "Agent Runtime agents the caller can read that run on the organization's default model (no usable model of their own), with the runtime each one uses and whether the caller may give it a model",
         tags: ["Organization"],
         response: constructResponseSchema(
           z.object({
@@ -370,21 +370,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
               RuntimeDependentSchema.extend({
                 id: z.string(),
                 name: z.string(),
+                /** Whether the caller may give this agent a model of its own. */
+                canUpdate: z.boolean(),
               }),
             ),
-            /** Inheriting agents the caller can't read: their runtimes only. */
-            hidden: z.array(RuntimeDependentSchema),
           }),
         ),
       },
     },
     async ({ organizationId, user }, reply) => {
-      return reply.send(
-        await listRuntimeAgentsInheritingOrganizationDefault({
-          organizationId,
-          userId: user.id,
-        }),
-      );
+      // Agents the caller can't read stay out entirely; the save conflict
+      // only counts them.
+      const { agents } = await listRuntimeAgentsInheritingOrganizationDefault({
+        organizationId,
+        userId: user.id,
+      });
+      return reply.send({ agents });
     },
   );
 

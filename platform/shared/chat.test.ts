@@ -215,6 +215,8 @@ describe("chat file upload helpers", () => {
       "text/tab-separated-values",
     );
     expect(getMediaType({ name: "README.md", type: "" })).toBe("text/markdown");
+    expect(getMediaType({ name: "voice.m4a", type: "" })).toBe("audio/mp4");
+    expect(getMediaType({ name: "voice.aac", type: "" })).toBe("audio/aac");
     expect(getMediaType({ name: "readme.txt", type: "" })).toBe("text/plain");
     expect(getMediaType({ name: "config.yaml", type: "" })).toBe(
       "application/x-yaml",

@@ -974,6 +974,8 @@ export function getMediaType(file: FileLikeWithMediaType): string {
     svg: "image/svg+xml",
     bmp: "image/bmp",
     ico: "image/x-icon",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
     mp4: "video/mp4",
     webm: "video/webm",
     mov: "video/quicktime",

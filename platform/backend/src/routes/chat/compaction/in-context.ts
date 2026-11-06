@@ -17,6 +17,7 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import type { ChatMessage } from "@/types";
 import { extractTaggedText } from "@/utils/generate-tagged-text";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { chatAttachmentInlineByteLimit } from "../normalization/enforce-request-size-limit";
 import { materializeAttachments } from "../normalization/materialize-attachments";
 import { prepareMessagesForProvider } from "../normalization/prepare-for-provider";
 import { buildSummaryMessage } from "./history";
@@ -107,6 +108,9 @@ export async function summarizeInContext(params: {
       rerouteBinaryDocsToSandbox:
         params.provider === "anthropic" && !anthropicNativeEndpoint,
       sandboxAvailable,
+      // Same budget as the main turn, so compaction never sends a file the
+      // turn itself would keep out of the request.
+      inlineByteLimit: chatAttachmentInlineByteLimit(params.provider),
     });
     const compactionMessages: ChatMessage[] = [
       ...(params.previousSummary

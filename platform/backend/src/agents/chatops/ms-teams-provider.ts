@@ -3194,4 +3194,5 @@ const LEGACY_MENU_COMMANDS = new Map([
   ["show current agent for this conversation", "/status"],
   ["show available commands", "/help"],
   ["stop the bot reading your group-chat files", "/sign-out"],
+  ["stop the bot reading your files", "/sign-out"],
 ]);

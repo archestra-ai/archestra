@@ -2816,6 +2816,7 @@ test.each([
   ["Show current agent for this conversation", "/status"],
   ["Show available commands", "/help"],
   ["Stop the bot reading your group-chat files", "/sign-out"],
+  ["Stop the bot reading your files", "/sign-out"],
 ])("old menu text %s invokes %s after removing the mention", async (description, command) => {
   const message = await createProvider().parseWebhookNotification(
     makeActivity({ text: `<at>TestBot</at> ${description}` }),

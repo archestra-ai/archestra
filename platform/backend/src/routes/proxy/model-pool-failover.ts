@@ -200,7 +200,17 @@ export async function planModelPool(params: {
   for (const [memberId, bench] of benches) {
     benchedUntil.set(memberId, bench.until);
   }
-  const byId = new Map(reachable.map((member) => [member.id, member]));
+  // Transient benches remain last-resort candidates. Exhausted credit does
+  // not recover by trying harder, even when every member is depleted.
+  const eligible = reachable.filter(
+    (member) => !benches.get(member.id)?.reason.startsWith("credit_exhausted"),
+  );
+  if (eligible.length === 0)
+    throw new ApiError(
+      503,
+      "All compatible model pool members are cooling down after credit exhaustion. Try again after their cooldown expires.",
+    );
+  const byId = new Map(eligible.map((member) => [member.id, member]));
   return {
     poolId: pool.id,
     poolName: pool.name,
@@ -208,7 +218,7 @@ export async function planModelPool(params: {
     timeoutMs: toMs(pool.timeoutSeconds),
     cooldownMs: toMs(pool.cooldownSeconds),
     members: orderPoolMembers({
-      members: reachable,
+      members: eligible,
       benchedUntil,
       seed: params.sessionId ?? undefined,
     }).map((id) => {
@@ -351,7 +361,20 @@ export async function openThroughModelPool<T>(params: {
   };
   let hiddenError: ApiError | undefined;
   let attempted = 0;
+  let creditCoolingDown = false;
   for (const [index, member] of plan.members.entries()) {
+    // Another request may have exhausted this member after this plan was built.
+    const bench = await cacheManager.get<Bench>(
+      benchKey(plan.poolId, member.memberId, "credit"),
+    );
+    if (
+      bench &&
+      bench.until > Date.now() &&
+      bench.reason.startsWith("credit_exhausted")
+    ) {
+      creditCoolingDown = true;
+      continue;
+    }
     attempt.providerApiKeyId = member.providerApiKeyId;
     attempt.provider = member.provider;
     attempt.modelId = member.modelId;
@@ -431,7 +454,7 @@ export async function openThroughModelPool<T>(params: {
           ? undefined
           : error instanceof MemberUnavailableError
             ? { reason: "key_unavailable", retryAfterMs: undefined }
-            : poolFailoverReason(error);
+            : poolFailoverReason(error, member.provider);
       attempt.attemptOutcome = "failed";
       if (error instanceof MemberTimeoutError) attempt.cutOff = true;
       // An error that doesn't fail over still gets a reason; its message is in
@@ -480,6 +503,11 @@ export async function openThroughModelPool<T>(params: {
     throw lastFailure.error;
   }
   if (hiddenError) throw hiddenError;
+  if (creditCoolingDown)
+    throw new ApiError(
+      503,
+      "All compatible model pool members are cooling down after credit exhaustion. Try again after their cooldown expires.",
+    );
   // The plan must have at least one member.
   throw new Error("Model pool plan has no members");
 }
@@ -533,6 +561,8 @@ const DEFAULT_BENCH_MS = 30_000;
  * longer wait just moves on.
  */
 const MAX_BENCH_MS = 60_000;
+/** Billing failures need a top-up; retry at most once an hour by default. */
+const CREDIT_BENCH_MS = 60 * 60_000;
 
 /** A benched member: when it comes back, and the failure that benched it. */
 interface Bench {
@@ -552,13 +582,22 @@ async function benchMember(params: {
   cooldownMs?: number;
 }): Promise<void> {
   const cooldownMs = params.cooldownMs ?? DEFAULT_BENCH_MS;
-  const ms = Math.min(
-    Math.max(MAX_BENCH_MS, cooldownMs),
-    Math.max(params.cooldownMs ?? 1_000, params.retryAfterMs ?? cooldownMs),
-  );
+  // Reuse the pool cooldown override (including shorter recovery probes).
+  const ms = params.reason.startsWith("credit_exhausted")
+    ? (params.cooldownMs ?? CREDIT_BENCH_MS)
+    : Math.min(
+        Math.max(MAX_BENCH_MS, cooldownMs),
+        Math.max(params.cooldownMs ?? 1_000, params.retryAfterMs ?? cooldownMs),
+      );
   try {
     await cacheManager.set(
-      benchKey(params.poolId, params.memberId),
+      // Separate slots prevent an already in-flight transient failure from
+      // overwriting a credit exclusion, including across server replicas.
+      benchKey(
+        params.poolId,
+        params.memberId,
+        params.reason.startsWith("credit_exhausted") ? "credit" : undefined,
+      ),
       { until: Date.now() + ms, reason: params.reason } satisfies Bench,
       ms,
     );
@@ -572,11 +611,18 @@ async function readBenches(
   pool: Pick<ModelPool, "id" | "members">,
 ): Promise<Map<string, Bench>> {
   const benches = await cacheManager.getMany<Bench>(
-    pool.members.map((member) => benchKey(pool.id, member.id)),
+    pool.members.flatMap((member) => [
+      benchKey(pool.id, member.id),
+      benchKey(pool.id, member.id, "credit"),
+    ]),
   );
   const byMember = new Map<string, Bench>();
   for (const member of pool.members) {
-    const bench = benches.get(benchKey(pool.id, member.id));
+    const credit = benches.get(benchKey(pool.id, member.id, "credit"));
+    const bench =
+      credit && credit.until > Date.now()
+        ? credit
+        : benches.get(benchKey(pool.id, member.id));
     if (bench) byMember.set(member.id, bench);
   }
   return byMember;
@@ -586,8 +632,8 @@ function toMs(seconds: number | null): number | undefined {
   return seconds === null ? undefined : seconds * 1000;
 }
 
-function benchKey(poolId: string, memberId: string) {
-  return `${CacheKey.ModelPoolBench}-${poolId}:${memberId}` as const;
+function benchKey(poolId: string, memberId: string, kind?: "credit") {
+  return `${CacheKey.ModelPoolBench}-${poolId}:${memberId}${kind ? ":credit" : ""}` as const;
 }
 
 /** A number in [0, 1): seeded draws repeat for the same seed. */

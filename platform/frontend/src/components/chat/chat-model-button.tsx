@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
-import { LayersIcon } from "lucide-react";
+import { LayersIcon, RouteIcon } from "lucide-react";
 import { useState } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -16,6 +16,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  autoRoutedChoices,
+  useAutoRoutedModel,
+} from "@/lib/chat/use-auto-routed-model";
+import {
   REASONING_OPTIONS,
   useChatSetupOptions,
 } from "@/lib/chat/use-chat-setup-options";
@@ -24,7 +28,8 @@ import { logoNameForProvider } from "@/lib/provider-logos";
 /**
  * The composer's model control: the model's name (or the model pool's), plus
  * the reasoning level when one is chosen, opening the setup menu's Model and
- * Key tabs. It also keeps
+ * Key tabs. A route icon beside the name marks a chat the organization auto
+ * routes, since each session may run on any of the three tiers. It also keeps
  * the selected model valid as the key changes, so it stays mounted.
  */
 export function ChatModelButton({
@@ -43,6 +48,11 @@ export function ChatModelButton({
   };
   const data = useChatSetupOptions({ ...menuProps, agentSearch: "" });
   const provider = data.activeModel?.provider ?? menuProps.currentProvider;
+  const autoRouted = useAutoRoutedModel(data.activeAgent);
+  const tiers = data.activePool ? null : autoRouted.tiersFor(data.activeModel);
+  const modelAria = tiers
+    ? `${data.modelName}, auto routed across ${autoRoutedChoices(tiers)}`
+    : data.modelName;
   // Auto is the default and needs no label; only a chosen level shows.
   const level =
     data.supportsReasoning && menuProps.thinkingEffort !== null
@@ -61,8 +71,13 @@ export function ChatModelButton({
           size="sm"
           aria-label={
             data.supportsReasoning
-              ? `Model: ${data.modelName}, reasoning ${level?.label ?? "Auto"}`
-              : `Model: ${data.modelName}`
+              ? `Model: ${modelAria}, reasoning ${level?.label ?? "Auto"}`
+              : `Model: ${modelAria}`
+          }
+          title={
+            tiers
+              ? `Auto routed: each session runs on ${autoRoutedChoices(tiers)}`
+              : undefined
           }
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -89,6 +104,13 @@ export function ChatModelButton({
             </span>
           ) : (
             <span className="truncate">{data.modelName}</span>
+          )}
+          {tiers && !menuProps.subscriptionConnectRequired && (
+            <RouteIcon
+              aria-hidden
+              className="size-3.5 shrink-0 text-primary"
+              data-testid="chat-model-auto-routed"
+            />
           )}
           {level && !menuProps.subscriptionConnectRequired && (
             <span

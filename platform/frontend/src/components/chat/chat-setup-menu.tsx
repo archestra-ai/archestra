@@ -29,6 +29,7 @@ import {
   LogInIcon,
   type LucideIcon,
   RotateCcwIcon,
+  RouteIcon,
   SearchIcon,
   SettingsIcon,
   UsersRoundIcon,
@@ -60,6 +61,11 @@ import {
 } from "@/components/ui/command";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  type AutoRoutedTiers,
+  autoRoutedChoices,
+  useAutoRoutedModel,
+} from "@/lib/chat/use-auto-routed-model";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import {
   type ChatSetupAgent,
@@ -72,7 +78,6 @@ import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import type { AvailableModelPool } from "@/lib/model-pools.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
-import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import {
   isOrganizationSubscription,
   ORGANIZATION_SUBSCRIPTIONS_HEADING,
@@ -137,7 +142,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     ...ctx,
     agentSearch: scopeState === "agent" ? query : "",
   });
-  const organizationDefaultNote = useOrganizationDefaultNote(data.activeAgent);
+  const autoRouted = useAutoRoutedModel(data.activeAgent);
   const router = useRouter();
   const catalog = useModelProviderCatalog();
   const subscriptions = useMemo(
@@ -212,6 +217,9 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const currentAgent = data.activeAgent;
   const currentKey = data.activeKey;
   const modelProvider = currentModel?.provider ?? ctx.currentProvider;
+  const currentTiers = data.activePool
+    ? null
+    : autoRouted.tiersFor(currentModel);
 
   // ---- scopes on offer, in tab order
   const scopes = useMemo(() => {
@@ -246,7 +254,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       : scopes[0];
 
   // ---- what each tab shows: the live value, not the kind
-  const tabs: Record<Scope, { icon: ReactNode; text: string; aria: string }> = {
+  const tabs: Record<
+    Scope,
+    { icon: ReactNode; text: string; aria: string; marker?: ReactNode }
+  > = {
     model: showSignIn
       ? {
           icon: <LogInIcon className="size-4" />,
@@ -263,7 +274,12 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             <BoxIcon className="size-4" />
           ),
           text: data.modelName,
-          aria: `Model: ${data.modelName}`,
+          aria: currentTiers
+            ? `Model: ${data.modelName}, auto routed across ${autoRoutedChoices(currentTiers)}`
+            : `Model: ${data.modelName}`,
+          marker: currentTiers ? (
+            <RouteIcon aria-hidden className="size-3.5 shrink-0 text-primary" />
+          ) : undefined,
         },
     agent: {
       icon: <AgentIcon icon={data.agentIcon} size={16} />,
@@ -528,6 +544,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                   {tab.icon}
                 </span>
                 <span className="min-w-0 truncate">{tab.text}</span>
+                {tab.marker}
               </UnstyledButton>
             );
           })}
@@ -631,7 +648,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                       keywords={modelKeywords(m, data.providerLabel)}
                       selected={isCurrent}
                       warning={isCurrent && !searching ? warning : null}
-                      note={organizationDefaultNote(m.dbId)}
+                      autoRoutedTiers={autoRouted.tiersFor(m)}
+                      organizationDefault={autoRouted.isOrganizationDefault(
+                        m.dbId,
+                      )}
                       onSelect={() => pickModel(m)}
                     />
                   );
@@ -811,11 +831,14 @@ function ModelRow({
   model,
   keywords,
   selected,
+  autoRouted = false,
   onSelect,
 }: {
   model: LlmModel;
   keywords: string[];
   selected: boolean;
+  /** Marks the organization default while chats on it are auto routed. */
+  autoRouted?: boolean;
   onSelect: () => void;
 }) {
   const needsConnect = !!model.requiresUserConnection && !model.isConnected;
@@ -849,9 +872,17 @@ function ModelRow({
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-5 min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate font-medium">
+          <span className="min-w-0 truncate font-medium">
             {model.displayName}
           </span>
+          {autoRouted && (
+            <RouteIcon
+              role="img"
+              aria-label="Auto routed"
+              className="size-3.5 shrink-0 text-primary"
+            />
+          )}
+          <span className="flex-1" />
           {capabilities.length > 0 && (
             <span className="flex shrink-0 items-center gap-1 text-muted-foreground/70">
               {capabilities.map(({ key, label, Icon }) => (
@@ -917,19 +948,33 @@ function ModelSpecs({
 
 function ModelEntry({
   warning,
-  note,
+  autoRoutedTiers,
+  organizationDefault,
   ...row
 }: Parameters<typeof ModelRow>[0] & {
   warning: string | null;
-  note: string | null;
+  autoRoutedTiers: AutoRoutedTiers | null;
+  organizationDefault: boolean;
 }) {
   return (
     <>
-      <ModelRow {...row} />
-      {note && (
-        <div className="flex h-7 min-w-0 items-center px-2 text-xs text-muted-foreground">
-          <span className="truncate">{note}</span>
+      <ModelRow {...row} autoRouted={!!autoRoutedTiers} />
+      {autoRoutedTiers ? (
+        <div
+          className="flex h-7 min-w-0 items-center px-2 text-xs text-muted-foreground"
+          data-testid="chat-model-auto-routed-note"
+        >
+          <span className="truncate">
+            Auto routed · each session runs on{" "}
+            {autoRoutedChoices(autoRoutedTiers)}
+          </span>
         </div>
+      ) : (
+        organizationDefault && (
+          <div className="flex h-7 min-w-0 items-center px-2 text-xs text-muted-foreground">
+            <span className="truncate">Organization default</span>
+          </div>
+        )
       )}
       {warning && (
         <div className="flex h-7 min-w-0 items-center gap-2 px-2 text-xs text-amber-600 dark:text-amber-400">
@@ -1405,27 +1450,4 @@ function formatContext(n: number | null | undefined) {
   if (!n) return null;
   if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
   return `${Math.round(n / 1000)}K`;
-}
-
-/**
- * The note under the organization default's model row. Read only while the
- * menu is open, so a chat load does not wait on it: an agent with no model of
- * its own is auto routed on the default while the organization routes.
- */
-function useOrganizationDefaultNote(agent: ChatSetupAgent | undefined) {
-  const { data: organizationDefault } = useOrganizationDefaultModelSummary();
-  const agentFollowsDefault =
-    !!agent &&
-    agent.runtime === null &&
-    !agent.modelId &&
-    !agent.llmApiKeyId &&
-    !agent.modelPoolId;
-  return (dbId: string): string | null => {
-    if (!organizationDefault?.model || organizationDefault.model.id !== dbId)
-      return null;
-    if (!agentFollowsDefault || !organizationDefault.autoRouting.active)
-      return "Organization default";
-    const { fast, normal, smart } = organizationDefault.autoRouting.tiers;
-    return `Organization default · Auto routed: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
-  };
 }

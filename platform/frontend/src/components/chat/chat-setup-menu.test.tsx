@@ -414,7 +414,7 @@ describe("ChatSetupMenu", () => {
     ).toHaveLength(1);
   });
 
-  it("names the trio auto routing runs the organization default on, for an agent on the default", () => {
+  it("marks the organization default as auto routed for an agent on the default, naming the trio", () => {
     const tier = (id: string, displayName: string) => ({
       id,
       provider: "vllm" as const,
@@ -428,19 +428,75 @@ describe("ChatSetupMenu", () => {
     vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
       data: { model: tiers.normal, autoRouting: { active: true, tiers } },
     } as never);
-    const defaultRow = () =>
-      screen.getByRole("option", { name: /Llama 3 8B/ }).nextElementSibling;
+    const defaultOption = () =>
+      screen.getByRole("option", { name: /Llama 3 8B/ });
+    const onDefault = { selectedModel: "model-plain" };
 
-    const { unmount } = render(<ChatSetupMenu {...menuProps()} />);
-    expect(defaultRow()).toHaveTextContent(/Fast tier.*Llama 3 8B.*Smart tier/);
+    const { unmount } = render(<ChatSetupMenu {...menuProps(onDefault)} />);
+    expect(defaultOption().nextElementSibling).toHaveTextContent(
+      /Fast tier.*Llama 3 8B.*Smart tier/,
+    );
+    expect(
+      within(defaultOption()).getByRole("img", { name: "Auto routed" }),
+    ).toBeTruthy();
+    // The model keeps its name; the tab only adds that it is routed.
+    expect(
+      screen.getByRole("tab", {
+        name: "Model: Llama 3 8B, auto routed across Fast tier, Llama 3 8B or Smart tier",
+      }),
+    ).toHaveTextContent("Llama 3 8B");
     unmount();
 
     agents[0].modelId = "model-thinker";
     try {
-      render(<ChatSetupMenu {...menuProps()} />);
-      expect(defaultRow()).not.toHaveTextContent(/Fast tier/);
+      render(<ChatSetupMenu {...menuProps(onDefault)} />);
+      expect(defaultOption().nextElementSibling).toHaveTextContent(
+        "Organization default",
+      );
+      expect(
+        within(defaultOption()).queryByRole("img", { name: "Auto routed" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("tab", { name: "Model: Llama 3 8B" }),
+      ).toBeInTheDocument();
     } finally {
       agents[0].modelId = undefined;
+    }
+  });
+
+  it("does not mark an OpenAI default that chat sends over the Responses API, which the router skips", () => {
+    const gpt6 = {
+      ...models[1],
+      dbId: "model-gpt6",
+      id: "gpt-6.1-sol",
+      provider: "openai",
+      displayName: "GPT-6.1 Sol",
+    };
+    const tier = (id: string, displayName: string) => ({
+      id,
+      provider: "openai" as const,
+      displayName,
+    });
+    const tiers = {
+      fast: tier("model-fast", "Fast tier"),
+      normal: tier("model-gpt6", "GPT-6.1 Sol"),
+      smart: tier("model-smart", "Smart tier"),
+    };
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: { model: tiers.normal, autoRouting: { active: true, tiers } },
+    } as never);
+    models.push(gpt6 as (typeof models)[number]);
+    try {
+      render(<ChatSetupMenu {...menuProps({ selectedModel: "model-gpt6" })} />);
+      const option = screen.getByRole("option", { name: /GPT-6.1 Sol/ });
+      expect(
+        within(option).queryByRole("img", { name: "Auto routed" }),
+      ).toBeNull();
+      expect(option.nextElementSibling).toHaveTextContent(
+        "Organization default",
+      );
+    } finally {
+      models.pop();
     }
   });
 });

@@ -2316,7 +2316,7 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
         async ({ pool, makeSecret, makeLlmProviderApiKey }) => {
           const model = {
             gemini: "gemini-3.8-flash",
-            openai: "o3-mini",
+            openai: "gpt-4o-mini",
             anthropic: "claude-sonnet-4-5",
           };
           if (target !== "gemini")
@@ -2324,7 +2324,7 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
               provider: target,
               modelId: model[target],
               externalId: `${target}/${model[target]}`,
-              inputModalities: ["text"],
+              inputModalities: ["text", "image"],
               outputModalities: ["text"],
               customPricePerMillionInput: "1",
               customPricePerMillionOutput: "2",

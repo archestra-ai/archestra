@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-06
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -51,6 +51,8 @@ The controller does not install a container isolation runtime. Check image archi
 ## Storage and Placement
 
 Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
+
+To run each unprivileged run in its own kernel, set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME) to a sandboxing RuntimeClass such as `gvisor`.
 
 ## EKS With Fargate
 

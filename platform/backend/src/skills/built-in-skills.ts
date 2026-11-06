@@ -4,7 +4,7 @@ import {
   APP_BUILD_LOOP_GUIDANCE,
 } from "@/archestra-mcp-server/app-authoring-guidance";
 import { enterpriseTier } from "@/enterprise-tier";
-import type { SkillFileKind } from "@/types/skill";
+import type { Skill, SkillFileKind } from "@/types/skill";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
 import { RUNTIME_HANDOFF_SKILL } from "./runtime-handoff";
@@ -80,6 +80,24 @@ export function findBuiltInSkillBySourceRef(
   return (
     getEnabledBuiltInSkills().find((skill) => skill.builtInSkillId === id) ??
     null
+  );
+}
+
+/**
+ * Whether this deployment ships a newer default than the revision a built-in
+ * copy was last written from. Startup sync upgrades untouched copies, so after
+ * it runs this is true only for a copy that was edited and therefore left
+ * behind; resetting it is the only way it picks up the new revision.
+ */
+export function hasNewerBuiltInDefault(
+  skill: Pick<Skill, "sourceType" | "sourceRef" | "sourceCommit">,
+): boolean {
+  if (skill.sourceType !== "built_in" || !skill.sourceRef) return false;
+  const definition = findBuiltInSkillBySourceRef(skill.sourceRef);
+  if (!definition) return false;
+  return (
+    builtInSkillShippedWrite(definition).skill.sourceCommit !==
+    skill.sourceCommit
   );
 }
 

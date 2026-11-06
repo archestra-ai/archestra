@@ -139358,6 +139358,10 @@ export type GetSkillsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            /**
+             * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+             */
+            builtInUpdateAvailable: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -139582,6 +139586,10 @@ export type CreateSkillResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 
@@ -139828,6 +139836,10 @@ export type GetSkillResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 
@@ -140027,6 +140039,10 @@ export type UpdateSkillResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 
@@ -140771,6 +140787,10 @@ export type RestoreSkillResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 
@@ -141017,6 +141037,10 @@ export type ResetSkillResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 
@@ -141207,6 +141231,10 @@ export type UpdateSkillGithubSyncResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default.
+         */
+        builtInUpdateAvailable: boolean;
     };
 };
 

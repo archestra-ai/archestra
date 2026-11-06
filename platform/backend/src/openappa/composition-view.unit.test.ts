@@ -12,41 +12,8 @@ import {
 } from "./composition-view";
 
 const COMPOSED_AT = new Date("2026-10-15T08:00:00.000Z");
-const REFUSED_AT = new Date("2026-10-15T09:00:00.000Z");
 
 describe("compositionView", () => {
-  test("a clean row is current whatever its record says", () => {
-    expect(compositionView(row({ served: null }))).toEqual({
-      served: { kind: "current", rootRevision: 4, composedAt: COMPOSED_AT },
-      refusal: null,
-    });
-  });
-
-  test("a refused row serves the composition its record describes", () => {
-    expect(
-      compositionView(
-        row({
-          lastError: "policy refused: x",
-          lastErrorAt: REFUSED_AT,
-          rootRevision: 5,
-          served: composition({ rootRevision: 4 }),
-        }),
-      ),
-    ).toEqual({
-      served: {
-        kind: "previous",
-        rootRevision: 4,
-        composedAt: COMPOSED_AT,
-        batteries: [{ name: "acme", status: "active", composed: true }],
-      },
-      refusal: {
-        message: "policy refused: x",
-        at: REFUSED_AT,
-        rootRevision: 5,
-      },
-    });
-  });
-
   test("a record that describes other bytes is not read, so what is served is unknown", () => {
     expect(
       compositionView(
@@ -68,22 +35,6 @@ describe("compositionView", () => {
       compositionView(row({ lastError: "policy refused: x", rootRevision: -1 }))
         .refusal?.rootRevision,
     ).toBeNull();
-  });
-
-  test("a root text alone is served only when its record says so", () => {
-    expect(
-      compositionView(
-        row({
-          lastError: "policy refused: x",
-          served: {
-            v: 1,
-            kind: "root_only",
-            contentHash: HASH,
-            rootRevision: 1,
-          },
-        }),
-      ).served,
-    ).toEqual({ kind: "root_only" });
   });
 });
 

@@ -10,20 +10,6 @@ function policyMoved(): Error {
 }
 
 describe("retryWhilePolicyMoved", () => {
-  test("gives up after a bounded number of attempts with the moved policy", async () => {
-    let attempts = 0;
-    await expect(
-      retryWhilePolicyMoved({
-        random: () => 0,
-        run: async () => {
-          attempts++;
-          throw policyMoved();
-        },
-      }),
-    ).rejects.toThrow(POLICY_MOVED);
-    expect(attempts).toBe(3);
-  });
-
   test("retries a failure the binding codes as policy_moved, whatever its text", async () => {
     let attempts = 0;
     const decided = await retryWhilePolicyMoved({

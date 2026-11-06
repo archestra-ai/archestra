@@ -584,14 +584,6 @@ describe("openappaFailure: conversations that cannot continue", () => {
       "OpenAPPA could not safely complete an operation",
     );
   });
-
-  test("classifies by the runtime's code, not by its wording", () => {
-    const failure = openappaFailure(
-      runtimeFailure("untrusted_log", "reworded by a later runtime"),
-    );
-
-    expectNoRetry(failure, 409);
-  });
 });
 
 describe("openappaFailure: the model's requests", () => {

@@ -2,11 +2,24 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, exports,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ChevronDown, Download, FileJson, FileSpreadsheet, Info, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  Info,
+  X,
+} from "lucide-react";
 import { type SetStateAction, useCallback, useMemo } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -522,14 +535,27 @@ export default function CostExplorer() {
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="xs" className="ml-auto" disabled={cube.rows.length === 0}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto"
+                  disabled={cube.rows.length === 0}
+                >
                   <Download /> Export <ChevronDown />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => exportCsv(exportParams)}><FileSpreadsheet /> CSV</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => exportJson(exportParams)}><FileJson /> JSON</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void exportParquet(exportParams)}><Download /> Parquet</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportCsv(exportParams)}>
+                  <FileSpreadsheet /> CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportJson(exportParams)}>
+                  <FileJson /> JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void exportParquet(exportParams)}
+                >
+                  <Download /> Parquet
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

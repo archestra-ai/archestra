@@ -36,6 +36,11 @@ export function useOrganizationDefaultModel({
     : null;
   return {
     model,
+    /** The three routed models, when the default is auto routed for this caller. */
+    autoRoutedTiers:
+      followsRouting && summary?.model && summary.autoRouting.active
+        ? summary.autoRouting.tiers
+        : null,
     label: summaryLabel({
       summary,
       followsRouting,

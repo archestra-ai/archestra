@@ -96,6 +96,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
@@ -3052,37 +3053,35 @@ export function AgentForm({
   const modelControl = (
     <>
       {!llmApiKeyId ? (
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <ModelSelector
-                  selectedModel=""
-                  onModelChange={() => {}}
-                  disabled
-                  variant="outline"
-                  enabled={false}
-                  placeholder={
-                    isClaudeCodeRuntime && !agent
-                      ? "Select a Claude model"
-                      : (organizationDefaultModel.label ?? undefined)
-                  }
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs text-xs">
-              {/* The trigger truncates a long organization default (e.g.
-                  "Auto routed: …"), so the tooltip carries the full name. */}
-              {!(isClaudeCodeRuntime && !agent) &&
-                organizationDefaultModel.label && (
-                  <p className="font-medium">
-                    {organizationDefaultModel.label}
-                  </p>
-                )}
-              <p>Select a provider API key first</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        organizationDefaultModel.autoRoutedTiers ? (
+          <AutoRoutedModelTrigger
+            tiers={organizationDefaultModel.autoRoutedTiers}
+          />
+        ) : (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <ModelSelector
+                    selectedModel=""
+                    onModelChange={() => {}}
+                    disabled
+                    variant="outline"
+                    enabled={false}
+                    placeholder={
+                      isClaudeCodeRuntime && !agent
+                        ? "Select a Claude model"
+                        : (organizationDefaultModel.label ?? undefined)
+                    }
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Select a provider API key first
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       ) : (
         <ModelSelector
           selectedModel={llmModel || ""}
@@ -3234,7 +3233,7 @@ export function AgentForm({
               />
             </fieldset>
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0">{providerKeyControl}</div>
               {!agentModelPoolId && (
                 <div className="min-w-0">{modelControl}</div>

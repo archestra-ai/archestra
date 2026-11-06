@@ -326,11 +326,13 @@ function CatalogItemDetails({
   const environmentLabel =
     variant === "builtin"
       ? null
-      : resolveCatalogEnvironmentLabel({
-          environmentId: item.environmentId,
-          environments: environmentList?.environments ?? [],
-          defaultEnvironmentName: defaultEnvironment.name,
-        });
+      : isPlaywright
+        ? "Agent environment"
+        : resolveCatalogEnvironmentLabel({
+            environmentId: item.environmentId,
+            environments: environmentList?.environments ?? [],
+            defaultEnvironmentName: defaultEnvironment.name,
+          });
 
   const allServersForCatalog = useMemo(
     () => (catalogMcpServers ?? []).filter((s) => s.catalogId === item.id),

@@ -3368,8 +3368,9 @@ function applyAgentAutoModel(
   },
   agent: { runtime: unknown; builtIn?: boolean },
 ): void {
+  const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
   if (body.autoModel) {
-    if (agent.runtime !== null && agent.runtime !== undefined) {
+    if (hasRuntime) {
       throw new ApiError(400, "Agent Runtime agents cannot run on auto.");
     }
     if (agent.builtIn) {
@@ -3379,9 +3380,11 @@ function applyAgentAutoModel(
     body.llmApiKeyId = null;
     body.modelPoolId = null;
   } else if (
-    body.autoModel === undefined &&
-    (body.modelPoolId || body.llmApiKeyId || body.modelId)
+    hasRuntime ||
+    (body.autoModel === undefined &&
+      (body.modelPoolId || body.llmApiKeyId || body.modelId))
   ) {
+    // An agent that becomes an Agent Runtime agent leaves `auto` too.
     body.autoModel = false;
   }
 }

@@ -1906,8 +1906,36 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(aliceState?.dispatchCount).toBe(4);
     expect(bobState?.dispatchCount).toBe(4);
 
+    // Verify new round_robin scopes phase-shift their initial queue so distinct
+    // principals do not all hit `a` on their first run (Charlie -> `c`, Dave -> `d`).
+    const charliePlan = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: assigned,
+      config: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+      scopeKey: { userId: "charlie-first-run", organizationId },
+    });
+    const davePlan = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: assigned,
+      config: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+      scopeKey: { userId: "dave-first-run", organizationId },
+    });
+    expect(charliePlan.claimedPrimaryAgentId).toBe(c);
+    expect(davePlan.claimedPrimaryAgentId).toBe(d);
+
     // 2. Per-scope weighted round-robin (Smooth Weighted Round-Robin) across
-    //    user, team, and org scopes.
+    //    user, team, and org scopes, with phase-shifted initial SWRR state and
+    //    unlaunched claim rollback.
     const weightedConfig = {
       enabled: true,
       algorithm: "weighted" as const,
@@ -1941,34 +1969,72 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       }
     }
 
-    // Team scope gets exact 3:2:1 smoothly interleaved distribution: [a, b, c, a, b, a]
+    // Team scope (scopeOffset=0) gets exact 3:2:1 smoothly interleaved distribution: [a, b, c, a, b, a]
     expect(teamPrimaries).toEqual([a, b, c, a, b, a]);
-    // Org scope only ran 3 times and got its first 3 smooth selections: [a, b, c]
-    expect(orgPrimaries).toEqual([a, b, c]);
+    // Org scope (scopeOffset=1) is phase-shifted by 1 SWRR step so its first 3 runs are [b, c, a]
+    expect(orgPrimaries).toEqual([b, c, a]);
 
-    // 3. Per-scope random queues/seeds in keyv_cache
+    // Verify releaseUnlaunchedClaim restores `weightedCurrent` (not just `queue`)
+    // so a rolled-back weighted claim re-selects `b` (step 4 of [b, c, a, b, a, a])
+    // instead of advancing to `a` (step 5).
+    const orgUnlaunchedPlan = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: threePool,
+      config: weightedConfig,
+      scopeKey: orgScope,
+    });
+    expect(orgUnlaunchedPlan.dispatchCount).toBe(4);
+    expect(orgUnlaunchedPlan.claimedPrimaryAgentId).toBe(b);
+    await subagentLoadBalancer.releaseUnlaunchedClaim({
+      callerAgentId: gateway.id,
+      claimedAgentId: orgUnlaunchedPlan.claimedPrimaryAgentId,
+      scopeKey: orgScope,
+    });
+    const orgRetryPlan = await subagentLoadBalancer.planCandidates({
+      callerAgentId: gateway.id,
+      assignedAgentIds: threePool,
+      config: weightedConfig,
+      scopeKey: orgScope,
+    });
+    expect(orgRetryPlan.dispatchCount).toBe(4);
+    expect(orgRetryPlan.claimedPrimaryAgentId).toBe(b);
+
+    // 3. Per-scope random queues/seeds in keyv_cache produce deterministic,
+    //    distinct per-scope candidate sequences.
     const randomConfig = {
       enabled: true,
       algorithm: "random" as const,
       retries: 0,
       fallbackEnabled: true,
     };
-    const randomUser1: string[] = [];
+    const randomUser1Orders: string[][] = [];
+    const randomUser2Orders: string[][] = [];
     for (let i = 0; i < 4; i++) {
-      const planned = await subagentLoadBalancer.planCandidates({
+      const planned1 = await subagentLoadBalancer.planCandidates({
         callerAgentId: gateway.id,
         assignedAgentIds: assigned,
         config: randomConfig,
         scopeKey: { userId: "random-user-1" },
       });
-      expect([...planned.candidateIds].sort()).toEqual([...assigned].sort());
-      randomUser1.push(planned.claimedPrimaryAgentId ?? "");
+      const planned2 = await subagentLoadBalancer.planCandidates({
+        callerAgentId: gateway.id,
+        assignedAgentIds: assigned,
+        config: randomConfig,
+        scopeKey: { userId: "random-user-2" },
+      });
+      expect([...planned1.candidateIds].sort()).toEqual([...assigned].sort());
+      expect([...planned2.candidateIds].sort()).toEqual([...assigned].sort());
+      randomUser1Orders.push(planned1.candidateIds);
+      randomUser2Orders.push(planned2.candidateIds);
     }
     const randomUser1State = await subagentLoadBalancer.getState(gateway.id, {
       userId: "random-user-1",
     });
     expect(randomUser1State?.dispatchCount).toBe(4);
-    expect(randomUser1).toHaveLength(4);
+    expect(randomUser1Orders).not.toEqual(randomUser2Orders);
+    expect(
+      new Set(randomUser1Orders.map((o) => o.join(","))).size,
+    ).toBeGreaterThan(1);
 
     // 4. Failover queue inversion fix: when primary `a` fails and fails over to `b`,
     //    `b` is placed BEFORE `a` at the back of the queue (`[c, d, b, a]`) so all
@@ -2182,8 +2248,12 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     expect(claudeStatus.state).toBe("connected");
 
     // Mock modelSyncService.syncModelsForApiKey so that:
-    // - SuperGrok key lazily links grokModel
-    // - ChatGPT Subscription key does NOT link gpt-5.4 (simulating an unsupported model)
+    // - SuperGrok key lazily links grokModel on run 1 (1 call)
+    // - ChatGPT Subscription key throws a transient network error on run 1 (1 call,
+    //   verifying canLaunchAgentRuntimeModel catches sync errors without failing
+    //   start_agent_run), then completes without linking gpt-5.4 on run 2 (1 call)
+    //   and is cached for 5 minutes on runs 3 and 4 (0 calls).
+    let chatgptSyncAttempts = 0;
     const syncSpy = vi
       .spyOn(modelSyncService, "syncModelsForApiKey")
       .mockImplementation(async ({ apiKeyId }) => {
@@ -2192,8 +2262,13 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
             actorGrokKey.id,
             [grokModel.id],
           );
+          return { syncedCount: 1, error: null } as never;
         }
-        return { syncedCount: 1, error: null } as never;
+        chatgptSyncAttempts += 1;
+        if (chatgptSyncAttempts === 1) {
+          throw new TypeError("fetch failed");
+        }
+        return { syncedCount: 0, error: null } as never;
       });
 
     for (const subagent of [
@@ -2230,10 +2305,11 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       );
     }
 
-    // `codexSubagent` (unlinked gpt-5.4) is skipped during preflight, while
-    // `claudeRuntimeSubagent` (archestra-claude-code-runtime with personal subscription)
-    // and `grokSubagent` (lazily synced SuperGrok subscription) alternate in 1:1 round-robin!
-    expect(syncSpy).toHaveBeenCalled();
+    // `codexSubagent` (unlinked gpt-5.4 + transient sync error on run 1) is skipped during preflight,
+    // while `claudeRuntimeSubagent` (archestra-claude-code-runtime with personal subscription)
+    // and `grokSubagent` (lazily synced SuperGrok subscription) alternate in 1:1 round-robin,
+    // and the 5-minute TTL cooldown prevents re-syncing the ChatGPT key on runs 3 and 4.
+    expect(syncSpy).toHaveBeenCalledTimes(3);
     expect(selectedIds).toEqual([
       claudeRuntimeSubagent.id,
       grokSubagent.id,

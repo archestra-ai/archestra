@@ -31,6 +31,11 @@ export interface SubagentLoadBalancerState {
    * Smooth weighted round-robin current counters keyed by subagent ID.
    */
   weightedCurrent?: Record<string, number>;
+  /**
+   * Previous smooth weighted round-robin counters before the most recent primary
+   * claim, used by `releaseUnlaunchedClaim` to roll back refused dispatches.
+   */
+  previousWeightedCurrent?: Record<string, number>;
 }
 
 export interface PlannedSubagentCandidates {
@@ -43,8 +48,13 @@ class SubagentLoadBalancer {
   /**
    * Plans the ordered candidate subagent list for a delegation request.
    * Atomically advances the caller's per-scope (`user` / `team` / `org`)
-   * distributed state in PostgreSQL `keyv_cache` for `round_robin`, `weighted`,
-   * and `random`.
+   * distributed state in PostgreSQL `keyv_cache`:
+   * - `round_robin` and `weighted` seed each new scope's starting phase from an
+   *   atomic per-(caller, algorithm) counter so first runs across principals
+   *   spread across workers in round-robin / weight order without lockstep
+   *   collisions.
+   * - `random` selects the primary in SQL via `hashtext(caller:scope:dispatchCount)`
+   *   and orders the fallback tail with `createSeededSubagentRandom`.
    */
   async planCandidates(params: {
     callerAgentId: string;
@@ -88,38 +98,6 @@ class SubagentLoadBalancer {
       weightsMap[id] = normalizeSubagentWeight(normalizedConfig.weights?.[id]);
     }
 
-    let initialPrimaryId = availableIds[0] ?? null;
-    let initialWeightedCurrent: Record<string, number> | undefined;
-    if (normalizedConfig.algorithm === "weighted") {
-      const initialStep = stepSmoothWeightedRoundRobin({
-        availableIds,
-        weights: weightsMap,
-        currentWeights: {},
-        tieBreakOrder: assignedList,
-      });
-      initialPrimaryId = initialStep.chosenId ?? initialPrimaryId;
-      initialWeightedCurrent = initialStep.nextCurrentWeights;
-    } else if (normalizedConfig.algorithm === "random") {
-      const initialRandom = createSeededSubagentRandom(
-        `${params.callerAgentId}:${effectiveScopeKey}:1`,
-      );
-      const initialIndex = Math.floor(initialRandom() * availableIds.length);
-      initialPrimaryId = availableIds[initialIndex] ?? initialPrimaryId;
-    }
-
-    const initialQueue = initialPrimaryId
-      ? moveAgentToBack(assignedList, initialPrimaryId)
-      : assignedList;
-    const initialEnvelope = JSON.stringify({
-      value: {
-        queue: initialQueue,
-        dispatchCount: 1,
-        ...(initialWeightedCurrent
-          ? { weightedCurrent: initialWeightedCurrent }
-          : {}),
-      } satisfies SubagentLoadBalancerState,
-      expires,
-    });
     const assignedJson = JSON.stringify(assignedList);
     const availableJson = JSON.stringify(availableIds);
     const weightsJson = JSON.stringify(weightsMap);
@@ -127,6 +105,81 @@ class SubagentLoadBalancer {
 
     try {
       await ensureKeyvCacheTable();
+
+      const scopeOffset =
+        effectiveScopeKey !== DEFAULT_SUBAGENT_LOAD_BALANCER_SCOPE_KEY &&
+        normalizedConfig.algorithm !== "random"
+          ? await claimInitialScopeOffset({
+              callerAgentId: params.callerAgentId,
+              algorithm: normalizedConfig.algorithm,
+              keyvKey,
+              now,
+              expires,
+            })
+          : 0;
+
+      const seededAssignedList = rotateArray(assignedList, scopeOffset);
+      const seededAvailableIds = seededAssignedList.filter(
+        (id) => !params.excludedAgentIds?.has(id),
+      );
+
+      let initialPrimaryId = seededAvailableIds[0] ?? availableIds[0] ?? null;
+      let initialQueue = initialPrimaryId
+        ? moveAgentToBack(seededAssignedList, initialPrimaryId)
+        : seededAssignedList;
+      let initialWeightedCurrent: Record<string, number> | undefined;
+      let initialPreviousWeightedCurrent: Record<string, number> | undefined;
+
+      if (normalizedConfig.algorithm === "weighted") {
+        const totalWeight = assignedList.reduce(
+          (sum, id) => sum + (weightsMap[id] ?? 1),
+          0,
+        );
+        const warmupSteps = totalWeight > 0 ? scopeOffset % totalWeight : 0;
+        let startingCurrentWeights: Record<string, number> = {};
+        let startingTieBreakOrder = [...assignedList];
+        for (let s = 0; s < warmupSteps; s++) {
+          const warmup = stepSmoothWeightedRoundRobin({
+            availableIds: assignedList,
+            weights: weightsMap,
+            currentWeights: startingCurrentWeights,
+            tieBreakOrder: startingTieBreakOrder,
+          });
+          startingCurrentWeights = warmup.nextCurrentWeights;
+          if (warmup.chosenId) {
+            startingTieBreakOrder = moveAgentToBack(
+              startingTieBreakOrder,
+              warmup.chosenId,
+            );
+          }
+        }
+        const initialStep = stepSmoothWeightedRoundRobin({
+          availableIds,
+          weights: weightsMap,
+          currentWeights: startingCurrentWeights,
+          tieBreakOrder: startingTieBreakOrder,
+        });
+        initialPrimaryId = initialStep.chosenId ?? initialPrimaryId;
+        initialWeightedCurrent = initialStep.nextCurrentWeights;
+        initialPreviousWeightedCurrent = startingCurrentWeights;
+        initialQueue = initialPrimaryId
+          ? moveAgentToBack(startingTieBreakOrder, initialPrimaryId)
+          : startingTieBreakOrder;
+      }
+
+      const initialEnvelope = JSON.stringify({
+        value: {
+          queue: initialQueue,
+          dispatchCount: 1,
+          ...(initialWeightedCurrent
+            ? {
+                weightedCurrent: initialWeightedCurrent,
+                previousWeightedCurrent: initialPreviousWeightedCurrent ?? {},
+              }
+            : {}),
+        } satisfies SubagentLoadBalancerState,
+        expires,
+      });
 
       const result =
         normalizedConfig.algorithm === "weighted"
@@ -223,7 +276,8 @@ class SubagentLoadBalancer {
                     'value', jsonb_build_object(
                       'queue', (SELECT next_queue FROM rotated),
                       'dispatchCount', COALESCE((keyv_cache.value::jsonb #>> '{value,dispatchCount}')::bigint, 0) + 1,
-                      'weightedCurrent', (SELECT cw_map FROM updated_cw)
+                      'weightedCurrent', (SELECT cw_map FROM updated_cw),
+                      'previousWeightedCurrent', (SELECT cw FROM existing_cw)
                     ),
                     'expires', ${expires}::bigint
                   )::text
@@ -235,7 +289,46 @@ class SubagentLoadBalancer {
           : normalizedConfig.algorithm === "random"
             ? await db.execute<{ value: string }>(sql`
                 INSERT INTO keyv_cache (key, value)
-                VALUES (${keyvKey}, ${initialEnvelope})
+                SELECT
+                  ${keyvKey},
+                  (
+                    WITH avail_indexed AS (
+                      SELECT
+                        elem,
+                        ord - 1 AS avail_idx,
+                        count(*) OVER () AS avail_cnt
+                      FROM jsonb_array_elements_text(${availableJson}::jsonb)
+                        WITH ORDINALITY AS a(elem, ord)
+                    ),
+                    chosen AS (
+                      SELECT elem AS primary_id
+                      FROM avail_indexed
+                      WHERE avail_idx = (
+                        abs(
+                          hashtext(${randomSeedPrefix} || '1')::bigint
+                        ) % GREATEST(1, avail_cnt)
+                      )
+                      LIMIT 1
+                    ),
+                    rotated AS (
+                      SELECT COALESCE(
+                        jsonb_agg(
+                          a.elem
+                          ORDER BY (a.elem = (SELECT primary_id FROM chosen)), a.ord
+                        ),
+                        '[]'::jsonb
+                      ) AS next_queue
+                      FROM jsonb_array_elements_text(${assignedJson}::jsonb)
+                        WITH ORDINALITY AS a(elem, ord)
+                    )
+                    SELECT jsonb_build_object(
+                      'value', jsonb_build_object(
+                        'queue', (SELECT next_queue FROM rotated),
+                        'dispatchCount', 1
+                      ),
+                      'expires', ${expires}::bigint
+                    )::text
+                  )
                 ON CONFLICT (key) DO UPDATE SET value = CASE
                   WHEN (
                     jsonb_typeof(keyv_cache.value::jsonb -> 'expires') IS DISTINCT FROM 'number'
@@ -437,6 +530,7 @@ class SubagentLoadBalancer {
         normalizedConfig,
         {
           scopeKey: `${params.callerAgentId}:${effectiveScopeKey}`,
+          random: Math.random,
         },
       );
       return {
@@ -711,6 +805,8 @@ class SubagentLoadBalancer {
               'dispatchCount', GREATEST(0, COALESCE((keyv_cache.value::jsonb #>> '{value,dispatchCount}')::bigint, 1) - 1),
               'weightedCurrent', COALESCE(
                 CASE
+                  WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,previousWeightedCurrent}') = 'object'
+                  THEN keyv_cache.value::jsonb #> '{value,previousWeightedCurrent}'
                   WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,weightedCurrent}') = 'object'
                   THEN keyv_cache.value::jsonb #> '{value,weightedCurrent}'
                   ELSE '{}'::jsonb
@@ -773,6 +869,69 @@ async function ensureKeyvCacheTable(): Promise<void> {
     )
   `);
   keyvTableEnsured = true;
+}
+
+async function claimInitialScopeOffset(params: {
+  callerAgentId: string;
+  algorithm: string;
+  keyvKey: string;
+  now: number;
+  expires: number;
+}): Promise<number> {
+  const seedKeyvKey = `keyv:${CacheKey.SubagentLoadBalancer}-${params.callerAgentId}:seed:${params.algorithm}`;
+  const result = await db.execute<{ scope_offset: number | string }>(sql`
+    WITH target_exists AS (
+      SELECT 1 AS ok
+      FROM keyv_cache
+      WHERE key = ${params.keyvKey}
+        AND (
+          jsonb_typeof(value::jsonb -> 'expires') IS DISTINCT FROM 'number'
+          OR (value::jsonb ->> 'expires')::numeric > ${params.now}
+        )
+        AND jsonb_typeof(value::jsonb #> '{value,queue}') = 'array'
+    ),
+    bumped_seed AS (
+      INSERT INTO keyv_cache (key, value)
+      SELECT
+        ${seedKeyvKey},
+        jsonb_build_object(
+          'value',
+          jsonb_build_object('count', 1),
+          'expires',
+          ${params.expires}::bigint
+        )::text
+      WHERE NOT EXISTS (SELECT 1 FROM target_exists)
+      ON CONFLICT (key) DO UPDATE SET value = CASE
+        WHEN (
+          jsonb_typeof(keyv_cache.value::jsonb -> 'expires') IS DISTINCT FROM 'number'
+          OR (keyv_cache.value::jsonb ->> 'expires')::numeric > ${params.now}
+        )
+        THEN jsonb_build_object(
+          'value',
+          jsonb_build_object(
+            'count',
+            COALESCE((keyv_cache.value::jsonb #>> '{value,count}')::bigint, 0) + 1
+          ),
+          'expires',
+          ${params.expires}::bigint
+        )::text
+        ELSE EXCLUDED.value
+      END
+      RETURNING COALESCE((value::jsonb #>> '{value,count}')::bigint, 1) - 1 AS scope_offset
+    )
+    SELECT scope_offset FROM bumped_seed
+  `);
+  const raw = result.rows[0]?.scope_offset;
+  const parsed = typeof raw === "number" ? raw : Number(raw ?? 0);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : 0;
+}
+
+function rotateArray<T>(items: readonly T[], offset: number): T[] {
+  const n = items.length;
+  if (n <= 1) return [...items];
+  const shift = ((Math.trunc(offset) % n) + n) % n;
+  if (shift === 0) return [...items];
+  return [...items.slice(shift), ...items.slice(0, shift)];
 }
 
 function stateCacheKey(

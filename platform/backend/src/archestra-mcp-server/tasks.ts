@@ -356,23 +356,35 @@ export async function startDelegatedTask(params: {
     if (actor) {
       const readinessChecks = await Promise.all(
         nonExcludedIds.map(async (candidateId) => {
-          const candidateAgent = await AgentModel.findById(candidateId);
-          if (
-            !candidateAgent ||
-            candidateAgent.organizationId !== actor.organizationId
-          ) {
+          try {
+            const candidateAgent = await AgentModel.findById(candidateId);
+            if (
+              !candidateAgent ||
+              candidateAgent.organizationId !== actor.organizationId
+            ) {
+              return { candidateId, ready: false };
+            }
+            const candidateRuntime = resolveAgentRuntime(candidateAgent);
+            if (!candidateRuntime) {
+              return { candidateId, ready: false };
+            }
+            const ready = await canLaunchAgentRuntimeModel({
+              runtime: candidateRuntime,
+              agent: candidateAgent,
+              actor,
+            });
+            return { candidateId, ready };
+          } catch (error) {
+            logger.warn(
+              {
+                err: error,
+                callerAgentId: callerAgent.id,
+                candidateId,
+              },
+              "Subagent readiness pre-filter check failed; marking candidate unready",
+            );
             return { candidateId, ready: false };
           }
-          const candidateRuntime = resolveAgentRuntime(candidateAgent);
-          if (!candidateRuntime) {
-            return { candidateId, ready: false };
-          }
-          const ready = await canLaunchAgentRuntimeModel({
-            runtime: candidateRuntime,
-            agent: candidateAgent,
-            actor,
-          });
-          return { candidateId, ready };
         }),
       );
       const readyCount = readinessChecks.filter((entry) => entry.ready).length;

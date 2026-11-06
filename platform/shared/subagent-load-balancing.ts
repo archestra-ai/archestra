@@ -134,7 +134,7 @@ export function normalizeSubagentWeight(weight?: number | null): number {
   );
 }
 
-export function hashSubagentLoadBalancerSeed(input: string | number): number {
+function hashSubagentLoadBalancerSeed(input: string | number): number {
   const text = String(input);
   let h = 2166136261 >>> 0;
   for (let i = 0; i < text.length; i++) {
@@ -275,7 +275,7 @@ export function stepSmoothWeightedRoundRobin(params: {
  * Deterministic stateless Smooth Weighted Round-Robin ordering for a given
  * `seed` (step index) and optional `scopeKey`.
  */
-export function orderSubagentsBySmoothWeightedRoundRobin(
+function orderSubagentsBySmoothWeightedRoundRobin(
   agentIds: readonly string[],
   weights?: Record<string, number> | null,
   seed = 0,
@@ -399,7 +399,9 @@ export function orderSubagentsByLoadBalancing(
     return ordered;
   }
   const scopeOffset =
-    normalizedScope !== DEFAULT_SUBAGENT_LOAD_BALANCER_SCOPE_KEY && !hasSeed
+    normalizedScope !== DEFAULT_SUBAGENT_LOAD_BALANCER_SCOPE_KEY &&
+    !hasSeed &&
+    !hasExplicitRandom
       ? hashSubagentLoadBalancerSeed(normalizedScope)
       : 0;
   const rawSeed = hasSeed

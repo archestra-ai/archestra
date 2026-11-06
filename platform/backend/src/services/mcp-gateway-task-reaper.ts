@@ -82,6 +82,7 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.AgentWorkspaceTransferTicket,
       );
+      await cacheManager.deleteExpiredByPrefix(CacheKey.SubagentLoadBalancer);
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

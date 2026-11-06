@@ -6,9 +6,11 @@ import {
   type SubscriptionCredentialKind,
   type SupportedProvider,
   subscriptionKindFromCredential,
+  TimeInMs,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
@@ -23,6 +25,16 @@ import { prepareAgentRuntimeBackendDriver } from "./backends";
 import { claudeCodeAccountManager } from "./claude-code-account";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+
+const LAZY_SUBSCRIPTION_SYNC_COOLDOWN_MS = 5 * TimeInMs.Minute;
+
+const lazySubscriptionSyncCache = new Map<
+  string,
+  {
+    subscriptionKind: SubscriptionCredentialKind | null;
+    expiresAt: number;
+  }
+>();
 
 export async function ensureProviderApiKeySupportsSelectedModel(params: {
   providerApiKey: {
@@ -54,6 +66,19 @@ export async function ensureProviderApiKeySupportsSelectedModel(params: {
     return;
   }
 
+  const now = Date.now();
+  const cacheKey = `${providerApiKey.id}:${providerApiKey.secretId ?? ""}`;
+  const cached = lazySubscriptionSyncCache.get(cacheKey);
+  if (cached && now < cached.expiresAt) {
+    if (cached.subscriptionKind) {
+      throw new ApiError(
+        409,
+        `The selected model "${model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[cached.subscriptionKind].label}. Choose a model supported by that connection.`,
+      );
+    }
+    return;
+  }
+
   let subscriptionKind = params.subscriptionCredential?.kind ?? null;
   let apiKeyValue = params.subscriptionCredential?.apiKeyValue;
 
@@ -74,18 +99,29 @@ export async function ensureProviderApiKeySupportsSelectedModel(params: {
     }
   }
 
-  if (subscriptionKind && apiKeyValue) {
-    await modelSyncService.syncModelsForApiKey({
-      apiKeyId: providerApiKey.id,
-      provider: providerApiKey.provider,
-      apiKeyValue,
+  if (!subscriptionKind || !apiKeyValue) {
+    lazySubscriptionSyncCache.set(cacheKey, {
+      subscriptionKind: null,
+      expiresAt: now + LAZY_SUBSCRIPTION_SYNC_COOLDOWN_MS,
     });
-    if (!(await hasSelectedModel())) {
-      throw new ApiError(
-        409,
-        `The selected model "${model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[subscriptionKind].label}. Choose a model supported by that connection.`,
-      );
-    }
+    return;
+  }
+
+  await modelSyncService.syncModelsForApiKey({
+    apiKeyId: providerApiKey.id,
+    provider: providerApiKey.provider,
+    apiKeyValue,
+  });
+  lazySubscriptionSyncCache.set(cacheKey, {
+    subscriptionKind,
+    expiresAt: Date.now() + LAZY_SUBSCRIPTION_SYNC_COOLDOWN_MS,
+  });
+
+  if (!(await hasSelectedModel())) {
+    throw new ApiError(
+      409,
+      `The selected model "${model}" is not available through your ${SUBSCRIPTION_CREDENTIALS[subscriptionKind].label}. Choose a model supported by that connection.`,
+    );
   }
 }
 
@@ -227,7 +263,11 @@ export async function canLaunchAgentRuntimeModel(
     ) {
       return false;
     }
-    throw error;
+    logger.warn(
+      { err: error, agentId: params.runtime.agentId },
+      "Unexpected error checking runtime model readiness; marking candidate unready",
+    );
+    return false;
   }
 }
 

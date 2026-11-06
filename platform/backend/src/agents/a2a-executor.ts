@@ -37,6 +37,7 @@ import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
+import { agentUsesAutoModel } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -368,7 +369,8 @@ export async function executeA2AMessage(
   // normal follows its parent's routing.
   const autoRoutable =
     !modelPoolId &&
-    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"));
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart")) &&
+    (await agentUsesAutoModel(agent, organizationId));
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -1334,18 +1336,21 @@ async function resolveRunLlmSelection(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
+    autoModel: boolean;
+    runtime: unknown;
   };
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
   tier?: SubagentModelTier;
 }) {
-  const { llmApiKeyId, modelId } = params.agent;
+  const { llmApiKeyId, modelId, autoModel } = params.agent;
   const base = await resolveForkParentSelection({
-    agent: { llmApiKeyId, modelId },
+    agent: { llmApiKeyId, modelId, autoModel },
     organizationId: params.organizationId,
     userId: params.userId,
     parentLlm: params.parentLlm,
+    allowAutoModel: params.agent.runtime === null,
   });
   return params.tier
     ? resolveSubagentTierSelection({

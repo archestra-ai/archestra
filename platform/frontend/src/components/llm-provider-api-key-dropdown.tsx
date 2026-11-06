@@ -12,6 +12,7 @@ import {
   Key,
   LayersIcon,
   Plus,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import Image from "next/image";
@@ -103,6 +104,16 @@ interface LlmProviderApiKeyDropdownProps {
   pools?: AvailableModelPool[];
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
+  /**
+   * The `auto` model, offered first while auto routing is on: it picks a
+   * fast, normal or smart model per session. A picked `auto` replaces the key.
+   */
+  auto?: {
+    selected: boolean;
+    /** The tiers it routes across. */
+    description?: string;
+    onSelect: () => void;
+  };
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -134,6 +145,7 @@ export function LlmProviderApiKeyDropdown({
   pools = [],
   selectedPoolId = null,
   onSelectPool,
+  auto,
 }: LlmProviderApiKeyDropdownProps) {
   const selectableKeys = useMemo(
     () =>
@@ -170,11 +182,15 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
-  const selectedKey = selectedPool
+  const autoSelected = auto?.selected ?? false;
+  const selectedPool = autoSelected
     ? undefined
-    : availableKeys.find((key) => key.id === selectedApiKeyId);
-  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
+    : pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey =
+    selectedPool || autoSelected
+      ? undefined
+      : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool || autoSelected ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -202,7 +218,12 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {selectedPool ? (
+              {autoSelected ? (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">Auto</span>
+                </>
+              ) : selectedPool ? (
                 <>
                   <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate font-medium">
@@ -296,6 +317,26 @@ export function LlmProviderApiKeyDropdown({
                   {allOptionSelected && (
                     <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
                   )}
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {auto && (
+              <CommandGroup>
+                <CommandItem
+                  value="auto"
+                  keywords={["auto", "auto routing"]}
+                  onSelect={auto.onSelect}
+                  className="cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span>Auto</span>
+                    <span className="text-xs text-muted-foreground">
+                      {auto.description ??
+                        "Picks a fast, normal or smart model per session"}
+                    </span>
+                  </div>
+                  {auto.selected && <CheckIcon className="h-4 w-4 shrink-0" />}
                 </CommandItem>
               </CommandGroup>
             )}

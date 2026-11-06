@@ -5,8 +5,16 @@ import {
   clientForExternalAgentIds,
 } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogBody,
@@ -37,7 +45,8 @@ type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
 /**
  * Past sessions from the interaction log the plan can learn from: a free scan
  * counts them, then an explicit, capped scoring run reads a sample with the
- * session scorer. Beside an active plan it folds into one line until opened.
+ * session scorer. Beside an active plan it is one card with its action until
+ * a run starts.
  */
 export function PastSessions({
   routingEnabled,
@@ -53,98 +62,95 @@ export function PastSessions({
   const { data } = useAutoRoutingBackfill();
   const scan = useScanAutoRoutingBackfill();
   const cancel = useCancelAutoRoutingBackfill();
-  const [opened, setOpened] = useState(false);
   if (!data) return null;
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
-  if (hasActivePlan && !running && !opened) {
-    if (!scoreOffer) {
-      return canUpdate ? (
-        <Button
-          size="xs"
-          variant="link"
-          className="h-auto p-0 text-sm text-muted-foreground"
-          disabled={scan.isPending}
-          onClick={() => scan.mutate()}
-        >
-          Scan past sessions
-        </Button>
-      ) : null;
-    }
-    return (
-      <p
-        className="flex items-center gap-2 text-sm text-muted-foreground"
-        data-testid="auto-routing-past-traffic"
-      >
-        <span className="tabular-nums">
-          {scoreOffer.rescore
-            ? `The scorer changed: ${count(scoreOffer.remaining)} past sessions to re-score`
-            : `${count(scoreOffer.remaining)} past sessions to score`}
-        </span>
-        {scorer === "no_jev_key" ? (
-          <AddJevKeyLink />
-        ) : (
-          canUpdate && (
-            <Button
-              size="xs"
-              variant="link"
-              className="h-auto p-0 text-sm"
-              onClick={() => setOpened(true)}
-            >
-              {scoreOffer.rescore ? "Re-score" : "Score"}
+  const scoreAction =
+    scoreOffer &&
+    (scorer === "no_jev_key" ? (
+      <AddJevKeyLink />
+    ) : (
+      canUpdate && (
+        <ScoreDialogTrigger offer={scoreOffer}>
+          {(open) => (
+            <Button size="sm" onClick={open}>
+              {scoreLabel(scoreOffer)}
             </Button>
-          )
-        )}
-      </p>
+          )}
+        </ScoreDialogTrigger>
+      )
+    ));
+  const scanButton = (label: string) => (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={scan.isPending}
+      onClick={() => scan.mutate()}
+    >
+      {label}
+    </Button>
+  );
+
+  if (hasActivePlan && !running) {
+    if (!scoreOffer && !canUpdate) return null;
+    return (
+      <Card className="gap-3 py-4" data-testid="auto-routing-past-traffic">
+        <CardHeader className="px-4">
+          <CardTitle className="text-sm">Past sessions</CardTitle>
+          <CardDescription className="tabular-nums">
+            {!scoreOffer
+              ? "Scan the interaction log for past sessions the plan could learn from. It reads the database only and costs nothing."
+              : scoreOffer.rescore
+                ? `The session scorer changed, so ${count(scoreOffer.remaining)} past sessions need re-scoring before the plan can use them.`
+                : `${count(scoreOffer.remaining)} past sessions are not scored yet. Scoring them lets the plan learn from your real traffic.`}
+          </CardDescription>
+          <CardAction>
+            {scoreOffer ? scoreAction : scanButton("Scan past sessions")}
+          </CardAction>
+        </CardHeader>
+      </Card>
     );
   }
 
   return (
-    <section
-      className="space-y-3 rounded-md border p-4"
-      data-testid="auto-routing-past-sessions"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-medium">Past sessions</h3>
-        {canUpdate && !running && (
-          <Button
-            size="xs"
-            variant="link"
-            className="ml-auto h-auto p-0 text-sm"
-            disabled={scan.isPending}
-            onClick={() => scan.mutate()}
-          >
-            {backfill ? "Scan again" : "Scan past sessions"}
-          </Button>
+    <Card className="gap-3 py-4" data-testid="auto-routing-past-sessions">
+      <CardHeader className="px-4">
+        <CardTitle className="text-sm">Past sessions</CardTitle>
+        {!backfill && (
+          <CardDescription>
+            Scanning finds the past sessions in the interaction log the plan
+            could learn from. It reads the database only and costs nothing.
+          </CardDescription>
         )}
-        {canUpdate && running && (
-          <Button
-            size="xs"
-            variant="link"
-            className="ml-auto h-auto p-0 text-sm"
-            disabled={cancel.isPending}
-            onClick={() => cancel.mutate()}
-          >
-            Cancel
-          </Button>
+        {canUpdate && (
+          <CardAction className="flex flex-wrap items-center gap-2">
+            {running ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={cancel.isPending}
+                onClick={() => cancel.mutate()}
+              >
+                Cancel
+              </Button>
+            ) : (
+              <>
+                {backfill && scoreAction}
+                {scanButton(backfill ? "Scan again" : "Scan past sessions")}
+              </>
+            )}
+          </CardAction>
         )}
-      </div>
-      {backfill ? (
-        <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Scanning finds the past sessions in the interaction log the plan could
-          learn from. It reads the database only and costs nothing.
-        </p>
+      </CardHeader>
+      {backfill && (
+        <CardContent className="space-y-3 px-4">
+          <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
+          {scoreOffer && !canUpdate && scorer === "no_jev_key" && (
+            <AddJevKeyLink />
+          )}
+        </CardContent>
       )}
-      {backfill &&
-        scoreOffer &&
-        (scorer === "no_jev_key" ? (
-          <AddJevKeyLink />
-        ) : (
-          canUpdate && <ScoreAction offer={scoreOffer} />
-        ))}
-    </section>
+    </Card>
   );
 }
 
@@ -286,12 +292,46 @@ function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
   );
 }
 
-function ScoreAction({ offer }: { offer: ScoreOffer }) {
-  // What the admin confirms, frozen while the dialog is open.
-  const [confirming, setConfirming] = useState<{
-    offer: ScoreOffer;
-    maxCostUsd: number;
-  } | null>(null);
+/** The score action's label: what it scores and roughly what it costs. */
+function scoreLabel(offer: ScoreOffer): string {
+  return `${offer.rescore ? "Re-score" : "Score"} ${count(offer.remaining)} sessions · ~${formatCurrency(offer.estimatedCostUsd)}`;
+}
+
+/**
+ * Opens the confirmation that says what scoring does and what it may cost;
+ * nothing is scored until the admin confirms there.
+ */
+function ScoreDialogTrigger({
+  offer,
+  children,
+}: {
+  offer: ScoreOffer;
+  children: (open: () => void) => ReactNode;
+}) {
+  // The offer the admin confirms, frozen while the dialog is open.
+  const [confirming, setConfirming] = useState<ScoreOffer | null>(null);
+  return (
+    <>
+      {children(() => setConfirming(offer))}
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+      >
+        {confirming && (
+          <ScoreDialog offer={confirming} onDone={() => setConfirming(null)} />
+        )}
+      </Dialog>
+    </>
+  );
+}
+
+function ScoreDialog({
+  offer,
+  onDone,
+}: {
+  offer: ScoreOffer;
+  onDone: () => void;
+}) {
   const [ceiling, setCeiling] = useState(offer.suggestedMaxCostUsd.toFixed(2));
   const score = useScoreAutoRoutingBackfill();
   const maxCostUsd = Number(ceiling);
@@ -304,98 +344,93 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
   const verb = offer.rescore ? "Re-score" : "Score";
 
   return (
-    <div className="space-y-2">
-      {offer.rescore && (
-        <p className="text-sm text-muted-foreground">
-          The session scorer changed since these sessions were scored.
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          size="sm"
-          disabled={ceilingError !== null}
-          onClick={() => setConfirming({ offer, maxCostUsd })}
-        >
-          {verb} {count(offer.remaining)} sessions · ~
-          {formatCurrency(offer.estimatedCostUsd)}
-        </Button>
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span>limit $</span>
-          <Input
-            aria-label="Spending limit (USD)"
-            type="number"
-            min={0}
-            max={AUTO_ROUTING_BACKFILL_MAX_COST_USD}
-            step="0.01"
-            value={ceiling}
-            aria-invalid={ceilingError !== null}
-            aria-describedby={
-              ceilingError ? "auto-routing-backfill-ceiling-error" : undefined
-            }
-            onChange={(event) => setCeiling(event.target.value)}
-            className="h-8 w-20"
-          />
-        </span>
-      </div>
-      {ceilingError && (
-        <p
-          id="auto-routing-backfill-ceiling-error"
-          className="text-sm text-destructive"
-        >
-          {ceilingError}
-        </p>
-      )}
-      <Dialog
-        open={confirming !== null}
-        onOpenChange={(open) => !open && setConfirming(null)}
-      >
-        {confirming && (
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{verb} past sessions?</DialogTitle>
-              <DialogDescription>
-                The opening prompts of these sessions are sent to the Jev
-                session scorer.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                <dt className="text-muted-foreground">Window</dt>
-                <dd>
-                  {formatDate({ date: confirming.offer.windowStart })} to{" "}
-                  {formatDate({ date: confirming.offer.cutoff })}
-                </dd>
-                <dt className="text-muted-foreground">Sessions</dt>
-                <dd>{confirming.offer.remaining.toLocaleString("en-US")}</dd>
-                <dt className="text-muted-foreground">Spending limit</dt>
-                <dd>{formatCurrency(confirming.maxCostUsd)}</dd>
-              </dl>
-            </DialogBody>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirming(null)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={score.isPending}
-                onClick={() =>
-                  score.mutate(
-                    {
-                      backfillId: confirming.offer.backfillId,
-                      scorerVersionId: confirming.offer.scorerVersionId,
-                      maxSessions: confirming.offer.sessions,
-                      maxCostUsd: confirming.maxCostUsd,
-                    },
-                    { onSettled: () => setConfirming(null) },
-                  )
-                }
-              >
-                {verb} sessions
-              </Button>
-            </DialogFooter>
-          </DialogContent>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{verb} past sessions?</DialogTitle>
+        <DialogDescription>
+          Auto splits sessions across the fast, normal and smart models by how
+          hard they are. Scoring sends the opening prompt of each past session
+          to Jev, which rates it, so the routing plan can learn from your
+          organization&apos;s real traffic.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody className="space-y-4">
+        {offer.rescore && (
+          <p className="text-sm text-muted-foreground">
+            The session scorer changed since these sessions were scored, so
+            their old scores no longer count.
+          </p>
         )}
-      </Dialog>
-    </div>
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+          <dt className="text-muted-foreground">Sessions</dt>
+          <dd>
+            {count(offer.remaining)}, from{" "}
+            {formatDate({ date: offer.windowStart, dateFormat: "MMM d, yyyy" })}{" "}
+            to {formatDate({ date: offer.cutoff, dateFormat: "MMM d, yyyy" })}
+          </dd>
+          <dt className="text-muted-foreground">Estimated cost</dt>
+          <dd>~{formatCurrency(offer.estimatedCostUsd)}</dd>
+          <dt className="text-muted-foreground">Spending limit</dt>
+          <dd className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">$</span>
+            <Input
+              aria-label="Spending limit (USD)"
+              type="number"
+              min={0}
+              max={AUTO_ROUTING_BACKFILL_MAX_COST_USD}
+              step="0.01"
+              value={ceiling}
+              aria-invalid={ceilingError !== null}
+              aria-describedby={
+                ceilingError
+                  ? "auto-routing-backfill-ceiling-error"
+                  : "auto-routing-backfill-ceiling-hint"
+              }
+              onChange={(event) => setCeiling(event.target.value)}
+              className="w-24"
+            />
+          </dd>
+        </dl>
+        {ceilingError ? (
+          <p
+            id="auto-routing-backfill-ceiling-error"
+            className="text-sm text-destructive"
+          >
+            {ceilingError}
+          </p>
+        ) : (
+          <p
+            id="auto-routing-backfill-ceiling-hint"
+            className="text-sm text-muted-foreground"
+          >
+            Scoring runs in the background and stops at the limit. When it
+            finishes, the next routing plan is fitted on the scores. Chats keep
+            running meanwhile.
+          </p>
+        )}
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button
+          disabled={ceilingError !== null || score.isPending}
+          onClick={() =>
+            score.mutate(
+              {
+                backfillId: offer.backfillId,
+                scorerVersionId: offer.scorerVersionId,
+                maxSessions: offer.sessions,
+                maxCostUsd,
+              },
+              { onSettled: onDone },
+            )
+          }
+        >
+          {verb} {count(offer.remaining)} sessions
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 

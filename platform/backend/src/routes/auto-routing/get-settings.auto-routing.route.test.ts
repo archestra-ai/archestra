@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -33,7 +34,8 @@ describe("GET /api/auto-routing/settings", () => {
       enabled: false,
       budgetUsdPerDay: null,
       tiers: { fast: null, normal: null, smart: null },
-      routedAgentCount: 0,
+      eligibleApiKeyIds: [],
+      usage: { agentCount: 0, organizationDefault: false },
       generation: 0,
       plannedGeneration: 0,
       status: {
@@ -45,6 +47,7 @@ describe("GET /api/auto-routing/settings", () => {
         },
         lastFitError: null,
         scorer: "no_jev_key",
+        scorerApiKey: null,
       },
     });
   });
@@ -54,22 +57,44 @@ describe("GET /api/auto-routing/settings", () => {
     makeLlmProviderApiKey,
   }) => {
     const secret = await makeSecret({ secret: { apiKey: "sk-jev" } });
-    await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+    const jevKey = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
       provider: "jev",
     });
 
     const response = await getSettings();
 
     expect(response.json().status.scorer).toBe("ready");
+    expect(response.json().status.scorerApiKey).toEqual({
+      id: jevKey.id,
+      name: jevKey.name,
+    });
   });
 
-  test("reports the trio, the routed agents, the active plan, the last fit error and cold-start progress", async ({
+  test("reports the tiers, where auto is used, the active plan, the last fit error and cold-start progress", async ({
     makeAgent,
   }) => {
     const trio = await configureAutoRouting(ctx.organizationId);
-    // Counted: agents on the organization default. Not counted: the LLM Proxy configureAutoRouting created.
-    await makeAgent({ organizationId: ctx.organizationId, agentType: "agent" });
-    await makeAgent({ organizationId: ctx.organizationId, agentType: "agent" });
+    const [key] = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        name: schema.llmProviderApiKeysTable.name,
+      })
+      .from(schema.autoRoutingTiersTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.llmProviderApiKeysTable.id,
+          schema.autoRoutingTiersTable.providerApiKeyId,
+        ),
+      )
+      .where(
+        eq(schema.autoRoutingTiersTable.organizationId, ctx.organizationId),
+      )
+      .limit(1);
+    // Counted: agents set to auto. Not counted: agents on a model of their own.
+    await makeAgent({ organizationId: ctx.organizationId, autoModel: true });
+    await makeAgent({ organizationId: ctx.organizationId, autoModel: true });
+    await makeAgent({ organizationId: ctx.organizationId });
     const plan = await publishFittedPlan({
       organizationId: ctx.organizationId,
       trio,
@@ -103,15 +128,27 @@ describe("GET /api/auto-routing/settings", () => {
       enabled: true,
       budgetUsdPerDay: 50,
       tiers: {
-        fast: { id: trio[0].id, provider: "openai", modelId: trio[0].modelId },
+        fast: {
+          id: trio[0].id,
+          provider: "openai",
+          modelId: trio[0].modelId,
+          apiKey: key,
+        },
         normal: {
           id: trio[1].id,
           provider: "openai",
           modelId: trio[1].modelId,
+          apiKey: key,
         },
-        smart: { id: trio[2].id, provider: "openai", modelId: trio[2].modelId },
+        smart: {
+          id: trio[2].id,
+          provider: "openai",
+          modelId: trio[2].modelId,
+          apiKey: key,
+        },
       },
-      routedAgentCount: 2,
+      eligibleApiKeyIds: [key.id],
+      usage: { agentCount: 2, organizationDefault: false },
       generation: 2,
       plannedGeneration: 2,
       status: {
@@ -119,6 +156,7 @@ describe("GET /api/auto-routing/settings", () => {
         coldStart: { scorerVersionId: running.id, sessions: 2, required: 1000 },
         lastFitError: "solver diverged",
         scorer: "no_jev_key",
+        scorerApiKey: null,
       },
     });
   });

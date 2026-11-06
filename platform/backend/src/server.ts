@@ -50,7 +50,6 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { authPlugin as fastifyAuthPlugin } from "@/auth/fastify-plugin";
-import { applyPendingNormalTiers } from "@/auto-routing/pending-normal-tier";
 import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -988,12 +987,6 @@ const startWebServer = async () => {
     // Complete the one-time permission upgrade before admitting API traffic.
     await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
-
-    // Finish the org-trio migration's normal tiers that waited for the Agent
-    // Runtime check; auto routing stays disabled for them meanwhile.
-    void applyPendingNormalTiers().catch((error) => {
-      logger.error({ err: error }, "Failed to apply pending normal tiers");
-    });
 
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms

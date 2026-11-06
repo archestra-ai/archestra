@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import {
   configureAutoRouting,
   makeRoutingModel,
-  setOrganizationTrio,
+  setAutoRoutingTiers,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -37,7 +37,7 @@ describe("PUT /api/auto-routing/settings", () => {
       makeRoutingModel(),
     ]);
 
-    await setOrganizationTrio(ctx.organizationId, { fast, normal, smart });
+    await setAutoRoutingTiers(ctx.organizationId, { fast, normal, smart });
 
     const response = await putSettings({
       enabled: true,
@@ -198,7 +198,7 @@ describe("PUT /api/auto-routing/settings", () => {
 
   test("enabling needs a complete trio", async () => {
     const fast = await makeRoutingModel();
-    await setOrganizationTrio(ctx.organizationId, { fast });
+    await setAutoRoutingTiers(ctx.organizationId, { fast });
 
     const response = await putSettings({
       enabled: true,
@@ -249,7 +249,7 @@ describe("PUT /api/auto-routing/settings", () => {
       await withThreshold(200_000),
       await withThreshold(128_000),
     ];
-    await setOrganizationTrio(ctx.organizationId, { fast, normal, smart });
+    await setAutoRoutingTiers(ctx.organizationId, { fast, normal, smart });
 
     const response = await putSettings({
       enabled: true,
@@ -261,7 +261,7 @@ describe("PUT /api/auto-routing/settings", () => {
       (await AutoRoutingSettingsModel.find(ctx.organizationId))?.enabled,
     ).toBe(false);
 
-    await setOrganizationTrio(ctx.organizationId, { normal: fast });
+    await setAutoRoutingTiers(ctx.organizationId, { normal: fast });
     const accepted = await putSettings({
       enabled: true,
       budgetUsdPerDay: 10,

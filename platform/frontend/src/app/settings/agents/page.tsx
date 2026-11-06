@@ -44,6 +44,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -79,6 +80,7 @@ export default function AgentSettingsPage() {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [tiers, setTiers] = useState<ModelTierSelection>(EMPTY_MODEL_TIERS);
+  const [defaultAutoModel, setDefaultAutoModel] = useState(false);
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState(true);
   const [playwrightEnabled, setPlaywrightEnabled] = useState(true);
@@ -89,6 +91,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId: "",
     defaultModel: "",
     tiers: EMPTY_MODEL_TIERS,
+    defaultAutoModel: false,
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
@@ -130,6 +133,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setTiers(state.tiers);
+    setDefaultAutoModel(state.defaultAutoModel);
     setDefaultAgentId(state.defaultAgentId);
     const savedFileUploads = organization.allowChatFileUploads ?? true;
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
@@ -151,6 +155,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId,
     defaultModel,
     tiers,
+    defaultAutoModel,
     defaultAgentId,
   };
 
@@ -189,6 +194,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setTiers(saved.tiers);
+    setDefaultAutoModel(saved.defaultAutoModel);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
@@ -206,6 +212,10 @@ export default function AgentSettingsPage() {
     }));
   }, [allModels, isPlaceholderData]);
 
+  const organizationDefaultModel = useOrganizationDefaultModel();
+  const defaultModelName =
+    modelItems.find((item) => item.value === defaultModel)?.model ?? null;
+
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
@@ -222,6 +232,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId("");
     setDefaultModel("");
     setTiers(EMPTY_MODEL_TIERS);
+    setDefaultAutoModel(false);
   }, []);
 
   const isSaving =
@@ -273,36 +284,63 @@ export default function AgentSettingsPage() {
                     open={apiKeySelectorOpen}
                     onOpenChange={setApiKeySelectorOpen}
                     onSelectKey={(value) => {
-                      setSelectedApiKeyId(value);
-                      setDefaultModel("");
+                      setDefaultAutoModel(false);
+                      // Back from Auto to the key it kept: the model stays.
+                      if (value !== selectedApiKeyId) {
+                        setSelectedApiKeyId(value);
+                        setDefaultModel("");
+                      }
                       setApiKeySelectorOpen(false);
                     }}
+                    auto={
+                      organizationDefaultModel.auto || defaultAutoModel
+                        ? {
+                            selected: defaultAutoModel,
+                            description:
+                              organizationDefaultModel.auto?.description,
+                            onSelect: () => {
+                              setDefaultAutoModel(true);
+                              setApiKeySelectorOpen(false);
+                            },
+                          }
+                        : undefined
+                    }
                     triggerVariant="select"
                     triggerClassName="w-full"
                     popoverClassName="w-80"
                     emptyTriggerLabel="Select provider key..."
                   />
-                  <LlmModelSearchableSelect
-                    value={defaultModel}
-                    onValueChange={setDefaultModel}
-                    options={modelItems}
-                    freeFilterable={canFilterFreeModels}
-                    placeholder={
-                      !selectedApiKeyId
-                        ? "Select provider key first..."
-                        : modelsPending
-                          ? "Loading models..."
-                          : "Select model..."
-                    }
-                    className="w-full"
-                    disabled={
-                      isSaving ||
-                      !hasPermission ||
-                      modelsPending ||
-                      !selectedApiKeyId
-                    }
-                  />
-                  {selectedApiKey && defaultModel && (
+                  {defaultAutoModel ? (
+                    <p className="text-xs text-muted-foreground">
+                      <span>
+                        {defaultModelName
+                          ? `New chats and agents on the default use Auto. Built-in agents keep running on ${defaultModelName}.`
+                          : "New chats and agents on the default use Auto. Built-in agents have no default model yet: pick a key and model, then choose Auto again."}
+                      </span>
+                    </p>
+                  ) : (
+                    <LlmModelSearchableSelect
+                      value={defaultModel}
+                      onValueChange={setDefaultModel}
+                      options={modelItems}
+                      freeFilterable={canFilterFreeModels}
+                      placeholder={
+                        !selectedApiKeyId
+                          ? "Select provider key first..."
+                          : modelsPending
+                            ? "Loading models..."
+                            : "Select model..."
+                      }
+                      className="w-full"
+                      disabled={
+                        isSaving ||
+                        !hasPermission ||
+                        modelsPending ||
+                        !selectedApiKeyId
+                      }
+                    />
+                  )}
+                  {!defaultAutoModel && selectedApiKey && defaultModel && (
                     <ModelTierPickers
                       value={tiers}
                       onChange={setTiers}
@@ -326,7 +364,7 @@ export default function AgentSettingsPage() {
                     disabled={
                       isSaving ||
                       !hasPermission ||
-                      (!selectedApiKeyId && !defaultModel)
+                      (!selectedApiKeyId && !defaultModel && !defaultAutoModel)
                     }
                   >
                     Reset

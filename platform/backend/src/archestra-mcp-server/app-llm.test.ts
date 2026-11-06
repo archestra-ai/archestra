@@ -7,9 +7,14 @@ import {
 } from "@archestra/shared";
 import { APICallError, generateText } from "ai";
 import { eq } from "drizzle-orm";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
-import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import {
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -110,7 +115,15 @@ describe("app llm completion", () => {
     );
   });
 
-  test("asks the proxy to auto route the completion", async () => {
+  test("asks the proxy to auto route the completion while the organization default is auto", async () => {
+    const deployed = config.autoRouting.enabled;
+    config.autoRouting.enabled = true;
+    onTestFinished(() => {
+      config.autoRouting.enabled = deployed;
+    });
+    const { organizationId } = context;
+    if (!organizationId) throw new Error("context has no organization");
+    await OrganizationModel.patch(organizationId, { defaultAutoModel: true });
     const { generateText: realGenerateText } =
       await vi.importActual<typeof import("ai")>("ai");
     vi.mocked(generateText).mockImplementation(realGenerateText);

@@ -100,6 +100,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
+  useHasPermissions: () => ({ data: true }),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -233,6 +234,48 @@ describe("ChatSetupMenu", () => {
 
     expect(props.onModelPoolChange).toHaveBeenCalledWith("pool-1");
     expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("offers Auto beside the keys while auto routing is on, and picks it at once", async () => {
+    const tier = (id: string, displayName: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName,
+    });
+    const tiers = {
+      fast: tier("model-fast", "Fast tier"),
+      normal: tier("model-plain", "Normal tier"),
+      smart: tier("model-smart", "Smart tier"),
+    };
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: {
+        model: tiers.normal,
+        defaultAutoModel: false,
+        autoRouting: { active: true, tiers },
+      },
+    } as never);
+    const user = userEvent.setup();
+    const props = renderMenu({ onModelPoolChange: vi.fn() });
+
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    const auto = screen.getByRole("option", { name: /^Auto/ });
+    expect(auto).toHaveTextContent(/Fast tier.*Normal tier.*Smart tier/);
+    await user.click(auto);
+
+    expect(props.onModelPoolChange).toHaveBeenCalledWith("auto");
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("shows Auto in place of the key, with no model tab", () => {
+    renderMenu({ modelPoolId: "auto", onModelPoolChange: vi.fn() });
+
+    expect(screen.getByRole("tab", { name: "Model: Auto" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("tab", { name: /^Model: (?!Auto)/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a picked pool in place of the key, with no model tab", () => {
@@ -414,7 +457,7 @@ describe("ChatSetupMenu", () => {
     ).toHaveLength(1);
   });
 
-  it("names the trio auto routing runs the organization default on, for an agent on the default", () => {
+  it("names the trio an auto organization default runs on, for an agent on the default", () => {
     const tier = (id: string, displayName: string) => ({
       id,
       provider: "vllm" as const,
@@ -426,7 +469,11 @@ describe("ChatSetupMenu", () => {
       smart: tier("model-smart", "Smart tier"),
     };
     vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
-      data: { model: tiers.normal, autoRouting: { active: true, tiers } },
+      data: {
+        model: tiers.normal,
+        defaultAutoModel: true,
+        autoRouting: { active: true, tiers },
+      },
     } as never);
     const defaultRow = () =>
       screen.getByRole("option", { name: /Llama 3 8B/ }).nextElementSibling;

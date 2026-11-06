@@ -944,9 +944,56 @@ args:
 
 {{/*
 Shared init containers for both platform and worker Deployments.
-Handles Vault secret injection, pgvector extension setup, and PostgreSQL readiness.
+Handles the Cloud SQL Auth Proxy sidecar, Vault secret injection, pgvector
+extension setup, and PostgreSQL readiness.
 */}}
 {{- define "archestra-platform.initContainers" -}}
+{{- $cloudSqlProxy := (.Values.archestra.database).cloudSqlProxy | default dict }}
+{{- if $cloudSqlProxy.enabled }}
+{{- if not $cloudSqlProxy.instanceConnectionName }}
+{{- fail "archestra.database.cloudSqlProxy.instanceConnectionName is required when the Cloud SQL Auth Proxy is enabled" }}
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+{{- fail "archestra.database.cloudSqlProxy requires postgresql.enabled=false" }}
+{{- end }}
+# Cloud SQL Auth Proxy as a native sidecar: it starts before the remaining
+# init containers, keeps running beside the app, and stops after it.
+- name: cloud-sql-proxy
+  image: {{ printf "%s:%s" $cloudSqlProxy.image.repository $cloudSqlProxy.image.tag }}{{ with $cloudSqlProxy.image.digest }}@{{ . }}{{ end }}
+  restartPolicy: Always
+  args:
+    - --port={{ $cloudSqlProxy.port }}
+    - --health-check
+    - --http-address=0.0.0.0
+    - --http-port={{ $cloudSqlProxy.healthPort }}
+    - --exit-zero-on-sigterm
+    {{- range $cloudSqlProxy.args }}
+    - {{ . | quote }}
+    {{- end }}
+    - {{ $cloudSqlProxy.instanceConnectionName | quote }}
+  startupProbe:
+    httpGet:
+      path: /startup
+      port: {{ $cloudSqlProxy.healthPort }}
+    periodSeconds: 1
+    failureThreshold: 60
+  livenessProbe:
+    httpGet:
+      path: /liveness
+      port: {{ $cloudSqlProxy.healthPort }}
+    periodSeconds: 10
+    failureThreshold: 6
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  {{- with $cloudSqlProxy.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
 # Vault secret injection init container
 - name: vault-secrets

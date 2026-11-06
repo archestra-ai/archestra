@@ -42,8 +42,6 @@ on:
         required: false
       MICROSOFT_365_COPILOT_TENANT_ID:
         required: false
-      DATABASE_URL:
-        required: false
       MFILES_VAF_ADD_ON_GITHUB_TOKEN:
         required: false
       CONTENT_ENCRYPTION_SECRET:
@@ -107,7 +105,6 @@ jobs:
           CHAT_ANTHROPIC_API_KEY: ${{ secrets.CHAT_ANTHROPIC_API_KEY }}
           MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.MICROSOFT_365_COPILOT_CLIENT_ID }}
           MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.MICROSOFT_365_COPILOT_TENANT_ID }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MFILES_VAF_ADD_ON_GITHUB_TOKEN: ${{ secrets.MFILES_VAF_ADD_ON_GITHUB_TOKEN }}
           CONTENT_ENCRYPTION_SECRET: ${{ secrets.CONTENT_ENCRYPTION_SECRET }}
         run: |
@@ -166,8 +163,7 @@ jobs:
                       ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID: secret("MICROSOFT_365_COPILOT_TENANT_ID"),
                       ARCHESTRA_CONTENT_ENCRYPTION_SECRET: secret("CONTENT_ENCRYPTION_SECRET")
                     }
-                  },
-                  postgresql: { external_database_url: secret("DATABASE_URL") }
+                  }
                 }
               else {} end
             ' > "$secret_values"

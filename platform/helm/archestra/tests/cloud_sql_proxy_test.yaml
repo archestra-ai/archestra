@@ -1,0 +1,76 @@
+suite: Cloud SQL Auth Proxy sidecar
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+set:
+  postgresql.enabled: false
+  postgresql.external_database_url: postgresql://app%40project.iam@127.0.0.1:5432/archestra?sslmode=disable
+  archestra.database.cloudSqlProxy.enabled: true
+  archestra.database.cloudSqlProxy.instanceConnectionName: project:us-central1:instance
+tests:
+  - it: starts the proxy as the first, native sidecar of the web pod
+    template: archestra-platform.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: cloud-sql-proxy
+      - equal:
+          path: spec.template.spec.initContainers[0].restartPolicy
+          value: Always
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: --auto-iam-authn
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: project:us-central1:instance
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-postgres
+
+  - it: runs the proxy in worker pods
+    template: archestra-worker.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: cloud-sql-proxy
+
+  - it: runs the proxy in the migration Job so migrations reach the database
+    template: migration-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: cloud-sql-proxy
+      - equal:
+          path: spec.template.spec.initContainers[0].restartPolicy
+          value: Always
+
+  - it: renders no proxy when disabled
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.database.cloudSqlProxy.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content:
+            name: cloud-sql-proxy
+          any: true
+
+  - it: requires an instance connection name
+    template: migration-job.yaml
+    set:
+      archestra.database.cloudSqlProxy.instanceConnectionName: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: archestra.database.cloudSqlProxy.instanceConnectionName is required when the Cloud SQL Auth Proxy is enabled
+
+  - it: refuses to run alongside the bundled PostgreSQL
+    template: migration-job.yaml
+    set:
+      postgresql.enabled: true
+      postgresql.external_database_url: null
+    asserts:
+      - failedTemplate:
+          errorMessage: archestra.database.cloudSqlProxy requires postgresql.enabled=false

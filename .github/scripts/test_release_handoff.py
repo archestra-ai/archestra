@@ -264,8 +264,11 @@ class WorkflowHandoffTests(unittest.TestCase):
                 self.assertIsNotNone(condition, name)
                 self.assertIn("!inputs.handoff-fixture", condition[1], name)
         token = next(block for block in blocks if block.startswith("      - name: Generate a token"))
-        self.assertIn("permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
-        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}", token)
+        self.assertIn("permission-actions: read", token)
+        self.assertIn("permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}", token)
+        self.assertIn("permission-pull-requests: ${{ !inputs.handoff-fixture && 'write' || '' }}", token)
+        self.assertNotIn("permission-workflows", token)
+        self.assertNotIn("permission-issues", token)
         consumer = source.split("  verify-handoff-fixture:\n", 1)[1]
         self.assertNotIn("secrets.", consumer)
         self.assertNotIn("steps.generate-token", consumer)

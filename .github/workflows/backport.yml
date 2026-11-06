@@ -48,12 +48,18 @@ jobs:
 
       # An App token makes push/PR events trigger ordinary CI. GITHUB_TOKEN
       # would suppress those events and leave the backport without its checks.
+      # Cherry-picks can change .github/workflows, which needs the workflows
+      # permission; the shared wrapper cannot request it, so this calls the
+      # upstream action it wraps (same pin, token revoked at job end).
       - name: Generate a backport token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write # push backport branches
+          permission-pull-requests: write # open backport PRs, comment on the source PR
+          permission-workflows: write # push cherry-picks that touch .github/workflows
 
       - name: Configure Git identity
         uses: $/.github/actions/configure-git-identity

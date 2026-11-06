@@ -60,8 +60,12 @@ jobs:
         id: generate-token
         uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}
-          permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}
+          # Read scanned queue artifacts from other runs.
+          permission-actions: read
+          # Write releases, tags, and the release PR branch; the fixture only reads.
+          permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}
+          # Open and label the release PR; the fixture requests none.
+          permission-pull-requests: ${{ !inputs.handoff-fixture && 'write' || '' }}
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 

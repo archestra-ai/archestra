@@ -129,9 +129,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
-    # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
+    # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
+    # dependency updates can otherwise downgrade the explicit requirements.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \

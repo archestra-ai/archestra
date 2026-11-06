@@ -50,6 +50,8 @@ on:
       - "platform/.dockerignore"
       - ".github/workflows/build-agent-catalog-images.yml"
       - ".github/workflows/build-native-multi-arch-image.yml"
+      # The selector counts itself as a shared input.
+      - ".github/scripts/agent-image-inputs.py"
       # Local build action and the builder recipe it invokes.
       - ".github/actions/build-docker-image/**"
       - ".github/actions/setup-docker-builder/**"
@@ -128,7 +130,8 @@ jobs:
           fetch-depth: 1
 
       # The token reaches only these commands, never .git/config. Diffing two
-      # commits needs only their trees, so a depth-1 fetch of the base is enough.
+      # commits needs only their trees, so depth-1 fetches are enough. A pull
+      # request checks out its merge commit, so its head is fetched as well.
       - name: Diff against the base
         id: diff
         env:
@@ -147,7 +150,7 @@ jobs:
           fi
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
-              fetch --depth=1 origin "${base}"
+              fetch --depth=1 origin "${base}" "${HEAD_SHA}"
           images=$(python3 .github/scripts/agent-image-inputs.py "${base}" "${HEAD_SHA}")
           echo "images=${images}" >> "${GITHUB_OUTPUT}"
           { echo '### Agent images to validate'; echo '```'; echo "${images}"; echo '```'; } >> "${GITHUB_STEP_SUMMARY}"

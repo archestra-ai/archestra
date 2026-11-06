@@ -71,13 +71,10 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
           organizationId: params.organizationId,
           userId: params.userId,
         })));
-  const usesClaudeCodeSubscription =
-    isClaudeCodeRuntimeCommand(params.runtime.command?.[0]) &&
-    params.runtime.claudeCode?.authentication !== "provider" &&
-    !getClaudeCodeCloudProvider({
-      runtime: params.runtime,
-      provider: llm.selectedProvider,
-    });
+  const usesClaudeCodeSubscription = usesClaudeCodeSubscriptionForProvider({
+    runtime: params.runtime,
+    provider: llm.selectedProvider,
+  });
   if (usesClaudeCodeSubscription) {
     llm = {
       modelId: null,
@@ -153,6 +150,17 @@ export function getClaudeCodeCloudProvider(params: {
   return null;
 }
 
+function usesClaudeCodeSubscriptionForProvider(params: {
+  runtime: Pick<ResolvedAgentRuntime, "command" | "claudeCode">;
+  provider: SupportedProvider;
+}): boolean {
+  return (
+    isClaudeCodeRuntimeCommand(params.runtime.command?.[0]) &&
+    params.runtime.claudeCode?.authentication !== "provider" &&
+    !getClaudeCodeCloudProvider(params)
+  );
+}
+
 /** Rejects an organization default model an inheriting Agent Runtime agent cannot run. */
 export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   organizationId: string;
@@ -170,6 +178,14 @@ export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   }
   const incompatible = agents.find((agent) => {
     if (!agent.runtime) return false;
+    if (
+      usesClaudeCodeSubscriptionForProvider({
+        runtime: agent.runtime,
+        provider: model.provider,
+      })
+    ) {
+      return false;
+    }
     return !getAgentRuntimeModelCompatibility({
       inferenceProtocol: agent.runtime.inferenceProtocol,
       runtimeCommand: agent.runtime.command,

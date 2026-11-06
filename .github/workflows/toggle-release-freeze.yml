@@ -22,6 +22,8 @@ jobs:
   toggle-release-freeze:
     name: Toggle Release Freeze
     runs-on: ubuntu-latest
+    # The release-freeze app key lives only in this environment (main).
+    environment: release-freeze
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

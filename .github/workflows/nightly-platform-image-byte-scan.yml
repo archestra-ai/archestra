@@ -53,5 +53,5 @@ jobs:
           image-sha: ${{ steps.images.outputs.source_sha }}
           full-image: ${{ steps.images.outputs.full }}
           slim-image: ${{ steps.images.outputs.slim }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          dockerhub-user: ${{ secrets.DOCKER_READONLY_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_READONLY_PASSWORD }}

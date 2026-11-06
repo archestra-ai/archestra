@@ -192,8 +192,6 @@ jobs:
           # trim export time and keep a plain single-manifest image. (Published release
           # images keep provenance via build-native-multi-arch-image.yml's default.)
           provenance: "false"
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Read-only caches: untrusted PRs have no registry credentials to export back.
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
@@ -294,8 +292,6 @@ jobs:
           # Docker Scout reads this attached SBOM directly instead of spending
           # ~3m35s storing and indexing the image again during every scan.
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Import both the E2E cache and the amd64 cache populated by staging
           # and manual dev builds. Each workflow keeps its own writer
           # to avoid last-writer-wins cache-manifest clobbering.
@@ -330,8 +326,6 @@ jobs:
             ${{ steps.platform-reuse.outputs.input_tag }}
           provenance: "false"
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Reuse the slim build's live BuildKit cache instead of creating a
           # second builder and re-importing/rebuilding the same graph.
           setup-builder: "false"

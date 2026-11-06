@@ -30,17 +30,11 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      DOCKER_USERNAME:
+      environment:
+        description: "GitHub Environment whose secrets the publishing jobs read (release-publish for releases); empty for none"
         required: false
-      DOCKER_PASSWORD:
-        required: false
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TEAM:
-        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -57,6 +51,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
+      environment: ${{ inputs.environment }}
       image_directory: ${{ inputs.image_directory }}
       image_name: ${{ inputs.image_name }}
       image_registry: docker.io/archestra
@@ -75,9 +70,3 @@ jobs:
       amd64_runner: ubuntu-24.04-16core
       arm64_runner: ubuntu-24.04-arm-32core
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

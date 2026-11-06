@@ -67,6 +67,10 @@ inputs:
     description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs)."
     required: false
     default: ""
+  clean-build:
+    description: "Use a fresh builder with no layer imports, exports, Turbo credentials or previous assets"
+    required: false
+    default: "false"
   # Secrets must be passed as regular inputs in composite actions
   turbo-team:
     description: "Turborepo remote caching team"
@@ -93,6 +97,23 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Validate clean build isolation
+      if: inputs.clean-build == 'true'
+      shell: bash
+      env:
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
+        INPUT_SETUP_BUILDER: ${{ inputs.setup-builder }}
+      run: |
+        set -euo pipefail
+        [ "$INPUT_SETUP_BUILDER" = true ] || { echo "Clean builds require a fresh builder" >&2; exit 1; }
+        [ -z "$INPUT_PREVIOUS_IMAGE" ] || { echo "Clean builds cannot import previous assets" >&2; exit 1; }
+        if [ -d "$INPUT_CONTEXT/docker/prev-static-assets" ] &&
+           [ -n "$(find "$INPUT_CONTEXT/docker/prev-static-assets" -mindepth 1 ! -name .gitkeep -print -quit)" ]; then
+          echo "Clean build context contains previous assets" >&2
+          exit 1
+        fi
+
     - name: Ensure docker/prev-static-assets directory exists
       shell: bash
       run: mkdir -p "${INPUT_CONTEXT}/docker/prev-static-assets"
@@ -148,6 +169,7 @@ runs:
         INPUT_PROVENANCE: ${{ inputs.provenance }}
         INPUT_SBOM: ${{ inputs.sbom }}
         INPUT_VERSION: ${{ inputs.version }}
+        INPUT_CLEAN_BUILD: ${{ inputs.clean-build }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
         REUSE_BUILDER: ${{ inputs.setup-builder == 'false' }}
@@ -165,6 +187,14 @@ runs:
           --network host
           --metadata-file "${METADATA_FILE}"
         )
+
+        if [ "$INPUT_CLEAN_BUILD" = true ]; then
+          ARGS+=( --pull --no-cache )
+          INPUT_CACHE_FROM=""
+          INPUT_CACHE_TO=""
+          SECRET_TURBO_TEAM=""
+          SECRET_TURBO_TOKEN=""
+        fi
 
         [ -n "${INPUT_PLATFORMS}" ] && ARGS+=( --platform "${INPUT_PLATFORMS}" )
         [ -n "${INPUT_TARGET}" ] && ARGS+=( --target "${INPUT_TARGET}" )

@@ -19,6 +19,8 @@ import sys
 SHA = re.compile(r"[0-9a-f]{40}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 PLATFORM = "docker.io/archestra/platform"
+# Incident recovery releases must not inherit artifacts from earlier builds.
+CLEAN_REBUILD_VERSIONS = {"1.4.23", "1.5.0-rc.25"}
 
 
 def command(*args):
@@ -32,7 +34,8 @@ def build_inputs(image, arch):
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[1-9][0-9]*)?", version):
         raise ValueError("Invalid release version")
     previous = ""
-    if image in ("platform", "platform-slim"):
+    clean_build = version in CLEAN_REBUILD_VERSIONS
+    if not clean_build and image in ("platform", "platform-slim"):
         # Use the same predecessor as publication, including a synthetic queue
         # commit containing a release PR plus ordinary PRs.
         tags = command("git", "tag", "--merged", "HEAD^", "--list", "platform-v*")
@@ -48,7 +51,10 @@ def build_inputs(image, arch):
             if len(matches) != 1 or not DIGEST.fullmatch(matches[0]):
                 raise ValueError("Previous release must resolve to exactly one immutable architecture")
             previous = f"{PLATFORM}@{matches[0]}"
-    return {"version": version, "previous_image": previous}
+    inputs = {"version": version, "previous_image": previous}
+    if clean_build:
+        inputs["clean_build"] = True
+    return inputs
 
 
 def file_digest(path):
@@ -123,6 +129,7 @@ def main():
             raise ValueError("Publication version differs from the source manifest")
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"version={inputs['version']}\nprevious-image={inputs['previous_image']}\n")
+            output.write(f"clean-build={str(inputs.get('clean_build', False)).lower()}\n")
     elif mode == "prepare":
         directory.mkdir(parents=True, exist_ok=True)
         record = {"schema": 1, "image": image, "arch": arch, **identity(), **build_inputs(image, arch),
@@ -130,6 +137,7 @@ def main():
         (directory / "build.json").write_text(json.dumps(record))
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"version={record['version']}\nprevious-image={record['previous_image']}\n")
+            output.write(f"clean-build={str(record.get('clean_build', False)).lower()}\n")
     elif mode == "seal":
         record = json.loads((directory / "build.json").read_text())
         image_id = command("docker", "image", "inspect", os.environ["IMAGE_REFERENCE"], "--format", "{{.Id}}")

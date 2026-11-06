@@ -87,6 +87,7 @@ jobs:
           provenance: "mode=min"
           tags: ${{ env.IMAGE_REFERENCE }}
           version: ${{ steps.inputs.outputs.version }}
+          clean-build: ${{ steps.inputs.outputs.clean-build }}
           previous-image: ${{ steps.inputs.outputs.previous-image }}
           require-previous-assets: "true"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

@@ -172,16 +172,11 @@ async function main() {
     fs.mkdirSync(docsDir, { recursive: true });
   }
 
-  let existingContent: string | null = null;
-  if (fs.existsSync(docsFilePath)) {
-    existingContent = fs.readFileSync(docsFilePath, "utf-8");
-  }
-
-  const markdownContent = generateMarkdownContent(existingContent);
+  const markdownContent = generateMarkdownContent();
   const { index, pages } = splitToolReference(markdownContent);
-  fs.writeFileSync(docsFilePath, `${index.trimEnd()}\n`);
+  writePagePreservingDate(docsFilePath, index);
   for (const [slug, body] of Object.entries(pages)) {
-    fs.writeFileSync(path.join(docsDir, `${slug}.md`), `${body.trimEnd()}\n`);
+    writePagePreservingDate(path.join(docsDir, `${slug}.md`), body);
   }
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
@@ -339,36 +334,42 @@ Assigning a tool does not grant access to the resources it manages. Each tool en
 ${referenceSections.join("\n")}`;
 }
 
-function extractBodyFromMarkdown(content: string): string {
-  const frontmatterEnd = content.indexOf("---", 4);
-  if (frontmatterEnd === -1) return content;
-  return content.slice(frontmatterEnd + 3).trim();
-}
-
 function extractLastUpdatedFromMarkdown(content: string): string | null {
   const match = content.match(/lastUpdated:\s*(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : null;
 }
 
-function generateMarkdownContent(existingContent: string | null): string {
-  const newBody = linkPermissionMentions(generateMarkdownBody());
+function generateMarkdownContent(): string {
+  const lastUpdated = new Date().toISOString().slice(0, 10);
+  return `${generateFrontmatter(lastUpdated)}${linkPermissionMentions(generateMarkdownBody())}`;
+}
 
-  let lastUpdated: string;
+function writePagePreservingDate(filePath: string, generated: string): void {
+  const existing = fs.existsSync(filePath)
+    ? fs.readFileSync(filePath, "utf-8")
+    : null;
+  const content = preserveLastUpdated(generated, existing);
+  fs.writeFileSync(filePath, `${content.trimEnd()}\n`);
+}
 
-  if (existingContent) {
-    const existingBody = extractBodyFromMarkdown(existingContent);
-    const existingLastUpdated = extractLastUpdatedFromMarkdown(existingContent);
+/** Preserve a page's date only when its final rendered body is unchanged. */
+export function preserveLastUpdated(
+  generated: string,
+  existing: string | null,
+): string {
+  const existingDate = existing && extractLastUpdatedFromMarkdown(existing);
+  if (!existingDate) return generated;
 
-    if (existingBody === newBody.trim() && existingLastUpdated) {
-      lastUpdated = existingLastUpdated;
-    } else {
-      lastUpdated = new Date().toISOString().split("T")[0];
-    }
-  } else {
-    lastUpdated = new Date().toISOString().split("T")[0];
-  }
+  const withoutDate = (content: string) =>
+    content
+      .replace(/^(lastUpdated:\s*)\d{4}-\d{2}-\d{2}/m, "$1")
+      .trimEnd();
+  if (withoutDate(existing) !== withoutDate(generated)) return generated;
 
-  return `${generateFrontmatter(lastUpdated)}${newBody}`;
+  return generated.replace(
+    /^(lastUpdated:\s*)\d{4}-\d{2}-\d{2}/m,
+    (_match, prefix: string) => `${prefix}${existingDate}`,
+  );
 }
 
 const toolPageGroups: Record<string, { slug: string; title: string }> = {
@@ -407,7 +408,7 @@ const toolPageGroups: Record<string, { slug: string; title: string }> = {
   Plugins: { slug: "organization", title: "Organization" },
 };
 
-function splitToolReference(markdown: string): {
+export function splitToolReference(markdown: string): {
   index: string;
   pages: Record<string, string>;
 } {

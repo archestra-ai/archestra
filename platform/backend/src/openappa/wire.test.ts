@@ -3546,6 +3546,23 @@ describe("APPA request preflight", () => {
     ).toThrow("direct tool mode only");
   });
 
+  test("refuses grammar exec declared in ordinary tools without origin metadata", () => {
+    expect(() =>
+      prepareAppaRequest({
+        body: {
+          tools: [
+            { type: "function", name: NOTICE },
+            { type: "function", name: CONTROL },
+            { type: "custom", name: "exec", format: { type: "grammar" } },
+          ],
+          input: [],
+        },
+        interactionType: "openai:responses",
+        identity,
+      }),
+    ).toThrow("direct tool mode only");
+  });
+
   test("refuses historic custom exec calls even without a grammar declaration", () => {
     expect(() =>
       prepareAppaRequest({

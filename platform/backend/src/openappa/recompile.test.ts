@@ -195,6 +195,32 @@ describe("recompile coalescing", () => {
     expect(accepted.lastErrorAt).toBeNull();
   });
 
+  test("a refusal under a revision that composed before keeps that composition and says it is still served", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeInternalMcpCatalog({ organizationId, name: "Acme" });
+    await declare({ organizationId, userId });
+    const clean = await openappaBatteriesService.recompile(organizationId);
+
+    // The inputs move under the same revision and the runtime refuses them.
+    native.refusals.next = true;
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const refused = await openappaBatteriesService.recompile(organizationId);
+    expect(refused.content).toBe(clean.content);
+    expect(refused.served).toEqual(clean.served);
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .composition,
+    ).toMatchObject({
+      served: { kind: "previous", rootRevision: clean.rootRevision },
+      refusal: { rootRevision: clean.rootRevision },
+    });
+  });
+
   test("a refusal whose store keeps losing marks no install row", async ({
     makeOrganization,
     makeUser,

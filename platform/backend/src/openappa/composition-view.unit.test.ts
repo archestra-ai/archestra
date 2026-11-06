@@ -14,6 +14,13 @@ import {
 const COMPOSED_AT = new Date("2026-10-15T08:00:00.000Z");
 
 describe("compositionView", () => {
+  test("a clean row is current whatever its record says", () => {
+    expect(compositionView(row({ served: null }))).toEqual({
+      served: { kind: "current", rootRevision: 4, composedAt: COMPOSED_AT },
+      refusal: null,
+    });
+  });
+
   test("a record that describes other bytes is not read, so what is served is unknown", () => {
     expect(
       compositionView(

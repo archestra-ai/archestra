@@ -176,7 +176,7 @@ gh() {
     def test_main_policy_rc_transition_and_rolling_releases(self):
         section = WORKFLOW.read_text().split(
             "      - name: Validate branch release policy\n", 1
-        )[1].split("      # release-please runs", 1)[0]
+        )[1].split("\n  # release-please runs", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         for version, override, allowed, create_pr in (
             ("1.4.0-beta.13", "1.4.0-rc.14", True, True),

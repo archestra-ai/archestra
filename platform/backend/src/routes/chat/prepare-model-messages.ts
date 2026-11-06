@@ -11,7 +11,6 @@ import {
   type UIMessage,
 } from "ai";
 import { ensureToolCallsHaveResults } from "@/agents/tool-call-results";
-import config from "@/config";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage, ConversationContentKey } from "@/types";
 import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
@@ -24,7 +23,7 @@ import {
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import {
   assertRequestWithinProviderPayloadLimit,
-  providerAttachmentLimitBytes,
+  chatAttachmentInlineByteLimit,
   providerImageAttachmentLimitBytes,
 } from "./normalization/enforce-request-size-limit";
 import { materializeAttachments } from "./normalization/materialize-attachments";
@@ -208,7 +207,7 @@ export async function buildModelMessages(params: {
       messages: compactionResult.messages,
       provider,
       conversationId,
-      ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
+      ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities, provider),
       anthropicNativeEndpoint,
       sandboxAvailable,
       conversationKey,
@@ -256,11 +255,7 @@ async function buildModelMessagesForProvider(params: {
   // provider publishes one, its documented request ceiling — whichever is
   // smaller. Anything above stays in the Files panel rather than being sent
   // and refused.
-  const providerLimit = providerAttachmentLimitBytes(params.provider);
-  const inlineByteLimit = Math.min(
-    config.chat.attachmentInlineBytesLimit,
-    providerLimit ?? Number.POSITIVE_INFINITY,
-  );
+  const inlineByteLimit = chatAttachmentInlineByteLimit(params.provider);
   const providerImageLimit = providerImageAttachmentLimitBytes(params.provider);
   const inlineImageByteLimit = Math.min(
     inlineByteLimit,

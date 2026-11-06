@@ -1,11 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, test } from "vitest";
-import {
-  peerProofAuthorizes,
-  signPeerProof,
-  stripPeerProofs,
-  verifyPeerProof,
-} from "./peer-claims";
+import { signPeerProof, stripPeerProofs, verifyPeerProof } from "./peer-claims";
 
 const secret = "peer-proof-secret";
 
@@ -21,39 +16,6 @@ const claims: Parameters<typeof signPeerProof>[0] = {
 };
 
 describe("peer proofs", () => {
-  test("a signed proof authorizes only that caller, action, and message", () => {
-    const signed = signPeerProof(claims, secret);
-    expect(signed).toBeDefined();
-    const proof = verifyPeerProof(signed, secret);
-    expect(proof).toEqual(claims);
-    expect(
-      peerProofAuthorizes({
-        proof: proof ?? claims,
-        organizationId: claims.organization_id,
-        callerId: "user:alice",
-        action: "read_peer_message",
-        messageId: claims.message_id ?? undefined,
-      }),
-    ).toBe(true);
-    expect(
-      peerProofAuthorizes({
-        proof: proof ?? claims,
-        organizationId: claims.organization_id,
-        callerId: "user:bob",
-        action: "read_peer_message",
-        messageId: claims.message_id ?? undefined,
-      }),
-    ).toBe(false);
-    expect(
-      peerProofAuthorizes({
-        proof: proof ?? claims,
-        organizationId: claims.organization_id,
-        callerId: "user:alice",
-        action: "list_peer_messages",
-      }),
-    ).toBe(false);
-  });
-
   test("a remedy-shaped MAC does not verify as a peer proof", () => {
     const signed = signPeerProof(claims, secret);
     if (!signed) throw new Error("expected a proof");

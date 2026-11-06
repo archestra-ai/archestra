@@ -422,7 +422,7 @@ jobs:
           pr_title="chore: update agent runtime CLIs"
           pr_body="Raise the agent CLIs in the agent catalog images (Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok CLI, Kimi Code, and GitHub Copilot CLI) to their newest stable release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`. Upstream channel pointers cap each pick: npm \`stable\` for Claude Code, npm \`latest\` for Codex, OpenCode, OpenClaw, Kimi Code, and GitHub Copilot CLI, GitHub releases for Hermes, and xAI's stable channel for Grok CLI.
 
-          Merge once every **Validate agent-\*** check passes. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
+          Merge once every **Validate agent-\*** check passes. The \`build-agent-images\` label runs them on this pull request. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -430,10 +430,11 @@ jobs:
               --base main \
               --head "$BRANCH" \
               --title "$pr_title" \
-              --body "$pr_body")"
+              --body "$pr_body" \
+              --label build-agent-images)"
           else
             pr="$existing_pr"
-            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body" --add-label build-agent-images
           fi
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 

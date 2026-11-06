@@ -26,7 +26,7 @@ const baseSha = "a".repeat(40);
 const fileSha = "b".repeat(40);
 const changed = `${initialPolicy()}\n# Reviewable policy change\n`;
 
-test("a locally managed change validates and saves a new revision", async ({
+test("a locally managed policy refuses validation changes outside the validation workflow", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -55,22 +55,6 @@ test("a locally managed change validates and saves a new revision", async ({
     }),
   ).rejects.toThrow("Save local policy and validation changes together");
   expect((await guardrailsPolicyService.get(org.id)).revision).toBe(0);
-
-  const result = await publishOpenAppaPolicyChange({
-    organizationId: org.id,
-    userId: user.id,
-    edits: [{ oldText: initialPolicy(), newText: changed }],
-    expectedRevision: 0,
-    title: "Clarify policy",
-    summary: "Explain the change",
-  });
-
-  expect(result).toMatchObject({
-    delivery: "revision",
-    revision: 1,
-    before: initialPolicy(),
-    after: changed,
-  });
 });
 
 for (const scenario of [

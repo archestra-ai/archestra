@@ -96,6 +96,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AutoRoutedModelTrigger } from "@/components/auto-routed-model-trigger";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
@@ -3049,32 +3050,54 @@ export function AgentForm({
       {createApiKeyDialog}
     </>
   );
+  const defaultModelPlaceholder =
+    isClaudeCodeRuntime && !agent
+      ? "Select a Claude model"
+      : (organizationDefaultModel.label ?? undefined);
   const modelControl = (
     <>
       {!llmApiKeyId ? (
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <ModelSelector
-                  selectedModel=""
-                  onModelChange={() => {}}
-                  disabled
-                  variant="outline"
-                  enabled={false}
-                  placeholder={
-                    isClaudeCodeRuntime && !agent
-                      ? "Select a Claude model"
-                      : (organizationDefaultModel.label ?? undefined)
-                  }
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Select a provider API key first
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        organizationDefaultModel.autoRoutedTiers ? (
+          <AutoRoutedModelTrigger
+            tiers={organizationDefaultModel.autoRoutedTiers}
+          />
+        ) : (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: the selector inside is disabled, so this wrapper takes focus to open the tooltip with the full default name
+                  tabIndex={0}
+                  className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ModelSelector
+                    selectedModel=""
+                    onModelChange={() => {}}
+                    disabled
+                    variant="outline"
+                    enabled={false}
+                    placeholder={defaultModelPlaceholder}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="start"
+                className="w-max max-w-xs text-left text-xs text-wrap"
+              >
+                {/* The placeholder truncates, so the full name lives here. */}
+                {defaultModelPlaceholder &&
+                  defaultModelPlaceholder ===
+                    organizationDefaultModel.label && (
+                    <p className="font-medium">{defaultModelPlaceholder}</p>
+                  )}
+                <p className="text-muted-foreground">
+                  Add a provider API key to pick a model.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       ) : (
         <ModelSelector
           selectedModel={llmModel || ""}
@@ -3226,7 +3249,7 @@ export function AgentForm({
               />
             </fieldset>
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0">{providerKeyControl}</div>
               {!agentModelPoolId && (
                 <div className="min-w-0">{modelControl}</div>

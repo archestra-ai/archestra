@@ -78,6 +78,19 @@ for (const input of ["wheel", "touch"] as const) {
     await picker.click();
     const list = page.getByRole("listbox");
     await expect(list.getByRole("option")).toHaveCount(20);
+    // The dropdown lines up with its trigger, like the app's other pickers.
+    // Polled: the open animation scales the popover in from 95%.
+    const triggerBox = await picker.boundingBox();
+    const popover = page.locator('[data-slot="popover-content"]');
+    await expect
+      .poll(async () => {
+        const box = await popover.boundingBox();
+        return [Math.round(box?.x ?? 0), Math.round(box?.width ?? 0)];
+      })
+      .toEqual([
+        Math.round(triggerBox?.x ?? 0),
+        Math.round(triggerBox?.width ?? 0),
+      ]);
     await expect
       .poll(() => list.evaluate((element) => element.scrollHeight))
       .toBeGreaterThan(await list.evaluate((element) => element.clientHeight));

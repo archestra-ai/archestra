@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -398,6 +398,72 @@ test("the proxy's unattended note is read for that session only, and withdrawn o
   // the note: the next attended request withdraws it again, memo or not.
   await rememberUnattendedSession(session, true);
   await rememberUnattendedSession(session, false);
+  await rememberUnattendedSession(session, true);
+  expect(await isUnattendedSession(session)).toBe(true);
+  await rememberUnattendedSession(session, false);
+  expect(await isUnattendedSession(session)).toBe(false);
+});
+
+/** Makes the cache's storage refuse the given writes to unattended notes. */
+async function refuseUnattendedNoteWrites(
+  writes: readonly ("DELETE" | "INSERT OR UPDATE")[],
+): Promise<() => Promise<void>> {
+  await db.execute(sql`
+    CREATE FUNCTION refuse_unattended_note() RETURNS trigger
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cache storage down'; END $$
+  `);
+  for (const [index, write] of writes.entries()) {
+    const row = write === "DELETE" ? "OLD" : "NEW";
+    await db.execute(
+      sql.raw(`
+        CREATE TRIGGER refuse_unattended_note_${index} BEFORE ${write} ON keyv_cache
+        FOR EACH ROW WHEN (${row}.key LIKE '%openappa-unattended-session-%')
+        EXECUTE FUNCTION refuse_unattended_note()
+      `),
+    );
+  }
+  return async () => {
+    await db.execute(sql`DROP FUNCTION refuse_unattended_note() CASCADE`);
+  };
+}
+
+test("an attended request whose note cannot be deleted overwrites it, so no review is answered for a person", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = { organization_id: organizationId, session_id: "s11" };
+  await rememberUnattendedSession(session, true);
+  const restore = await refuseUnattendedNoteWrites(["DELETE"]);
+  try {
+    await rememberUnattendedSession(session, false);
+    expect(await isUnattendedSession(session)).toBe(false);
+  } finally {
+    await restore();
+  }
+  await rememberUnattendedSession(session, true);
+  expect(await isUnattendedSession(session)).toBe(true);
+  await rememberUnattendedSession(session, false);
+  expect(await isUnattendedSession(session)).toBe(false);
+});
+
+test("an attended request whose note can be neither deleted nor overwritten fails, and the note recovers once the cache does", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const session = { organization_id: organizationId, session_id: "s12" };
+  await rememberUnattendedSession(session, true);
+  const restore = await refuseUnattendedNoteWrites([
+    "DELETE",
+    "INSERT OR UPDATE",
+  ]);
+  try {
+    await expect(rememberUnattendedSession(session, false)).rejects.toThrow();
+    expect(await isUnattendedSession(session)).toBe(true);
+  } finally {
+    await restore();
+  }
+  await rememberUnattendedSession(session, false);
+  expect(await isUnattendedSession(session)).toBe(false);
   await rememberUnattendedSession(session, true);
   expect(await isUnattendedSession(session)).toBe(true);
   await rememberUnattendedSession(session, false);

@@ -537,8 +537,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           instruction,
           TimeInMs.Day,
         );
-      } catch {
-        logger.warn("OpenAPPA could not retain a review continuation");
+      } catch (err) {
+        logger.warn({ err }, "OpenAPPA could not retain a review continuation");
       }
     }
     // Answers this request re-sends from its history read what they read when
@@ -1817,7 +1817,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // there too), and only in the mode that reads the note.
         if (!unattendedNoted && unattendedNoteMatters(settings)) {
           unattendedNoted = true;
-          await rememberUnattendedSession(binding.session, binding.unattended);
+          try {
+            await rememberUnattendedSession(
+              binding.session,
+              binding.unattended,
+            );
+          } catch (error) {
+            await cancelCalls(session, admittedCalls(), policy);
+            throw error;
+          }
         }
         if (
           runtimeCalls.has(call.id) ||
@@ -1876,9 +1884,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             clarification,
             TimeInMs.Day,
           );
-        } catch {
+        } catch (err) {
           // Ancillary prose must not interrupt a ruled batch or its cancellation.
-          logger.warn("OpenAPPA could not retain denial clarification");
+          logger.warn(
+            { err },
+            "OpenAPPA could not retain denial clarification",
+          );
         }
       }
       if (!notice) {
@@ -6594,8 +6605,8 @@ async function renewContinuationLease(
 ): Promise<void> {
   try {
     await cacheManager.set(key, instruction, TimeInMs.Day);
-  } catch {
-    logger.warn("OpenAPPA could not refresh a review continuation");
+  } catch (err) {
+    logger.warn({ err }, "OpenAPPA could not refresh a review continuation");
   }
 }
 

@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -45,7 +45,10 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
-import { isUnenforcedSession } from "@/openappa/unenforced";
+import {
+  findUnenforcedCalls,
+  isUnenforcedSession,
+} from "@/openappa/unenforced";
 import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
@@ -6265,6 +6268,63 @@ describe("rendering runtime text for this client", () => {
         expect(
           await isUnattendedSession(session(organizationId, "runtime-only")),
         ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("an attended batch whose unattended note cannot be withdrawn is refused", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, cancelCalls, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      try {
+        await run("stuck-note", "header");
+        expect(
+          await isUnattendedSession(session(organizationId, "stuck-note")),
+        ).toBe(true);
+        await db.execute(sql`
+          CREATE FUNCTION refuse_unattended_note() RETURNS trigger
+          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cache storage down'; END $$
+        `);
+        for (const [name, write, row] of [
+          ["refuse_unattended_note_delete", "DELETE", "OLD"],
+          ["refuse_unattended_note_write", "INSERT OR UPDATE", "NEW"],
+        ])
+          await db.execute(
+            sql.raw(`
+              CREATE TRIGGER ${name} BEFORE ${write} ON keyv_cache
+              FOR EACH ROW WHEN (${row}.key LIKE '%openappa-unattended-session-%')
+              EXECUTE FUNCTION refuse_unattended_note()
+            `),
+          );
+        try {
+          await expect(
+            run("stuck-note", "attended", [
+              { id: "post-2", name: "post_message", arguments: {} },
+              { id: "send-2", name: "send_email", arguments: {} },
+              { id: "read-2", name: "read_file", arguments: {} },
+            ]),
+          ).rejects.toThrow();
+        } finally {
+          await db.execute(sql`DROP FUNCTION refuse_unattended_note() CASCADE`);
+        }
+        expect(cancelCalls).toHaveBeenLastCalledWith(
+          expect.anything(),
+          ["read-2"],
+          expect.anything(),
+        );
+        // The call it would have let through was never recorded as released.
+        expect(
+          (
+            await findUnenforcedCalls({
+              session: session(organizationId, "stuck-note"),
+              toolCallIds: ["send-2"],
+            })
+          ).reasons.size,
+        ).toBe(0);
       } finally {
         restore();
       }

@@ -137,8 +137,12 @@ export async function admitOpenappaRequest(
     const principal = params.principal;
     // The proxy's platform credential and Chat ownership checks remain mandatory.
     // Expired/missing APPA lineage is an integration refusal, not platform auth.
+    // A server or storage failure says nothing about the session, so only a
+    // client-side (4xx) refusal can be waived.
     if (
       !(error instanceof ApiError) ||
+      error.statusCode < 400 ||
+      error.statusCode >= 500 ||
       error.statusCode === 401 ||
       error.message.startsWith("OpenAPPA Chat session") ||
       !params.deployment.active
@@ -817,9 +821,7 @@ function observedAppaSession(params: {
   } catch (error) {
     // Enforcement is off, so the request goes on either way. A request
     // without a usable session id is expected; anything else is not.
-    const details = {
-      error: error instanceof Error ? error.message : String(error),
-    };
+    const details = { err: error };
     if (error instanceof ApiError)
       logger.debug(
         details,

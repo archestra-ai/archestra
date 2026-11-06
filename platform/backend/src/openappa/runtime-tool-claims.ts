@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import logger from "@/logging";
 import type { OpenAppaSession } from "./service";
 
 export const RUNTIME_TOOL_PROOF_ARGUMENT = "runtime_proof";
@@ -39,7 +40,11 @@ export function signRuntimeToolProof(params: {
     });
     const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
     return `${payload}.${signature(payload, params.secret)}`;
-  } catch {
+  } catch (err) {
+    logger.warn(
+      { err, toolCallId: params.toolCallId },
+      "OpenAPPA could not sign a runtime tool proof",
+    );
     return undefined;
   }
 }

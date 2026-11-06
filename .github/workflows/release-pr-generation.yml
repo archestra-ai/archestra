@@ -87,7 +87,7 @@ jobs:
     name: Generate release screenshots
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     concurrency:
       group: release-generation-screenshots-${{ github.event.pull_request.number }}

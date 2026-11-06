@@ -71,12 +71,12 @@ on:
         description: "Runner label for the linux/amd64 build leg"
         required: false
         type: string
-        default: "blacksmith-16vcpu-ubuntu-2404"
+        default: "ubuntu-24.04-16core"
       arm64_runner:
         description: "Runner label for the linux/arm64 build leg"
         required: false
         type: string
-        default: "blacksmith-32vcpu-ubuntu-2404-arm"
+        default: "ubuntu-24.04-arm-32core"
       export_cache:
         description: "Whether this build may update the shared registry cache"
         required: false

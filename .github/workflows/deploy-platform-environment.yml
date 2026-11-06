@@ -128,6 +128,51 @@ jobs:
               ;;
           esac
 
+          # Secrets reach Helm through a values file, never --set: --set splits
+          # on commas and echoes the remainder in its parse error, which
+          # GitHub's masking does not catch. jq reads each value from the
+          # environment, so secrets stay off the command line and are always
+          # written as strings. The file is the last --values, so it keeps
+          # the precedence --set had over the checked-in values files.
+          secret_values="$RUNNER_TEMP/deploy-secret-values.json"
+          trap 'rm -f "$secret_values"' EXIT
+          (
+            umask 077
+            jq -n --arg target "$TARGET_ENVIRONMENT" '
+              def secret($name): $ENV[$name] // "";
+              {
+                archestra: {
+                  env: {
+                    ARCHESTRA_AUTH_ADMIN_EMAIL: secret("AUTH_ADMIN_EMAIL"),
+                    ARCHESTRA_AUTH_ADMIN_PASSWORD: secret("AUTH_ADMIN_PASSWORD"),
+                    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: secret("MFILES_VAF_ADD_ON_GITHUB_TOKEN")
+                  }
+                }
+              }
+              * if $target == "staging" then
+                {
+                  archestra: {
+                    env: {
+                      ARCHESTRA_METRICS_SECRET: secret("METRICS_SECRET"),
+                      ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: secret("OTEL_EXPORTER_OTLP_ENDPOINT"),
+                      ARCHESTRA_AUTH_SECRET: secret("AUTH_SECRET"),
+                      ARCHESTRA_SENTRY_BACKEND_DSN: secret("BACKEND_DSN"),
+                      ARCHESTRA_SENTRY_FRONTEND_DSN: secret("FRONTEND_DSN"),
+                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID: secret("OUTLOOK_TENANT_ID"),
+                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID: secret("OUTLOOK_CLIENT_ID"),
+                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: secret("OUTLOOK_CLIENT_SECRET"),
+                      ARCHESTRA_CHAT_ANTHROPIC_API_KEY: secret("CHAT_ANTHROPIC_API_KEY"),
+                      ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID: secret("MICROSOFT_365_COPILOT_CLIENT_ID"),
+                      ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID: secret("MICROSOFT_365_COPILOT_TENANT_ID"),
+                      ARCHESTRA_CONTENT_ENCRYPTION_SECRET: secret("CONTENT_ENCRYPTION_SECRET")
+                    }
+                  },
+                  postgresql: { external_database_url: secret("DATABASE_URL") }
+                }
+              else {} end
+            ' > "$secret_values"
+          )
+
           # Development deployments select the platform and runtime companions
           # from one CI registry; chart defaults remain for released installs.
           helm_args=(
@@ -137,30 +182,14 @@ jobs:
             --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE=${CI_IMAGE_REGISTRY}/p4-shim:${PLATFORM_IMAGE_TAG}"
             --set "archestra.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY=${CI_IMAGE_REGISTRY}"
             --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${CI_IMAGE_REGISTRY}/mcp-server-base:${PLATFORM_IMAGE_TAG}"
-            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
-            --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
-            --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"
             --values .github/values-staging-demo-shared.yaml
-            --values "$values_file" --atomic --timeout 15m
+            --values "$values_file"
+            --values "$secret_values"
+            --atomic --timeout 15m
           )
 
           if [[ "$TARGET_ENVIRONMENT" == staging ]]; then
-            helm_args+=(
-              --create-namespace
-              --set "archestra.env.ARCHESTRA_METRICS_SECRET=${METRICS_SECRET}"
-              --set "archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}"
-              --set "archestra.env.ARCHESTRA_AUTH_SECRET=${AUTH_SECRET}"
-              --set "archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN=${BACKEND_DSN}"
-              --set "archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN=${FRONTEND_DSN}"
-              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID=${OUTLOOK_TENANT_ID}"
-              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID}"
-              --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET}"
-              --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${CHAT_ANTHROPIC_API_KEY}"
-              --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${MICROSOFT_365_COPILOT_CLIENT_ID}"
-              --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${MICROSOFT_365_COPILOT_TENANT_ID}"
-              --set "archestra.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET=${CONTENT_ENCRYPTION_SECRET}"
-              --set-string "postgresql.external_database_url=${DATABASE_URL}"
-            )
+            helm_args+=(--create-namespace)
           fi
 
           # Helm's single wait spans a migration hook, rolling Deployments,
@@ -178,7 +207,7 @@ jobs:
             cat "$profile_log"
             echo "::endgroup::"
           }
-          trap show_profile EXIT
+          trap 'show_profile; rm -f "$secret_values"' EXIT
 
           # Deploy jobs run with cancel-in-progress: false in a per-environment
           # concurrency group, so no other Helm operation can be legitimately

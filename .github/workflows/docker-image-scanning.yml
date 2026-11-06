@@ -42,8 +42,8 @@ jobs:
     name: Scan release candidate (${{ matrix.image }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    # Build every amd64 candidate on a native Blacksmith runner in parallel.
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Build every amd64 candidate on a native 16-core runner in parallel.
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout scan policy and image sources.

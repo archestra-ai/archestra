@@ -66,8 +66,8 @@ jobs:
       checkout_ref: ${{ inputs.checkout_ref }}
       # This reusable workflow currently publishes the compile-bound Platform
       # image; keep release builds on the same measured native runners as dev.
-      amd64_runner: blacksmith-16vcpu-ubuntu-2404
-      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
+      amd64_runner: ubuntu-24.04-16core
+      arm64_runner: ubuntu-24.04-arm-32core
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}

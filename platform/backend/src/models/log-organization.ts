@@ -6,6 +6,7 @@ import {
   isNull,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -13,10 +14,18 @@ import db, { schema } from "@/database";
 /**
  * Keep interaction reads inside the active organization. Interactions do not
  * duplicate an organization id, so their owning agent, knowledge connector,
- * or app is the tenant boundary.
+ * or app is the tenant boundary. `owners` names those columns on another
+ * source of interaction rows (the usage rollup); defaults to `interactions`.
  */
-export function interactionBelongsToOrganization(organizationId: string): SQL {
-  const t = schema.interactionsTable;
+export function interactionBelongsToOrganization(
+  organizationId: string,
+  owners: {
+    profileId: SQLWrapper;
+    connectorId: SQLWrapper;
+    appId: SQLWrapper;
+  } = schema.interactionsTable,
+): SQL {
+  const t = owners;
   // Correlated EXISTS lets PostgreSQL pick per query between hashing the
   // organization's owners once (a wide log scan) and probing each row's owner
   // by primary key (one session's few rows); an uncorrelated set is always
@@ -27,7 +36,7 @@ export function interactionBelongsToOrganization(organizationId: string): SQL {
       | typeof schema.agentsTable
       | typeof schema.knowledgeBaseConnectorsTable
       | typeof schema.appsTable,
-    ownerId: typeof t.profileId | typeof t.connectorId | typeof t.appId,
+    ownerId: SQLWrapper,
   ) =>
     or(
       isNull(ownerId),

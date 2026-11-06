@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -7,13 +7,16 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import GithubAppConfigModel from "@/models/github-app-config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { secretManager } from "@/secrets-manager";
 import {
   checkDueAppaGithubSyncs,
+  getRepositoryProtection,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { expect, test } from "@/test";
@@ -69,6 +72,8 @@ function serveRepository(state: {
 }) {
   const paths = [
     "appa.toml",
+    "code-owners.toml",
+    ".github/CODEOWNERS",
     "mcp/payments_api.toml",
     "mcp/helpdesk.toml",
     "mcp/README.toml",
@@ -91,6 +96,25 @@ function serveRepository(state: {
           })),
       ),
     ),
+    // A folder the repository does not have.
+    http.get(`${REPO}/contents/docs`, () =>
+      HttpResponse.json({ message: "Not Found" }, { status: 404 }),
+    ),
+    http.get(`${REPO}/contents/.github`, ({ request }) => {
+      const listed = Object.entries(at(request) ?? {}).filter(([path]) =>
+        path.startsWith(".github/"),
+      );
+      return listed.length === 0
+        ? new HttpResponse(null, { status: 404 })
+        : HttpResponse.json(
+            listed.map(([path, text]) => ({
+              type: "file",
+              name: path.slice(".github/".length),
+              path,
+              sha: createHash("sha1").update(text).digest("hex"),
+            })),
+          );
+    }),
     http.get(`${REPO}/contents/mcp`, ({ request }) => {
       const listed = Object.entries(at(request) ?? {}).filter(([path]) =>
         path.startsWith("mcp/"),
@@ -117,6 +141,82 @@ function serveRepository(state: {
       }),
     ),
   );
+}
+
+/**
+ * A GitHub App source for `example/policies`: every token request is
+ * recorded, and one asking for a permission in `refuse` is refused as GitHub
+ * refuses a permission the installation was not granted.
+ */
+async function connectApp(params: {
+  organizationId: string;
+  refuse?: string[];
+}) {
+  const { privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" },
+  });
+  const installationId = randomUUID();
+  const secret = await secretManager().createSecret(
+    { apiToken: privateKey },
+    "test-policy-app",
+  );
+  const app = await GithubAppConfigModel.create({
+    organizationId: params.organizationId,
+    name: "Policy App",
+    githubUrl: "https://api.github.com",
+    appId: "123",
+    installationId,
+    secretId: secret.id,
+  });
+  await OpenAppaGithubSyncModel.save(params.organizationId, {
+    repo: "example/policies",
+    ref: "main",
+    path: "appa.toml",
+    interval: "1h",
+    githubAppConfigId: app.id,
+    githubPatId: null,
+    validationDirectory: "",
+  });
+  const tokens: Array<{
+    repositories?: string[];
+    permissions?: Record<string, string>;
+  }> = [];
+  server.use(
+    http.post(
+      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      async ({ request }) => {
+        const asked = (await request.json()) as (typeof tokens)[number];
+        tokens.push(asked);
+        if (
+          Object.keys(asked.permissions ?? {}).some((name) =>
+            params.refuse?.includes(name),
+          )
+        )
+          return HttpResponse.json(
+            {
+              message:
+                "The permissions requested are not granted to this installation.",
+            },
+            { status: 422 },
+          );
+        return HttpResponse.json({
+          token: `token-${Object.keys(asked.permissions ?? {})
+            .sort()
+            .join("-")}`,
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        });
+      },
+    ),
+  );
+  return { tokens };
+}
+
+/** A sync, which brings the repository's protection in line, and what it found. */
+async function syncAndProtect(organizationId: string) {
+  await syncAppaGithubPolicy(organizationId);
+  return getRepositoryProtection(organizationId);
 }
 
 async function connect(params: {
@@ -827,4 +927,411 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(queued.map((task) => task.payload)).toContainEqual({
     organizationId: org.id,
   });
+});
+
+test("each job's GitHub App token covers the policy repository and its own permissions only, and a permission the App lacks is reported", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const { tokens } = await connectApp({
+    organizationId: org.id,
+    refuse: ["administration", "checks"],
+  });
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: {
+        "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
+        "mcp/payments_api.toml": REFUNDS,
+      },
+    },
+  });
+  server.use(http.get(`${REPO}/pulls`, () => HttpResponse.json([])));
+
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError).toBe(
+    null,
+  );
+  // Every token names the policy repository alone and the job's permissions.
+  expect(
+    tokens.every((token) => token.repositories?.join() === "policies"),
+  ).toBe(true);
+  expect(tokens.map((token) => token.permissions)).toEqual(
+    expect.arrayContaining([
+      { contents: "read", pull_requests: "read" },
+      { contents: "read" },
+      { administration: "write" },
+      { contents: "write", pull_requests: "write" },
+    ]),
+  );
+  const protection = await getRepositoryProtection(org.id);
+  expect(protection?.branchRules).toMatchObject({
+    state: "needs_permission",
+    detail: expect.stringContaining("Administration (read and write)"),
+  });
+
+  // A check token the App was not granted backs off instead of failing.
+  await checkDueAppaGithubSyncs();
+  expect(tokens.at(-1)?.permissions).toEqual({
+    checks: "write",
+    pull_requests: "read",
+  });
+});
+
+test("Archestra keeps one ruleset on the synced branch: it creates it, restores what is missing or weaker, and leaves one turned off alone", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id });
+  serveRepository({
+    head: FIRST,
+    files: { [FIRST]: { "appa.toml": RULES } },
+  });
+  let existing: Record<string, unknown> | null = null;
+  const written: Array<{ method: string; body: Record<string, unknown> }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rulesets`, () =>
+      HttpResponse.json(
+        existing
+          ? [
+              {
+                id: 5,
+                name: "Archestra Guardrails policy",
+                source_type: "Repository",
+              },
+            ]
+          : [],
+      ),
+    ),
+    http.post(`${REPO}/rulesets`, async ({ request }) => {
+      written.push({ method: "POST", body: (await request.json()) as never });
+      return HttpResponse.json({ id: 5 }, { status: 201 });
+    }),
+    http.get(`${REPO}/rulesets/5`, () => HttpResponse.json(existing)),
+    http.put(`${REPO}/rulesets/5`, async ({ request }) => {
+      written.push({ method: "PUT", body: (await request.json()) as never });
+      return HttpResponse.json({ id: 5 });
+    }),
+  );
+
+  await syncAppaGithubPolicy(org.id);
+  expect(written).toEqual([
+    {
+      method: "POST",
+      body: {
+        name: "Archestra Guardrails policy",
+        target: "branch",
+        enforcement: "active",
+        conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+        bypass_actors: [],
+        rules: [
+          { type: "deletion" },
+          { type: "non_fast_forward" },
+          {
+            type: "pull_request",
+            parameters: {
+              required_approving_review_count: 1,
+              dismiss_stale_reviews_on_push: true,
+              require_code_owner_review: true,
+              require_last_push_approval: true,
+              required_review_thread_resolution: false,
+            },
+          },
+          {
+            type: "required_status_checks",
+            parameters: {
+              strict_required_status_checks_policy: false,
+              required_status_checks: [
+                { context: "Archestra Guardrails policy", integration_id: 123 },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ]);
+  // Read back as GitHub stores it, with its own defaults added: complete, so
+  // nothing is written again.
+  existing = {
+    id: 5,
+    name: "Archestra Guardrails policy",
+    target: "branch",
+    source_type: "Repository",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      { type: "deletion" },
+      { type: "non_fast_forward" },
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["merge", "squash", "rebase"],
+          dismiss_stale_reviews_on_push: true,
+          require_code_owner_review: true,
+          require_extra_approval_for_unattributed_changes: true,
+          require_last_push_approval: true,
+          required_approving_review_count: 1,
+          required_review_thread_resolution: false,
+          required_reviewers: [],
+        },
+      },
+      {
+        type: "required_status_checks",
+        parameters: {
+          do_not_enforce_on_create: false,
+          required_status_checks: [
+            { context: "Archestra Guardrails policy", integration_id: 123 },
+          ],
+          strict_required_status_checks_policy: false,
+        },
+      },
+    ],
+  };
+  expect((await syncAndProtect(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  });
+  expect(written).toHaveLength(1);
+
+  // An administrator made some rules stricter and others weaker: the weaker
+  // ones come back, the stricter ones and their own additions stay.
+  existing = {
+    id: 5,
+    name: "Archestra Guardrails policy",
+    target: "branch",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    bypass_actors: [
+      { actor_id: 1, actor_type: "RepositoryRole", bypass_mode: "always" },
+    ],
+    rules: [
+      { type: "deletion" },
+      {
+        type: "pull_request",
+        parameters: {
+          required_approving_review_count: 2,
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: true,
+          required_review_thread_resolution: true,
+        },
+      },
+      { type: "required_signatures" },
+    ],
+  };
+  written.length = 0;
+  await syncAndProtect(org.id);
+  expect(written).toEqual([
+    {
+      method: "PUT",
+      body: {
+        name: "Archestra Guardrails policy",
+        target: "branch",
+        enforcement: "active",
+        conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+        bypass_actors: [
+          { actor_id: 1, actor_type: "RepositoryRole", bypass_mode: "always" },
+        ],
+        rules: [
+          { type: "deletion" },
+          {
+            type: "pull_request",
+            parameters: {
+              required_approving_review_count: 2,
+              dismiss_stale_reviews_on_push: true,
+              require_code_owner_review: true,
+              require_last_push_approval: true,
+              required_review_thread_resolution: true,
+            },
+          },
+          { type: "required_signatures" },
+          { type: "non_fast_forward" },
+          {
+            type: "required_status_checks",
+            parameters: {
+              strict_required_status_checks_policy: false,
+              required_status_checks: [
+                { context: "Archestra Guardrails policy", integration_id: 123 },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  // Turned off on GitHub: an administrator's choice, left as it is.
+  existing = { ...existing, enforcement: "disabled" };
+  written.length = 0;
+  expect((await syncAndProtect(org.id))?.branchRules).toMatchObject({
+    state: "disabled",
+  });
+  expect(written).toEqual([]);
+});
+
+test("the code owners of each server's file follow who may edit the server, proposed in one pull request that is updated only when they change", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  const data = await makeTeam(org.id, admin.id, { name: "Data" });
+  const dana = await makeUser({ email: "dana@example.com" });
+  await makeMember(dana.id, org.id);
+  const servers = [
+    { name: "payments_api", grant: { type: "team", id: payments.id } },
+    { name: "helpdesk", grant: { type: "user", id: dana.id } },
+    { name: "data_warehouse", grant: { type: "team", id: data.id } },
+  ] as const;
+  for (const { name, grant } of servers) {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "remote",
+        serverUrl: `https://${name}.example.com/mcp`,
+        scope: "org",
+      },
+      {
+        organizationId: org.id,
+        initialPermissionGrants: [
+          { subject: grant, actions: ["read", "use", "update"] },
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    );
+    await ToolModel.createToolIfNotExists({
+      name: `${name}__read`,
+      description: "read",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+  }
+  await connectApp({ organizationId: org.id, refuse: ["administration"] });
+  const files = {
+    "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
+    "mcp/payments_api.toml": REFUNDS,
+    "code-owners.toml": `[teams]\nPayments = "@acme/payments"\n\n[users]\n"Dana@Example.com" = "@dana-acme"\n`,
+    ".github/CODEOWNERS": "* @acme/admins\n",
+  };
+  const proposedHead = "a".repeat(40);
+  const state = {
+    head: FIRST,
+    files: { [FIRST]: files } as Record<string, Record<string, string>>,
+  };
+  serveRepository(state);
+  let open: Array<Record<string, unknown>> = [];
+  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const pulls: Array<{
+    title: string;
+    body: string;
+    head: string;
+    base: string;
+  }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-code-owners"
+          ? open
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: proposedHead }),
+    ),
+    http.get(`${REPO}/git/ref/heads/archestra/openappa-code-owners`, () =>
+      HttpResponse.json({ message: "Not Found" }, { status: 404 }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.get(`${REPO}/codeowners/errors`, () =>
+      HttpResponse.json({
+        errors: [
+          {
+            line: 6,
+            kind: "Unknown owner",
+            message:
+              "Unknown owner on line 6: make sure @acme/payments exists and has write access to the repository",
+          },
+        ],
+      }),
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+
+  await syncAppaGithubPolicy(org.id);
+  const proposed = `* @acme/admins
+
+# BEGIN Archestra: MCP server rules owners
+# Written from who may edit each MCP server in Archestra and code-owners.toml.
+# Change those, not these lines: Archestra rewrites them.
+/mcp/helpdesk.toml @dana-acme
+/mcp/payments_api.toml @acme/payments
+# END Archestra: MCP server rules owners
+`;
+  expect(trees).toEqual([
+    {
+      base_tree: TREE,
+      tree: [
+        {
+          path: ".github/CODEOWNERS",
+          mode: "100644",
+          type: "blob",
+          content: proposed,
+        },
+      ],
+    },
+  ]);
+  expect(pulls).toEqual([
+    expect.objectContaining({
+      title: "Code owners for MCP server rules files",
+      head: "archestra/openappa-code-owners",
+      base: "main",
+    }),
+  ]);
+  expect(pulls[0]?.body).toContain("- data_warehouse: team Data");
+  expect(pulls[0]?.body).toContain("line 6: Unknown owner on line 6");
+  expect((await getRepositoryProtection(org.id))?.codeOwners).toEqual({
+    state: "pull_request",
+    url: "https://github.com/example/policies/pull/9",
+    unowned: [{ server: "data_warehouse", editors: ["team Data"] }],
+    mapErrors: [],
+  });
+
+  // The open pull request already proposes these owners: nothing is pushed.
+  open = [
+    {
+      number: 9,
+      html_url: "https://github.com/example/policies/pull/9",
+      head: { sha: proposedHead },
+    },
+  ];
+  state.files[proposedHead] = { ...files, ".github/CODEOWNERS": proposed };
+  await syncAndProtect(org.id);
+  expect(trees).toHaveLength(1);
+  expect(pulls).toHaveLength(1);
 });

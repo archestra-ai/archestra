@@ -530,12 +530,15 @@ function manifest(params: { appName: string; seedsWorkflow: boolean }) {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
-    // Contents and pull requests on the policy repository, and checks on its
-    // pull requests; it never creates repositories.
+    // Contents and pull requests on the policy repository, checks on its pull
+    // requests, and Administration for the branch ruleset Archestra keeps.
+    // Each job's token carries only its own part; it never creates
+    // repositories.
     default_permissions: {
       contents: "write",
       pull_requests: "write",
       checks: "write",
+      administration: "write",
       metadata: "read",
       ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },

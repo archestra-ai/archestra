@@ -25,7 +25,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+The App needs **Read & write** on Contents and Pull requests to sync and propose changes, on Checks to check pull requests, and on Administration to keep the branch rules. On GitHub Enterprise Server it also needs Workflows. Each job gets its own token, limited to the policy repository and to the permissions that job uses, and it expires within an hour. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
 
 ### GitLab
 
@@ -65,12 +65,38 @@ include = [
 
 What to know:
 
-- Your repository decides who reviews: give each file its owners in `CODEOWNERS`, such as `/mcp/payments_api.toml @example/payments`, and require code owner reviews on the branch.
-- Archestra checks each open pull request into the synced branch every minute, the way Git sync checks a commit before applying it, and reports the result as the **Archestra Guardrails policy** check. Require that check in the branch's rules, so a change Git sync would refuse cannot merge. To post it, a GitHub App needs the **Checks** permission (Read and write). An App created before that permission was added needs it added in its settings on GitHub, and the change accepted on its installation. With a personal access token, or on GitLab, the result is posted as a commit status.
 - A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
-- A server file starts with `[policy]` and `version = 2`, like `appa.toml`. It holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. Git sync refuses a commit whose server file names another server's tool, `*`, or a tool without its server, whoever approved it, and the last accepted policy stays in force.
-- For a rule that covers every tool of the server, name it `<tool prefix>__*`, such as `payments_api__*`. It applies to each of the server's tools that has no rule of its own in the file, including tools the server gains later.
-- A server file uses the organization's authorities and sanitizers but does not declare its own. To have a person approve a call, require an attention mark that an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
+- A server file starts with `[policy]` and `version = 2`, like `appa.toml`, and holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. `<tool prefix>__*`, such as `payments_api__*`, covers each of the server's tools the file has no rule for, including tools it gains later. Git sync refuses a commit whose server file reaches further, such as `*` or another server's tool, whoever approved it.
+- A server file uses the organization's authorities and sanitizers but declares none of its own. To have a person approve a call, require an attention mark an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
+
+## Protect Each Server's File
+
+Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
+
+- **Code owners:** a pull request that adds each server's editors to `CODEOWNERS` as owners of its file, updated when editors change.
+- **The policy check:** every pull request into the synced branch gets the **Archestra Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
+- **Branch rules:** a ruleset named **Archestra Guardrails policy** on the synced branch. A merge needs a pull request, a code owner's approval of its latest push, and the passing check. No one can force-push, delete the branch, or bypass it.
+
+People map to GitHub through the account they connected in Archestra. Map teams, roles, and anyone else in `code-owners.toml`, beside `appa.toml`:
+
+```toml
+[teams]
+Payments = "@example/payments"
+
+[roles]
+admin = "@example/guardrails-admins"
+
+[users]
+"dana@example.com" = "@dana"
+```
+
+**Settings → Guardrails** shows both under **Repository protection**, with any editor who has no GitHub owner yet.
+
+What to know:
+
+- An App created before Archestra kept these needs the Checks and Administration permissions added in its settings on GitHub, and the change accepted on its installation. Until then, the parts it cannot do are reported as off.
+- To manage the branch yourself, turn the ruleset off on GitHub. Archestra leaves a disabled ruleset alone, and keeps any rule you make stricter.
+- Archestra only rewrites its own block in `CODEOWNERS`. Keep a fallback owner above it for files no server owns. GitLab repositories get the policy check as a commit status; protect their branch in GitLab.
 
 ## Validations in Git
 

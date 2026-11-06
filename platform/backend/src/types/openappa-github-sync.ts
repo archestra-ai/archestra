@@ -104,6 +104,47 @@ export const CreateAppaGithubRepositorySchema = z
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
 }).omit({ content: true });
+/**
+ * How the policy repository protects its server rules files: the branch
+ * ruleset Archestra keeps, and the CODEOWNERS lines it proposes from who may
+ * edit each MCP server. Null without a connected repository.
+ */
+export const AppaRepositoryProtectionSchema = z
+  .object({
+    branchRules: z.object({
+      state: z.enum([
+        "active",
+        "incomplete",
+        "missing",
+        "disabled",
+        "needs_permission",
+        "unavailable",
+        "unsupported",
+        "error",
+      ]),
+      url: z.string().optional(),
+      detail: z.string().optional(),
+    }),
+    codeOwners: z.object({
+      state: z.enum([
+        "up_to_date",
+        "pull_request",
+        "out_of_date",
+        "not_used",
+        "needs_permission",
+        "unsupported",
+        "error",
+      ]),
+      url: z.string().optional(),
+      detail: z.string().optional(),
+      unowned: z.array(
+        z.object({ server: z.string(), editors: z.array(z.string()) }),
+      ),
+      mapErrors: z.array(z.string()),
+    }),
+  })
+  .nullable();
+
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),

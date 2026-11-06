@@ -6,8 +6,11 @@ import {
   resolveGitCredentialAccess,
 } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
+import { fetchAsGithubApp } from "@/integrations/github/app-auth";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
 import {
   expandRepositoryIncludes,
@@ -26,20 +29,82 @@ import {
   resolveGithubPatToken,
   resolveGithubSkillAppCredentials,
 } from "@/skills/github-app-token";
-import { GITHUB_DOT_COM_SOURCE } from "@/skills/github-source";
+import {
+  GITHUB_DOT_COM_SOURCE,
+  githubSkillSourceFromApiUrl,
+} from "@/skills/github-source";
 import { ApiError } from "@/types";
 import { mapWithConcurrency } from "@/utils/concurrency";
+
+/**
+ * What one job may do in the policy repository: the permissions its GitHub
+ * App token carries, by GitHub's permission names.
+ */
+export type GithubJobPermissions = Partial<
+  Record<
+    "contents" | "pull_requests" | "checks" | "administration",
+    "read" | "write"
+  >
+>;
+
+/**
+ * A GitHub App installation that was not granted what a job asks for, or does
+ * not cover the policy repository: the job reports it rather than failing.
+ */
+export class MissingGithubPermission extends ApiError {
+  constructor(
+    readonly repo: string,
+    readonly permissions: GithubJobPermissions,
+  ) {
+    super(
+      403,
+      `The GitHub App cannot act on ${repo} with ${describePermissions(permissions)}. Add the missing permissions in the App's settings on GitHub and accept the change on its installation, or install the App on the repository.`,
+    );
+  }
+}
+
+/** Permissions as GitHub's App settings name them, e.g. "Checks (write)". */
+function describePermissions(permissions: GithubJobPermissions): string {
+  const names: Record<keyof GithubJobPermissions, string> = {
+    contents: "Contents",
+    pull_requests: "Pull requests",
+    checks: "Checks",
+    administration: "Administration",
+  };
+  return Object.entries(permissions)
+    .map(
+      ([name, level]) =>
+        `${names[name as keyof GithubJobPermissions]} (${level === "write" ? "read and write" : "read"})`,
+    )
+    .join(" and ");
+}
 
 /**
  * The token and GitHub origins for an OpenAPPA policy source. A GitHub App
  * carries its own API URL, so GitHub Enterprise Server works like github.com;
  * personal access tokens and public reads are github.com only.
+ *
+ * Given a job's `permissions` and the source's repository, a GitHub App's
+ * token is minted for that job alone: the policy repository and those
+ * permissions, for under an hour, so a job never holds more than it does. A
+ * personal access token cannot be narrowed and is returned as it is.
  */
-export async function resolveOpenAppaGithubAccess(source: {
-  organizationId: string;
-  githubPatId: string | null;
-  githubAppConfigId: string | null;
-}): Promise<OpenAppaGithubAccess> {
+export async function resolveOpenAppaGithubAccess(
+  source: {
+    organizationId: string;
+    githubPatId: string | null;
+    githubAppConfigId: string | null;
+    repo?: string | null;
+  },
+  permissions?: GithubJobPermissions,
+): Promise<OpenAppaGithubAccess> {
+  if (source.githubAppConfigId && permissions && source.repo)
+    return jobAccess({
+      organizationId: source.organizationId,
+      githubAppConfigId: source.githubAppConfigId,
+      repo: source.repo,
+      permissions,
+    });
   if (source.githubAppConfigId) {
     const { githubToken, githubSource } =
       await resolveGithubSkillAppCredentials({
@@ -65,6 +130,85 @@ export async function resolveOpenAppaGithubAccess(source: {
       ...origins,
     };
   return { token: undefined, ...origins };
+}
+
+/** Job tokens by App, installation, repository and permissions. */
+const jobTokens = new LRUCacheManager<{ token: string; expiresAt: number }>({
+  maxSize: 256,
+  defaultTtl: 50 * 60_000,
+});
+
+/** A token minted is reused while it has this long left. */
+const JOB_TOKEN_MARGIN_MS = 5 * 60_000;
+
+async function jobAccess(params: {
+  organizationId: string;
+  githubAppConfigId: string;
+  repo: string;
+  permissions: GithubJobPermissions;
+}): Promise<OpenAppaGithubAccess> {
+  const { organizationId, repo } = params;
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: params.githubAppConfigId,
+    organizationId,
+  });
+  if (
+    definition?.kind !== "github_app" ||
+    !definition.appId ||
+    !definition.installationId
+  )
+    throw new ApiError(404, "GitHub App credential not found");
+  const api = (
+    definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
+  ).replace(/\/+$/, "");
+  const web = githubSkillSourceFromApiUrl(api).webOrigin;
+  const permissions = Object.fromEntries(
+    Object.entries(params.permissions).sort(([a], [b]) => a.localeCompare(b)),
+  ) as GithubJobPermissions;
+  const key = [
+    definition.id,
+    definition.installationId,
+    repo.toLowerCase(),
+    JSON.stringify(permissions),
+  ].join("\u0000");
+  const cached = jobTokens.get(key);
+  if (cached && cached.expiresAt - Date.now() > JOB_TOKEN_MARGIN_MS)
+    return { token: cached.token, api, web };
+  const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
+    organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!privateKey)
+    throw new ApiError(400, "GitHub App credential has no private key");
+  let minted: { token?: unknown; expires_at?: unknown };
+  try {
+    minted = await fetchAsGithubApp({
+      githubUrl: api,
+      appId: definition.appId,
+      privateKey,
+      path: `/app/installations/${encodeURIComponent(definition.installationId)}/access_tokens`,
+      method: "POST",
+      // A repository of the installation's own account, by name.
+      body: { repositories: [repo.slice(repo.indexOf("/") + 1)], permissions },
+    });
+  } catch (error) {
+    // GitHub answers 422 for a permission the installation was not granted,
+    // or a repository it does not cover.
+    if (error instanceof ApiError && /HTTP 422\b/.test(error.message))
+      throw new MissingGithubPermission(repo, permissions);
+    throw error;
+  }
+  const expiresAt =
+    typeof minted.expires_at === "string" ? Date.parse(minted.expires_at) : NaN;
+  if (typeof minted.token !== "string" || Number.isNaN(expiresAt))
+    throw new ApiError(502, "GitHub returned an invalid installation token");
+  jobTokens.set(
+    key,
+    { token: minted.token, expiresAt },
+    Math.max(0, expiresAt - Date.now() - JOB_TOKEN_MARGIN_MS),
+  );
+  return { token: minted.token, api, web };
 }
 
 /** The GitLab host and token behind a source's GitLab token. */
@@ -133,7 +277,7 @@ class OpenAppaRepositoryIncludes {
     sizeOf: (text) => text.length,
     defaultTtl: 0,
   });
-  /** The `.toml` files directly in one folder at one commit, by name. */
+  /** The files directly in one folder at one commit, by name. */
   private readonly listings = new LRUCacheManager<Map<string, string>>({
     maxSize: 512,
     defaultTtl: 0,
@@ -256,13 +400,13 @@ class OpenAppaRepositoryIncludes {
     };
     try {
       const listed = async (folder: string) => {
-        const key = cacheKey(source, commit, folder);
+        // Keyed by the folder in the repository: entries relative to another
+        // policy folder name other folders.
+        const inRepository = repositoryPath(source, folder);
+        const key = cacheKey(source, commit, inRepository);
         let names = this.listings.get(key);
         if (!names) {
-          names = await (await open()).list(
-            commit,
-            repositoryPath(source, folder),
-          );
+          names = await (await open()).list(commit, inRepository);
           this.listings.set(key, names);
         }
         return names;
@@ -396,7 +540,7 @@ function blobKey(source: RepositorySource, blob: string) {
 
 /** Reads one repository at a commit, with the source's credential. */
 type RepositoryReader = {
-  /** The `.toml` files directly in `folder` ("" for the top), by name, with their blob ids. */
+  /** The files directly in `folder` ("" for the top), by name, with their blob ids. */
   list(commit: string, folder: string): Promise<Map<string, string>>;
   /** One file's text; null when the commit has no such file. */
   text(commit: string, path: string): Promise<string | null>;
@@ -436,11 +580,7 @@ async function repositoryReader(
               name?: string;
               type?: string;
             }>)
-              if (
-                item.type === "blob" &&
-                item.id &&
-                item.name?.endsWith(".toml")
-              )
+              if (item.type === "blob" && item.id && item.name)
                 names.set(item.name, item.id);
             url = nextPage(response.headers.get("link"));
           }
@@ -458,7 +598,9 @@ async function repositoryReader(
         }),
     };
   }
-  const { token, api } = await resolveOpenAppaGithubAccess(source);
+  const { token, api } = await resolveOpenAppaGithubAccess(source, {
+    contents: "read",
+  });
   const get = async (url: string, accept: string, what: string) => {
     try {
       return await fetch(url, {
@@ -504,7 +646,7 @@ async function repositoryReader(
         name?: string;
         sha?: string;
       }>)
-        if (item.type === "file" && item.sha && item.name?.endsWith(".toml"))
+        if (item.type === "file" && item.sha && item.name)
           names.set(item.name, item.sha);
       return names;
     },

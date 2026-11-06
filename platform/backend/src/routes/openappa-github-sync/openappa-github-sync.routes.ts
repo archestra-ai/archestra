@@ -5,6 +5,7 @@ import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubSync,
+  getRepositoryProtection,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
@@ -24,6 +25,7 @@ import {
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
+  AppaRepositoryProtectionSchema,
   CreateAppaGithubRepositorySchema,
 } from "@/types/openappa-github-sync";
 
@@ -39,6 +41,18 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(await getAppaGithubSync(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/github-sync/protection",
+    {
+      schema: {
+        operationId: RouteId.GetAppaRepositoryProtection,
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaRepositoryProtectionSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await getRepositoryProtection(request.organizationId)),
   );
   app.put(
     "/api/openappa/github-sync",

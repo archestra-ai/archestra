@@ -42,11 +42,13 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
+  useAppaRepositoryProtection,
   useConfigureAppaGithubSync,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 
@@ -254,6 +256,9 @@ export function AppaGithubSyncPanel() {
                     message={source.lastSyncError}
                   />
                 ) : null}
+                {connected && !source.setupPullRequestNumber && (
+                  <RepositoryProtection />
+                )}
               </GitSourceCard>
             ) : null}
           </div>
@@ -299,6 +304,190 @@ export function AppaGithubSyncPanel() {
       />
     </>
   );
+}
+
+type Protection = NonNullable<
+  archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
+>;
+
+type ProtectionView = {
+  status: string;
+  tone: "ok" | "pending" | "problem" | "off";
+  link?: { href: string; label: string };
+  detail?: string;
+};
+
+/**
+ * The repository's protection for server rules files: the branch ruleset and
+ * the code owners Archestra keeps in line with the MCP registry at each sync.
+ */
+function RepositoryProtection() {
+  const { data } = useAppaRepositoryProtection(true);
+  if (!data) return null;
+  const rows: Array<{ label: string; view: ProtectionView }> = [
+    { label: "Branch rules", view: branchRulesView(data.branchRules) },
+    { label: "Code owners", view: codeOwnersView(data.codeOwners) },
+  ];
+  const { unowned, mapErrors } = data.codeOwners;
+  return (
+    <GitSourceNotice>
+      <div className="space-y-2 rounded-md border p-3 text-sm">
+        <p className="font-medium">Repository protection</p>
+        <dl className="space-y-2">
+          {rows.map(({ label, view }) => (
+            <div key={label} className="flex flex-wrap gap-x-3 gap-y-1">
+              <dt className="w-28 shrink-0 text-muted-foreground">{label}</dt>
+              <dd className="min-w-0 flex-1 space-y-1">
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      view.tone === "ok" && "bg-emerald-500",
+                      view.tone === "pending" && "bg-amber-500",
+                      view.tone === "problem" && "bg-destructive",
+                      view.tone === "off" && "bg-muted-foreground/40",
+                    )}
+                  />
+                  <span>{view.status}</span>
+                  {view.link && (
+                    <a
+                      href={view.link.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
+                    >
+                      <span>{view.link.label}</span>
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                  )}
+                </span>
+                {view.detail && (
+                  <p className="text-muted-foreground">{view.detail}</p>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {unowned.length > 0 && (
+          <InlineNotice variant="warning">
+            <AlertTriangle className="size-4 shrink-0" aria-hidden />
+            <InlineNoticeText>
+              {unowned.length === 1
+                ? "One server's editors have no GitHub owner, so its file keeps the fallback owners: "
+                : `${unowned.length} servers' editors have no GitHub owner, so their files keep the fallback owners: `}
+              {unowned
+                .map((entry) => `${entry.server} (${entry.editors.join(", ")})`)
+                .join("; ")}
+              . Map them in code-owners.toml, or ask them to connect GitHub.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
+        {mapErrors.length > 0 && (
+          <InlineNotice variant="error">
+            <AlertTriangle className="size-4 shrink-0" aria-hidden />
+            <InlineNoticeText>{mapErrors.join(" ")}</InlineNoticeText>
+          </InlineNotice>
+        )}
+      </div>
+    </GitSourceNotice>
+  );
+}
+
+function branchRulesView(rules: Protection["branchRules"]): ProtectionView {
+  const link = rules.url
+    ? { href: rules.url, label: "View ruleset" }
+    : undefined;
+  switch (rules.state) {
+    case "active":
+      return {
+        status:
+          "Merges need a pull request, a code owner's approval and the Archestra Guardrails policy check",
+        tone: "ok",
+        link,
+      };
+    case "incomplete":
+      return {
+        status: "Archestra restores the missing rules at the next sync",
+        tone: "pending",
+        link,
+      };
+    case "missing":
+      return {
+        status: "Archestra creates the ruleset at the next sync",
+        tone: "pending",
+      };
+    case "disabled":
+      return {
+        status: "Turned off on GitHub",
+        tone: "off",
+        link,
+        detail: rules.detail,
+      };
+    case "needs_permission":
+      // An App created before Archestra kept rulesets: an opt-in, not a fault.
+      return {
+        status: "Off until the GitHub App has the Administration permission",
+        tone: "off",
+        detail: rules.detail,
+      };
+    case "unavailable":
+      return {
+        status: "Not available for this repository",
+        tone: "problem",
+        detail: rules.detail,
+      };
+    case "unsupported":
+      return { status: "Not managed here", tone: "off", detail: rules.detail };
+    default:
+      return {
+        status: "Could not check",
+        tone: "problem",
+        detail: rules.detail,
+      };
+  }
+}
+
+function codeOwnersView(owners: Protection["codeOwners"]): ProtectionView {
+  switch (owners.state) {
+    case "up_to_date":
+      return {
+        status: "In line with who may edit each MCP server",
+        tone: "ok",
+      };
+    case "pull_request":
+      return {
+        status: "A change is waiting for review",
+        tone: "pending",
+        link: owners.url
+          ? { href: owners.url, label: "Review pull request" }
+          : undefined,
+      };
+    case "out_of_date":
+      return {
+        status: "Archestra opens a pull request at the next sync",
+        tone: "pending",
+      };
+    case "not_used":
+      return {
+        status: "No MCP server rules files are included yet",
+        tone: "off",
+      };
+    case "needs_permission":
+      return {
+        status: "The GitHub App cannot open the pull request",
+        tone: "problem",
+        detail: owners.detail,
+      };
+    case "unsupported":
+      return { status: "Not managed here", tone: "off", detail: owners.detail };
+    default:
+      return {
+        status: "Could not check",
+        tone: "problem",
+        detail: owners.detail,
+      };
+  }
 }
 
 export function OpenAppaSourceForm({

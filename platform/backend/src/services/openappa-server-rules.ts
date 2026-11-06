@@ -23,6 +23,7 @@ import {
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
+import { hasOwnFile } from "@/services/openappa-github-sync";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -49,9 +50,6 @@ function isServerBranch(prefix: string, branch: string): boolean {
     branch.startsWith(start) && /^[0-9a-f]{8}$/.test(branch.slice(start.length))
   );
 }
-
-/** A tool prefix that is also a safe file name. */
-const SAFE_PREFIX = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 
 type Caller = { organizationId: string; userId: string };
 
@@ -269,15 +267,7 @@ async function serverFor(params: Caller & { catalogId: string }) {
     targets: [prefix],
     catalogIds: [catalog.id],
   });
-  const carried = owners.byCatalog.get(catalog.id);
-  if (
-    !SAFE_PREFIX.test(prefix) ||
-    prefix.includes("__") ||
-    owners.conflicting.has(catalog.id) ||
-    carried?.size !== 1 ||
-    !carried.has(prefix) ||
-    [...(owners.byPrefix.get(prefix) ?? [])].some((id) => id !== catalog.id)
-  )
+  if (!hasOwnFile(catalog, owners))
     throw new ApiError(
       409,
       `${catalog.name}'s tools do not all carry its own name prefix, ${prefix}__, or another server's tools carry it too, so it has no rules file of its own`,
@@ -552,7 +542,10 @@ async function openGithubPull(params: {
 }
 
 async function githubWriter(source: Source) {
-  const { token, api } = await resolveOpenAppaGithubAccess(source);
+  const { token, api } = await resolveOpenAppaGithubAccess(source, {
+    contents: "write",
+    pull_requests: "write",
+  });
   if (!token)
     throw new ApiError(
       409,
@@ -570,7 +563,7 @@ function checkedSha(sha: unknown): string {
 async function github<T = unknown>(params: {
   token: string;
   url: string;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   body?: object;
 }): Promise<T> {
   let response: Response;

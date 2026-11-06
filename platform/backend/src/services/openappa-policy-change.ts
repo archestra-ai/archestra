@@ -561,10 +561,14 @@ async function resolveWriteToken(source: {
   organizationId: string;
   githubPatId: string | null;
   githubAppConfigId: string | null;
+  repo: string | null;
 }) {
   if (!source.githubPatId && !source.githubAppConfigId)
     throw new ApiError(409, "A GitHub write credential is required");
-  const access = await resolveOpenAppaGithubAccess(source);
+  const access = await resolveOpenAppaGithubAccess(source, {
+    contents: "write",
+    pull_requests: "write",
+  });
   return { ...access, token: access.token as string };
 }
 

@@ -52,7 +52,39 @@ The chart applies these mounts to web pods, worker pods, and the migration Job. 
 
 ## Amazon RDS IAM Authentication
 
-On Amazon RDS or Aurora PostgreSQL, enable IAM database authentication so each new connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job signs a fresh 15-minute IAM token instead of using a static password:
+On Amazon RDS or Aurora PostgreSQL, enable IAM database authentication so each new connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job signs a fresh 15-minute IAM token instead of using a static password.
+
+### 1. Prepare the PostgreSQL Database and IAM Role
+
+Enable IAM database authentication on your RDS or Aurora PostgreSQL instance, then connect as the master user and create the IAM-enabled database user and `pgvector` extension:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE USER archestra_iam WITH LOGIN;
+GRANT rds_iam TO archestra_iam;
+GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
+\c archestra
+GRANT ALL ON SCHEMA public TO archestra_iam;
+```
+
+Attach an IAM policy to the pod's IAM role allowing `rds-db:connect` for the RDS resource ID (`DbiResourceId`) and database username:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "rds-db:connect",
+      "Resource": "arn:aws:rds-db:eu-west-1:123456789012:dbuser:db-ABCDEFGHIJKLMNOPQRSTUVWX/archestra_iam"
+    }
+  ]
+}
+```
+
+### 2. Configure the Helm Chart on Amazon EKS
+
+On Amazon EKS, set `archestra.database.iamAuth.enabled: true` and `archestra.database.iamAuth.roleArn` (for IRSA) or bind the role with EKS Pod Identity:
 
 ```yaml
 postgresql:
@@ -61,13 +93,36 @@ archestra:
   database:
     iamAuth:
       enabled: true
+      # Annotates the platform ServiceAccount with eks.amazonaws.com/role-arn (omit when using EKS Pod Identity):
+      roleArn: arn:aws:iam::123456789012:role/archestra-rds-iam-role
       # Optional when connecting through a custom DNS name instead of *.rds.amazonaws.com:
       # awsRegion: eu-west-1
   env:
     ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
 ```
 
-Grant `rds_iam` to the PostgreSQL user and allow `rds-db:connect` on the pod's IAM role (via IRSA or EKS Pod Identity). The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and hostname on every connection.
+The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and hostname on every connection.
+
+### 3. Non-AWS Kubernetes Clusters (GKE, AKS, OpenShift, on-prem)
+
+When running outside AWS with network connectivity to RDS on port `5432`, you can authenticate using either OIDC federation or Kubernetes Secrets:
+
+- **OIDC federation (recommended)**: Register your cluster's OIDC issuer in AWS IAM and enable `injectWebIdentityTokenVolume` so the chart mounts a projected `sts.amazonaws.com` ServiceAccount token volume and sets `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE` on web, worker, and migration Job pods:
+
+  ```yaml
+  postgresql:
+    enabled: false
+  archestra:
+    database:
+      iamAuth:
+        enabled: true
+        roleArn: arn:aws:iam::123456789012:role/archestra-rds-iam-role
+        injectWebIdentityTokenVolume: true
+    env:
+      ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+  ```
+
+- **Secret-backed AWS credentials**: Supply `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN` through `archestra.envFromSecrets` (or `archestra.env`, where the chart automatically stores `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in a Kubernetes Secret).
 
 ## Connection Capacity
 

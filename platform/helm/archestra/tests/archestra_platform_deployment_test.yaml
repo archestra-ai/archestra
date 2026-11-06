@@ -3364,3 +3364,88 @@ tests:
           content:
             name: ARCHESTRA_DATABASE_AWS_REGION
             value: eu-west-1
+
+  - it: fails when archestra.database.iamAuth.enabled is true while postgresql.enabled is true
+    set:
+      postgresql.enabled: true
+      archestra.database.iamAuth.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: When archestra.database.iamAuth.enabled is true, you must set postgresql.enabled=false and configure an external RDS/Aurora PostgreSQL database."
+
+  - it: fails when archestra.database.iamAuth.injectWebIdentityTokenVolume is true without roleArn
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: When archestra.database.iamAuth.injectWebIdentityTokenVolume is true, you must set archestra.database.iamAuth.roleArn (or archestra.env.AWS_ROLE_ARN)."
+
+  - it: mounts projected OIDC token volume and sets AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE when injectWebIdentityTokenVolume is true
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.roleArn: arn:aws:iam::123456789012:role/non-eks-rds-role
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ROLE_ARN
+            value: arn:aws:iam::123456789012:role/non-eks-rds-role
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_WEB_IDENTITY_TOKEN_FILE
+            value: /var/run/secrets/aws-iam-token/serviceaccount/token
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: aws-iam-token
+            mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: aws-iam-token
+            projected:
+              defaultMode: 420
+              sources:
+                - serviceAccountToken:
+                    audience: sts.amazonaws.com
+                    expirationSeconds: 3600
+                    path: token
+
+  - it: references AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN from auth Secret instead of plaintext
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.env:
+        AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+        AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+        AWS_SESSION_TOKEN: IQoJb3JpZ2luX2VjEJr//////////wEaCXVzLWVhc3QtMSJHMEUCIQD
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            value: AKIAIOSFODNN7EXAMPLE
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: aws-secret-access-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SESSION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: aws-session-token

@@ -20,12 +20,18 @@ import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 export type RanOnParties = {
   /** The client the work started in, such as "Claude Code". */
   clientLabel: string;
-  /** The Agent Runtime agent that took it. */
-  agentName: string;
-  /** The run's own page: its terminal and history. */
-  runHref: string;
   /** The client's session trace, from the run's session. */
   clientSessionHref: string | null;
+  /** The runs on the strip, oldest first. */
+  runs: RanOnRun[];
+};
+
+type RanOnRun = {
+  runId: string;
+  /** The Agent Runtime agent that took the work. */
+  agentName: string;
+  /** The run's own page: its terminal and history. */
+  href: string;
 };
 
 /**
@@ -168,17 +174,16 @@ function RanOnStrip({
             key={segment.key}
             segment={segment}
             parties={parties}
-            href={
-              segment.elsewhere
-                ? parties.clientSessionHref
-                : segment.holder === "runtime"
-                  ? parties.runHref
-                  : null
-            }
+            run={runOf(parties, segment.runId)}
           />
         ))}
         {view.moves.map((move) => (
-          <MoveKnob key={move.key} move={move} parties={parties} />
+          <MoveKnob
+            key={move.key}
+            move={move}
+            parties={parties}
+            run={runOf(parties, move.runId)}
+          />
         ))}
       </div>
       {layout === "trace" ? <div className="hidden lg:block" /> : null}
@@ -212,13 +217,18 @@ function RanOnLine({
             <ArrowUpRight className="size-3" aria-hidden="true" />
           </Link>
         ) : null}
-        <Link
-          href={parties.runHref}
-          className="inline-flex items-center gap-0.5 hover:text-foreground"
-        >
-          <span>Open run</span>
-          <ArrowUpRight className="size-3" aria-hidden="true" />
-        </Link>
+        {parties.runs.map((run) => (
+          <Link
+            key={run.runId}
+            href={run.href}
+            className="inline-flex min-w-0 items-center gap-0.5 hover:text-foreground"
+          >
+            <span className="max-w-24 truncate">
+              {parties.runs.length === 1 ? "Open run" : run.agentName}
+            </span>
+            <ArrowUpRight className="size-3 shrink-0" aria-hidden="true" />
+          </Link>
+        ))}
       </span>
     </div>
   );
@@ -271,18 +281,25 @@ function Counts({ view, parties }: { view: RanOnView; parties: RanOnParties }) {
 function SegmentBar({
   segment,
   parties,
-  href,
+  run,
 }: {
   segment: RanOnSegment;
   parties: RanOnParties;
-  href: string | null;
+  /** The run that held a runtime stretch. */
+  run: RanOnRun | null;
 }) {
   const runtime = segment.holder === "runtime";
+  const href = segment.elsewhere
+    ? parties.clientSessionHref
+    : runtime
+      ? (run?.href ?? null)
+      : null;
+  const agentName = run?.agentName ?? "Agent Runtime";
   const Icon = runtime ? Container : Laptop;
   const title = segment.elsewhere
     ? `Back in ${parties.clientLabel}`
     : runtime
-      ? `Agent Runtime · ${parties.agentName}`
+      ? `Agent Runtime · ${agentName}`
       : parties.clientLabel;
   const style: CSSProperties = {
     left: `calc(${segment.x0 * 100}% + 1px)`,
@@ -317,7 +334,7 @@ function SegmentBar({
       </span>
       {runtime ? (
         <span className="hidden truncate opacity-70 @[180px]:inline">
-          {parties.agentName}
+          {agentName}
         </span>
       ) : null}
     </>
@@ -390,15 +407,18 @@ function SegmentBar({
 function MoveKnob({
   move,
   parties,
+  run,
 }: {
   move: RanOnMove;
   parties: RanOnParties;
+  run: RanOnRun | null;
 }) {
+  const agentName = run?.agentName ?? "Agent Runtime";
   const Icon = move.kind === "pull" ? ArrowDownLeft : ArrowUpRight;
   const copy: Record<RanOnMove["kind"], ReactNode> = {
-    push: `Handed to ${parties.agentName}`,
+    push: `Handed to ${agentName}`,
     pull: `Taken back to ${parties.clientLabel}`,
-    steer: `Sent back to ${parties.agentName}`,
+    steer: `Sent back to ${agentName}`,
   };
   return (
     <Tooltip>
@@ -420,6 +440,10 @@ function MoveKnob({
       </TooltipContent>
     </Tooltip>
   );
+}
+
+function runOf(parties: RanOnParties, runId: string | null): RanOnRun | null {
+  return parties.runs.find((run) => run.runId === runId) ?? null;
 }
 
 function clock(ms: number): string {

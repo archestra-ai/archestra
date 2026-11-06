@@ -52,7 +52,8 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
-import { buildRanOn } from "./_parts/ran-on";
+import { pageWindow } from "./_parts/page-window";
+import { buildRanOn, type SessionHandoffs } from "./_parts/ran-on";
 import type { RanOnParties } from "./_parts/ran-on-strip";
 import { SessionFacts } from "./_parts/session-facts";
 import {
@@ -144,16 +145,12 @@ export default function SessionDetailPage({
     [interactionsResponse],
   );
   const nextRequest = hasNextPage ? (nextPageHead.data?.data[0] ?? null) : null;
-  // Where this page's records end: the next page's first request's start.
-  // Without that boundary, the page's own last request bounds it.
-  const pageEndsAt = nextRequest
-    ? new Date(nextRequest.createdAt).getTime() -
-      Math.max(0, nextRequest.durationMs ?? 0)
-    : hasNextPage && interactions.length > 0
-      ? Math.max(
-          ...interactions.map((row) => new Date(row.createdAt).getTime()),
-        )
-      : null;
+  const { startsAt: pageStartsAt, endsAt: pageEndsAt } = pageWindow({
+    offset,
+    requests: interactions,
+    nextRequest,
+    hasNextPage,
+  });
   const requestsReady =
     interactionsResponse !== undefined &&
     !interactionsLoading &&
@@ -237,12 +234,14 @@ export default function SessionDetailPage({
   const { toolCalls } = sessionToolCalls;
   // Work this session handed to Agent Runtime ran under the run's own
   // session; its requests and calls in this page's time range join the trace.
-  const { data: handoffs } = useSessionHandoffs({ sessionId });
+  const { data: allHandoffs } = useSessionHandoffs({ sessionId });
+  // At most a few runs join the trace; the rest are listed, not drawn.
+  const handoffs = useMemo(() => capHandoffs(allHandoffs), [allHandoffs]);
+  const omittedRuns = allHandoffs?.handedTo.slice(MAX_MERGED_RUNS) ?? [];
   const handedOff = useHandedOffRecords({
-    sessionIds: (handoffs?.handedTo ?? [])
-      .slice(0, MAX_MERGED_RUNS)
-      .map((run) => run.llmSessionId),
-    startDate: offset > 0 ? interactions[0]?.createdAt : undefined,
+    sessionIds: (handoffs?.handedTo ?? []).map((run) => run.llmSessionId),
+    startDate:
+      pageStartsAt !== null ? new Date(pageStartsAt).toISOString() : undefined,
     endDate:
       pageEndsAt !== null ? new Date(pageEndsAt).toISOString() : undefined,
   });
@@ -313,9 +312,15 @@ export default function SessionDetailPage({
     toastOnError: false,
     enabled: originSessionId !== undefined,
   });
-  const handoffRun = handoffs?.handedTo[0] ?? handoffs?.handedFrom ?? null;
+  const handoffRuns = handoffs
+    ? handoffs.handedTo.length > 0
+      ? handoffs.handedTo
+      : handoffs.handedFrom
+        ? [handoffs.handedFrom]
+        : []
+    : [];
   const ranOn =
-    ranOnView && handoffRun
+    ranOnView && handoffRuns.length > 0
       ? {
           view: ranOnView,
           parties: {
@@ -323,8 +328,11 @@ export default function SessionDetailPage({
               (ranOnView.side === "client"
                 ? sessionData?.externalAgentIdLabels[0]
                 : originSession?.data[0]?.externalAgentIdLabels[0]) ?? "Client",
-            agentName: handoffRun.agentName,
-            runHref: `/chat/runs/${handoffRun.runId}`,
+            runs: handoffRuns.map((run) => ({
+              runId: run.runId,
+              agentName: run.agentName,
+              href: runHref(run.runId),
+            })),
             clientSessionHref: originSessionId
               ? llmSessionHref(originSessionId)
               : null,
@@ -531,6 +539,7 @@ export default function SessionDetailPage({
                     onRetry={() => sessionToolCalls.refetch()}
                     truncated={sessionToolCalls.truncated}
                     handedOffTruncated={handedOff.truncated}
+                    omittedRuns={omittedRuns}
                     missingToolCallId={
                       sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
@@ -608,6 +617,7 @@ function ToolCallsNotice({
   onRetry,
   truncated,
   handedOffTruncated,
+  omittedRuns,
   missingToolCallId,
   missingRequest,
   requestLookupFailed,
@@ -622,6 +632,8 @@ function ToolCallsNotice({
   truncated: boolean;
   /** The Agent Runtime records merged into this page were capped. */
   handedOffTruncated: boolean;
+  /** Runs this session started that the trace leaves out. */
+  omittedRuns: { runId: string; agentName: string; title: string | null }[];
   missingToolCallId: string | null;
   missingRequest: boolean;
   /** Finding the linked request's page failed. */
@@ -638,6 +650,7 @@ function ToolCallsNotice({
     !failed &&
     !truncated &&
     !handedOffTruncated &&
+    omittedRuns.length === 0 &&
     !missingToolCallId &&
     !missingRequest &&
     !requestLookupFailed &&
@@ -733,6 +746,28 @@ function ToolCallsNotice({
           </span>
         </p>
       ) : null}
+      {omittedRuns.length > 0 ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            <span>
+              This trace shows the first {MAX_MERGED_RUNS} Agent Runtime runs.
+              Open the others:{" "}
+            </span>
+            {omittedRuns.map((run, i) => (
+              <span key={run.runId}>
+                {i > 0 ? <span>, </span> : null}
+                <Link
+                  href={runHref(run.runId)}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  {run.title ?? run.agentName}
+                </Link>
+              </span>
+            ))}
+          </span>
+        </p>
+      ) : null}
       {missingToolCallId ? (
         <InlineNotice variant="neutral">
           <InlineNoticeText>
@@ -759,6 +794,26 @@ function ToolCallsNotice({
 
 /** Runs whose records join a client's trace; later ones stay one click away. */
 const MAX_MERGED_RUNS = 3;
+
+function runHref(runId: string): string {
+  return `/chat/runs/${runId}`;
+}
+
+/** Keeps the first runs and only the moves between the client and them. */
+function capHandoffs(
+  handoffs: SessionHandoffs | null | undefined,
+): SessionHandoffs | null {
+  if (!handoffs || handoffs.handedTo.length <= MAX_MERGED_RUNS) {
+    return handoffs ?? null;
+  }
+  const handedTo = handoffs.handedTo.slice(0, MAX_MERGED_RUNS);
+  const kept = new Set(handedTo.map((run) => run.runId));
+  return {
+    ...handoffs,
+    handedTo,
+    moves: handoffs.moves.filter((move) => kept.has(move.runId)),
+  };
+}
 
 function byCreatedAt<T extends { createdAt: string }>(records: T[]): T[] {
   return [...records].sort(

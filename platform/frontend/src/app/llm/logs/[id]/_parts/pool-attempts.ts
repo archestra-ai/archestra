@@ -4,52 +4,61 @@ import type { InteractionSummary } from "./session-timeline";
  * The attempts of the pooled request a row belongs to, oldest first.
  *
  * A model pool writes one row per attempt: a member that fails is recorded as
- * `failed_over` and the next member's attempt is the next row from the same
- * pool, numbered one higher. So the chain is rebuilt from the session's rows
- * around this one. Rows of other pools, sessions or attempts in between (a
- * subagent, the other half of a handoff) are skipped. Returns just the row
- * when its neighbours are not loaded.
+ * `failed_over`, and the next member's attempt is numbered one higher. No id
+ * ties the attempts together, so the chain is read from the order of the
+ * session's rows for that pool, and only when it cannot be mistaken: the
+ * attempts must be next to each other there, and no other request to the
+ * same pool in the same session may overlap them in time. Two requests
+ * failing over side by side stay unlinked. Returns just the row otherwise.
  */
 export function poolAttemptsOf(
   row: InteractionSummary,
   requests: InteractionSummary[],
 ): InteractionSummary[] {
   if (!row.modelPoolId || !row.attempt) return [row];
-  const index = requests.findIndex((candidate) => candidate.id === row.id);
+  const stream = requests.filter(
+    (candidate) =>
+      candidate.modelPoolId === row.modelPoolId &&
+      candidate.sessionId === row.sessionId,
+  );
+  const index = stream.findIndex((candidate) => candidate.id === row.id);
   if (index < 0) return [row];
-  const sameRequest = (candidate: InteractionSummary, attempt: number) =>
-    candidate.modelPoolId === row.modelPoolId &&
-    candidate.sessionId === row.sessionId &&
-    candidate.attempt === attempt;
 
-  const before: InteractionSummary[] = [];
-  let cursor = index;
-  for (let attempt = row.attempt - 1; attempt >= 1; attempt--) {
-    const found = findNear(requests, cursor, -1, (candidate) =>
-      sameRequest(candidate, attempt),
-    );
-    if (found < 0 || requests[found].attemptOutcome !== "failed_over") break;
-    before.unshift(requests[found]);
-    cursor = found;
+  let first = index;
+  while (first > 0 && follows(stream[first - 1], stream[first])) {
+    first--;
   }
+  let last = index;
+  while (last < stream.length - 1 && follows(stream[last], stream[last + 1])) {
+    last++;
+  }
+  const chain = stream.slice(first, last + 1);
+  if (chain.length === 1) return chain;
 
-  const after: InteractionSummary[] = [];
-  cursor = index;
-  let last = row;
-  for (
-    let attempt = row.attempt + 1;
-    last.attemptOutcome === "failed_over";
-    attempt++
-  ) {
-    const found = findNear(requests, cursor, 1, (candidate) =>
-      sameRequest(candidate, attempt),
-    );
-    if (found < 0) break;
-    last = requests[found];
-    after.push(last);
-    cursor = found;
-  }
-  return [...before, row, ...after];
+  const from = Math.min(...chain.map(startOf));
+  const to = Math.max(...chain.map((r) => Date.parse(r.createdAt)));
+  const overlapped = stream.some(
+    (other, i) =>
+      (i < first || i > last) &&
+      startOf(other) < to &&
+      Date.parse(other.createdAt) > from,
+  );
+  return overlapped ? [row] : chain;
+}
+
+/**
+ * Whether a pooled row is a retry whose failed attempt is the request row
+ * right above it in the list, so the two can be drawn joined.
+ */
+export function retriesRowAbove(
+  row: InteractionSummary,
+  above: InteractionSummary | null,
+  requests: InteractionSummary[],
+): boolean {
+  if (!above || !row.attempt || row.attempt < 2) return false;
+  const chain = poolAttemptsOf(row, requests);
+  const at = chain.findIndex((attempt) => attempt.id === row.id);
+  return at > 0 && chain[at - 1].id === above.id;
 }
 
 /**
@@ -80,9 +89,6 @@ export function poolFailureText(
 
 // ===
 
-/** How far from a row its next attempt may sit: other traffic interleaves. */
-const NEAR_ROWS = 12;
-
 const FAILURE_LABELS: Record<string, string> = {
   rate_limited: "rate limited",
   auth_failed: "auth failed",
@@ -94,18 +100,17 @@ const FAILURE_LABELS: Record<string, string> = {
   error: "error",
 };
 
-function findNear(
-  requests: InteractionSummary[],
-  from: number,
-  step: 1 | -1,
-  matches: (candidate: InteractionSummary) => boolean,
-): number {
-  for (
-    let i = from + step, seen = 0;
-    i >= 0 && i < requests.length && seen < NEAR_ROWS;
-    i += step, seen++
-  ) {
-    if (matches(requests[i])) return i;
-  }
-  return -1;
+function follows(
+  previous: InteractionSummary,
+  next: InteractionSummary,
+): boolean {
+  return (
+    previous.attemptOutcome === "failed_over" &&
+    previous.attempt !== null &&
+    next.attempt === previous.attempt + 1
+  );
+}
+
+function startOf(row: InteractionSummary): number {
+  return Date.parse(row.createdAt) - Math.max(0, row.durationMs ?? 0);
 }

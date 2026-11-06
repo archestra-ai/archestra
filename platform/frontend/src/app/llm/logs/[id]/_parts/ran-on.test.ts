@@ -108,6 +108,53 @@ describe("buildRanOn", () => {
     expect(view?.moves.map((m) => m.kind)).toEqual(["push"]);
   });
 
+  it("ties each runtime stretch and move to its own run", () => {
+    const second = {
+      ...run,
+      runId: "9b1e0f6a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+      llmSessionId: "agent-run-2",
+      agentName: "Docs Writer",
+    };
+    const twoRuns = buildTimeline({
+      requests: [
+        request("c1", 5, CLIENT),
+        request("a1", 20, RUN),
+        request("c2", 50, CLIENT),
+        request("b1", 70, "agent-run-2"),
+      ],
+      toolCalls: [move("push", 10), move("pull", 40), move("push-b", 60)],
+    });
+    const view = buildRanOn({
+      timeline: twoRuns,
+      handoffs: {
+        handedTo: [run, second],
+        handedFrom: null,
+        moves: [
+          moves[0],
+          moves[1],
+          {
+            kind: "push",
+            runId: second.runId,
+            mcpToolCallId: "push-b",
+            at: at(60_000),
+          },
+        ],
+      },
+      sessionId: CLIENT,
+    });
+    expect(view?.segments.map((s) => [s.runId, s.requests])).toEqual([
+      [null, 1],
+      [RUN_ID, 1],
+      [null, 1],
+      [second.runId, 1],
+    ]);
+    expect(view?.moves.map((m) => m.runId)).toEqual([
+      RUN_ID,
+      RUN_ID,
+      second.runId,
+    ]);
+  });
+
   it("is null for a session that handed nothing off", () => {
     expect(
       buildRanOn({

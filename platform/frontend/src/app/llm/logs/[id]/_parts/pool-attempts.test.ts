@@ -4,6 +4,7 @@ import {
   poolAttemptsOf,
   poolFailureLabel,
   poolFailureText,
+  retriesRowAbove,
 } from "./pool-attempts";
 import { at, row } from "./test-records";
 
@@ -47,6 +48,41 @@ describe("poolAttemptsOf", () => {
       "earlier",
     ]);
     expect(poolAttemptsOf(later, requests).map((r) => r.id)).toEqual(["later"]);
+  });
+
+  it("leaves overlapping requests to one pool unlinked", () => {
+    // A1 and B1 fail side by side; either retry could belong to either.
+    const overlapping = (
+      id: string,
+      seconds: number,
+      attempt: number,
+      outcome: string,
+    ) =>
+      row({
+        id,
+        sessionId: "run",
+        createdAt: at(seconds * 1000),
+        durationMs: 3000,
+        modelPoolId: "pool",
+        attempt,
+        attemptOutcome: outcome as "answered" | "failed_over",
+      });
+    const rows = [
+      overlapping("a1", 10, 1, "failed_over"),
+      overlapping("b1", 11, 1, "failed_over"),
+      overlapping("b2", 13, 2, "answered"),
+      overlapping("a2", 14, 2, "answered"),
+    ];
+    for (const r of rows) {
+      expect(poolAttemptsOf(r, rows).map((x) => x.id)).toEqual([r.id]);
+    }
+    expect(retriesRowAbove(rows[2], rows[1], rows)).toBe(false);
+  });
+
+  it("joins a retry to its failed attempt only when that is the row above", () => {
+    expect(retriesRowAbove(retry, failed, requests)).toBe(true);
+    // The client's own request sits between them on a merged trace.
+    expect(retriesRowAbove(retry, other, requests)).toBe(false);
   });
 
   it("returns the row alone when its retry is not loaded", () => {

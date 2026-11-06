@@ -51,7 +51,11 @@ import {
 } from "./guardrail-rows";
 import type { GuardrailsData, TraceYell } from "./guardrails";
 import { LabelChangeNote, LabelRail } from "./label-rail";
-import { poolFailureLabel, poolFailureText } from "./pool-attempts";
+import {
+  poolFailureLabel,
+  poolFailureText,
+  retriesRowAbove,
+} from "./pool-attempts";
 import type { RanOnKnob, RanOnView } from "./ran-on";
 import {
   RanOnHeader,
@@ -187,6 +191,11 @@ export function RequestWaterfall({
     [spans, guardrails],
   );
   const steppable = entries;
+  // Pool retries are matched against every request on the page.
+  const requestRows = useMemo(
+    () => spans.flatMap((span) => (span.type === "request" ? [span.row] : [])),
+    [spans],
+  );
   const changes = useMemo(
     () => (guardrails ? pageChanges({ entries, guardrails }) : []),
     [entries, guardrails],
@@ -582,7 +591,7 @@ export function RequestWaterfall({
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {entries.map((entry) => {
+                {entries.map((entry, entryIndex) => {
                   if (entry.type === "consult") {
                     const { consult } = entry;
                     const isSelected =
@@ -636,6 +645,11 @@ export function RequestWaterfall({
                       span={span}
                       profileName={profileName}
                       isConversation={span.row.id === conversationRowId}
+                      joinsRowAbove={retriesRowAbove(
+                        span.row,
+                        requestAbove(entries, entryIndex),
+                        requestRows,
+                      )}
                       poolKeyName={
                         span.row.providerApiKeyId
                           ? poolKeyNames?.get(span.row.providerApiKeyId)
@@ -1086,12 +1100,15 @@ function RequestRow({
   span,
   profileName,
   isConversation,
+  joinsRowAbove,
   poolKeyName,
   ...rowProps
 }: RowProps & {
   span: RequestSpan;
   profileName: string | null;
   isConversation: boolean;
+  /** A pool retry of the failed attempt in the row right above it. */
+  joinsRowAbove: boolean;
   /** The pool member key this attempt went to, when known. */
   poolKeyName?: string;
 }) {
@@ -1119,7 +1136,7 @@ function RequestRow({
       {...rowProps}
       label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
       barClassName={failedOver ? FAILED_ATTEMPT_BAR : undefined}
-      edge={retry ? <RetryBracket /> : null}
+      edge={joinsRowAbove ? <RetryBracket /> : null}
       name={
         <>
           <span
@@ -1235,6 +1252,15 @@ function RequestRow({
       }
     />
   );
+}
+
+/** The request in the list entry right above, if that entry is one. */
+function requestAbove(
+  entries: { type: string; span?: TimelineSpan }[],
+  index: number,
+): InteractionSummary | null {
+  const above = entries[index - 1];
+  return above?.span?.type === "request" ? above.span.row : null;
 }
 
 /** A failed pool attempt's bar: hatched, so its retry below reads as the answer. */

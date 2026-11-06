@@ -16,6 +16,8 @@ type Holder = "client" | "runtime";
 export type RanOnSegment = {
   key: string;
   holder: Holder;
+  /** The run that held this stretch; null for the client's. */
+  runId: string | null;
   /**
    * The client's stretch seen from the run's own session: its requests live
    * in the client's session, so the stretch is only a placeholder here.
@@ -32,7 +34,14 @@ export type RanOnSegment = {
   subscription: boolean;
 };
 
-export type RanOnMove = { key: string; kind: MoveKind; x: number; at: number };
+export type RanOnMove = {
+  key: string;
+  kind: MoveKind;
+  /** The run the work moved to or from. */
+  runId: string;
+  x: number;
+  at: number;
+};
 
 /** A move's knob in the row gutter, on the runtime lane's end. */
 export type RanOnKnob = { kind: MoveKind; edge: "top" | "bottom" };
@@ -75,7 +84,11 @@ export function buildRanOn({
     });
   }
   if (handoffs.handedFrom?.llmSessionId === sessionId) {
-    return runtimeView({ timeline, handoffs });
+    return runtimeView({
+      timeline,
+      handoffs,
+      runId: handoffs.handedFrom.runId,
+    });
   }
   return null;
 }
@@ -107,6 +120,9 @@ function clientView({
       .filter((span) => ranInRuntime(span, runtimeSessions))
       .map((s) => s.key),
   );
+  const sessionOfRun = new Map(
+    handoffs.handedTo.map((run) => [run.runId, run.llmSessionId]),
+  );
   const requests = requestSpans(spans);
   const runtimeRows = requests.filter((s) => runtimeKeys.has(s.key));
   const last = Math.max(...spans.map((s) => s.end));
@@ -130,7 +146,10 @@ function clientView({
       {
         move: {
           kind: "push",
-          runId: handoffs.handedTo[0].runId,
+          runId:
+            handoffs.handedTo.find(
+              (run) => run.llmSessionId === first.row.sessionId,
+            )?.runId ?? handoffs.handedTo[0].runId,
           mcpToolCallId: first.key,
           at: new Date(first.start).toISOString(),
         },
@@ -140,26 +159,28 @@ function clientView({
     ];
   }
 
-  const edges: { x: number; t: number; holder: Holder }[] = [
-    { x: 0, t: timeline.origin, holder: "client" },
+  const edges: { x: number; t: number; runId: string | null }[] = [
+    { x: 0, t: timeline.origin, runId: null },
     ...cuts.map((cut) => ({
       x: cut.x,
       t: cut.t,
-      holder: (cut.move.kind === "pull" ? "client" : "runtime") as Holder,
+      runId: cut.move.kind === "pull" ? null : cut.move.runId,
     })),
   ];
   const segments = edges.map((edge, i): RanOnSegment => {
     const next = edges[i + 1];
     const until = next ? next.t : Number.POSITIVE_INFINITY;
+    const runSession = edge.runId ? sessionOfRun.get(edge.runId) : undefined;
     const rows = requests.filter(
       (s) =>
         s.start >= edge.t &&
         s.start < until &&
-        runtimeKeys.has(s.key) === (edge.holder === "runtime"),
+        (runSession ? s.row.sessionId === runSession : !runtimeKeys.has(s.key)),
     );
     return {
       key: `segment-${i}`,
-      holder: edge.holder,
+      holder: edge.runId ? "runtime" : "client",
+      runId: edge.runId,
       elsewhere: false,
       x0: edge.x,
       x1: next ? next.x : 1,
@@ -171,6 +192,7 @@ function clientView({
   const moves = cuts.map((cut) => ({
     key: cut.move.mcpToolCallId,
     kind: cut.move.kind,
+    runId: cut.move.runId,
     x: cut.x,
     at: cut.t,
   }));
@@ -188,9 +210,11 @@ function clientView({
 function runtimeView({
   timeline,
   handoffs,
+  runId,
 }: {
   timeline: Timeline;
   handoffs: SessionHandoffs;
+  runId: string;
 }): RanOnView {
   const spans = timeline.spans;
   const requests = requestSpans(spans);
@@ -235,6 +259,7 @@ function runtimeView({
     segments.push({
       key: `runtime-${i}`,
       holder: "runtime",
+      runId,
       elsewhere: false,
       x0: stretch.x0,
       x1: stretch.x1,
@@ -246,6 +271,7 @@ function runtimeView({
       moves.push({
         key: stretch.from.mcpToolCallId,
         kind: stretch.from.kind,
+        runId,
         x: stretch.x0,
         at: stretch.from.t,
       });
@@ -254,6 +280,7 @@ function runtimeView({
     moves.push({
       key: stretch.to.mcpToolCallId,
       kind: "pull",
+      runId,
       x: stretch.x1,
       at: stretch.to.t,
     });
@@ -261,6 +288,7 @@ function runtimeView({
     segments.push({
       key: `client-${i}`,
       holder: "client",
+      runId: null,
       elsewhere: true,
       x0: stretch.x1,
       x1: next ? next.x0 : 1,

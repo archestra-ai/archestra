@@ -50,72 +50,15 @@ class CachePolicyTests(unittest.TestCase):
                     self.assertEqual(bool(values["cache-from"]), provider != "dockerhub")
                     self.assertEqual(bool(values["cache-to"]), provider != "dockerhub" and export == "true")
 
-    def test_persistent_builder_is_opt_in_and_untrusted_events_use_local_builder(self):
-        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
-        expression = action.split("    - name: Setup persistent Docker builder\n", 1)[1]
-        expression = re.search(r"^      if: (.*)$", expression, re.M).group(1)
-        trusted = ("push", "merge_group", "schedule", "workflow_dispatch")
-        for event in (*trusted, "pull_request", "pull_request_target", "workflow_run"):
-            for key in ("", "platform-e2e-linux-amd64"):
-                with self.subTest(event=event, key=key):
-                    selected = evaluate(expression, {
-                        "inputs": {"cache-key": key},
-                        "github": {"event_name": event},
-                    })
-                    self.assertEqual(selected, bool(key) and event in trusted)
-
-    def test_missing_or_local_persistent_builder_uses_standard_fallback(self):
-        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
-        inspect = action.split("    - name: Inspect persistent Docker builder\n", 1)[1]
-        inspect, fallback = inspect.split("    - name: Setup Docker builder\n", 1)
-        script = "\n".join(line[8:] for line in inspect.split("      run: |\n", 1)[1].splitlines())
-        expression = re.search(r"^      if: (.*)$", fallback, re.M).group(1)
-        for driver in ("remote", "docker-container", "docker", "unavailable"):
-            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
-                directory = Path(directory)
-                output = directory / "output"
-                output.touch()
-                docker = directory / "docker"
-                docker.write_text(
-                    '#!/bin/bash\n'
-                    '[ "$*" = "buildx inspect" ] || { echo "unsupported arguments" >&2; exit 64; }\n'
-                    '[ "$ARCHESTRA_TEST_DOCKER_DRIVER" != unavailable ] || exit 1\n'
-                    'printf "Name: blacksmith-test\\nDriver:        %s\\n\\nNodes:\\n" "$ARCHESTRA_TEST_DOCKER_DRIVER"\n'
-                )
-                docker.chmod(0o755)
-                result = subprocess.run(
-                    ["bash", "-e", "-c", script], text=True, capture_output=True,
-                    env=os.environ | {
-                        "PATH": f"{directory}:{os.environ['PATH']}",
-                        "GITHUB_OUTPUT": str(output), "ARCHESTRA_TEST_DOCKER_DRIVER": driver,
-                    },
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                persistent = "true" if "persistent=true" in output.read_text() else ""
-                self.assertEqual(evaluate(expression, {
-                    "steps": {"builder": {"outputs": {"persistent": persistent}}},
-                }), driver != "remote")
-
-    def test_persistent_builder_skips_the_registry_cache_export(self):
-        setup = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
-        reported = re.search(r"^    value: \$\{\{ (.*) \}\}$", setup, re.M).group(1)
+    def test_reused_builder_skips_the_registry_cache_import(self):
         action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()
         step = action.split("    - name: Build Docker image\n", 1)[1]
         env_block, run_block = step.split("      run: |\n", 1)
         names = re.findall(r"^        ([A-Z_]+): ", env_block, re.M)
         script = "\n".join(line[8:] for line in run_block.splitlines())
-        # A reused same-job builder skips setup; an absent output alone does
-        # not imply reuse (it can also mean the standard fallback builder).
-        for persistent, reuse in (("true", "false"), ("false", "false"), ("", "false"), ("", "true")):
+        for reuse in ("false", "true"):
             for cache_to in ("type=registry,ref=registry.test/platform:buildcache,mode=min", ""):
-                with self.subTest(persistent=persistent, reuse=reuse, cache_to=cache_to), \
-                        tempfile.TemporaryDirectory() as directory:
-                    if persistent:
-                        self.assertEqual(evaluate(reported, {
-                            "steps": {"builder": {"outputs": {
-                                "persistent": "true" if persistent == "true" else "",
-                            }}},
-                        }), persistent == "true")
+                with self.subTest(reuse=reuse, cache_to=cache_to), tempfile.TemporaryDirectory() as directory:
                     directory = Path(directory)
                     calls = directory / "calls"
                     docker = directory / "docker"
@@ -128,17 +71,16 @@ class CachePolicyTests(unittest.TestCase):
                             "RUNNER_TEMP": str(directory), "GITHUB_OUTPUT": str(directory / "output"),
                             "ARCHESTRA_TEST_DOCKER_CALLS": str(calls),
                             "INPUT_CONTEXT": "platform", "INPUT_PUSH": "true",
-                            "INPUT_CACHE_TO": cache_to, "PERSISTENT_BUILDER": persistent, "REUSE_BUILDER": reuse,
+                            "INPUT_CACHE_TO": cache_to, "REUSE_BUILDER": reuse,
                             "INPUT_CACHE_FROM": "type=registry,ref=registry.test/platform:buildcache",
                         },
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     arguments = calls.read_text().splitlines()
                     self.assertEqual(arguments[:2], ["buildx", "build"])
-                    self.assertEqual("--cache-from" in arguments, persistent != "true" and reuse != "true")
-                    exported = bool(cache_to) and persistent != "true"
-                    self.assertEqual("--cache-to" in arguments, exported)
-                    if exported:
+                    self.assertEqual("--cache-from" in arguments, reuse != "true")
+                    self.assertEqual("--cache-to" in arguments, bool(cache_to))
+                    if cache_to:
                         self.assertEqual(arguments[arguments.index("--cache-to") + 1], cache_to)
 
     def test_only_trusted_default_branch_publishers_can_save_rust_caches(self):

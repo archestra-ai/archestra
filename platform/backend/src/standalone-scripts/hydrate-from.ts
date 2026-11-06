@@ -28,6 +28,8 @@
 import { and, eq, inArray, not, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import config from "@/config";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import { withTransactionRetry } from "@/database/retry";
 import * as schema from "@/database/schemas";
 import logger from "@/logging";
@@ -52,7 +54,16 @@ if (sourceUrl === targetUrl) {
 }
 
 const sourcePool = new pg.Pool({ connectionString: sourceUrl });
-const targetPool = new pg.Pool({ connectionString: targetUrl });
+const targetPool = new pg.Pool(
+  buildPgConnectionConfig(
+    targetUrl,
+    {},
+    {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    },
+  ),
+);
 const source = drizzle(sourcePool, { schema });
 const target = drizzle(targetPool, { schema });
 

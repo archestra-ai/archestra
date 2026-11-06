@@ -23,19 +23,25 @@
  * failed: its rows are still the only record of its installs, and the log names
  * every one of them.
  */
+import db, { initializeDatabase } from "@/database";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 
 async function main(): Promise<number> {
-  const summary = await declareExistingInstalls();
-  console.log(
-    `[openappa-declare-installs] done: declared=${summary.declared.length} ` +
-      `unchanged=${summary.unchanged.length} failed=${summary.failed.length}`,
-  );
-  if (summary.failed.length === 0) return 0;
-  console.error(
-    `[openappa-declare-installs] organizations still undeclared: ${summary.failed.join(", ")}`,
-  );
-  return 1;
+  await initializeDatabase();
+  try {
+    const summary = await declareExistingInstalls();
+    console.log(
+      `[openappa-declare-installs] done: declared=${summary.declared.length} ` +
+        `unchanged=${summary.unchanged.length} failed=${summary.failed.length}`,
+    );
+    if (summary.failed.length === 0) return 0;
+    console.error(
+      `[openappa-declare-installs] organizations still undeclared: ${summary.failed.join(", ")}`,
+    );
+    return 1;
+  } finally {
+    await db.$client.end();
+  }
 }
 
 main()

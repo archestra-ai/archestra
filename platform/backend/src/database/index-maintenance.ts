@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import pg from "pg";
+import config from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import db, { getDatabaseConnectionString } from "@/database";
@@ -433,10 +434,17 @@ async function ensureMaintainedIndexes(params: {
 
 async function openMaintenanceConnection(): Promise<pg.Client> {
   const client = new pg.Client(
-    buildPgConnectionConfig(getDatabaseConnectionString(), {
-      connectionTimeoutMillis: 10_000,
-      application_name: "archestra-index-maintenance",
-    }),
+    buildPgConnectionConfig(
+      getDatabaseConnectionString(),
+      {
+        connectionTimeoutMillis: 10_000,
+        application_name: "archestra-index-maintenance",
+      },
+      {
+        iamAuthEnabled: config.database.iamAuthEnabled,
+        awsRegion: config.database.awsRegion || undefined,
+      },
+    ),
   );
   // Without a listener, a dropped connection would crash the process.
   client.on("error", (error) => {

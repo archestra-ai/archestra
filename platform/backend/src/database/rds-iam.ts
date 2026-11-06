@@ -534,7 +534,9 @@ export async function resolveNativeDatabaseConnectionString(
 
   const createBridgePromise = (async () => {
     const server = net.createServer((clientSocket) => {
+      clientSocket.unref();
       const upstreamTcp = net.connect(rdsPort, rdsHost);
+      upstreamTcp.unref();
       let clientBuf = Buffer.alloc(0);
       let upstreamSocket: net.Socket | tls.TLSSocket | null = null;
       let upstreamReady = false;
@@ -653,6 +655,7 @@ export async function resolveNativeDatabaseConnectionString(
             servername: rdsHost,
             ...(typeof sslConfig === "object" ? sslConfig : {}),
           });
+          tlsSock.unref();
           upstreamSocket = tlsSock;
           tlsSock.once("secureConnect", () => {
             upstreamReady = true;

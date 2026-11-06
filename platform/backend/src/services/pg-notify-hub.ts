@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { buildPgConnectionConfig } from "@/database/rds-iam";
+import config from "@/config";
+import {
+  buildPgConnectionConfig,
+  isRdsIamAuthEnabled,
+} from "@/database/rds-iam";
 import logger from "@/logging";
 
 /**
@@ -613,12 +617,21 @@ function parseFanoutMessage(
 }
 
 function createDefaultPgClient(connectionString: string): PgClient {
+  const iamAuthEnabled =
+    config.database.iamAuthEnabled || isRdsIamAuthEnabled();
   return new pg.Client(
-    buildPgConnectionConfig(connectionString, {
-      connectionTimeoutMillis: 1_000,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10_000,
-    }),
+    buildPgConnectionConfig(
+      connectionString,
+      {
+        connectionTimeoutMillis: iamAuthEnabled ? 10_000 : 1_000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10_000,
+      },
+      {
+        iamAuthEnabled,
+        awsRegion: config.database.awsRegion || undefined,
+      },
+    ),
   );
 }
 

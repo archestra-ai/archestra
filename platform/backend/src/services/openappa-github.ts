@@ -133,6 +133,10 @@ export async function isEmptyGithubRepository(params: {
   const response = await githubFetch({
     url: `${params.api}/repos/${params.repo}/commits?per_page=1`,
     token: params.token,
-  }).catch(() => null);
+    apiVersion: true,
+  }).catch((err) => {
+    logger.warn({ err }, "OpenAPPA could not reach GitHub");
+    return null;
+  });
   return response?.status === 409;
 }

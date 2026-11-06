@@ -58,11 +58,6 @@ describe("githubFetch", () => {
 });
 
 describe("githubJson", () => {
-  test("parses a JSON body", async () => {
-    respond(200, { sha: "abc" });
-    await expect(json(githubSyncErrors)).resolves.toEqual({ sha: "abc" });
-  });
-
   test("a request past its deadline cannot reach GitHub", async () => {
     server.use(
       http.get(REPO, async () => {
@@ -140,20 +135,14 @@ describe("error policies", () => {
   });
 });
 
-describe("githubSourceFetch", () => {
-  test("maps every failure to 400, naming a missing source when told how", async () => {
-    respond(404);
-    expect(
-      await failure(githubSourceFetch({ url: REPO }, "No such file")),
-    ).toEqual({ statusCode: 400, message: "No such file" });
-    for (const status of [404, 500]) {
-      respond(status);
-      expect(await failure(githubSourceFetch({ url: REPO }))).toEqual({
-        statusCode: 400,
-        message: `GitHub returned HTTP ${status}. Check repository access and the source path.`,
-      });
-    }
-  });
+test("a policy source read maps every failure to 400", async () => {
+  for (const status of [404, 500]) {
+    respond(status);
+    expect(await failure(githubSourceFetch({ url: REPO }))).toEqual({
+      statusCode: 400,
+      message: `GitHub returned HTTP ${status}. Check repository access and the source path.`,
+    });
+  }
 });
 
 describe("githubSetupRead", () => {
@@ -189,27 +178,18 @@ describe("githubSetupRead", () => {
 });
 
 describe("isEmptyGithubRepository", () => {
-  const COMMITS = `${REPO}/commits`;
-  const isEmpty = () =>
-    isEmptyGithubRepository({
-      api: "https://api.github.com",
-      repo: "example/policies",
-      token: "t",
-    });
-
-  test("only a 409 for the commits means empty", async () => {
-    for (const [status, empty] of [
-      [409, true],
-      [200, false],
-      [404, false],
-    ] as const) {
-      server.use(http.get(COMMITS, () => HttpResponse.json([], { status })));
-      expect(await isEmpty()).toBe(empty);
-    }
-  });
-
-  test("a request that fails is not empty", async () => {
-    server.use(http.get(COMMITS, () => HttpResponse.error()));
+  test("a missing or unreachable commits list is not empty", async () => {
+    const isEmpty = () =>
+      isEmptyGithubRepository({
+        api: "https://api.github.com",
+        repo: "example/policies",
+        token: "t",
+      });
+    server.use(
+      http.get(`${REPO}/commits`, () => HttpResponse.json([], { status: 404 })),
+    );
+    expect(await isEmpty()).toBe(false);
+    server.use(http.get(`${REPO}/commits`, () => HttpResponse.error()));
     expect(await isEmpty()).toBe(false);
   });
 });

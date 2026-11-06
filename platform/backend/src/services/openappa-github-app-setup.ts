@@ -22,7 +22,10 @@ import {
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import { lookupAccount } from "@/services/github-app-manifest-setup";
-import { githubFetch } from "@/services/openappa-github";
+import {
+  githubFetch,
+  isEmptyGithubRepository,
+} from "@/services/openappa-github";
 import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
@@ -334,10 +337,9 @@ class OpenAppaGithubAppSetup {
     if (!response?.ok) return { status: "unreachable", validations: null };
     const found = RepositorySchema.safeParse(await response.json());
     if (!found.success) return { status: "unreachable", validations: null };
-    // An empty repository gets the template's files written into it; GitHub
-    // answers 409 for the commits of a repository without any.
-    const commits = await get(`${app.api}/repos/${repo}/commits?per_page=1`);
-    if (commits?.status === 409) return { status: "empty", validations: null };
+    // An empty repository gets the template's files written into it.
+    if (await isEmptyGithubRepository({ api: app.api, repo, token }))
+      return { status: "empty", validations: null };
     const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
     if (
       !ref &&

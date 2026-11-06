@@ -62824,6 +62824,9 @@
                                     "format": "uuid",
                                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                   },
+                                  "autoModel": {
+                                    "type": "boolean"
+                                  },
                                   "identityProviderId": {
                                     "nullable": true,
                                     "type": "string"
@@ -63600,6 +63603,7 @@
                                   "llmModel",
                                   "modelId",
                                   "modelPoolId",
+                                  "autoModel",
                                   "identityProviderId",
                                   "environmentId",
                                   "runtime",
@@ -64649,6 +64653,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "autoModel": {
+                            "type": "boolean"
+                          },
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
@@ -65425,6 +65432,7 @@
                           "llmModel",
                           "modelId",
                           "modelPoolId",
+                          "autoModel",
                           "identityProviderId",
                           "environmentId",
                           "runtime",
@@ -65828,6 +65836,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "autoModel": {
+                    "type": "boolean"
                   },
                   "identityProviderId": {
                     "nullable": true,
@@ -66731,6 +66742,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -67490,6 +67504,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -68692,6 +68707,9 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "autoModel": {
+                        "type": "boolean"
+                      },
                       "sharedByName": {
                         "type": "boolean"
                       }
@@ -68711,6 +68729,7 @@
                       "modelId",
                       "llmApiKeyId",
                       "modelPoolId",
+                      "autoModel",
                       "sharedByName"
                     ],
                     "additionalProperties": false
@@ -69350,6 +69369,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "autoModel": {
+                            "type": "boolean"
+                          },
                           "sharedByName": {
                             "type": "boolean"
                           }
@@ -69369,6 +69391,7 @@
                           "modelId",
                           "llmApiKeyId",
                           "modelPoolId",
+                          "autoModel",
                           "sharedByName"
                         ],
                         "additionalProperties": false
@@ -72090,6 +72113,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -72861,6 +72887,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -73603,6 +73630,9 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "autoModel": {
+                          "type": "boolean"
                         },
                         "identityProviderId": {
                           "nullable": true,
@@ -74363,6 +74393,7 @@
                         "llmModel",
                         "modelId",
                         "modelPoolId",
+                        "autoModel",
                         "identityProviderId",
                         "environmentId",
                         "runtime",
@@ -74790,6 +74821,9 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "autoModel": {
+                      "type": "boolean"
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -75550,6 +75584,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -75902,6 +75937,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "autoModel": {
+                    "type": "boolean"
                   },
                   "identityProviderId": {
                     "nullable": true,
@@ -76520,6 +76558,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -77279,6 +77320,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -79389,6 +79431,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -80148,6 +80193,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -80713,6 +80759,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -81472,6 +81521,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -88828,6 +88878,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -89587,6 +89640,7 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -124935,12 +124989,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -124985,12 +125058,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -125035,12 +125127,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         }
@@ -125052,10 +125163,31 @@
                       ],
                       "additionalProperties": false
                     },
-                    "routedAgentCount": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "eligibleApiKeyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "agentCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "organizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agentCount",
+                        "organizationDefault"
+                      ],
+                      "additionalProperties": false
                     },
                     "generation": {
                       "type": "integer",
@@ -125127,13 +125259,33 @@
                             "ready",
                             "no_jev_key"
                           ]
+                        },
+                        "scorerApiKey": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
                         "lastFitError",
-                        "scorer"
+                        "scorer",
+                        "scorerApiKey"
                       ],
                       "additionalProperties": false
                     }
@@ -125142,7 +125294,8 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
-                    "routedAgentCount",
+                    "eligibleApiKeyIds",
+                    "usage",
                     "generation",
                     "plannedGeneration",
                     "status"
@@ -125412,6 +125565,77 @@
                     "type": "number",
                     "minimum": 0.01,
                     "maximum": 9999999999.99
+                  },
+                  "tiers": {
+                    "type": "object",
+                    "properties": {
+                      "fast": {
+                        "type": "object",
+                        "properties": {
+                          "modelId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "modelId",
+                          "providerApiKeyId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "normal": {
+                        "type": "object",
+                        "properties": {
+                          "modelId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "modelId",
+                          "providerApiKeyId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "smart": {
+                        "type": "object",
+                        "properties": {
+                          "modelId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "modelId",
+                          "providerApiKeyId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "fast",
+                      "normal",
+                      "smart"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -125478,12 +125702,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -125528,12 +125771,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -125578,12 +125840,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         }
@@ -125595,10 +125876,31 @@
                       ],
                       "additionalProperties": false
                     },
-                    "routedAgentCount": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "eligibleApiKeyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "agentCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "organizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agentCount",
+                        "organizationDefault"
+                      ],
+                      "additionalProperties": false
                     },
                     "generation": {
                       "type": "integer",
@@ -125670,13 +125972,33 @@
                             "ready",
                             "no_jev_key"
                           ]
+                        },
+                        "scorerApiKey": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
                         "lastFitError",
-                        "scorer"
+                        "scorer",
+                        "scorerApiKey"
                       ],
                       "additionalProperties": false
                     },
@@ -125780,7 +126102,8 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
-                    "routedAgentCount",
+                    "eligibleApiKeyIds",
+                    "usage",
                     "generation",
                     "plannedGeneration",
                     "status",
@@ -126883,12 +127206,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -126933,12 +127275,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         },
@@ -126983,12 +127344,31 @@
                             },
                             "modelId": {
                               "type": "string"
+                            },
+                            "apiKey": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
                             "id",
                             "provider",
-                            "modelId"
+                            "modelId",
+                            "apiKey"
                           ],
                           "additionalProperties": false
                         }
@@ -127000,10 +127380,31 @@
                       ],
                       "additionalProperties": false
                     },
-                    "routedAgentCount": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "eligibleApiKeyIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "agentCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "organizationDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agentCount",
+                        "organizationDefault"
+                      ],
+                      "additionalProperties": false
                     },
                     "generation": {
                       "type": "integer",
@@ -127075,13 +127476,33 @@
                             "ready",
                             "no_jev_key"
                           ]
+                        },
+                        "scorerApiKey": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
                         "lastFitError",
-                        "scorer"
+                        "scorer",
+                        "scorerApiKey"
                       ],
                       "additionalProperties": false
                     },
@@ -127185,7 +127606,8 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
-                    "routedAgentCount",
+                    "eligibleApiKeyIds",
+                    "usage",
                     "generation",
                     "plannedGeneration",
                     "status",
@@ -158419,6 +158841,9 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "defaultAutoModel": {
+                          "type": "boolean"
+                        },
                         "defaultFastModelId": {
                           "nullable": true,
                           "type": "string",
@@ -158915,6 +159340,7 @@
                         "defaultLlmProvider",
                         "defaultModelId",
                         "defaultLlmApiKeyId",
+                        "defaultAutoModel",
                         "defaultFastModelId",
                         "defaultSmartModelId",
                         "defaultUserLimitValue",
@@ -160153,6 +160579,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "autoModel": {
+                            "type": "boolean"
+                          },
                           "sharedByName": {
                             "type": "boolean"
                           }
@@ -160172,6 +160601,7 @@
                           "modelId",
                           "llmApiKeyId",
                           "modelPoolId",
+                          "autoModel",
                           "sharedByName"
                         ],
                         "additionalProperties": false
@@ -161011,6 +161441,9 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
+                            "autoModel": {
+                              "type": "boolean"
+                            },
                             "identityProviderId": {
                               "nullable": true,
                               "type": "string"
@@ -161770,6 +162203,7 @@
                             "llmModel",
                             "modelId",
                             "modelPoolId",
+                            "autoModel",
                             "identityProviderId",
                             "environmentId",
                             "runtime",
@@ -162671,6 +163105,9 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "autoModel": {
+                          "type": "boolean"
+                        },
                         "thinkingEffort": {
                           "nullable": true,
                           "type": "string",
@@ -163110,6 +163547,7 @@
                         "selectedProvider",
                         "modelId",
                         "modelPoolId",
+                        "autoModel",
                         "thinkingEffort",
                         "hasCustomToolSelection",
                         "hooksDebugEnabled",
@@ -163468,6 +163906,9 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "autoModel": {
+                                "type": "boolean"
+                              },
                               "sharedByName": {
                                 "type": "boolean"
                               }
@@ -163487,6 +163928,7 @@
                               "modelId",
                               "llmApiKeyId",
                               "modelPoolId",
+                              "autoModel",
                               "sharedByName"
                             ],
                             "additionalProperties": false
@@ -164326,6 +164768,9 @@
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
+                                "autoModel": {
+                                  "type": "boolean"
+                                },
                                 "identityProviderId": {
                                   "nullable": true,
                                   "type": "string"
@@ -165085,6 +165530,7 @@
                                 "llmModel",
                                 "modelId",
                                 "modelPoolId",
+                                "autoModel",
                                 "identityProviderId",
                                 "environmentId",
                                 "runtime",
@@ -168665,6 +169111,9 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "autoModel": {
+                        "type": "boolean"
+                      },
                       "thinkingEffort": {
                         "nullable": true,
                         "type": "string",
@@ -169142,6 +169591,7 @@
                       "selectedProvider",
                       "modelId",
                       "modelPoolId",
+                      "autoModel",
                       "thinkingEffort",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
@@ -169448,6 +169898,9 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "autoModel": {
+                    "type": "boolean"
+                  },
                   "projectId": {
                     "nullable": true,
                     "type": "string",
@@ -169554,6 +170007,9 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "autoModel": {
+                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -169994,6 +170450,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -170349,6 +170806,9 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "autoModel": {
+                        "type": "boolean"
                       },
                       "thinkingEffort": {
                         "nullable": true,
@@ -170789,6 +171249,7 @@
                       "selectedProvider",
                       "modelId",
                       "modelPoolId",
+                      "autoModel",
                       "thinkingEffort",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
@@ -171167,6 +171628,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -171606,6 +172070,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -171906,6 +172371,9 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "autoModel": {
+                    "type": "boolean"
+                  },
                   "agentId": {
                     "type": "string",
                     "format": "uuid",
@@ -172033,6 +172501,9 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "autoModel": {
+                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -172473,6 +172944,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -174931,6 +175403,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -175370,6 +175845,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -176034,6 +176510,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -176473,6 +176952,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -177206,6 +177686,9 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "autoModel": {
+                          "type": "boolean"
+                        },
                         "thinkingEffort": {
                           "nullable": true,
                           "type": "string",
@@ -177645,6 +178128,7 @@
                         "selectedProvider",
                         "modelId",
                         "modelPoolId",
+                        "autoModel",
                         "thinkingEffort",
                         "hasCustomToolSelection",
                         "hooksDebugEnabled",
@@ -178034,6 +178518,9 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "autoModel": {
+                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -178474,6 +178961,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -178870,6 +179358,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -179309,6 +179800,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -483945,6 +484437,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -484441,6 +484936,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -484803,6 +485299,9 @@
                       ],
                       "additionalProperties": false
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "autoRouting": {
                       "oneOf": [
                         {
@@ -484999,6 +485498,7 @@
                   },
                   "required": [
                     "model",
+                    "defaultAutoModel",
                     "autoRouting"
                   ],
                   "additionalProperties": false
@@ -485638,6 +486138,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -486134,6 +486637,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -487070,6 +487574,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -487566,6 +488073,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -488110,6 +488618,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -488606,6 +489117,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -489147,6 +489659,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -489643,6 +490158,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -490287,7 +490803,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -490401,6 +490917,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "defaultAutoModel": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -490624,6 +491143,9 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "defaultAutoModel": {
+                      "type": "boolean"
                     },
                     "defaultFastModelId": {
                       "nullable": true,
@@ -491121,6 +491643,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -491794,6 +492317,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -492290,6 +492816,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -492988,6 +493515,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -493484,6 +494014,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -494095,6 +494626,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -494591,6 +495125,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -495146,6 +495681,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -495642,6 +496180,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -496228,6 +496767,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -496724,6 +497266,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -497247,6 +497790,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -497743,6 +498289,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -499470,6 +500017,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "defaultAutoModel": {
+                      "type": "boolean"
+                    },
                     "defaultFastModelId": {
                       "nullable": true,
                       "type": "string",
@@ -499966,6 +500516,7 @@
                     "defaultLlmProvider",
                     "defaultModelId",
                     "defaultLlmApiKeyId",
+                    "defaultAutoModel",
                     "defaultFastModelId",
                     "defaultSmartModelId",
                     "defaultUserLimitValue",
@@ -530389,6 +530940,9 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "autoModel": {
+                      "type": "boolean"
+                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -530828,6 +531382,7 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
+                    "autoModel",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",

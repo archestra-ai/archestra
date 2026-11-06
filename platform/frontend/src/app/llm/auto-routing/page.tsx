@@ -14,9 +14,11 @@ import { useFittedTierModels } from "./_parts/fitted-tier-models";
 import { PastSessions } from "./_parts/past-sessions";
 import { describeFitError, parsePlanSummary } from "./_parts/plan-document";
 import { PlanSummaryView } from "./_parts/plan-summary";
-import { AutoRoutingSettingsForm } from "./_parts/settings-form";
-import { TryPrompt } from "./_parts/try-prompt";
-import { WhatIf } from "./_parts/what-if";
+import {
+  isAutoRoutingSetUp,
+  SetupCards,
+  UsageLine,
+} from "./_parts/setup-cards";
 
 export default function AutoRoutingOverviewPage() {
   const settingsQuery = useAutoRoutingSettings();
@@ -35,10 +37,26 @@ export default function AutoRoutingOverviewPage() {
   const settings = settingsQuery.data;
   if (!settings) return null;
 
+  if (!isAutoRoutingSetUp(settings)) {
+    return (
+      <div className="space-y-6">
+        <SetupCards settings={settings} />
+        <PastSessions
+          routingEnabled={settings.enabled}
+          hasActivePlan={settings.status.activePlan !== null}
+          canUpdate={canUpdate}
+          scorer={settings.status.scorer}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
-      <PlanStatus settings={settings} />
+      <div className="space-y-1">
+        <PlanStatus settings={settings} />
+        <UsageLine settings={settings} />
+      </div>
       <PastSessions
         routingEnabled={settings.enabled}
         hasActivePlan={settings.status.activePlan !== null}
@@ -46,7 +64,6 @@ export default function AutoRoutingOverviewPage() {
         scorer={settings.status.scorer}
       />
       <ActivePlanSummary settings={settings} />
-      <TryPrompt canUpdate={canUpdate} scorer={settings.status.scorer} />
     </div>
   );
 }
@@ -130,17 +147,10 @@ function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {
   const summary = plan ? parsePlanSummary(plan.summary) : null;
   if (!plan || !summary) return null;
   return (
-    <>
-      <PlanSummaryView
-        summary={summary}
-        budgetUsdPerDay={plan.budgetUsdPerDay}
-        tierModels={tierModels}
-      />
-      <WhatIf
-        key={`${plan.id}-${plan.budgetUsdPerDay}`}
-        savedBudgetUsdPerDay={plan.budgetUsdPerDay}
-        savedTiers={settings.tiers}
-      />
-    </>
+    <PlanSummaryView
+      summary={summary}
+      budgetUsdPerDay={plan.budgetUsdPerDay}
+      tierModels={tierModels}
+    />
   );
 }

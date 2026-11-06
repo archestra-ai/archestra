@@ -95,6 +95,7 @@ export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
+export { default as autoRoutingTiersTable } from "./auto-routing-tier";
 export { default as browserStorageStatesTable } from "./browser-storage-state";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
@@ -228,7 +229,6 @@ export {
   openappaPolicyTestSuitesTable,
 } from "./openappa-policy-tests";
 export { openappaYellsTable } from "./openappa-yell";
-export { default as orgTrioPendingNormalTierTable } from "./org-trio-pending-normal-tier";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";

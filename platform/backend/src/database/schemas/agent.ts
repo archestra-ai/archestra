@@ -120,6 +120,12 @@ const agentsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
+     * Runs on auto routing: each session goes to the organization's fast,
+     * normal or smart tier. `llmApiKeyId`, `modelId` and `modelPoolId` are
+     * then null. Never set on Agent Runtime agents.
+     */
+    autoModel: boolean("auto_model").notNull().default(false),
+    /**
      * Auto routing (the org's `llm_proxy` row only). Server-managed: written
      * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
      */

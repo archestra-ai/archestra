@@ -15,7 +15,6 @@ const {
   updateAutoRoutingSettings,
   getAutoRoutingPlans,
   getAutoRoutingPlan,
-  replanAutoRouting,
   previewAutoRouting,
   simulateAutoRouting,
   getAutoRoutingDiagnostics,
@@ -119,18 +118,6 @@ export function useUpdateAutoRoutingSettings() {
   return useMutation({
     mutationFn: async (body: AutoRoutingSettingsUpdate) => {
       const { data, error } = await updateAutoRoutingSettings({ body });
-      throwOnApiError(error);
-      return data;
-    },
-    onSuccess: (data) => applyFit(queryClient, data),
-  });
-}
-
-export function useReplanAutoRouting() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await replanAutoRouting();
       throwOnApiError(error);
       return data;
     },

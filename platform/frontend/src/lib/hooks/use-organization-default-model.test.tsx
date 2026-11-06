@@ -79,18 +79,23 @@ function renderDefaultModel(followsRouting?: boolean) {
 }
 
 describe("useOrganizationDefaultModel", () => {
-  it("names the three tiers while auto routing is active", async () => {
+  it("reads Auto, with the tiers in its offer, while the default is auto and routing is on", async () => {
     summary = {
       model: TIERS.normal,
+      defaultAutoModel: true,
       autoRouting: { active: true, tiers: TIERS },
     };
     const { result } = renderDefaultModel();
-    await waitFor(() => expect(result.current.label).not.toBeNull());
-    expect(result.current.label).toMatch(/Haiku.*Sonnet.*Opus/);
+    await waitFor(() => expect(result.current.label).toBe("Auto"));
+    expect(result.current.auto?.description).toMatch(/Haiku.*Sonnet.*Opus/);
   });
 
   it("names the default model while auto routing is off", async () => {
-    summary = { model: TIERS.normal, autoRouting: { active: false } };
+    summary = {
+      model: TIERS.normal,
+      defaultAutoModel: true,
+      autoRouting: { active: false },
+    };
     const { result } = renderDefaultModel();
     await waitFor(() =>
       expect(result.current.label).toBe("Anthropic · Sonnet"),
@@ -100,11 +105,24 @@ describe("useOrganizationDefaultModel", () => {
   it("names only the default model for an agent auto routing skips", async () => {
     summary = {
       model: TIERS.normal,
+      defaultAutoModel: true,
       autoRouting: { active: true, tiers: TIERS },
     };
     const { result } = renderDefaultModel(false);
     await waitFor(() =>
       expect(result.current.label).toBe("Anthropic · Sonnet"),
     );
+  });
+
+  it("offers auto with its tiers while routing is on, though the default is not auto", async () => {
+    summary = {
+      model: TIERS.normal,
+      defaultAutoModel: false,
+      autoRouting: { active: true, tiers: TIERS },
+    };
+    const { result } = renderDefaultModel();
+    await waitFor(() => expect(result.current.auto).not.toBeNull());
+    expect(result.current.label).toBe("Anthropic · Sonnet");
+    expect(result.current.auto?.description).toMatch(/Haiku.*Sonnet.*Opus/);
   });
 });

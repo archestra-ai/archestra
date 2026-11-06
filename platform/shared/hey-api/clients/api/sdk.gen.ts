@@ -10901,7 +10901,7 @@ export const updateSkillsSettings = <ThrowOnError extends boolean = false>(optio
 export const getAgentRuntimeTiers = <ThrowOnError extends boolean = false>(options?: Options<GetAgentRuntimeTiersData, ThrowOnError>) => (options?.client ?? client).get<GetAgentRuntimeTiersResponses, GetAgentRuntimeTiersErrors, ThrowOnError>({ url: '/api/organization/agent-runtime-tiers', ...options });
 
 /**
- * Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)
+ * Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)
  *
  * Authentication:
  *

@@ -3228,9 +3228,14 @@ export class ChatOpsManager {
 
       const { selectedModel, selectedProvider } =
         await resolveConversationLlmSelectionForAgent({
-          agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+          agent: {
+            llmApiKeyId: agent.llmApiKeyId,
+            modelId: agent.modelId,
+            autoModel: agent.autoModel,
+          },
           organizationId: params.organizationId,
           userId: params.userId,
+          allowAutoModel: agent.runtime === null,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);

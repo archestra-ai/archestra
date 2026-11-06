@@ -1,9 +1,9 @@
-import { and, eq, gt, gte, isNotNull, notExists, or } from "drizzle-orm";
+import { and, eq, gt, gte, isNotNull, notExists, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
 const agents = schema.agentsTable;
-const organizations = schema.organizationsTable;
+const tiers = schema.autoRoutingTiersTable;
 const plans = schema.routingPlansTable;
 const tasks = schema.tasksTable;
 
@@ -23,10 +23,13 @@ class AutoRoutingDispatchModel {
           gte(plans.createdAt, staleBefore),
         ),
       );
+    const tierCount = db
+      .select({ total: sql<number>`count(*)` })
+      .from(tiers)
+      .where(eq(tiers.organizationId, agents.organizationId));
     const rows = await db
       .select({ organizationId: agents.organizationId })
       .from(agents)
-      .innerJoin(organizations, eq(organizations.id, agents.organizationId))
       .where(
         and(
           eq(agents.agentType, "llm_proxy"),
@@ -34,9 +37,8 @@ class AutoRoutingDispatchModel {
           notDeleted(agents),
           eq(agents.autoRoutingEnabled, true),
           isNotNull(agents.autoRoutingBudgetUsdPerDay),
-          isNotNull(organizations.defaultFastModelId),
-          isNotNull(organizations.defaultModelId),
-          isNotNull(organizations.defaultSmartModelId),
+          // Every tier is set.
+          sql`(${tierCount}) = 3`,
           or(
             gt(
               agents.autoRoutingGeneration,

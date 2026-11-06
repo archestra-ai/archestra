@@ -1311,6 +1311,8 @@ export function AgentForm({
   // A model pool in place of the key and model; the server stores one of its
   // members as the key and model.
   const [modelPoolId, setModelPoolId] = useState<string | null>(null);
+  // The `auto` model in place of the key and model.
+  const [autoModel, setAutoModel] = useState(false);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1715,6 +1717,7 @@ export function AgentForm({
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             modelPoolId: agentData.modelPoolId ?? null,
+            autoModel: agentData.autoModel ?? false,
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             networkPolicy: agentData.networkPolicy ?? null,
@@ -1751,6 +1754,7 @@ export function AgentForm({
             llmApiKeyId: null,
             llmModel: null,
             modelPoolId: null,
+            autoModel: false,
             identityProviderId: undefined,
             environmentId: undefined,
             networkPolicy: null,
@@ -1779,6 +1783,7 @@ export function AgentForm({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setModelPoolId(nextValues.modelPoolId);
+      setAutoModel(nextValues.autoModel);
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
@@ -1932,6 +1937,14 @@ export function AgentForm({
     enabled: isInternalAgent && !runtime,
   });
   const agentModelPoolId = runtime ? null : modelPoolId;
+  // Auto is offered to agents the platform runs itself, not to runtimes or
+  // built-in agents, while auto routing is on.
+  const offersAutoModel =
+    isInternalAgent &&
+    !runtime &&
+    !agent?.builtIn &&
+    !!organizationDefaultModel.auto;
+  const agentAutoModel = !runtime && !agent?.builtIn && autoModel;
   const agentModelPool = agentModelPoolId
     ? modelPools.find((pool) => pool.id === agentModelPoolId)
     : undefined;
@@ -2206,7 +2219,8 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null));
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+      agentAutoModel !== (persistedAgent.autoModel ?? false));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2375,6 +2389,7 @@ export function AgentForm({
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                   modelPoolId: agentModelPoolId,
+                  autoModel: agentAutoModel,
                 }),
               }),
             }),
@@ -2450,6 +2465,7 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             modelPoolId: agentModelPoolId,
+            autoModel: agentAutoModel,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2764,6 +2780,7 @@ export function AgentForm({
     isClaudeCodeRuntime,
     supportsClaudeCodeSubscription,
     runtimeHasLocalChanges,
+    agentAutoModel,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2854,6 +2871,7 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     modelPoolId,
+    autoModel,
     identityProviderId,
     environmentId,
     networkPolicy,
@@ -2966,6 +2984,7 @@ export function AgentForm({
         onSelectKey={(keyId) => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoModel(false);
           handleLlmApiKeyChange(keyId);
           setApiKeySelectorOpen(false);
         }}
@@ -2975,11 +2994,30 @@ export function AgentForm({
           cancelPendingCreatedKeySelection();
           pendingModelAutoSelectionRef.current = null;
           setModelPoolId(poolId);
+          setAutoModel(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
+        auto={
+          offersAutoModel || agentAutoModel
+            ? {
+                selected: agentAutoModel,
+                description: organizationDefaultModel.auto?.description,
+                onSelect: () => {
+                  cancelPendingCreatedKeySelection();
+                  pendingModelAutoSelectionRef.current = null;
+                  setAutoModel(true);
+                  setModelPoolId(null);
+                  setLlmApiKeyId(null);
+                  setLlmModel(null);
+                  lastAutoSelectedProviderRef.current = null;
+                  setApiKeySelectorOpen(false);
+                },
+              }
+            : undefined
+        }
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
         providerFilter={apiKeyProviderFilter}
@@ -2990,13 +3028,16 @@ export function AgentForm({
         allowOrganizationDefault={
           !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
         }
-        organizationDefaultSelected={!llmApiKeyId && !agentModelPoolId}
+        organizationDefaultSelected={
+          !llmApiKeyId && !agentModelPoolId && !agentAutoModel
+        }
         organizationDefaultDescription={
           organizationDefaultModel.label ?? undefined
         }
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoModel(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
@@ -3065,7 +3106,9 @@ export function AgentForm({
                   placeholder={
                     isClaudeCodeRuntime && !agent
                       ? "Select a Claude model"
-                      : (organizationDefaultModel.label ?? undefined)
+                      : agentAutoModel
+                        ? "Auto"
+                        : (organizationDefaultModel.label ?? undefined)
                   }
                 />
               </div>
@@ -3122,9 +3165,11 @@ export function AgentForm({
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
         ? "Select a provider and Claude model"
-        : agentModelPoolId
-          ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
-          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+        : agentAutoModel
+          ? "Auto"
+          : agentModelPoolId
+            ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
+            : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
@@ -4494,6 +4539,7 @@ type AgentFormFields = {
   llmApiKeyId: string | null;
   llmModel: string | null;
   modelPoolId: string | null;
+  autoModel: boolean;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   networkPolicy: AgentNetworkPolicy | null;

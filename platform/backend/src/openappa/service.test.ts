@@ -2034,13 +2034,11 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
-  test.each([
-    undefined,
-  ])("evaluates an unregistered remedy lookalike (%s)", async (namespace) => {
-    // The gateway canonicalizer only resolves namespaces it attests; a
-    // foreign server's member stays a bare leaf name. The leaf alone must
-    // never release remedy control: the call carries a namespace, so it is
-    // evaluated like any foreign tool.
+  test("evaluates a bare-name remedy lookalike", async () => {
+    // The leaf name alone never releases remedy control: a call without the
+    // control's namespace is evaluated like any foreign tool. The namespaced
+    // lookalike is covered by "releases the control call only in the
+    // namespace its tool was declared in".
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "deny_call", feedback: "Not declared" }),
     );
@@ -2050,7 +2048,6 @@ describe("APPA feature boundary", () => {
         {
           id: "lookalike",
           name: "archestra__execute_remedy_plan",
-          namespace,
           arguments: { offer_id: "offer-1" },
         },
       ],

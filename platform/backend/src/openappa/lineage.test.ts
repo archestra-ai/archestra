@@ -87,4 +87,15 @@ describe("where a traced stamped history belongs", () => {
       place("replaying", ["parent", "tool-less"]),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
+
+  test("refuses a receipt whose claimed source never started", async () => {
+    await expect(
+      forkedSession({
+        organizationId,
+        sessionId: "replaying",
+        traced: ["missing"],
+        scope,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
 });

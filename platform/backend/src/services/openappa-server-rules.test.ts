@@ -549,6 +549,26 @@ test("each open pull request carries the checks a pull would make on its merge r
   expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
     FIRST,
   );
+
+  // A credential that may post neither is not asked again every minute.
+  let listed = 0;
+  server.use(
+    http.get(`${REPO}/pulls`, () => {
+      listed++;
+      return HttpResponse.json([
+        { head: { sha: "6".repeat(40) }, merge_commit_sha: null },
+      ]);
+    }),
+    http.post(`${REPO}/check-runs`, () =>
+      HttpResponse.json({}, { status: 403 }),
+    ),
+    http.post(`${REPO}/statuses/:sha`, () =>
+      HttpResponse.json({}, { status: 403 }),
+    ),
+  );
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(listed).toBe(1);
 });
 
 test("a server's editors propose its rules as a pull request; readers and outsiders cannot", async ({

@@ -728,6 +728,15 @@ const checkedPulls = new LRUCacheManager<true>({
 });
 
 /**
+ * A repository that refused a check, for ten minutes: a credential without
+ * the permission is not asked again every minute.
+ */
+const refusedChecks = new LRUCacheManager<true>({
+  maxSize: 512,
+  defaultTtl: 10 * TimeInMs.Minute,
+});
+
+/**
  * Check every open pull request (merge request on GitLab) into the synced
  * branch as a pull would check its result, and post the outcome on its head
  * commit as the "Archestra Guardrails policy" check. A branch rule that
@@ -738,6 +747,8 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.repo || !row.path || !row.interval || !row.sourceCommit) return;
   const source = { ...row, repo: row.repo, path: row.path };
+  const repository = [organizationId, source.repo].join("\u0000");
+  if (refusedChecks.get(repository)) return;
   const pulls = row.gitlabTokenId
     ? await gitlabPullRequests(source)
     : await githubPullRequests(source);
@@ -749,7 +760,16 @@ async function checkAppaGithubPullRequests(organizationId: string) {
     const outcome = await outcomeAt({ source, commitSha: pull.result });
     // A read that failed for now is checked again next minute.
     if (!outcome) continue;
-    await pull.post(outcome);
+    try {
+      await pull.post(outcome);
+    } catch (error) {
+      refusedChecks.set(repository, true);
+      logger.warn(
+        { organizationId, error },
+        "OpenAPPA could not post the policy check on a pull request: a GitHub App needs the Checks permission (read and write), a token the commit statuses scope",
+      );
+      return;
+    }
     checkedPulls.set(key, true);
   }
 }

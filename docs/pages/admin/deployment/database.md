@@ -130,7 +130,7 @@ Enable IAM database authentication on your RDS or Aurora PostgreSQL instance, th
   GRANT ALL ON SCHEMA public TO archestra_iam;
   ```
 
-- **Existing Archestra database**: Grant `rds_iam` directly to the existing database role that owns Archestra's tables and sequences (for example, `archestra`) and keep that username in `ARCHESTRA_DATABASE_URL` and the `rds-db:connect` policy so table ownership and migration DDL (`ALTER TABLE`) privileges remain intact:
+- **Existing Archestra database**: Grant `rds_iam` directly to the existing database role that owns Archestra's tables and sequences (for example, `archestra`) and keep that username in [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL) and the `rds-db:connect` policy so table ownership and migration DDL (`ALTER TABLE`) privileges remain intact:
 
   ```sql
   \c archestra

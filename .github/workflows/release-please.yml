@@ -97,7 +97,7 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@75d74747ef6874b818a5a9b1c3c9d2dc2c6bc6a3 # archestra-ai/.github#57
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
@@ -380,7 +380,7 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@75d74747ef6874b818a5a9b1c3c9d2dc2c6bc6a3 # archestra-ai/.github#57
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true

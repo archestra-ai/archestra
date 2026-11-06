@@ -294,6 +294,7 @@ describe("organization routes", () => {
       await makeAgent({
         organizationId,
         authorId: user.id,
+        name: "Inheriting Codex Agent",
         agentType: "agent",
         access: "personal",
         runtime: {
@@ -318,7 +319,11 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(409);
-      expect(response.json().error.message).toContain("incompatible");
+      // The admin can unblock themselves only if told which agents block the
+      // default and how to fix them.
+      const message = response.json().error.message;
+      expect(message).toContain('"Inheriting Codex Agent"');
+      expect(message).toContain("Set a model on that agent");
     });
 
     test("does not apply the default compatibility check to explicit runtime overrides", async ({
@@ -394,6 +399,83 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("GET /api/organization/agent-settings/default-model-dependents", () => {
+    test("lists only Agent Runtime agents that inherit the default model", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const runtime = {
+        image: "example.com/coding-agent:latest",
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic" as const,
+        backend: "kubernetes" as const,
+        steerMode: "pipe" as const,
+        privileged: false,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      };
+      const inheriting = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        name: "Inherits the default",
+        agentType: "agent",
+        access: "personal",
+        runtime,
+      });
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "anthropic",
+      });
+      const model = await ModelModel.create({
+        externalId: "anthropic/organization-dependents-test",
+        provider: "anthropic",
+        modelId: "organization-dependents-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        name: "Has its own model",
+        agentType: "agent",
+        access: "personal",
+        llmApiKeyId: key.id,
+        modelId: model.id,
+        runtime,
+      });
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        name: "No runtime",
+        agentType: "agent",
+        access: "personal",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization/agent-settings/default-model-dependents",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        agents: [
+          {
+            id: inheriting.id,
+            name: "Inherits the default",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+          },
+        ],
+      });
     });
   });
 

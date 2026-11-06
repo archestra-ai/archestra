@@ -24,6 +24,7 @@ import { environmentKeys } from "./environment.query";
 import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import {
   getApiErrorInternalCode,
+  getApiErrorMessage,
   handleApiError,
   throwOnApiError,
   toApiError,
@@ -65,6 +66,8 @@ export function useAppearanceSettings(enabled = true) {
 export const organizationKeys = {
   agentRuntimeTiers: () =>
     [...organizationKeys.all, "agent-runtime-tiers"] as const,
+  defaultModelRuntimeDependents: () =>
+    [...organizationKeys.all, "default-model-runtime-dependents"] as const,
   all: ["organization"] as const,
   invitations: () => [...organizationKeys.all, "invitations"] as const,
   invitation: (id: string) => [...organizationKeys.invitations(), id] as const,
@@ -440,7 +443,12 @@ export function useUpdateAppearanceSettings(
         await archestraApiSdk.updateAppearanceSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
+        // The server says why (e.g. which agents block a default model), so
+        // show its reason instead of only the generic message.
+        const reason = getApiErrorMessage(error);
+        toast.error(onErrorMessage, {
+          description: reason === "API request failed" ? undefined : reason,
+        });
         return null;
       }
 
@@ -591,6 +599,23 @@ export function useAgentRuntimeTiers(enabled = true) {
 }
 
 /**
+ * Agent Runtime agents with no model of their own: they run on the
+ * organization's default model, so a new default must suit their runtimes.
+ */
+export function useDefaultModelRuntimeDependents(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.defaultModelRuntimeDependents(),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getDefaultModelRuntimeDependents();
+      throwOnApiError(error);
+      return data?.agents ?? [];
+    },
+    enabled,
+  });
+}
+
+/**
  * Update agent settings (default model, default agent)
  */
 export function useUpdateAgentSettings(
@@ -622,6 +647,9 @@ export function useUpdateAgentSettings(
       // removes tiers refetches them, and the form rebuilds from the saved list.
       queryClient.invalidateQueries({
         queryKey: organizationKeys.agentRuntimeTiers(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.defaultModelRuntimeDependents(),
       });
       toast.success(onSuccessMessage);
     },

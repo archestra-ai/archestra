@@ -164,6 +164,10 @@ vi.mock("@/lib/llm-models.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/agent.query", () => ({
+  useUpdateAgentModels: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({
     data: mockApiKeys,
@@ -178,6 +182,7 @@ vi.mock("@/lib/organization.query");
 import {
   useAgentRuntimeTiers,
   useAppearanceSettings,
+  useDefaultModelRuntimeDependents,
   useIsGlobalAdmin,
   useOrganization,
   useSaveAgentRuntimeTiers,
@@ -251,6 +256,9 @@ beforeEach(() => {
     mutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
+  vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 });
 
 describe("AgentSettingsPage", () => {
@@ -353,6 +361,59 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+});
+
+describe("Default model blocked by Agent Runtime agents", () => {
+  it("names the Claude Code agents that can't run the default and opens a dialog offering only keys they can use", async () => {
+    const user = userEvent.setup();
+    mockApiKeys = [
+      { id: "key-1", name: "gemini - org", provider: "gemini", scope: "org" },
+      {
+        id: "key-2",
+        name: "anthropic - org",
+        provider: "anthropic",
+        scope: "org",
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: [
+        {
+          id: "agent-1",
+          name: "Release Notes Writer",
+          runtimeCommand: ["archestra-claude-code"],
+          inferenceProtocol: "anthropic",
+        },
+      ],
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(
+      screen.getByText("Can't make Gemini 2.5 Pro the default"),
+    ).toBeVisible();
+    expect(screen.getByText("Release Notes Writer")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Set model" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Set a model for Release Notes Writer",
+    });
+    // Claude Code can't use the Gemini key, so only the Anthropic key is offered.
+    expect(within(dialog).getByText("anthropic - org")).toBeVisible();
+    expect(within(dialog).queryByText("gemini - org")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("shows no warning when every runtime agent can run the default", () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
   });
 });
 

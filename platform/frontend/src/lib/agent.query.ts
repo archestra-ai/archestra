@@ -31,7 +31,7 @@ import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { defaultMcpGatewayQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
@@ -483,6 +483,44 @@ export function useTransferAgentOwnership() {
       queryClient.invalidateQueries({ queryKey: ["profileTokens"] });
       queryClient.invalidateQueries({ queryKey: memberDefaultAgentQueryKey });
       toast.success("Ownership transferred");
+    },
+  });
+}
+
+/**
+ * Gives each agent its own provider key and model, one request per agent, and
+ * refreshes the agents that still follow the organization's default model.
+ * Resolves with the ids it saved; stops at the first failure.
+ */
+export function useUpdateAgentModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      assignments: Array<{
+        agentId: string;
+        llmApiKeyId: string;
+        modelId: string;
+      }>,
+    ) => {
+      const saved: string[] = [];
+      try {
+        for (const { agentId, llmApiKeyId, modelId } of assignments) {
+          const { error } = await updateAgent({
+            path: { id: agentId },
+            body: { llmApiKeyId, modelId },
+          });
+          if (error) throw reportApiError(error);
+          saved.push(agentId);
+        }
+      } finally {
+        if (saved.length > 0) {
+          queryClient.invalidateQueries({
+            queryKey: organizationKeys.defaultModelRuntimeDependents(),
+          });
+          queryClient.invalidateQueries({ queryKey: ["agents"] });
+        }
+      }
+      return saved;
     },
   });
 }

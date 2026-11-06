@@ -2,10 +2,12 @@
 
 import {
   DocsPage,
+  getAgentRuntimeModelCompatibility,
   getDocsUrl,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   providerSupportsChat,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -48,12 +50,14 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useDefaultModelRuntimeDependents,
   useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { DefaultModelBlockedBadge } from "./_parts/default-model-blocked-badge";
 import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
@@ -194,17 +198,51 @@ export default function AgentSettingsPage() {
     setPlaywrightEnabled(savedPlaywrightRef.current);
   };
 
+  // Agent Runtime agents with no model of their own run on this default, so
+  // a model their runtime can't serve would break them. Check every option
+  // up front, with the same rule the server applies on save.
+  const { data: runtimeDependents } = useDefaultModelRuntimeDependents();
+  const blockingAgentsFor = useCallback(
+    (model: { provider: SupportedProvider; id: string }) =>
+      (runtimeDependents ?? []).filter(
+        (agent) =>
+          !getAgentRuntimeModelCompatibility({
+            inferenceProtocol: agent.inferenceProtocol,
+            runtimeCommand: agent.runtimeCommand,
+            provider: model.provider,
+            modelId: model.id,
+          }).compatible,
+      ),
+    [runtimeDependents],
+  );
+
   const modelItems = useMemo(() => {
     if (!allModels || isPlaceholderData) return [];
-    return allModels.map((model) => ({
-      value: model.dbId,
-      model: model.displayName ?? model.id,
-      modelId: model.id,
-      provider: model.provider,
-      isFree: model.isFree,
-      isBest: model.isBest,
-    }));
-  }, [allModels, isPlaceholderData]);
+    return allModels.map((model) => {
+      const blocking = blockingAgentsFor(model).length;
+      return {
+        value: model.dbId,
+        model: model.displayName ?? model.id,
+        modelId: model.id,
+        provider: model.provider,
+        isFree: model.isFree,
+        isBest: model.isBest,
+        description:
+          blocking > 0
+            ? `Can't run ${blocking} Agent Runtime ${blocking === 1 ? "agent" : "agents"}`
+            : undefined,
+      };
+    });
+  }, [allModels, isPlaceholderData, blockingAgentsFor]);
+
+  const selectedModel = useMemo(
+    () =>
+      isPlaceholderData
+        ? undefined
+        : allModels?.find((model) => model.dbId === defaultModel),
+    [allModels, defaultModel, isPlaceholderData],
+  );
+  const blockingAgents = selectedModel ? blockingAgentsFor(selectedModel) : [];
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -302,6 +340,12 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
+                  {selectedModel && (
+                    <DefaultModelBlockedBadge
+                      agents={blockingAgents}
+                      modelName={selectedModel.displayName ?? selectedModel.id}
+                    />
+                  )}
                   {selectedApiKey && defaultModel && (
                     <ModelTierPickers
                       value={tiers}
@@ -439,7 +483,10 @@ export default function AgentSettingsPage() {
 
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
-        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
+        disabledSave={
+          (selectedApiKeyId !== "" && defaultModel === "") ||
+          (changes.hasModelChanges && blockingAgents.length > 0)
+        }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}

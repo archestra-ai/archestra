@@ -153,6 +153,38 @@ export function getClaudeCodeCloudProvider(params: {
   return null;
 }
 
+/**
+ * Agent Runtime agents with no model or key of their own: they run on the
+ * organization's default model, so a new default must suit their runtimes.
+ */
+export async function listRuntimeAgentsInheritingOrganizationDefault(
+  organizationId: string,
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    runtimeCommand: string[] | null;
+    inferenceProtocol: NonNullable<Agent["runtime"]>["inferenceProtocol"];
+  }>
+> {
+  const agents =
+    await AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
+      organizationId,
+    );
+  return agents.flatMap((agent) =>
+    agent.runtime
+      ? [
+          {
+            id: agent.id,
+            name: agent.name,
+            runtimeCommand: agent.runtime.command ?? null,
+            inferenceProtocol: agent.runtime.inferenceProtocol,
+          },
+        ]
+      : [],
+  );
+}
+
 /** Rejects an organization default model an inheriting Agent Runtime agent cannot run. */
 export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   organizationId: string;
@@ -161,27 +193,33 @@ export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   if (!params.modelId) return;
   const [model, agents] = await Promise.all([
     ModelModel.findById(params.modelId),
-    AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
-      params.organizationId,
-    ),
+    listRuntimeAgentsInheritingOrganizationDefault(params.organizationId),
   ]);
   if (!model) {
     throw new ApiError(404, "Default model not found");
   }
-  const incompatible = agents.find((agent) => {
-    if (!agent.runtime) return false;
-    return !getAgentRuntimeModelCompatibility({
-      inferenceProtocol: agent.runtime.inferenceProtocol,
-      runtimeCommand: agent.runtime.command,
+  const incompatible = agents.flatMap((agent) => {
+    const result = getAgentRuntimeModelCompatibility({
+      inferenceProtocol: agent.inferenceProtocol,
+      runtimeCommand: agent.runtimeCommand,
       provider: model.provider,
       modelId: model.modelId,
       supportedEndpoints: model.supportedEndpoints,
-    }).compatible;
+    });
+    return result.compatible ? [] : [{ agent, reason: result.message }];
   });
-  if (incompatible) {
-    throw new ApiError(
-      409,
-      `The proposed default model is incompatible with Agent Runtime Agent "${incompatible.name}". Update that Agent's runtime or choose a compatible default model.`,
-    );
-  }
+  if (incompatible.length === 0) return;
+  const names = incompatible.map(({ agent }) => `"${agent.name}"`);
+  const listed =
+    names.length > 3
+      ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`
+      : names.join(", ");
+  const subject =
+    incompatible.length === 1
+      ? `Agent Runtime agent ${listed} has no model of its own, so it`
+      : `Agent Runtime agents ${listed} have no model of their own, so they`;
+  throw new ApiError(
+    409,
+    `Can't use "${model.modelId}" as the default model. ${subject} would run on it, and it can't: ${incompatible[0].reason} Set a model on ${incompatible.length === 1 ? "that agent" : "those agents"}, or choose a compatible default model.`,
+  );
 }

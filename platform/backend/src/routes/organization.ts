@@ -58,7 +58,10 @@ import {
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
+import {
+  assertRuntimeAgentsSupportOrganizationDefault,
+  listRuntimeAgentsInheritingOrganizationDefault,
+} from "@/services/agent-runtime/model-compatibility";
 import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-tier-settings";
 import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
@@ -349,6 +352,40 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         ...(await organizationAgentRuntimeTiers(organizationId)),
         defaultWorkspaceGiB: config.agentRuntime.workspaceStorageGiB,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/agent-settings/default-model-dependents",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultModelRuntimeDependents,
+        description:
+          "Agent Runtime agents with no model of their own, which run on the organization's default model, with the runtime each one uses",
+        tags: ["Organization"],
+        response: constructResponseSchema(
+          z.object({
+            agents: z.array(
+              z.object({
+                id: z.string(),
+                name: z.string(),
+                runtimeCommand: z.array(z.string()).nullable(),
+                inferenceProtocol: z.enum([
+                  "openai_responses",
+                  "openai_chat",
+                  "anthropic",
+                ]),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send({
+        agents:
+          await listRuntimeAgentsInheritingOrganizationDefault(organizationId),
       });
     },
   );

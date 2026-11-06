@@ -58,7 +58,11 @@ import {
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
+import {
+  assertRuntimeAgentsSupportOrganizationDefault,
+  countHiddenAgentsBlockingDefault,
+  listRuntimeAgentsInheritingOrganizationDefault,
+} from "@/services/agent-runtime/model-compatibility";
 import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-tier-settings";
 import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
@@ -353,6 +357,55 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/organization/agent-settings/default-model-dependents",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultModelRuntimeDependents,
+        description:
+          "Agent Runtime agents the caller can read that run on the organization's default model (no usable model of their own), with the runtime each one uses and whether the caller may give it a model",
+        tags: ["Organization"],
+        querystring: z.object({
+          /** A candidate default (models.id) to count hidden blockers for. */
+          modelId: z.string().uuid().optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            agents: z.array(
+              RuntimeDependentSchema.extend({
+                id: z.string(),
+                name: z.string(),
+                /** Whether the caller may give this agent a model of its own. */
+                canUpdate: z.boolean(),
+              }),
+            ),
+            /**
+             * How many agents the caller can't read couldn't run `modelId`
+             * (0 without one): the only thing it learns about them.
+             */
+            hiddenBlockingCount: z.number().int(),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, user, query }, reply) => {
+      const [{ agents }, hiddenBlockingCount] = await Promise.all([
+        listRuntimeAgentsInheritingOrganizationDefault({
+          organizationId,
+          userId: user.id,
+        }),
+        query.modelId
+          ? countHiddenAgentsBlockingDefault({
+              organizationId,
+              userId: user.id,
+              modelId: query.modelId,
+            })
+          : 0,
+      ]);
+      return reply.send({ agents, hiddenBlockingCount });
+    },
+  );
+
   fastify.patch(
     "/api/organization/agent-settings",
     {
@@ -446,6 +499,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
+          userId: user.id,
           modelId: merged.modelId,
         });
       }
@@ -1581,6 +1635,14 @@ async function assertOrganizationDefaultModelSelection(params: {
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/** An inheriting Agent Runtime agent's runtime, as far as a default model goes. */
+const RuntimeDependentSchema = z.object({
+  runtimeCommand: z.array(z.string()).nullable(),
+  inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
+  /** Absent when Claude Code picks the authentication automatically. */
+  claudeCodeAuthentication: z.enum(["provider", "subscription"]).optional(),
+});
 
 /**
  * Every mapped key must belong to the organization, match its provider, and

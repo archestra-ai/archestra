@@ -35,6 +35,8 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
+import { ConfigureAutoRoutingButton } from "./_parts/configure-button";
+import AutoRoutingDiagnosticsPage from "./diagnostics/page";
 import AutoRoutingOverviewPage from "./page";
 import AutoRoutingPlansPage from "./plans/page";
 
@@ -51,10 +53,12 @@ Element.prototype.releasePointerCapture = vi.fn();
 const API_ORIGIN = "http://localhost:9000";
 const PLAN_ID = "00000000-0000-4000-8000-000000000001";
 
+const ORG_KEY = { id: "00000000-0000-4000-8000-000000000501", name: "Org key" };
 const tier = (modelId: string, index: number) => ({
   id: `00000000-0000-4000-8000-00000000010${index}`,
   provider: "anthropic" as const,
   modelId,
+  apiKey: ORG_KEY,
 });
 
 function makeSettings(
@@ -68,7 +72,8 @@ function makeSettings(
       normal: tier("claude-sonnet", 2),
       smart: tier("claude-opus", 3),
     },
-    routedAgentCount: 2,
+    eligibleApiKeyIds: [ORG_KEY.id],
+    usage: { agentCount: 2, organizationDefault: false },
     generation: 3,
     plannedGeneration: 3,
     status: {
@@ -80,6 +85,7 @@ function makeSettings(
       },
       lastFitError: null,
       scorer: "ready",
+      scorerApiKey: { id: "00000000-0000-4000-8000-000000000502", name: "Jev" },
     },
     ...overrides,
   };
@@ -170,6 +176,13 @@ const server = setupServer(
       scoreOffer: null,
     } satisfies AutoRoutingBackfillState),
   ),
+  http.get(`${API_ORIGIN}/api/auto-routing/diagnostics`, () =>
+    HttpResponse.json({ status: "cold_start" }),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
 );
 
 beforeAll(() => {
@@ -201,73 +214,40 @@ describe("AutoRoutingOverviewPage", () => {
   it("saves only the edited budget", async () => {
     const user = userEvent.setup();
     renderPage();
-    const budget = await screen.findByLabelText("Daily budget (USD)");
+    const budget = await openConfigure(user);
     await user.clear(budget);
     await user.type(budget, "55.5");
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
   });
 
-  it("re-plans on the saved settings while the form is clean", async () => {
-    let replans = 0;
+  it("names a saved key not shared with the whole organization, and still saves the budget", async () => {
+    settings = makeSettings({ eligibleApiKeyIds: [] });
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () => {
-        replans += 1;
-        return HttpResponse.json({
-          ...makeSettings(),
-          fit: null,
-        } satisfies AutoRoutingSettingsChange);
-      }),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: "Re-plan now" }),
-    );
-
-    await waitFor(() => expect(replans).toBe(1));
-    expect(updates).toEqual([]);
-  });
-
-  it("turns the action into a save while edited, then back into a re-plan", async () => {
-    let replans = 0;
-    server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () => {
-        replans += 1;
-        return HttpResponse.json({
-          ...makeSettings(),
-          fit: null,
-        } satisfies AutoRoutingSettingsChange);
-      }),
-      http.put(
-        `${API_ORIGIN}/api/auto-routing/settings`,
-        async ({ request }) => {
-          const body = (await request.json()) as AutoRoutingSettingsUpdate;
-          updates.push(body);
-          return HttpResponse.json({
-            ...makeSettings({ budgetUsdPerDay: body.budgetUsdPerDay }),
-            fit: null,
-          } satisfies AutoRoutingSettingsChange);
-        },
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          { ...ORG_KEY, provider: "anthropic", scope: "org" },
+        ]),
       ),
     );
     const user = userEvent.setup();
     renderPage();
-    const budget = await screen.findByLabelText("Daily budget (USD)");
-    await user.clear(budget);
-    await user.type(budget, "55.5");
-    expect(
-      screen.queryByRole("button", { name: "Re-plan now" }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    const budget = await openConfigure(user);
 
-    await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
     expect(
-      await screen.findByRole("button", { name: "Re-plan now" }),
-    ).toBeEnabled();
-    expect(budget).toHaveValue(55.5);
-    expect(replans).toBe(0);
+      await screen.findByText(
+        '"Org key" is not shared with the whole organization',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Fast provider key" }),
+    ).toHaveTextContent("Org key");
+
+    await user.clear(budget);
+    await user.type(budget, "30");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 30 }]));
   });
 
   it("offers a retry when the settings fail to load", async () => {
@@ -285,35 +265,40 @@ describe("AutoRoutingOverviewPage", () => {
     const user = userEvent.setup();
     renderPage();
     const retry = await screen.findByRole("button", { name: "Retry" });
-    expect(
-      screen.queryByLabelText("Daily budget (USD)"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("auto-routing-status")).not.toBeInTheDocument();
 
     fail = false;
     await user.click(retry);
 
-    expect(await screen.findByLabelText("Daily budget (USD)")).toHaveValue(20);
+    expect(
+      await screen.findByTestId("auto-routing-status"),
+    ).toBeInTheDocument();
   });
 
-  it("requires a budget to enable routing", async () => {
+  it("requires a budget to turn routing on", async () => {
     settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("switch", { name: "Disabled" }));
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await openConfigure(user);
+    await user.click(screen.getByRole("switch", { name: "Auto routing on" }));
 
-    expect(await screen.findByText("Set a daily budget")).toBeInTheDocument();
+    expect(await screen.findByText("Set a daily budget.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(updates).toEqual([]);
   });
-
-  it("counts the agents on the organization default that routing applies to", async () => {
-    settings = makeSettings({ routedAgentCount: 7 });
+  it("says where Auto is used", async () => {
+    settings = makeSettings({
+      usage: { agentCount: 7, organizationDefault: true },
+    });
     renderPage();
 
-    expect(await screen.findByText(/\b7 agents\b/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "7 agents on Auto, plus everything on the organization default.",
+      ),
+    ).toBeInTheDocument();
   });
-
-  it("shows the organization trio read-only, with a link to edit it", async () => {
+  it("shows the setup steps until a tier is set, with the tiers set so far", async () => {
     settings = makeSettings({
       tiers: { ...makeSettings().tiers, smart: null },
     });
@@ -332,50 +317,60 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     renderPage();
-    await screen.findByLabelText("Daily budget (USD)");
 
-    const tierValue = (label: string) =>
-      screen.getByText(label).closest("div")?.querySelector("dd");
+    const models = await screen.findByTestId("auto-routing-setup-2");
+    expect(within(models).getByText("2 of 3 set")).toBeInTheDocument();
     await waitFor(() =>
-      expect(tierValue("Fast model")).toHaveTextContent("Claude Haiku"),
+      expect(models).toHaveTextContent(/Fast\s*Claude Haiku/),
     );
-    expect(tierValue("Normal model")).toHaveTextContent("claude-sonnet");
-    expect(tierValue("Smart model")).toHaveTextContent("Not set");
-    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
-    expect(
-      screen.getByRole("link", { name: /Settings → Agents/ }),
-    ).toHaveAttribute("href", "/settings/agents");
+    expect(models).toHaveTextContent(/Smart\s*Not set/);
+    expect(screen.getByTestId("auto-routing-setup-1")).toHaveTextContent(
+      "Connected",
+    );
+    expect(screen.queryByTestId("auto-routing-status")).not.toBeInTheDocument();
   });
 
+  it("asks for a Jev key until one is connected", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        scorer: "no_jev_key",
+        scorerApiKey: null,
+      },
+    });
+    renderPage();
+
+    const jev = await screen.findByTestId("auto-routing-setup-1");
+    expect(jev).toHaveTextContent("Needed");
+    expect(within(jev).getByTestId("auto-routing-add-jev-key")).toHaveAttribute(
+      "href",
+      "/llm/model-providers?create=jev&access=organization",
+    );
+  });
   it("rejects a budget below a cent without saving", async () => {
     const user = userEvent.setup();
     renderPage();
-    const budget = await screen.findByLabelText("Daily budget (USD)");
+    const budget = await openConfigure(user);
     await user.clear(budget);
     await user.type(budget, "0");
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     expect(
-      await screen.findByText(/Enter an amount between 0.01/),
+      await screen.findByText(/Enter a budget between 0.01/),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(updates).toEqual([]);
   });
-
-  it("shows read-only viewers the settings without letting them change anything", async () => {
+  it("does not offer read-only viewers the Configure dialog", async () => {
     setCanUpdate(false);
     renderPage();
 
-    expect(await screen.findByLabelText("Daily budget (USD)")).toBeDisabled();
-    expect(screen.getByRole("switch", { name: "Enabled" })).toBeDisabled();
-    expect(screen.getByLabelText("Try a prompt")).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "Save and re-plan" }),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("auto-routing-status"),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Re-plan now" }),
+      screen.queryByRole("button", { name: "Configure" }),
     ).not.toBeInTheDocument();
   });
-
   it("reports cold-start progress while no plan is active", async () => {
     renderPage();
 
@@ -445,7 +440,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.click(await screen.findByLabelText("Traffic"));
     await user.click(await screen.findByRole("option", { name: "×3" }));
 
@@ -467,7 +462,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.click(await screen.findByLabelText("Traffic"));
     await user.click(await screen.findByRole("option", { name: "×3" }));
 
@@ -476,9 +471,6 @@ describe("AutoRoutingOverviewPage", () => {
       await within(whatIf).findByText(
         "fast · claude-haiku: 50.0% sessions, 20.0% tokens",
       ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("fast · unknown: 50.0% sessions, 20.0% tokens"),
     ).toBeInTheDocument();
   });
 
@@ -501,7 +493,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     const whatIf = await screen.findByTestId("auto-routing-what-if");
     await user.click(within(whatIf).getByLabelText("Traffic"));
     await user.click(await screen.findByRole("option", { name: "×3" }));
@@ -541,7 +533,7 @@ describe("AutoRoutingOverviewPage", () => {
       }),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.click(await screen.findByLabelText("Traffic"));
     await user.click(await screen.findByRole("option", { name: "×3" }));
 
@@ -564,7 +556,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.click(await screen.findByLabelText("Traffic"));
     await user.click(await screen.findByRole("option", { name: "×10" }));
 
@@ -637,10 +629,10 @@ describe("AutoRoutingOverviewPage", () => {
     const user = userEvent.setup();
     renderPage(<AutoRoutingPlansPage />);
     expect(await screen.findByText("No plans yet")).toBeInTheDocument();
-    const budget = screen.getByLabelText("Daily budget (USD)");
+    const budget = await openConfigure(user);
     await user.clear(budget);
     await user.type(budget, "30");
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
@@ -649,12 +641,11 @@ describe("AutoRoutingOverviewPage", () => {
     expect(await screen.findByText("420")).toBeInTheDocument();
     expect(settingsReads).toBe(1);
   });
-
-  it("shows the error of a re-plan whose fit failed", async () => {
+  it("shows the error of a save whose fit failed", async () => {
     const error =
       "ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs 8.85889296187498 USD/day, above the 0.01 USD/day budget";
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
         HttpResponse.json({
           ...makeSettings({
             status: { ...makeSettings().status, lastFitError: error },
@@ -665,9 +656,10 @@ describe("AutoRoutingOverviewPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: "Re-plan now" }),
-    );
+    const budget = await openConfigure(user);
+    await user.clear(budget);
+    await user.type(budget, "25");
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Last fit failed")).toBeInTheDocument();
     expect(
@@ -676,7 +668,6 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     ).toBeInTheDocument();
   });
-
   it("previews the tier a prompt would get", async () => {
     const previewed: unknown[] = [];
     server.use(
@@ -698,7 +689,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.type(
       await screen.findByLabelText("Try a prompt"),
       "Refactor the billing module",
@@ -736,7 +727,7 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     );
     const user = userEvent.setup();
-    renderPage();
+    renderDiagnostics();
     await user.click(
       await screen.findByRole("switch", { name: "Use request JSON" }),
     );
@@ -789,37 +780,21 @@ describe("AutoRoutingOverviewPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    const budget = await screen.findByLabelText("Daily budget (USD)");
+    const budget = await openConfigure(user);
     await user.clear(budget);
     await user.type(budget, "0.01");
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(message, expect.anything()),
     );
     expect(budget).toHaveValue(0.01);
-    expect(
-      screen.getByRole("button", { name: "Save and re-plan" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
-  it("keeps the slider range from the saved budget while a new one is typed", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const budget = await screen.findByLabelText("Daily budget (USD)");
-    const slider = screen.getByRole("slider");
-
-    for (const typed of ["50", "80"]) {
-      await user.clear(budget);
-      await user.type(budget, typed);
-      expect(slider).toHaveAttribute("aria-valuenow", typed);
-      expect(slider).toHaveAttribute("aria-valuemax", "100");
-    }
-  });
-
-  it("tells when a re-plan found nothing new", async () => {
+  it("tells when a save found nothing new to plan", async () => {
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
         HttpResponse.json({
           ...withActivePlan(makeSettings()),
           fit: { status: "unchanged", planId: PLAN_ID },
@@ -828,21 +803,21 @@ describe("AutoRoutingOverviewPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await user.click(
-      await screen.findByRole("button", { name: "Re-plan now" }),
-    );
+    const budget = await openConfigure(user);
+    await user.clear(budget);
+    await user.type(budget, "21");
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Plan is up to date"),
     );
   });
-
-  it("offers a plain save when routing is switched off", async () => {
+  it("saves routing switched off", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("switch", { name: "Enabled" }));
-
-    expect(screen.getByRole("switch", { name: "Disabled" })).not.toBeChecked();
+    await openConfigure(user);
+    await user.click(screen.getByRole("switch", { name: "Auto routing on" }));
+    expect(screen.getByText("Auto routing is off")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updates).toEqual([{ enabled: false }]));
@@ -946,7 +921,7 @@ describe("past sessions", () => {
     await waitFor(() => expect(scans).toBe(1));
   });
 
-  it("says routing is off once enough sessions are scored, and fits once enabled", async () => {
+  it("shows the setup steps while routing is off, and fits once it is turned on", async () => {
     const base = makeSettings();
     const status = {
       ...base.status,
@@ -964,12 +939,13 @@ describe("past sessions", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Auto routing is off · 1,064 sessions scored, enough for a plan",
+    expect(await screen.findByTestId("auto-routing-setup-2")).toHaveTextContent(
+      "Off",
     );
 
-    await user.click(screen.getByRole("switch", { name: "Disabled" }));
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await openConfigure(user);
+    await user.click(screen.getByRole("switch", { name: "Auto routing on" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
@@ -978,7 +954,7 @@ describe("past sessions", () => {
     );
   });
 
-  it("drops a fit-blocked notice once a re-plan refits", async () => {
+  it("drops a fit-blocked notice once a save refits", async () => {
     serveBackfill(
       {
         backfill: scanned({
@@ -990,7 +966,7 @@ describe("past sessions", () => {
       { backfill: scanned({ status: "done" }), scoreOffer: null },
     );
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
         HttpResponse.json({
           ...makeSettings(),
           fit: null,
@@ -1003,7 +979,10 @@ describe("past sessions", () => {
       await screen.findByText("No plan is fitted on these sessions"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Re-plan now" }));
+    const budget = await openConfigure(user);
+    await user.clear(budget);
+    await user.type(budget, "21");
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(
@@ -1328,7 +1307,11 @@ describe("past sessions", () => {
 
   it("points to the Jev key instead of offering a score the scorer cannot run", async () => {
     settings = makeSettings({
-      status: { ...makeSettings().status, scorer: "no_jev_key" },
+      status: {
+        ...makeSettings().status,
+        scorer: "no_jev_key",
+        scorerApiKey: null,
+      },
     });
     serveBackfill({ backfill: scanned(), scoreOffer: offer });
     renderPage();
@@ -1343,7 +1326,8 @@ describe("past sessions", () => {
     expect(
       within(section).queryByRole("button", { name: /^Score/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("auto-routing-add-jev-key")).toHaveLength(3);
+    // The past sessions and the setup step both point to it.
+    expect(screen.getAllByTestId("auto-routing-add-jev-key")).toHaveLength(2);
     expect(
       screen.queryByPlaceholderText("A first message of a session"),
     ).not.toBeInTheDocument();
@@ -1440,14 +1424,36 @@ function fingerprint(modelIds: string[]) {
   };
 }
 
+/** The Overview, with the layout's Configure button beside it. */
 function renderPage(sibling?: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
+      <ConfigureAutoRoutingButton />
       <AutoRoutingOverviewPage />
       {sibling}
     </QueryClientProvider>,
   );
+}
+
+function renderDiagnostics() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AutoRoutingDiagnosticsPage />
+    </QueryClientProvider>,
+  );
+}
+
+/** Opens the Configure dialog and returns its budget input. */
+async function openConfigure(user: ReturnType<typeof userEvent.setup>) {
+  const [configure] = await screen.findAllByRole("button", {
+    name: "Configure",
+  });
+  await user.click(configure);
+  return screen.findByLabelText("Daily budget (USD)");
 }

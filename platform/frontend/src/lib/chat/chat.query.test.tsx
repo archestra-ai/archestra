@@ -681,6 +681,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     selectedProvider: "openai",
     modelId: null,
     modelPoolId: null,
+    autoModel: false,
     hasCustomToolSelection: false,
     hooksDebugEnabled: false,
     todoList: null,

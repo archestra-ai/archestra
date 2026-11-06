@@ -10927,7 +10927,7 @@ export const getAgentRuntimeTiers = <ThrowOnError extends boolean = false>(optio
 export const getDefaultModelRuntimeDependents = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultModelRuntimeDependentsData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultModelRuntimeDependentsResponses, GetDefaultModelRuntimeDependentsErrors, ThrowOnError>({ url: '/api/organization/agent-settings/default-model-dependents', ...options });
 
 /**
- * Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)
+ * Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)
  *
  * Authentication:
  *

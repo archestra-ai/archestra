@@ -420,6 +420,7 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   modelId: true,
   llmApiKeyId: true,
   modelPoolId: true,
+  autoModel: true,
 }).extend({
   /**
    * Another user's agent whose own policy grants the caller read by name. A

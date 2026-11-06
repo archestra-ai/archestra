@@ -26,9 +26,11 @@ import {
   indexReadinessByAgent,
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
+import { AUTO_MODEL_CHOICE } from "@/lib/chat/auto-model";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -270,13 +272,24 @@ export function useChatSetupOptions(params: {
   const { data: pools = [] } = useAvailableModelPools({
     enabled: !!params.onModelPoolChange,
   });
-  const activePool = params.modelPoolId
-    ? pools.find((pool) => pool.id === params.modelPoolId)
-    : undefined;
+  // ---- auto: picked in place of a key like a pool, while auto routing is on
+  const organizationDefault = useOrganizationDefaultModel({
+    enabled: !!params.onModelPoolChange,
+  });
+  const autoSelected = params.modelPoolId === AUTO_MODEL_CHOICE;
+  const auto =
+    organizationDefault.auto && activeAgent?.runtime == null
+      ? organizationDefault.auto
+      : null;
+  const activePool =
+    params.modelPoolId && !autoSelected
+      ? pools.find((pool) => pool.id === params.modelPoolId)
+      : undefined;
 
   // ---- reasoning
   const supportsReasoning =
     !activePool &&
+    !autoSelected &&
     !!activeModel &&
     !!params.onThinkingEffortChange &&
     modelSupportsThinkingEffort({
@@ -290,7 +303,7 @@ export function useChatSetupOptions(params: {
   const updateConversation = useUpdateConversation();
   const selectKey = (key: LlmProviderApiKey) => {
     if (key.id === params.apiKeyId) {
-      // The pool's own key: back to it, alone.
+      // The pool's (or auto's) own key: back to it, alone.
       if (params.modelPoolId) params.onModelPoolChange?.(null);
       return;
     }
@@ -326,6 +339,7 @@ export function useChatSetupOptions(params: {
     modelsLoading,
     activeModel,
     modelName:
+      (autoSelected ? "Auto" : undefined) ??
       activePool?.name ??
       activeModel?.displayName ??
       params.fallbackModelName ??
@@ -339,6 +353,12 @@ export function useChatSetupOptions(params: {
     activePool,
     selectPool: (id: string) => {
       if (id !== params.modelPoolId) params.onModelPoolChange?.(id);
+    },
+    // auto
+    auto,
+    autoSelected,
+    selectAuto: () => {
+      if (!autoSelected) params.onModelPoolChange?.(AUTO_MODEL_CHOICE);
     },
     // credentials
     keys,

@@ -216,14 +216,17 @@ jobs:
     # Backstop: every check here finishes well under 20m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally
     # orphan and hold the step's log pipe open, leaving a *finished* job
-    # hanging until GitHub's 6h default. Fail fast instead. Turbo has no
-    # remote cache, so each run builds and checks from cold.
+    # hanging until GitHub's 6h default. Fail fast instead. Turbo restores
+    # check results that Warm Turbo Cache saved on main (on-commits-to-main.yml)
+    # and runs the rest from cold.
     timeout-minutes: 20
     permissions:
       contents: read # Release generation has a separate, single writer.
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_CACHE_DIR: ${{ github.workspace }}/platform/.turbo/cache
     steps:
       - name: Check if this is a release-please PR
         id: check-release-please
@@ -258,6 +261,12 @@ jobs:
         uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      # Read-only: only Warm Turbo Cache on main saves entries under this name.
+      - name: Restore Turbo cache from main
+        uses: $/.github/actions/turbo-cache
+        with:
+          name: platform-lint
 
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).

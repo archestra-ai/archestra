@@ -716,6 +716,7 @@ const layerTable = [
       "src/services/limit-access.ts",
       "src/services/limit.ts",
       "src/services/llm-throughput.ts",
+      "src/services/llm-usage-rollup.ts",
       "src/services/mcp-catalog-secrets.ts",
       "src/services/mcp-deployment-statuses.ts",
       "src/services/mcp-gateway-task-reaper.ts",

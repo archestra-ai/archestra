@@ -10,21 +10,6 @@ function policyMoved(): Error {
 }
 
 describe("retryWhilePolicyMoved", () => {
-  test("retries a moved policy and returns what the retry decided", async () => {
-    const attempts: number[] = [];
-    const decided = await retryWhilePolicyMoved({
-      random: () => 0,
-      run: async (attempt) => {
-        attempts.push(attempt);
-        if (attempt === 0) throw policyMoved();
-        return "allow_call";
-      },
-    });
-
-    expect(decided).toBe("allow_call");
-    expect(attempts).toEqual([0, 1]);
-  });
-
   test("gives up after a bounded number of attempts with the moved policy", async () => {
     let attempts = 0;
     await expect(

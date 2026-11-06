@@ -367,29 +367,24 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(
           z.object({
             agents: z.array(
-              z.object({
+              RuntimeDependentSchema.extend({
                 id: z.string(),
                 name: z.string(),
-                runtimeCommand: z.array(z.string()).nullable(),
-                inferenceProtocol: z.enum([
-                  "openai_responses",
-                  "openai_chat",
-                  "anthropic",
-                ]),
-                claudeCodeAuthentication: z
-                  .enum(["provider", "subscription"])
-                  .nullable(),
               }),
             ),
+            /** Inheriting agents the caller can't read: their runtimes only. */
+            hidden: z.array(RuntimeDependentSchema),
           }),
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send({
-        agents:
-          await listRuntimeAgentsInheritingOrganizationDefault(organizationId),
-      });
+    async ({ organizationId, user }, reply) => {
+      return reply.send(
+        await listRuntimeAgentsInheritingOrganizationDefault({
+          organizationId,
+          userId: user.id,
+        }),
+      );
     },
   );
 
@@ -486,6 +481,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
+          userId: user.id,
           modelId: merged.modelId,
         });
       }
@@ -1621,6 +1617,14 @@ async function assertOrganizationDefaultModelSelection(params: {
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/** An inheriting Agent Runtime agent's runtime, as far as a default model goes. */
+const RuntimeDependentSchema = z.object({
+  runtimeCommand: z.array(z.string()).nullable(),
+  inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
+  /** Absent when Claude Code picks the authentication automatically. */
+  claudeCodeAuthentication: z.enum(["provider", "subscription"]).optional(),
+});
 
 /**
  * Every mapped key must belong to the organization, match its provider, and

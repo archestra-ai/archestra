@@ -1,6 +1,5 @@
 "use client";
 
-import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
 import { ChevronDown, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -20,23 +19,26 @@ import { UpdateAgentModelsDialog } from "./update-agent-models-dialog";
  */
 export function DefaultModelBlockedBadge({
   agents,
+  hiddenCount,
+  reason,
+  allClaudeCode,
   modelName,
 }: {
+  /** The blocking agents the viewer can read. */
   agents: RuntimeAgent[];
+  /** Blocking agents the viewer can't read: counted, never named. */
+  hiddenCount: number;
+  /** Why they can't run the model, in one sentence. */
+  reason: string;
+  allClaudeCode: boolean;
   modelName: string;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dialogAgents, setDialogAgents] = useState<RuntimeAgent[] | null>(null);
-  const count = agents.length;
-  const allClaudeCode = agents.every((agent) =>
-    isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
-  );
+  const count = agents.length + hiddenCount;
   const one = count === 1;
-  const reason = allClaudeCode
-    ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
-    : `${one ? "Its" : "Their"} Agent Runtime image can't use this provider.`;
   const shown = agents.slice(0, PREVIEW_LIMIT);
-  const hidden = count - shown.length;
+  const more = agents.length - shown.length;
 
   const openDialog = (forAgents: RuntimeAgent[]) => {
     setPopoverOpen(false);
@@ -95,9 +97,16 @@ export function DefaultModelBlockedBadge({
                 </UnstyledButton>
               </li>
             ))}
-            {hidden > 0 && (
+            {more > 0 && (
               <li className="px-3.5 py-1.5 text-xs text-muted-foreground">
-                and {hidden} more
+                and {more} more
+              </li>
+            )}
+            {hiddenCount > 0 && (
+              <li className="px-3.5 py-1.5 text-xs text-muted-foreground">
+                {hiddenCount === 1
+                  ? "1 agent you can't view"
+                  : `${hiddenCount} agents you can't view`}
               </li>
             )}
           </ul>
@@ -106,12 +115,12 @@ export function DefaultModelBlockedBadge({
             <span className="text-muted-foreground">
               Or choose a different default.
             </span>
-            {!one && (
+            {agents.length > 1 && (
               <UnstyledButton
                 onClick={() => openDialog(agents)}
                 className="shrink-0 font-medium underline decoration-foreground/30 underline-offset-2 transition-colors hover:decoration-foreground"
               >
-                Set models for all {count}
+                Set models for all {agents.length}
               </UnstyledButton>
             )}
           </div>

@@ -1572,12 +1572,13 @@ class AgentModel {
    */
   static async findRuntimeAgentsInheritingOrganizationDefault(
     organizationId: string,
-  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime">>> {
+  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime" | "agentType">>> {
     return db
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         runtime: schema.agentsTable.runtime,
+        agentType: schema.agentsTable.agentType,
       })
       .from(schema.agentsTable)
       .where(

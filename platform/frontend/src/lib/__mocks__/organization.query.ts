@@ -30,7 +30,9 @@ export const useUpdateMcpSettings = vi.fn();
 export const useUpdateSkillsSettings = vi.fn();
 export const useUpdateAgentSettings = vi.fn();
 export const useAgentRuntimeTiers = vi.fn();
-export const useDefaultModelRuntimeDependents = vi.fn(() => ({ data: [] }));
+export const useDefaultModelRuntimeDependents = vi.fn(() => ({
+  data: { agents: [], hidden: [] },
+}));
 export const useSaveAgentRuntimeTiers = vi.fn();
 export const useUpdateConnectionSettings = vi.fn();
 export const useUpdateIntegrationSettings = vi.fn();

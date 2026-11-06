@@ -126250,11 +126250,16 @@ export type GetDefaultModelRuntimeDependentsResponses = {
      */
     200: {
         agents: Array<{
-            id: string;
-            name: string;
             runtimeCommand: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
-            claudeCodeAuthentication: 'provider' | 'subscription';
+            claudeCodeAuthentication?: 'provider' | 'subscription';
+            id: string;
+            name: string;
+        }>;
+        hidden: Array<{
+            runtimeCommand: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            claudeCodeAuthentication?: 'provider' | 'subscription';
         }>;
     };
 };

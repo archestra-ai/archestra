@@ -490301,12 +490301,6 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
                           "runtimeCommand": {
                             "nullable": true,
                             "type": "array",
@@ -490323,7 +490317,49 @@
                             ]
                           },
                           "claudeCodeAuthentication": {
+                            "type": "string",
+                            "enum": [
+                              "provider",
+                              "subscription"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "runtimeCommand",
+                          "inferenceProtocol",
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "hidden": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "runtimeCommand": {
                             "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "inferenceProtocol": {
+                            "type": "string",
+                            "enum": [
+                              "openai_responses",
+                              "openai_chat",
+                              "anthropic"
+                            ]
+                          },
+                          "claudeCodeAuthentication": {
                             "type": "string",
                             "enum": [
                               "provider",
@@ -490332,18 +490368,16 @@
                           }
                         },
                         "required": [
-                          "id",
-                          "name",
                           "runtimeCommand",
-                          "inferenceProtocol",
-                          "claudeCodeAuthentication"
+                          "inferenceProtocol"
                         ],
                         "additionalProperties": false
                       }
                     }
                   },
                   "required": [
-                    "agents"
+                    "agents",
+                    "hidden"
                   ],
                   "additionalProperties": false
                 }

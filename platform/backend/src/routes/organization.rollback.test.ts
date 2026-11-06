@@ -535,10 +535,93 @@ describe("organization routes", () => {
             name: "Inherits the default",
             runtimeCommand: ["archestra-claude-code"],
             inferenceProtocol: "anthropic",
-            claudeCodeAuthentication: null,
           },
         ],
+        hidden: [],
       });
+    });
+
+    test("names every blocking agent the caller can read, and only counts the ones it can't", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeMember,
+      makeSecret,
+      makeUser,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      const model = await ModelModel.create({
+        externalId: "openai/organization-visibility-test",
+        provider: "openai",
+        modelId: "organization-visibility-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      const names = ["Agent A", "Agent B", "Agent C", "Agent D"];
+      for (const name of names) {
+        await makeAgent({
+          organizationId,
+          authorId: user.id,
+          name,
+          agentType: "agent",
+          access: "personal",
+          runtime: {
+            image: "example.com/claude-code:latest",
+            command: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+            claudeCode: { authentication: "provider" },
+          },
+        });
+      }
+      const save = () =>
+        app.inject({
+          method: "PATCH",
+          url: "/api/organization/agent-settings",
+          payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+        });
+
+      const asAdmin = await save();
+      expect(asAdmin.statusCode).toBe(409);
+      for (const name of names) {
+        expect(asAdmin.json().error.message).toContain(`"${name}"`);
+      }
+
+      // Another member can't read these personal agents: the conflict and
+      // the dependents list count them without naming them.
+      const admin = user;
+      user = await makeUser();
+      await makeMember(user.id, organizationId, { role: "member" });
+      try {
+        const asMember = await save();
+        expect(asMember.statusCode).toBe(409);
+        const message = asMember.json().error.message;
+        expect(message).toContain("4 Agent Runtime agents you can't view");
+        for (const name of names) expect(message).not.toContain(name);
+
+        const dependents = await app.inject({
+          method: "GET",
+          url: "/api/organization/agent-settings/default-model-dependents",
+        });
+        expect(dependents.json().agents).toEqual([]);
+        expect(dependents.json().hidden).toHaveLength(4);
+      } finally {
+        user = admin;
+      }
     });
   });
 

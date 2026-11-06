@@ -604,7 +604,7 @@ export function useDefaultModelRuntimeDependents(enabled = true) {
       const { data, error } =
         await archestraApiSdk.getDefaultModelRuntimeDependents();
       throwOnApiError(error);
-      return data?.agents ?? [];
+      return data ?? { agents: [], hidden: [] };
     },
     enabled,
   });

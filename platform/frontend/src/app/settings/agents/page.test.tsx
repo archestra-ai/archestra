@@ -257,7 +257,7 @@ beforeEach(() => {
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateSecuritySettings>);
   vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-    data: [],
+    data: { agents: [], hidden: [] },
   } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 });
 
@@ -377,15 +377,18 @@ describe("Default model blocked by Agent Runtime agents", () => {
       },
     ];
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Release Notes Writer",
-          runtimeCommand: ["archestra-claude-code"],
-          inferenceProtocol: "anthropic",
-          claudeCodeAuthentication: "provider",
-        },
-      ],
+      data: {
+        hidden: [],
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     renderPage();
@@ -409,7 +412,7 @@ describe("Default model blocked by Agent Runtime agents", () => {
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("counts a Responses-only model as blocking an agent whose runtime uses Chat Completions", () => {
+  it("counts a Responses-only model as blocking an agent whose runtime uses Chat Completions", async () => {
     mockOrganization = { ...mockOrganization, defaultModelId: "copilot-1" };
     vi.mocked(useOrganization).mockReturnValue({
       data: mockOrganization,
@@ -432,41 +435,73 @@ describe("Default model blocked by Agent Runtime agents", () => {
       },
     ];
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Chat Completions Agent",
-          runtimeCommand: null,
-          inferenceProtocol: "openai_chat",
-          claudeCodeAuthentication: null,
-        },
-      ],
+      data: {
+        hidden: [],
+        agents: [
+          {
+            id: "agent-1",
+            name: "Chat Completions Agent",
+            runtimeCommand: null,
+            inferenceProtocol: "openai_chat",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
+    const user = userEvent.setup();
     renderPage();
 
-    expect(
+    await user.click(
       screen.getByRole("button", { name: "1 agent can't run this" }),
-    ).toBeVisible();
+    );
+    expect(screen.getByText(/requires the Responses API/)).toBeVisible();
   });
 
   it("does not count a Claude Code agent on subscription authentication, which runs on the person's Claude account instead", () => {
     vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Release Notes Writer",
-          runtimeCommand: ["archestra-claude-code"],
-          inferenceProtocol: "anthropic",
-          claudeCodeAuthentication: null,
-        },
-      ],
+      data: {
+        hidden: [],
+        agents: [
+          {
+            id: "agent-1",
+            name: "Release Notes Writer",
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
 
     renderPage();
 
     expect(
       screen.queryByRole("button", { name: /can't run this/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("counts blocking agents the viewer can't read without naming them", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: {
+        agents: [],
+        hidden: [
+          {
+            runtimeCommand: ["archestra-claude-code"],
+            inferenceProtocol: "anthropic",
+            claudeCodeAuthentication: "provider",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    await user.click(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    );
+    expect(screen.getByText("1 agent you can't view")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Set model" }),
     ).not.toBeInTheDocument();
   });
 

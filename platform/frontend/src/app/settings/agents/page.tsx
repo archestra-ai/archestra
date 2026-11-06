@@ -4,6 +4,7 @@ import {
   DocsPage,
   getAgentRuntimeDefaultModelCompatibility,
   getDocsUrl,
+  isClaudeCodeRuntimeCommand,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   providerSupportsChat,
@@ -58,6 +59,7 @@ import {
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { DefaultModelBlockedBadge } from "./_parts/default-model-blocked-badge";
+import type { RuntimeDependent } from "./_parts/runtime-agent";
 import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
@@ -202,30 +204,45 @@ export default function AgentSettingsPage() {
   // a model their runtime can't serve would break them. Check every option
   // up front, with the same rule the server applies on save.
   const { data: runtimeDependents } = useDefaultModelRuntimeDependents();
-  const blockingAgentsFor = useCallback(
+  const blockedBy = useCallback(
     (model: {
       provider: SupportedProvider;
       id: string;
       capabilities?: { supportedEndpoints?: string[] | null };
-    }) =>
-      (runtimeDependents ?? []).filter(
-        (agent) =>
-          !getAgentRuntimeDefaultModelCompatibility({
-            inferenceProtocol: agent.inferenceProtocol,
-            runtimeCommand: agent.runtimeCommand,
-            claudeCodeAuthentication: agent.claudeCodeAuthentication,
-            provider: model.provider,
-            modelId: model.id,
-            supportedEndpoints: model.capabilities?.supportedEndpoints,
-          }).compatible,
-      ),
+    }) => {
+      const reasonFor = (agent: RuntimeDependent) => {
+        const result = getAgentRuntimeDefaultModelCompatibility({
+          ...agent,
+          provider: model.provider,
+          modelId: model.id,
+          supportedEndpoints: model.capabilities?.supportedEndpoints,
+        });
+        return result.compatible ? null : result.message;
+      };
+      const agents = (runtimeDependents?.agents ?? []).filter(
+        (agent) => reasonFor(agent) !== null,
+      );
+      const hidden = (runtimeDependents?.hidden ?? []).filter(
+        (agent) => reasonFor(agent) !== null,
+      );
+      const first = agents[0] ?? hidden[0];
+      return {
+        agents,
+        hiddenCount: hidden.length,
+        total: agents.length + hidden.length,
+        reason: first ? reasonFor(first) : null,
+        allClaudeCode: [...agents, ...hidden].every((agent) =>
+          isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
+        ),
+      };
+    },
     [runtimeDependents],
   );
 
   const modelItems = useMemo(() => {
     if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => {
-      const blocking = blockingAgentsFor(model).length;
+      const blocking = blockedBy(model).total;
       return {
         value: model.dbId,
         model: model.displayName ?? model.id,
@@ -239,7 +256,7 @@ export default function AgentSettingsPage() {
             : undefined,
       };
     });
-  }, [allModels, isPlaceholderData, blockingAgentsFor]);
+  }, [allModels, isPlaceholderData, blockedBy]);
 
   const selectedModel = useMemo(
     () =>
@@ -248,7 +265,7 @@ export default function AgentSettingsPage() {
         : allModels?.find((model) => model.dbId === defaultModel),
     [allModels, defaultModel, isPlaceholderData],
   );
-  const blockingAgents = selectedModel ? blockingAgentsFor(selectedModel) : [];
+  const blocked = selectedModel ? blockedBy(selectedModel) : null;
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -348,7 +365,14 @@ export default function AgentSettingsPage() {
                   />
                   {selectedModel && (
                     <DefaultModelBlockedBadge
-                      agents={blockingAgents}
+                      agents={blocked?.agents ?? []}
+                      hiddenCount={blocked?.hiddenCount ?? 0}
+                      reason={
+                        blocked?.allClaudeCode
+                          ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
+                          : (blocked?.reason ?? "")
+                      }
+                      allClaudeCode={blocked?.allClaudeCode ?? false}
                       modelName={selectedModel.displayName ?? selectedModel.id}
                     />
                   )}
@@ -491,7 +515,7 @@ export default function AgentSettingsPage() {
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={
           (selectedApiKeyId !== "" && defaultModel === "") ||
-          (changes.hasModelChanges && blockingAgents.length > 0)
+          (changes.hasModelChanges && (blocked?.total ?? 0) > 0)
         }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}

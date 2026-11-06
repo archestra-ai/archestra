@@ -5,9 +5,12 @@ import {
   isClaudeCodeRuntimeCommand,
   type SupportedProvider,
 } from "@archestra/shared";
+import { getAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import { hiddenAgentsAmong } from "@/auth/permission-gated";
 import config from "@/config";
 import {
   AgentModel,
+  AgentTeamModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -157,74 +160,154 @@ export function getClaudeCodeCloudProvider(params: {
 /**
  * Agent Runtime agents with no model or key of their own: they run on the
  * organization's default model, so a new default must suit their runtimes.
+ * `agents` are the ones `userId` can read (all of them for a system check
+ * with no user); `hidden` describes only the runtimes of the rest, so a
+ * caller can count them without learning names.
  */
-export async function listRuntimeAgentsInheritingOrganizationDefault(
-  organizationId: string,
-): Promise<
-  Array<{
-    id: string;
-    name: string;
-    runtimeCommand: string[] | null;
-    inferenceProtocol: NonNullable<Agent["runtime"]>["inferenceProtocol"];
-    claudeCodeAuthentication: "provider" | "subscription" | null;
-  }>
-> {
-  const agents =
+export async function listRuntimeAgentsInheritingOrganizationDefault(params: {
+  organizationId: string;
+  userId?: string;
+}): Promise<{
+  agents: Array<RuntimeDependent & { id: string; name: string }>;
+  hidden: RuntimeDependent[];
+}> {
+  const rows = (
     await AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
-      organizationId,
-    );
-  return agents.flatMap((agent) =>
-    agent.runtime
-      ? [
-          {
-            id: agent.id,
-            name: agent.name,
-            runtimeCommand: agent.runtime.command ?? null,
-            inferenceProtocol: agent.runtime.inferenceProtocol,
-            claudeCodeAuthentication:
-              agent.runtime.claudeCode?.authentication ?? null,
-          },
-        ]
-      : [],
+      params.organizationId,
+    )
+  ).flatMap((agent) =>
+    agent.runtime ? [{ ...agent, runtime: agent.runtime }] : [],
   );
+  const readable = params.userId
+    ? await readableAgentIds({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        agents: rows,
+      })
+    : new Set(rows.map((row) => row.id));
+  const agents: Array<RuntimeDependent & { id: string; name: string }> = [];
+  const hidden: RuntimeDependent[] = [];
+  for (const row of rows) {
+    const runtime: RuntimeDependent = {
+      runtimeCommand: row.runtime.command ?? null,
+      inferenceProtocol: row.runtime.inferenceProtocol,
+      ...(row.runtime.claudeCode && {
+        claudeCodeAuthentication: row.runtime.claudeCode.authentication,
+      }),
+    };
+    if (readable.has(row.id)) {
+      agents.push({ id: row.id, name: row.name, ...runtime });
+    } else {
+      hidden.push(runtime);
+    }
+  }
+  return { agents, hidden };
 }
 
-/** Rejects an organization default model an inheriting Agent Runtime agent cannot run. */
+/**
+ * Rejects an organization default model an inheriting Agent Runtime agent
+ * cannot run, naming the blocking agents `userId` can read and counting the
+ * rest.
+ */
 export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
   organizationId: string;
+  /** The person saving; absent for a system check, which names every agent. */
+  userId?: string;
   modelId: string | null;
 }): Promise<void> {
   if (!params.modelId) return;
-  const [model, agents] = await Promise.all([
+  const [model, dependents] = await Promise.all([
     ModelModel.findById(params.modelId),
-    listRuntimeAgentsInheritingOrganizationDefault(params.organizationId),
+    listRuntimeAgentsInheritingOrganizationDefault(params),
   ]);
   if (!model) {
     throw new ApiError(404, "Default model not found");
   }
-  const incompatible = agents.flatMap((agent) => {
+  const reasonFor = (agent: RuntimeDependent) => {
     const result = getAgentRuntimeDefaultModelCompatibility({
-      inferenceProtocol: agent.inferenceProtocol,
-      runtimeCommand: agent.runtimeCommand,
-      claudeCodeAuthentication: agent.claudeCodeAuthentication,
+      ...agent,
       provider: model.provider,
       modelId: model.modelId,
       supportedEndpoints: model.supportedEndpoints,
     });
-    return result.compatible ? [] : [{ agent, reason: result.message }];
+    return result.compatible ? null : result.message;
+  };
+  const named = dependents.agents.flatMap((agent) => {
+    const reason = reasonFor(agent);
+    return reason ? [{ name: agent.name, reason }] : [];
   });
-  if (incompatible.length === 0) return;
-  const names = incompatible.map(({ agent }) => `"${agent.name}"`);
-  const listed =
-    names.length > 3
-      ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`
-      : names.join(", ");
-  const subject =
-    incompatible.length === 1
-      ? `Agent Runtime agent ${listed} has no model of its own, so it`
-      : `Agent Runtime agents ${listed} have no model of their own, so they`;
+  const hiddenReasons = dependents.hidden.flatMap((agent) => {
+    const reason = reasonFor(agent);
+    return reason ? [reason] : [];
+  });
+  const total = named.length + hiddenReasons.length;
+  if (total === 0) return;
+  const one = total === 1;
+  const who = [
+    named.length > 0 &&
+      `Agent Runtime ${named.length === 1 ? "agent" : "agents"} ${named.map(({ name }) => `"${name}"`).join(", ")}`,
+    hiddenReasons.length > 0 &&
+      `${hiddenReasons.length} Agent Runtime ${hiddenReasons.length === 1 ? "agent" : "agents"} you can't view`,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  const reason = named[0]?.reason ?? hiddenReasons[0];
   throw new ApiError(
     409,
-    `Can't use "${model.modelId}" as the default model. ${subject} would run on it, and it can't: ${incompatible[0].reason} Set a model on ${incompatible.length === 1 ? "that agent" : "those agents"}, or choose a compatible default model.`,
+    `Can't use "${model.modelId}" as the default model. ${who} ${one ? "has" : "have"} no model of ${one ? "its" : "their"} own, so ${one ? "it" : "they"} would run on it, and ${one ? "it" : "they"} can't: ${reason} Set a model on ${one ? "that agent" : "those agents"}, or choose a compatible default model.`,
+  );
+}
+
+// === Internal helpers ===
+
+/** What decides whether an inheriting agent's runtime can run a default. */
+type RuntimeDependent = {
+  runtimeCommand: string[] | null;
+  inferenceProtocol: NonNullable<Agent["runtime"]>["inferenceProtocol"];
+  /** Absent when Claude Code picks the authentication automatically. */
+  claudeCodeAuthentication?: "provider" | "subscription";
+};
+
+/**
+ * The agents among `agents` that `userId` can read, by the same checks as
+ * reading one agent: gated agents, per-type permissions, and (for anyone who
+ * doesn't administer that type) team visibility.
+ */
+async function readableAgentIds(params: {
+  agents: Array<Pick<Agent, "id" | "agentType">>;
+  userId: string;
+  organizationId: string;
+}): Promise<Set<string>> {
+  if (params.agents.length === 0) return new Set();
+  const [checker, gatedHidden, teamVisible] = await Promise.all([
+    getAgentTypePermissionChecker(params),
+    hiddenAgentsAmong(
+      params.agents.map((agent) => agent.id),
+      {
+        kind: "caller",
+        userId: params.userId,
+        organizationId: params.organizationId,
+      },
+    ),
+    AgentTeamModel.getUserAccessibleAgentIds(params.userId, false),
+  ]);
+  const visible = new Set(teamVisible);
+  const mayRead = ({ id, agentType }: Pick<Agent, "id" | "agentType">) => {
+    try {
+      checker.require(agentType, { action: "read", scope: id });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  return new Set(
+    params.agents
+      .filter(
+        (agent) =>
+          !gatedHidden.has(agent.id) &&
+          mayRead(agent) &&
+          (checker.isAdmin(agent.agentType) || visible.has(agent.id)),
+      )
+      .map(({ id }) => id),
   );
 }

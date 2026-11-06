@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useUpdateAgentModels } from "@/lib/agent.query";
 import { useLlmModels } from "@/lib/llm-models.query";
-import { getApiErrorMessage } from "@/lib/utils/api";
+import { getApiErrorMessage, isReportedApiError } from "@/lib/utils/api";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentModelPicker } from "./agent-model-picker";
 import type { ModelSelection, RuntimeAgent } from "./runtime-agent";
@@ -110,6 +110,8 @@ export function UpdateAgentModelsDialog({
       );
       onSaved(ids);
     } catch (error) {
+      // An API refusal was already toasted with its reason by the query layer.
+      if (isReportedApiError(error)) return;
       toast.error("Couldn't update agents", {
         description: getApiErrorMessage(error),
       });

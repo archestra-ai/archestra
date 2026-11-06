@@ -32,13 +32,15 @@ concurrency:
 jobs:
   publish:
     name: Publish prebuilt dev addons
+    # Forks and the private mirror cannot write the public org's packages.
+    if: github.repository == 'archestra-ai/archestra'
     runs-on: ubicloud-standard-16-ubuntu-2404
     timeout-minutes: 45
     permissions:
       contents: read # Check out the addon sources.
-      id-token: write # Required for Workload Identity Federation.
+      packages: write # Publish the addons to GHCR.
     env:
-      REPOSITORY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/napi-dev-cache
+      REPOSITORY: ghcr.io/archestra-ai/ci/napi-dev-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,14 +51,12 @@ jobs:
         id: key
         run: echo "value=$(node platform/scripts/napi-prebuilt.mjs --key)" >> "$GITHUB_OUTPUT"
 
-      - name: Authenticate to Google Artifact Registry
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+      - name: Log in to GHCR
+        uses: $/.github/actions/docker-login
         with:
-          # The development deploy identity, as on-commits-to-main passes it to
-          # the image workflows; GCP_* secrets exist only in release environments.
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Check for a published entry
         id: published

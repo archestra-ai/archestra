@@ -203,7 +203,11 @@ export default function AgentSettingsPage() {
   // up front, with the same rule the server applies on save.
   const { data: runtimeDependents } = useDefaultModelRuntimeDependents();
   const blockingAgentsFor = useCallback(
-    (model: { provider: SupportedProvider; id: string }) =>
+    (model: {
+      provider: SupportedProvider;
+      id: string;
+      capabilities?: { supportedEndpoints?: string[] | null };
+    }) =>
       (runtimeDependents ?? []).filter(
         (agent) =>
           !getAgentRuntimeModelCompatibility({
@@ -211,6 +215,7 @@ export default function AgentSettingsPage() {
             runtimeCommand: agent.runtimeCommand,
             provider: model.provider,
             modelId: model.id,
+            supportedEndpoints: model.capabilities?.supportedEndpoints,
           }).compatible,
       ),
     [runtimeDependents],

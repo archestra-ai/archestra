@@ -443,12 +443,7 @@ export function useUpdateAppearanceSettings(
         await archestraApiSdk.updateAppearanceSettings({ body: data });
 
       if (error) {
-        // The server says why (e.g. which agents block a default model), so
-        // show its reason instead of only the generic message.
-        const reason = getApiErrorMessage(error);
-        toast.error(onErrorMessage, {
-          description: reason === "API request failed" ? undefined : reason,
-        });
+        toast.error(onErrorMessage);
         return null;
       }
 
@@ -631,7 +626,12 @@ export function useUpdateAgentSettings(
         await archestraApiSdk.updateAgentSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
+        // The server says why (e.g. which agents block a default model), so
+        // show its reason instead of only the generic message.
+        const reason = getApiErrorMessage(error);
+        toast.error(onErrorMessage, {
+          description: reason === "API request failed" ? undefined : reason,
+        });
         return null;
       }
 

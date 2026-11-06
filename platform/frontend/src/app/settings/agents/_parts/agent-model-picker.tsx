@@ -48,6 +48,7 @@ export function AgentModelPicker({
               runtimeCommand: agent.runtimeCommand,
               provider: model.provider,
               modelId: model.id,
+              supportedEndpoints: model.capabilities?.supportedEndpoints,
             }).compatible,
         ),
       )

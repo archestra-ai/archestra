@@ -150,18 +150,10 @@ vi.mock("@/lib/config/config.query", () => ({
         : undefined,
 }));
 
+let mockModels: Array<Record<string, unknown>> = [];
+
 vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
-      {
-        id: "gemini-2.5-pro",
-        dbId: "gemini-2.5-pro",
-        provider: "gemini",
-        displayName: "Gemini 2.5 Pro",
-      },
-    ],
-    isPending: false,
-  }),
+  useLlmModels: () => ({ data: mockModels, isPending: false }),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -229,6 +221,14 @@ beforeEach(() => {
   ];
   mockRuntimeBackend = null;
   mockRuntimeEnabled = undefined;
+  mockModels = [
+    {
+      id: "gemini-2.5-pro",
+      dbId: "gemini-2.5-pro",
+      provider: "gemini",
+      displayName: "Gemini 2.5 Pro",
+    },
+  ];
 
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
     isGlobalAdmin: true,
@@ -406,6 +406,46 @@ describe("Default model blocked by Agent Runtime agents", () => {
     expect(within(dialog).getByText("anthropic - org")).toBeVisible();
     expect(within(dialog).queryByText("gemini - org")).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("counts a Responses-only model as blocking an agent whose runtime uses Chat Completions", () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: "copilot-1" };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockApiKeys = [
+      {
+        id: "key-1",
+        name: "copilot",
+        provider: "github-copilot",
+        scope: "org",
+      },
+    ];
+    mockModels = [
+      {
+        id: "gpt-5.1-codex",
+        dbId: "copilot-1",
+        provider: "github-copilot",
+        displayName: "GPT-5.1 Codex",
+        capabilities: { supportedEndpoints: ["/responses"] },
+      },
+    ];
+    vi.mocked(useDefaultModelRuntimeDependents).mockReturnValue({
+      data: [
+        {
+          id: "agent-1",
+          name: "Chat Completions Agent",
+          runtimeCommand: null,
+          inferenceProtocol: "openai_chat",
+        },
+      ],
+    } as unknown as ReturnType<typeof useDefaultModelRuntimeDependents>);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("button", { name: "1 agent can't run this" }),
+    ).toBeVisible();
   });
 
   it("shows no warning when every runtime agent can run the default", () => {

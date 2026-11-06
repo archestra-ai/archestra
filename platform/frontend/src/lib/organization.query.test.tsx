@@ -494,4 +494,34 @@ describe("useUpdateAgentSettings", () => {
     expect(toast.success).toHaveBeenCalledWith("saved");
     queryClient.clear();
   });
+  it("shows the server's reason when a save is refused, such as the agents a default model would break", async () => {
+    const reason =
+      'Can\'t use "gpt-4o" as the default model. Agent Runtime agent "PR Reviewer" has no model of its own.';
+    server.use(
+      http.patch(`${API_ORIGIN}/api/organization/agent-settings`, () =>
+        HttpResponse.json(
+          { error: { message: reason, type: "api_conflict_error" } },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { result, queryClient } = renderWithClient(() =>
+      useUpdateAgentSettings("saved", "Failed to update agent settings"),
+    );
+
+    await act(() =>
+      result.current.mutateAsync({
+        defaultModelId: "model-1",
+        defaultLlmApiKeyId: "key-1",
+      }),
+    );
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Failed to update agent settings",
+      {
+        description: reason,
+      },
+    );
+    queryClient.clear();
+  });
 });

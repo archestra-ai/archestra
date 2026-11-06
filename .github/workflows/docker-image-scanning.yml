@@ -52,6 +52,10 @@ jobs:
     if: ${{ needs.classify.outputs.scan == 'true' }}
     # Build every architecture on native runners in parallel.
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
+    # Only merge groups reach this job (release-image-policy.py). The
+    # merge-queue-build environment admits gh-readonly-queue/main/* and
+    # gh-readonly-queue/release/*/* refs and holds the Sentry build secret.
+    environment: merge-queue-build
     timeout-minutes: 45
     permissions:
       contents: read
@@ -90,8 +94,8 @@ jobs:
           previous-image: ${{ steps.inputs.outputs.previous-image }}
           require-previous-assets: "true"
           # Publication promotes these exact bytes, so release candidates keep
-          # the Sentry build secret (see ../release-image-security.md). Only
-          # version-changing merge groups reach this job; pull requests never do.
+          # the Sentry build secret (see ../release-image-security.md). It comes
+          # from the merge-queue-build environment; pull requests never run this.
           sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
           cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
       - name: Seal candidate bytes for scanning

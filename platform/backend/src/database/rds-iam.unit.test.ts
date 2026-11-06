@@ -545,8 +545,9 @@ describe("rds-iam native bridge & retry helpers", () => {
     const receivedPasswords: string[] = [];
     const mockPgServer = net.createServer((rawSocket) => {
       rawSocket.once("data", (sslReq) => {
+        const reqBuf = Buffer.isBuffer(sslReq) ? sslReq : Buffer.from(sslReq);
         // Expect 8-byte PostgreSQL SSLRequest (80877103) and reply 'S' (0x53)
-        if (sslReq.length === 8 && sslReq.readInt32BE(4) === 80877103) {
+        if (reqBuf.length === 8 && reqBuf.readInt32BE(4) === 80877103) {
           rawSocket.write(Buffer.from([0x53]));
           const tlsSocket = new tls.TLSSocket(rawSocket, {
             isServer: true,

@@ -66,8 +66,10 @@ include = [
 What to know:
 
 - Your repository decides who reviews: give each file its owners in `CODEOWNERS`, such as `/mcp/payments_api.toml @example/payments`, and require code owner reviews on the branch.
+- Archestra checks each open pull request into the synced branch every minute, the way Git sync checks a commit before applying it, and reports the result as the **Archestra Guardrails policy** check. Require that check in the branch's rules, so a change Git sync would refuse cannot merge. To post it, a GitHub App needs the **Checks** permission (Read and write). An App created before that permission was added needs it added in its settings on GitHub, and the change accepted on its installation. With a personal access token, or on GitLab, the result is posted as a commit status.
 - A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
 - A server file starts with `[policy]` and `version = 2`, like `appa.toml`. It holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. Git sync refuses a commit whose server file names another server's tool, `*`, or a tool without its server, whoever approved it, and the last accepted policy stays in force.
+- For a rule that covers every tool of the server, name it `<tool prefix>__*`, such as `payments_api__*`. It applies to each of the server's tools that has no rule of its own in the file, including tools the server gains later.
 - A server file uses the organization's authorities and sanitizers but does not declare its own. To have a person approve a call, require an attention mark that an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
 
 ## Validations in Git

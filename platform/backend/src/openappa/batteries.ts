@@ -2072,7 +2072,7 @@ type PlannedComposition = {
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
   /** The repository files folded into the root, when it includes any. */
-  included?: Array<{ path: string; sha256: string }>;
+  included?: Array<{ path: string; sha256: string; tools?: string[] }>;
   /** Why the root's repository files could not be read; it is then refused. */
   foldErrors?: string[];
 };

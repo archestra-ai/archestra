@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getGithubWebOrigin, gitHostFromUrl } from "@archestra/shared";
+import {
+  getGithubWebOrigin,
+  gitHostFromUrl,
+  TimeInMs,
+} from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import { LRUCacheManager } from "@/cache-manager";
 import { enterpriseTier } from "@/enterprise-tier";
+import { gitClient } from "@/git-hosts/git-access";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -21,12 +27,14 @@ import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   openappaRepositoryIncludes,
+  type RepositorySource,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type { AppaGithubSource } from "@/types/openappa-github-sync";
+import { mapWithConcurrency } from "@/utils/concurrency";
 
 export async function getAppaGithubSync(organizationId: string) {
   const [row, suite] = await Promise.all([
@@ -543,69 +551,12 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     }
     const { content } = read;
     const commit = { sha: read.commitSha };
-    const local = await guardrailsPolicyService.get(organizationId);
-    // The repository files the pulled policy includes are read at the same
-    // commit and checked folded in; the policy text is stored as written.
-    const pulled = openappaRepositoryIncludes.foldAt({
+    const { local } = await checkCommitPolicy({
+      organizationId,
+      source: { ...row, repo },
+      commitSha: commit.sha,
       content,
-      files: await openappaRepositoryIncludes.read({
-        source: { ...row, repo },
-        commit: commit.sha,
-        paths: repositoryIncludePaths(content),
-      }),
     });
-    if (pulled.errors.length > 0)
-      throw new ApiError(400, pulled.errors.join("\n"));
-    const kept = await openappaRepositoryIncludes.expand({
-      organizationId,
-      content: local.content,
-    });
-    const previous =
-      kept.errors.length > 0
-        ? withoutRepositoryIncludes(local.content)
-        : kept.content;
-    // Named on its own: the generic refusal below would hide what to change.
-    const credentialErrors = await openappaDeclarations.credentialErrors(
-      pulled.content,
-    );
-    if (credentialErrors.length > 0)
-      throw new ApiError(400, credentialErrors.join("\n"));
-    const resolved = await resolvePair({
-      organizationId,
-      local: previous,
-      pulled: pulled.content,
-    });
-    const validation = await guardrailsPolicyService
-      .validate(pulled.content, {
-        organizationId,
-        previous,
-        resolved: { submitted: resolved.pulled, previous: resolved.local },
-      })
-      .catch((error) => {
-        logger.warn(
-          { organizationId, error },
-          "OpenAPPA could not check a pulled policy",
-        );
-        return { valid: false, errors: [] };
-      });
-    if (!validation.valid)
-      throw new ApiError(
-        400,
-        "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
-      );
-    const granted = uploadedGrants(resolved);
-    if (granted.length > 0)
-      throw new ApiError(
-        400,
-        `The repository's policy would hand ${granted
-          .map(
-            (grant) =>
-              `${grant.variable} to the uploaded ${grant.battery} battery`,
-          )
-          .join(
-            ", and ",
-          )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
-      );
     const contentHash = createHash("sha256").update(content).digest("hex");
     const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
@@ -638,6 +589,88 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     });
   }
 }
+/**
+ * Every check a pull makes before it accepts a commit's policy, storing
+ * nothing: the repository files folded in at that commit, the credential
+ * declarations, the bindings a pull may not hand to new code, and APPA's own
+ * validation. Throws an ApiError naming why the commit would be refused.
+ */
+async function checkCommitPolicy(params: {
+  organizationId: string;
+  source: RepositorySource;
+  commitSha: string;
+  content: string;
+}): Promise<{
+  local: Awaited<ReturnType<typeof guardrailsPolicyService.get>>;
+}> {
+  const { organizationId, content } = params;
+  const local = await guardrailsPolicyService.get(organizationId);
+  // The repository files the pulled policy includes are read at the same
+  // commit and checked folded in; the policy text is stored as written.
+  const pulled = await openappaRepositoryIncludes.foldAt({
+    organizationId,
+    content,
+    files: await openappaRepositoryIncludes.read({
+      source: params.source,
+      commit: params.commitSha,
+      paths: repositoryIncludePaths(content),
+    }),
+  });
+  if (pulled.errors.length > 0)
+    throw new ApiError(400, pulled.errors.join("\n"));
+  const kept = await openappaRepositoryIncludes.expand({
+    organizationId,
+    content: local.content,
+  });
+  const previous =
+    kept.errors.length > 0
+      ? withoutRepositoryIncludes(local.content)
+      : kept.content;
+  // Named on its own: the generic refusal below would hide what to change.
+  const credentialErrors = await openappaDeclarations.credentialErrors(
+    pulled.content,
+  );
+  if (credentialErrors.length > 0)
+    throw new ApiError(400, credentialErrors.join("\n"));
+  const resolved = await resolvePair({
+    organizationId,
+    local: previous,
+    pulled: pulled.content,
+  });
+  const validation = await guardrailsPolicyService
+    .validate(pulled.content, {
+      organizationId,
+      previous,
+      resolved: { submitted: resolved.pulled, previous: resolved.local },
+    })
+    .catch((error) => {
+      logger.warn(
+        { organizationId, error },
+        "OpenAPPA could not check a pulled policy",
+      );
+      return { valid: false, errors: [] };
+    });
+  if (!validation.valid)
+    throw new ApiError(
+      400,
+      "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
+    );
+  const granted = uploadedGrants(resolved);
+  if (granted.length > 0)
+    throw new ApiError(
+      400,
+      `The repository's policy would hand ${granted
+        .map(
+          (grant) =>
+            `${grant.variable} to the uploaded ${grant.battery} battery`,
+        )
+        .join(
+          ", and ",
+        )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
+    );
+  return { local };
+}
+
 async function queuePolicyValidation(
   organizationId: string,
   policyHash: string,
@@ -658,6 +691,246 @@ export async function checkDueAppaGithubSyncs() {
   if (!enterpriseTier.isOpenappaActive()) return;
   for (const row of await OpenAppaGithubSyncModel.findDue())
     await OpenAppaGithubSyncModel.enqueue(row.organizationId);
+  // Open pull requests get a pull's checks every minute, before they merge.
+  await mapWithConcurrency(
+    await OpenAppaGithubSyncModel.findConnected(),
+    4,
+    async (row) => {
+      try {
+        await checkAppaGithubPullRequests(row.organizationId);
+      } catch (error) {
+        logger.warn(
+          { organizationId: row.organizationId, error },
+          "OpenAPPA could not check the policy repository's pull requests",
+        );
+      }
+    },
+  );
+}
+
+// =============================================================================
+// Pull request checks: a pull's own checks on what a pull request would merge
+// =============================================================================
+
+/** The check each pull request in the policy repository carries. */
+const POLICY_CHECK_NAME = "Archestra Guardrails policy";
+
+/** The most open pull requests checked in one repository each minute. */
+const MAX_CHECKED_PULLS = 50;
+
+/**
+ * Pull request results checked already, by repository, head and the merge
+ * result checked: a new commit on either side is checked again, nothing else.
+ */
+const checkedPulls = new LRUCacheManager<true>({
+  maxSize: 4096,
+  defaultTtl: TimeInMs.Day,
+});
+
+/**
+ * Check every open pull request (merge request on GitLab) into the synced
+ * branch as a pull would check its result, and post the outcome on its head
+ * commit as the "Archestra Guardrails policy" check. A branch rule that
+ * requires the check stops a merge Git sync would refuse; without one, the
+ * reviewers still see it.
+ */
+async function checkAppaGithubPullRequests(organizationId: string) {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.repo || !row.path || !row.interval || !row.sourceCommit) return;
+  const source = { ...row, repo: row.repo, path: row.path };
+  const pulls = row.gitlabTokenId
+    ? await gitlabPullRequests(source)
+    : await githubPullRequests(source);
+  for (const pull of pulls.slice(0, MAX_CHECKED_PULLS)) {
+    const key = [organizationId, source.repo, pull.head, pull.result].join(
+      "\u0000",
+    );
+    if (checkedPulls.get(key)) continue;
+    const outcome = await outcomeAt({ source, commitSha: pull.result });
+    // A read that failed for now is checked again next minute.
+    if (!outcome) continue;
+    await pull.post(outcome);
+    checkedPulls.set(key, true);
+  }
+}
+
+type PullOutcome = { accepted: true } | { accepted: false; reason: string };
+
+type CheckedPull = {
+  head: string;
+  /** The commit checked: GitHub's merge result when it has one, else the head. */
+  result: string;
+  post: (outcome: PullOutcome) => Promise<void>;
+};
+
+type PolicySource = RepositorySource & {
+  path: string;
+  ref: string | null;
+};
+
+/** Whether a pull would accept the policy at `commitSha`; null for a passing failure. */
+async function outcomeAt(params: {
+  source: PolicySource;
+  commitSha: string;
+}): Promise<PullOutcome | null> {
+  const { source } = params;
+  // The policy file is read like an include entry beside it.
+  const name = source.path.slice(source.path.lastIndexOf("/") + 1);
+  try {
+    const content = (
+      await openappaRepositoryIncludes.read({
+        source,
+        commit: params.commitSha,
+        paths: [name],
+      })
+    ).get(name);
+    if (content === undefined)
+      return {
+        accepted: false,
+        reason: `${source.path} is not in this pull request's result`,
+      };
+    await checkCommitPolicy({
+      organizationId: source.organizationId,
+      source,
+      commitSha: params.commitSha,
+      content,
+    });
+    return { accepted: true };
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode < 500)
+      return { accepted: false, reason: error.message };
+    logger.warn(
+      { organizationId: source.organizationId, error },
+      "OpenAPPA could not check a policy pull request",
+    );
+    return null;
+  }
+}
+
+function checkSummary(outcome: PullOutcome) {
+  return outcome.accepted
+    ? {
+        title: "Git sync would accept this policy",
+        summary:
+          "Archestra checked the policy this pull request would merge, with every file it includes, as Git sync checks a commit before applying it.",
+      }
+    : {
+        title: "Git sync would refuse this policy",
+        summary: outcome.reason,
+      };
+}
+
+async function githubPullRequests(
+  source: PolicySource,
+): Promise<CheckedPull[]> {
+  const { token, api } = await resolveOpenAppaGithubAccess(source);
+  if (!token) return [];
+  const base = `${api}/repos/${source.repo}`;
+  const branch =
+    source.ref ??
+    (await githubJson<{ default_branch: string }>({ url: base, token }))
+      .default_branch;
+  const pulls = await githubJson<
+    Array<{ head?: { sha?: string }; merge_commit_sha?: string | null }>
+  >({
+    url: `${base}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
+    token,
+  });
+  return pulls.flatMap((pull) => {
+    const head = pull.head?.sha;
+    if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
+    const merged = pull.merge_commit_sha;
+    return [
+      {
+        head,
+        result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
+        post: (outcome) => postGithubCheck({ base, token, head, outcome }),
+      },
+    ];
+  });
+}
+
+/**
+ * A check run where the credential may create one, a GitHub App with the
+ * Checks permission; otherwise a commit status, which reads the same.
+ */
+async function postGithubCheck(params: {
+  base: string;
+  token: string;
+  head: string;
+  outcome: PullOutcome;
+}) {
+  const { base, token, head, outcome } = params;
+  const { title, summary } = checkSummary(outcome);
+  let refused = false;
+  try {
+    await githubJson({
+      url: `${base}/check-runs`,
+      token,
+      method: "POST",
+      body: {
+        name: POLICY_CHECK_NAME,
+        head_sha: head,
+        status: "completed",
+        conclusion: outcome.accepted ? "success" : "failure",
+        output: { title, summary: summary.slice(0, 60_000) },
+      },
+      onHttpError: (status) => {
+        refused = status === 403 || status === 404;
+        return new ApiError(502, `GitHub returned HTTP ${status}`);
+      },
+    });
+    return;
+  } catch (error) {
+    if (!refused) throw error;
+  }
+  await githubJson({
+    url: `${base}/statuses/${head}`,
+    token,
+    method: "POST",
+    body: {
+      state: outcome.accepted ? "success" : "failure",
+      context: POLICY_CHECK_NAME,
+      description: (outcome.accepted ? title : summary).slice(0, 140),
+    },
+  });
+}
+
+async function gitlabPullRequests(
+  source: PolicySource & { gitlabTokenId: string | null },
+): Promise<CheckedPull[]> {
+  if (!source.gitlabTokenId) return [];
+  const client = gitClient(
+    await resolveOpenAppaGitlabAccess({
+      organizationId: source.organizationId,
+      gitlabTokenId: source.gitlabTokenId,
+    }),
+  );
+  const project = client.repoApi(source.repo);
+  const branch = source.ref ?? (await client.defaultBranch(source.repo));
+  const requests = await client.json<Array<{ sha?: string }>>(
+    `${project}/merge_requests?state=opened&target_branch=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
+  );
+  return requests.flatMap((request) => {
+    const head = request.sha;
+    if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
+    return [
+      {
+        head,
+        result: head,
+        post: async (outcome) => {
+          const { title, summary } = checkSummary(outcome);
+          await client.json(`${project}/statuses/${head}`, {
+            body: {
+              state: outcome.accepted ? "success" : "failed",
+              name: POLICY_CHECK_NAME,
+              description: (outcome.accepted ? title : summary).slice(0, 255),
+            },
+          });
+        },
+      },
+    ];
+  });
 }
 
 /**

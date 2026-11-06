@@ -130,7 +130,9 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
  * of its own in `appa.toml`. Whatever review merged it, such a file reaches
  * only its own server: rules for that server's tools, annotators under its
  * name, and none of the helpers that serve every call. The files cannot
- * overlap, so their order does not matter.
+ * overlap, so their order does not matter. `<prefix>__*` is the server's own
+ * catch-all: the host writes it out as one rule for each of the server's tools
+ * the file has no rule of its own for, after the file's other rules.
  *
  * Archestra stores none of these files. They are read from the repository at
  * the commit Git sync accepted, so who may change one, and how, is the
@@ -231,10 +233,19 @@ export function includedFileErrors(path: string, content: string): string[] {
 export function expandRepositoryIncludes(params: {
   content: string;
   files: ReadonlyMap<string, string>;
-}): { content: string; errors: string[]; paths: string[] } {
+  /** Each server's current tools by prefix, for the files' `<prefix>__*` rules. */
+  serverTools?: ReadonlyMap<string, readonly string[]>;
+}): {
+  content: string;
+  errors: string[];
+  paths: string[];
+  /** The tools each file's `<prefix>__*` rules were written out for, by path. */
+  covered: Map<string, string[]>;
+} {
   const entries = repositoryIncludePaths(params.content);
+  const covered = new Map<string, string[]>();
   if (entries.length === 0)
-    return { content: params.content, errors: [], paths: [] };
+    return { content: params.content, errors: [], paths: [], covered };
   // The text parsed above, so this is a table.
   const document = parsePolicyToml(params.content) as Record<string, unknown>;
   const errors: string[] = [];
@@ -258,7 +269,8 @@ export function expandRepositoryIncludes(params: {
     errors.push(
       "policy.deployment must be a table to include repository files",
     );
-  if (errors.length > 0) return { content: params.content, errors, paths: [] };
+  if (errors.length > 0)
+    return { content: params.content, errors, paths: [], covered };
 
   const rootHelpers = {
     annotator: helperNames(policy.annotator),
@@ -277,6 +289,16 @@ export function expandRepositoryIncludes(params: {
     if ("errors" in parsed) {
       errors.push(...parsed.errors);
       continue;
+    }
+    const prefix = SERVER_RULES_FILE.exec(path)?.[1];
+    if (prefix !== undefined && parsed.policy.tool) {
+      const written = withServerCatchAll({
+        prefix,
+        rules: parsed.policy.tool,
+        tools: params.serverTools?.get(prefix) ?? [],
+      });
+      parsed.policy.tool = written.rules;
+      if (written.covered) covered.set(path, written.covered);
     }
     for (const kind of INCLUDABLE) {
       const added = parsed.policy[kind];
@@ -302,7 +324,8 @@ export function expandRepositoryIncludes(params: {
       policy.deployment = deployment;
     }
   }
-  if (errors.length > 0) return { content: params.content, errors, paths: [] };
+  if (errors.length > 0)
+    return { content: params.content, errors, paths: [], covered };
 
   const include = (document.include as unknown[]).filter(
     (entry) => typeof entry !== "string" || !isRepositoryInclude(entry),
@@ -310,14 +333,94 @@ export function expandRepositoryIncludes(params: {
   if (include.length > 0) document.include = include;
   else delete document.include;
   document.policy = policy;
-  return { content: stringifyToml(document), errors: [], paths };
+  return { content: stringifyToml(document), errors: [], paths, covered };
+}
+
+/**
+ * The server files among `files` whose rules include the server's own
+ * catch-all, `<prefix>__*`, by prefix: the servers whose tools a fold needs.
+ */
+export function serverCatchAllPrefixes(
+  files: ReadonlyMap<string, string>,
+): string[] {
+  const prefixes = new Set<string>();
+  for (const [path, text] of files) {
+    const prefix = SERVER_RULES_FILE.exec(path)?.[1];
+    if (prefix === undefined || !text.includes(`${prefix}__*`)) continue;
+    const rules = tablesOf(asRecord(parsePolicyToml(text)?.policy)?.tool);
+    if (rules.some((rule) => isServerCatchAll(prefix, rule)))
+      prefixes.add(prefix);
+  }
+  return [...prefixes].sort();
+}
+
+/** Whether a rule is `<prefix>__*`, with or without an argument selector. */
+function isServerCatchAll(
+  prefix: string,
+  rule: Record<string, unknown>,
+): boolean {
+  return (
+    typeof rule.name === "string" &&
+    rule.server === undefined &&
+    ruleTool(rule.name) === `${prefix}__*`
+  );
+}
+
+/**
+ * A server file's rules with its `<prefix>__*` rules written out: one copy of
+ * each for every tool of the server the file has no plain rule for, after
+ * the file's other rules, as OpenAPPA's catch-all comes after every contract.
+ */
+function withServerCatchAll(params: {
+  prefix: string;
+  rules: unknown[];
+  tools: readonly string[];
+}): { rules: unknown[]; covered?: string[] } {
+  const { prefix } = params;
+  const rules = tablesOf(params.rules);
+  const catchAll = rules.filter((rule) => isServerCatchAll(prefix, rule));
+  if (catchAll.length === 0) return { rules: params.rules };
+  const own = rules.filter((rule) => !isServerCatchAll(prefix, rule));
+  // A plain rule always matches its tool, so the catch-all never reaches it;
+  // a rule with an argument selector leaves the tool's other calls to it.
+  const ruled = new Set(
+    own.flatMap((rule) =>
+      typeof rule.name === "string" && !rule.name.includes("(")
+        ? [rule.name]
+        : [],
+    ),
+  );
+  const covered = [...new Set(params.tools)]
+    .filter(
+      (tool) =>
+        parseFullToolName(tool).serverName === prefix && !ruled.has(tool),
+    )
+    .sort();
+  return {
+    rules: [
+      ...own,
+      ...catchAll.flatMap((rule) =>
+        covered.map((tool) => ({
+          ...rule,
+          name: `${tool}${(rule.name as string).slice(`${prefix}__*`.length)}`,
+        })),
+      ),
+    ],
+    covered,
+  };
+}
+
+/** A rule name without its argument selector. */
+function ruleTool(name: string): string {
+  return name.split("(", 1)[0] ?? "";
 }
 
 /**
  * Whether one `[[policy.tool]]` entry names only tools of the MCP server with
- * this prefix: `<prefix>__<tool>`, `mcp/<prefix>/<tool>`, or a tool name with
- * `server = "<prefix>"`. A bare tool name matches across servers, and `*`
- * matches every tool, so neither is the server's own.
+ * this prefix: `<prefix>__<tool>`, the server's catch-all `<prefix>__*`,
+ * `mcp/<prefix>/<tool>`, or a tool name with `server = "<prefix>"`. A bare
+ * tool name matches across servers, and `*` matches every tool, so neither is
+ * the server's own.
  */
 export function governsServerTool(
   prefix: string,
@@ -325,7 +428,7 @@ export function governsServerTool(
 ): boolean {
   if (typeof rule.name !== "string") return false;
   // A rule's argument selector narrows it; it never widens the tools it names.
-  const bare = rule.name.split("(", 1)[0] ?? "";
+  const bare = ruleTool(rule.name);
   if (bare === "" || bare === "*") return false;
   if (rule.server !== undefined)
     return rule.server === prefix && !bare.includes("/");

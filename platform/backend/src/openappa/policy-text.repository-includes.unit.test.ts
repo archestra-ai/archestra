@@ -7,6 +7,7 @@ import {
   includesServerRules,
   isRepositoryInclude,
   repositoryIncludePaths,
+  serverCatchAllPrefixes,
   serverRulesPath,
   withoutRepositoryIncludes,
 } from "./policy-text";
@@ -63,7 +64,7 @@ describe("repository includes", () => {
     const root = `include = ["batteries/archestra/appa.toml"]\n# kept\n[policy]\nversion = 2\n`;
     expect(
       expandRepositoryIncludes({ content: root, files: files({}) }),
-    ).toEqual({ content: root, errors: [], paths: [] });
+    ).toEqual({ content: root, errors: [], paths: [], covered: new Map() });
     expect(withoutRepositoryIncludes(root)).toBe(root);
   });
 
@@ -366,5 +367,79 @@ on = ["tool_output"]
         server: "helpdesk",
       }),
     ).toBe(false);
+  });
+
+  test("<prefix>__* is the server's own catch-all: one rule for each of its tools the file has no plain rule for, after the file's own", () => {
+    const payments = `[policy]
+version = 2
+
+[[policy.tool]]
+name = "payments_api__*"
+delta = { trust = "suspicious" }
+
+[[policy.tool]]
+name = "payments_api__refund_payment"
+requires = { trust = "trusted" }
+delta = {}
+
+[[policy.tool]]
+name = "payments_api__get_invoice(customer:vip-*)"
+delta = { audience = ["self"] }
+`;
+    expect(includedFileErrors("mcp/payments_api.toml", payments)).toEqual([]);
+    const all = files({ "mcp/payments_api.toml": payments });
+    expect(serverCatchAllPrefixes(all)).toEqual(["payments_api"]);
+    expect(
+      serverCatchAllPrefixes(files({ "mcp/helpdesk.toml": HELPDESK })),
+    ).toEqual([]);
+    const root = `include = ["mcp/*.toml"]\n[policy]\nversion = 2\n`;
+    const expanded = expandRepositoryIncludes({
+      content: root,
+      files: all,
+      serverTools: new Map([
+        [
+          "payments_api",
+          [
+            "payments_api__refund_payment",
+            "payments_api__get_invoice",
+            "payments_api__export_ledger",
+            // Another server's tool that only starts with the prefix.
+            "payments_api__shadow__export_all",
+          ],
+        ],
+      ]),
+    });
+    expect(expanded.errors).toEqual([]);
+    const tools = (
+      parse(expanded.content) as {
+        policy: { tool: Array<{ name: string; delta: unknown }> };
+      }
+    ).policy.tool;
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "payments_api__refund_payment",
+      "payments_api__get_invoice(customer:vip-*)",
+      // A plain rule wins over the catch-all; a selector leaves the rest of
+      // the tool's calls to it.
+      "payments_api__export_ledger",
+      "payments_api__get_invoice",
+    ]);
+    expect(tools[2]?.delta).toEqual({ trust: "suspicious" });
+    expect(expanded.covered.get("mcp/payments_api.toml")).toEqual([
+      "payments_api__export_ledger",
+      "payments_api__get_invoice",
+    ]);
+    // With no tools known, the catch-all governs nothing.
+    expect(
+      (
+        parse(
+          expandRepositoryIncludes({ content: root, files: all }).content,
+        ) as {
+          policy: { tool: Array<{ name: string }> };
+        }
+      ).policy.tool.map((tool) => tool.name),
+    ).toEqual([
+      "payments_api__refund_payment",
+      "payments_api__get_invoice(customer:vip-*)",
+    ]);
   });
 });

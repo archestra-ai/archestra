@@ -1,3 +1,4 @@
+import { parseFullToolName } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type GitAccess,
@@ -5,7 +6,9 @@ import {
   resolveGitCredentialAccess,
 } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import ToolModel from "@/models/tool";
 import {
   expandRepositoryIncludes,
   isRepositoryInclude,
@@ -15,6 +18,7 @@ import {
   repositoryIncludePaths,
   SERVER_RULES_FOLDER,
   SERVER_RULES_INCLUDE,
+  serverCatchAllPrefixes,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
@@ -107,8 +111,12 @@ export type RepositorySource = {
 export type ExpandedRoot = {
   content: string;
   errors: string[];
-  /** Each included file and the hash of the bytes folded in, in include order. */
-  included: Array<{ path: string; sha256: string }>;
+  /**
+   * Each included file and the hash of the bytes folded in, in include order,
+   * with the tools its `<prefix>__*` rules covered when it has one: a server
+   * that gains a tool composes again.
+   */
+  included: Array<{ path: string; sha256: string; tools?: string[] }>;
 };
 
 /**
@@ -184,18 +192,27 @@ class OpenAppaRepositoryIncludes {
         throw error;
       }
     }
-    return fold({ content: params.content, files });
+    return fold({
+      content: params.content,
+      files,
+      serverTools: await serverToolsFor(params.organizationId, files),
+    });
   }
 
   /**
    * Fold in the files of one commit, read with `read`: a path the commit does
    * not hold refuses the fold, rather than being read anywhere else.
    */
-  foldAt(params: {
+  async foldAt(params: {
+    organizationId: string;
     content: string;
     files: ReadonlyMap<string, string>;
-  }): ExpandedRoot {
-    return fold(params);
+  }): Promise<ExpandedRoot> {
+    return fold({
+      content: params.content,
+      files: params.files,
+      serverTools: await serverToolsFor(params.organizationId, params.files),
+    });
   }
 
   /** Files at the commit Git sync accepted; a path not there is left out. */
@@ -322,15 +339,48 @@ export const openappaRepositoryIncludes = new OpenAppaRepositoryIncludes();
 function fold(params: {
   content: string;
   files: ReadonlyMap<string, string>;
+  serverTools?: ReadonlyMap<string, readonly string[]>;
 }): ExpandedRoot {
-  const { paths, ...expanded } = expandRepositoryIncludes(params);
+  const { paths, covered, ...expanded } = expandRepositoryIncludes(params);
   return {
     ...expanded,
-    included: paths.map((path) => ({
-      path,
-      sha256: repositoryFileHash(params.files.get(path) as string),
-    })),
+    included: paths.map((path) => {
+      const tools = covered.get(path);
+      return {
+        path,
+        sha256: repositoryFileHash(params.files.get(path) as string),
+        ...(tools ? { tools } : {}),
+      };
+    }),
   };
+}
+
+/**
+ * The current tools of each server whose file has a `<prefix>__*` rule, by
+ * prefix; nothing is read when no file has one.
+ */
+async function serverToolsFor(
+  organizationId: string,
+  files: ReadonlyMap<string, string>,
+): Promise<Map<string, string[]> | undefined> {
+  const prefixes = serverCatchAllPrefixes(files);
+  if (prefixes.length === 0) return undefined;
+  const tools = await ToolModel.getToolNamesByPrefixes({
+    scopeCatalogIds:
+      await InternalMcpCatalogModel.findIdsVisibleToOrganization(
+        organizationId,
+      ),
+    prefixes,
+    catalogIds: [],
+  });
+  const byPrefix = new Map<string, string[]>();
+  for (const { name } of tools) {
+    // A tool whose own name holds the separator belongs to a longer prefix.
+    const server = parseFullToolName(name).serverName;
+    if (server && prefixes.includes(server))
+      byPrefix.set(server, [...(byPrefix.get(server) ?? []), name]);
+  }
+  return byPrefix;
 }
 
 /** One commit's key, or one folder's at that commit. */

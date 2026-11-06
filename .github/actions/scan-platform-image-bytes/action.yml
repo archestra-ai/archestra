@@ -11,12 +11,6 @@ inputs:
   slim-image:
     description: "Optional retained immutable slim Platform image reference (required with full-image)"
     default: ""
-  dockerhub-user:
-    description: "Docker Hub username for Docker Scout"
-    required: true
-  dockerhub-password:
-    description: "Docker Hub password/token for Docker Scout"
-    required: true
 
 runs:
   using: composite
@@ -60,6 +54,4 @@ runs:
         additional-images: ${{ steps.images.outputs.slim }}
         platform: linux/amd64
         concurrent: "false"
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-password: ${{ inputs.dockerhub-password }}
         exit-code: "true"

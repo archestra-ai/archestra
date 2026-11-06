@@ -25,11 +25,12 @@ on:
         required: false
         type: string
         default: ""
+      environment:
+        description: "GitHub Environment whose OIDC subject the publishing jobs use (release-publish for releases); empty for none"
+        required: false
+        type: string
+        default: ""
     secrets:
-      DOCKER_USERNAME:
-        required: false
-      DOCKER_PASSWORD:
-        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -82,6 +83,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
+      environment: ${{ inputs.environment }}
       image_directory: ./platform/docker_images/mcp_server
       dockerfile: ./platform/docker_images/mcp_server/Dockerfile
       image_name: mcp-server-base
@@ -93,7 +95,5 @@ jobs:
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/mcp_server", ".github/workflows/build-base-mcp-server-docker-image.yml"]'
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

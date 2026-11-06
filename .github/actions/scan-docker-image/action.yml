@@ -19,12 +19,6 @@ inputs:
     description: "Scan images concurrently. Scout's shared indexing cache can lock when two images are indexed at once."
     required: false
     default: "false"
-  dockerhub-user:
-    description: "Docker Hub username for Scout authentication"
-    required: true
-  dockerhub-password:
-    description: "Docker Hub password for Scout authentication"
-    required: true
   only-severities:
     description: "Comma-separated list of severities to check"
     required: false
@@ -77,8 +71,6 @@ runs:
     - name: Docker Scout CVE Check
       shell: bash
       env:
-        DOCKER_SCOUT_HUB_USER: ${{ inputs.dockerhub-user }}
-        DOCKER_SCOUT_HUB_PASSWORD: ${{ inputs.dockerhub-password }}
         SCOUT_IMAGE: ${{ inputs.image }}
         SCOUT_ADDITIONAL_IMAGES: ${{ inputs.additional-images }}
         SCOUT_PLATFORM: ${{ inputs.platform }}

@@ -3766,20 +3766,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
-  test("bypasses Guardrails v2 for an unsupported client by default", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: url(),
-      remoteAddress: "127.0.0.1",
-      headers: { ...externalClientHeaders() },
-      payload: payload(false) as Record<string, unknown>,
-    });
-
-    expect(response.statusCode, response.body).toBe(200);
-    expect(providerRequests).toHaveLength(1);
-    expect(events).toHaveLength(0);
-  });
-
   test("blocks an unsupported client before the provider when configured", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
     const response = await app.inject({

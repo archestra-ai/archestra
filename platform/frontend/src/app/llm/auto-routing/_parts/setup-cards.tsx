@@ -199,11 +199,20 @@ function UseAutoCard({ settings }: { settings: AutoRoutingSettings }) {
   );
 }
 
+/** What runs on Auto, in a sentence. */
 function usageText(usage: AutoRoutingSettings["usage"]): string {
-  const agents = `${usage.agentCount} ${usage.agentCount === 1 ? "agent" : "agents"} on Auto`;
-  return usage.organizationDefault
-    ? `${agents}, plus everything on the organization default.`
-    : `${agents}. The organization default is not Auto.`;
+  const agents =
+    usage.agentCount === 1 ? "1 agent" : `${usage.agentCount} agents`;
+  if (usage.organizationDefault) {
+    const base =
+      "Auto is the organization default: every chat and agent without a model of its own runs on it.";
+    return usage.agentCount > 0
+      ? `${base} ${agents} also ${usage.agentCount === 1 ? "has" : "have"} Auto set directly.`
+      : base;
+  }
+  return usage.agentCount > 0
+    ? `${agents} ${usage.agentCount === 1 ? "runs" : "run"} on Auto. The organization default is a fixed model.`
+    : "Nothing runs on Auto yet. Pick it for an agent or a chat, or make it the organization default.";
 }
 
 function StatusCard({

@@ -34,7 +34,7 @@ describe("AutoRoutedModelTrigger", () => {
       expect(tooltip).toHaveTextContent(model);
       expect(tooltip).toHaveTextContent(tier);
     }
-    expect(tooltip).toHaveTextContent("Add a provider API key to pick one.");
+    expect(tooltip).not.toHaveTextContent("provider API key");
   });
 
   test("does not submit the surrounding agent form when clicked or pressed", async () => {

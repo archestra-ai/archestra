@@ -294,7 +294,7 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(
       await screen.findByText(
-        "7 agents on Auto, plus everything on the organization default.",
+        "Auto is the organization default: every chat and agent without a model of its own runs on it. 7 agents also have Auto set directly.",
       ),
     ).toBeInTheDocument();
   });
@@ -1106,9 +1106,13 @@ describe("past sessions", () => {
     serveBackfill({ backfill: scanned(), scoreOffer: offer });
     const user = userEvent.setup();
     renderPage();
-    const ceiling = await screen.findByLabelText("Spending limit (USD)");
+    await user.click(
+      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const ceiling = within(dialog).getByLabelText("Spending limit (USD)");
     const action = () =>
-      screen.getByRole("button", { name: /^Score 240 sessions/ });
+      within(dialog).getByRole("button", { name: "Score 240 sessions" });
 
     await user.clear(ceiling);
     await user.type(ceiling, String(AUTO_ROUTING_BACKFILL_MAX_COST_USD));
@@ -1230,10 +1234,13 @@ describe("past sessions", () => {
     const dialog = await screen.findByRole("dialog");
 
     expect(dialog).toHaveTextContent(
-      `${formatDate({ date: "2026-08-01T00:00:00.000Z" })} to ${formatDate({ date: "2026-09-01T00:00:00.000Z" })}`,
+      `${formatDate({ date: "2026-08-01T00:00:00.000Z", dateFormat: "MMM d, yyyy" })} to ${formatDate({ date: "2026-09-01T00:00:00.000Z", dateFormat: "MMM d, yyyy" })}`,
     );
     expect(dialog).not.toHaveTextContent(
-      formatDate({ date: "2026-10-20T00:00:00.000Z" }),
+      formatDate({
+        date: "2026-10-20T00:00:00.000Z",
+        dateFormat: "MMM d, yyyy",
+      }),
     );
     await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
     await waitFor(() => expect(scores).toMatchObject([{ backfillId: older }]));
@@ -1243,15 +1250,16 @@ describe("past sessions", () => {
     const scores = serveBackfill({ backfill: scanned(), scoreOffer: offer });
     const user = userEvent.setup();
     renderPage();
-    const ceiling = await screen.findByLabelText("Spending limit (USD)");
+    await user.click(
+      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("sends the opening prompt");
+    expect(dialog).toHaveTextContent("~$");
+    expect(scores).toEqual([]);
+    const ceiling = within(dialog).getByLabelText("Spending limit (USD)");
     await user.clear(ceiling);
     await user.type(ceiling, "2.5");
-    await user.click(
-      screen.getByRole("button", { name: /^Score 240 sessions/ }),
-    );
-    expect(scores).toEqual([]);
-
-    const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
 
     await waitFor(() =>
@@ -1283,10 +1291,7 @@ describe("past sessions", () => {
     });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("button", { name: "Re-score" }));
-    await user.click(
-      await screen.findByRole("button", { name: /^Re-score 240 sessions/ }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Re-score…" }));
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
         name: /sessions$/,

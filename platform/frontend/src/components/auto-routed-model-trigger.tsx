@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { Sparkles } from "lucide-react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,19 +40,7 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
             aria-disabled
             className="cursor-default gap-2 aria-disabled:cursor-default aria-disabled:opacity-100"
           >
-            <span className="flex -space-x-1" aria-hidden>
-              {rows.map((row) => (
-                <span
-                  key={row.tier}
-                  className="grid size-5 place-items-center rounded-full border bg-background"
-                >
-                  <ModelSelectorLogo
-                    provider={row.provider}
-                    className="size-3"
-                  />
-                </span>
-              ))}
-            </span>
+            <Sparkles aria-hidden />
             <span className="text-foreground/80">Auto</span>
             <span className="hidden text-muted-foreground sm:inline">
               3 models
@@ -77,9 +66,6 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-muted-foreground">
-            Add a provider API key to pick one.
-          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

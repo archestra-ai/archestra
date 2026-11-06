@@ -64,14 +64,6 @@ inputs:
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
-  turbo-team:
-    description: "Turborepo remote caching team"
-    required: false
-    default: ""
-  turbo-token:
-    description: "Turborepo remote caching token"
-    required: false
-    default: ""
   sentry-auth-token:
     description: "Sentry auth token for source map uploads (optional)"
     required: false
@@ -139,8 +131,6 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
-        SECRET_TURBO_TEAM: ${{ inputs.turbo-team }}
-        SECRET_TURBO_TOKEN: ${{ inputs.turbo-token }}
         SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
       run: |
         set -euo pipefail
@@ -175,8 +165,6 @@ runs:
 
         # Build secrets are exposed to RUN steps via --secret env references;
         # the values never appear in the command line.
-        [ -n "${SECRET_TURBO_TEAM}" ] && ARGS+=( --secret "id=turbo_team,env=SECRET_TURBO_TEAM" )
-        [ -n "${SECRET_TURBO_TOKEN}" ] && ARGS+=( --secret "id=turbo_token,env=SECRET_TURBO_TOKEN" )
         [ -n "${SECRET_SENTRY_AUTH_TOKEN}" ] && ARGS+=( --secret "id=sentry_auth_token,env=SECRET_SENTRY_AUTH_TOKEN" )
 
         # A custom --output wins (it can encode push-by-digest / compression /

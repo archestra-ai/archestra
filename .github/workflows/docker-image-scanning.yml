@@ -72,8 +72,6 @@ jobs:
           push: "false"
           load: "true"
           tags: release-scan-${{ matrix.image }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-amd64
       - name: Pin locally built image
         id: image

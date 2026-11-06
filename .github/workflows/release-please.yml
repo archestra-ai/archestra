@@ -323,10 +323,6 @@ jobs:
       previous_version: ${{ needs.release-please.outputs.platform_previous_version }}
       push_image: true
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-    secrets:
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
@@ -369,6 +365,8 @@ jobs:
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
+    outputs:
+      preserve_latest: ${{ steps.publication-policy.outputs.preserve_latest }}
     permissions:
       contents: write # Attach the saved chart and publish the release.
       id-token: write # Authenticate the existing registry publisher.
@@ -523,8 +521,27 @@ jobs:
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
 
+  refresh-release-website:
+    name: Refresh release website
+    # Stable releases that take the latest tag refresh the production docs.
+    # The website deploy app key lives only in the website-deploy environment,
+    # so this runs apart from the publish job's release approval environment.
+    needs:
+      - release-please
+      - publish-github-release
+    if: ${{ github.ref_name != 'main' && needs.publish-github-release.outputs.preserve_latest != 'true' }}
+    runs-on: ubuntu-latest
+    environment: website-deploy
+    permissions:
+      contents: read # Check out the GitHub App token action.
+    steps:
+      - name: Checkout GitHub App token action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/github-app-token
+
       - name: Generate website deployment token
-        if: ${{ github.ref_name != 'main' && steps.publication-policy.outputs.preserve_latest != 'true' }}
         id: website-token
         uses: ./.github/actions/github-app-token
         with:
@@ -535,9 +552,9 @@ jobs:
           permission-actions: write
 
       - name: Refresh release website
-        if: ${{ github.ref_name != 'main' && steps.publication-policy.outputs.preserve_latest != 'true' }}
         env:
           GH_TOKEN: ${{ steps.website-token.outputs.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
         run: gh workflow run deploy-docs.yml --repo archestra-ai/website --ref main -f "docs_ref=$TAG_NAME"
 
   notify-release-failure:
@@ -562,6 +579,7 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
       - publish-github-release
+      - refresh-release-website
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
     permissions: {}
@@ -579,6 +597,7 @@ jobs:
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
           HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
           PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
+          WEBSITE_RESULT: ${{ needs.refresh-release-website.result }}
         run: |
           if [ -z "${SLACK_WEBHOOK_URL}" ]; then
             echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack alert."
@@ -594,6 +613,7 @@ jobs:
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`
+          • release website refresh: \`${WEBSITE_RESULT}\`
           <${RUN_URL}|View failed CI run>"
           jq -n --arg text "$TEXT" '{text: $text}' \
             | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"

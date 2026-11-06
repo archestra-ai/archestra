@@ -190,8 +190,9 @@ RUN apk add --no-cache \
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
    apk add --no-cache --upgrade "zlib>=1.3.2-r1" && \
-   # Require the Alpine 3.23 musl fix and invalidate cached layers with 1.2.5-r23.
-   apk add --no-cache --upgrade "musl>=1.2.5-r24"
+   # Require the Alpine 3.23 musl fix for both installed packages and invalidate
+   # cached layers with 1.2.5-r23.
+   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

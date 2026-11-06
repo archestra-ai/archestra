@@ -2,7 +2,15 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, exports,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ChevronDown, Download, FileJson, FileSpreadsheet, Info, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  Info,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import {
   type SetStateAction,

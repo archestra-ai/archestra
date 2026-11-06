@@ -1276,7 +1276,11 @@ function exportRows({
     const cols = pivotColumns(cube, bySplit);
     lines = [
       [dimLabel, ...cols.map((c) => c.csv), "total"],
-      ...cube.rows.map((r) => [r.label, ...pivotValues(r, cube, bySplit), r.total]),
+      ...cube.rows.map((r) => [
+        r.label,
+        ...pivotValues(r, cube, bySplit),
+        r.total,
+      ]),
     ];
   }
   return { header: lines[0] as string[], rows: lines.slice(1) };

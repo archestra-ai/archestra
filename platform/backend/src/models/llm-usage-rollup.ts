@@ -8,12 +8,11 @@ import {
   gte,
   lt,
   lte,
-  or,
   type SQL,
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { type SubqueryWithSelection, unionAll } from "drizzle-orm/pg-core";
+import { unionAll } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { AttributionLabels } from "@/types/attribution-label";
 
@@ -123,18 +122,49 @@ class LlmUsageRollupModel {
           sql`NOT EXISTS (SELECT 1 FROM ${d} WHERE ${d.hour} = ${h.hour})`,
         ),
       );
-    const edges = usageFactsQuery(
+    // The window's parts outside the served hours, each its own range so
+    // each is an index range scan.
+    const head = usageFactsQuery(
       and(
-        inWindow,
-        or(
-          lt(i.createdAt, sql`${from}::timestamp`),
-          gte(i.createdAt, sql`${to}::timestamp`),
-        ),
+        gte(i.createdAt, sql`${window.start}::timestamp`),
+        lt(i.createdAt, sql`${from}::timestamp`),
       ) as SQL,
       window.grain,
     );
-    const remarked = usageFactsQuery(inWindow, window.grain, db, marked);
-    return unionAll(rolled, edges, remarked).as("usage_facts");
+    const tail = usageFactsQuery(
+      and(
+        gte(i.createdAt, sql`${to}::timestamp`),
+        window.end === null
+          ? undefined
+          : lte(i.createdAt, sql`${window.end}::timestamp`),
+      ) as SQL,
+      window.grain,
+    );
+    // Each marked hour, as its own index range scan: the fence (OFFSET 0)
+    // keeps PostgreSQL from flattening the per-hour query and scanning the
+    // whole window instead.
+    const markedHour = usageFactsQuery(
+      and(
+        inWindow,
+        gte(i.createdAt, marked.hour),
+        lt(i.createdAt, sql`${marked.hour} + interval '1 hour'`),
+      ) as SQL,
+      window.grain,
+    )
+      .offset(0)
+      .as("marked_usage");
+    const remarked = db
+      .select(
+        Object.fromEntries(
+          Object.keys(rollupSelection).map((key) => [
+            key,
+            markedHour[key as keyof typeof rollupSelection],
+          ]),
+        ) as { [K in keyof typeof rollupSelection]: (typeof markedHour)[K] },
+      )
+      .from(marked)
+      .innerJoinLateral(markedHour, sql`true`);
+    return unionAll(rolled, head, tail, remarked).as("usage_facts");
   }
 
   /**
@@ -249,9 +279,6 @@ export type UsageWindow = {
    */
   served: { from: string; to: string } | null;
 };
-
-/** A subquery of hours, in its `hour` column. */
-type HourSet = SubqueryWithSelection<{ hour: SQL.Aliased<Date> }, string>;
 
 /**
  * Receipt facts per billed model for one interaction: a LATERAL over the
@@ -451,8 +478,6 @@ function usageFactsQuery(
   where: SQL,
   grain: UsageWindow["grain"],
   executor: typeof db | Transaction = db,
-  /** Only the interactions inside one of these hours. */
-  hours?: HourSet,
 ) {
   const i = schema.interactionsTable;
   const r = schema.interactionBillingTable;
@@ -559,17 +584,7 @@ function usageFactsQuery(
     })
     .from(i)
     .$dynamic();
-  // A range join, so each hour is an index range scan of `interactions`.
-  const scoped = hours
-    ? query.innerJoin(
-        hours,
-        and(
-          gte(i.createdAt, hours.hour),
-          lt(i.createdAt, sql`${hours.hour} + interval '1 hour'`),
-        ),
-      )
-    : query;
-  return scoped
+  return query
     .leftJoin(r, eq(r.interactionId, i.id))
     .leftJoin(billingModel, sql`true`)
     .where(where)

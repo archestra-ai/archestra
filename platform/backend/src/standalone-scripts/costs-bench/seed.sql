@@ -23,6 +23,9 @@
 \if :{?personal_agents} \else \set personal_agents 2600 \endif
 \if :{?virtual_keys} \else \set virtual_keys 300 \endif
 \if :{?days} \else \set days 365 \endif
+-- Share of each person's calls made with their own agent, key, client,
+-- sign-in method and models; the rest pick each of these at random.
+\if :{?home_share} \else \set home_share 0.8 \endif
 
 DO $$
 BEGIN
@@ -203,7 +206,7 @@ CROSS JOIN LATERAL (
 ) r
 CROSS JOIN LATERAL (
   SELECT CASE WHEN r.u < 0.95 THEN 1 + floor(:users * (r.u / 0.95) ^ 1.5)::int ELSE 0 END AS uid,
-    r.home < 0.8 AS home
+    r.home < :home_share AS home
 ) p0
 CROSS JOIN LATERAL (
   SELECT p0.*,

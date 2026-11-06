@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -36,7 +36,7 @@ Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read
 
 1. Pick a saved view, such as **Spend by model** or **Tokens by agent and person**, or choose a metric and grouping yourself. Team, agent, person, credential, provider, and model can each be split by another, so you can see who uses each agent.
 2. Click rows to compare their trends in the chart. **Summary** sorts totals; **Pivot** compares time buckets or a secondary breakdown.
-3. Use **Copy as CSV** to export the result. The API call below the table identifies the source endpoint.
+3. Use **Export** to download the result as CSV, JSON, or Parquet. The API call below the table identifies the source endpoint.
 
 - Subscription estimates value usage at equivalent API rates. They exclude subscription fees and are not a bill.
 - App opens and tool calls measure activity. The app spend view includes build and runtime costs, marks shared build sessions, and compares runtime usage with the chat-equivalent estimate. Opening an app does not itself imply inference.

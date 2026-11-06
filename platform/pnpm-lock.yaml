@@ -815,6 +815,9 @@ importers:
       handlebars:
         specifier: ^4.7.10
         version: 4.7.10
+      hyparquet-writer:
+        specifier: 0.18.0
+        version: 0.18.0
       import-in-the-middle:
         specifier: 3.0.0
         version: 3.0.0
@@ -8081,6 +8084,12 @@ packages:
     resolution: {integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==}
     engines: {node: '>=18'}
     hasBin: true
+
+  hyparquet-writer@0.18.0:
+    resolution: {integrity: sha512-1vDuEneasjp2yuk/OnLqli5aArzHQw8NYVbJD7ytpHZ3outmJaHHRcNbA7BiiFxonWGhwgPPWnVSsREv6LxE4A==}
+
+  hyparquet@1.32.0:
+    resolution: {integrity: sha512-SpkvdfgQjcdCJA+MTzo0WSreLLy/aLRYs3xetk1SsuFvq8vF+J/97OaRnZhf+p5Nx3J27i9FhSC0bJ5eQZG/7Q==}
 
   iconv-lite@0.7.2:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
@@ -18826,6 +18835,12 @@ snapshots:
       - supports-color
 
   husky@9.1.7: {}
+
+  hyparquet-writer@0.18.0:
+    dependencies:
+      hyparquet: 1.32.0
+
+  hyparquet@1.32.0: {}
 
   iconv-lite@0.7.2:
     dependencies:

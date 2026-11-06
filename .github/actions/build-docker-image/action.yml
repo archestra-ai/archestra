@@ -64,7 +64,7 @@ inputs:
     required: false
     default: ""
   cache-to:
-    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs). Ignored on the persistent builder."
+    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs)."
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
@@ -84,11 +84,6 @@ inputs:
     description: "Set up a new Buildx builder; disable to reuse the current job builder"
     required: false
     default: "true"
-
-  builder-cache-key:
-    description: Optional persistent Blacksmith BuildKit cache key for trusted builds
-    required: false
-    default: ""
 
 outputs:
   digest:
@@ -135,11 +130,8 @@ runs:
         REQUIRE_PREVIOUS_ASSETS: ${{ inputs.require-previous-assets }}
 
     - name: Setup Docker Builder
-      id: builder
       if: ${{ inputs.setup-builder == 'true' }}
       uses: $/.github/actions/setup-docker-builder
-      with:
-        cache-key: ${{ inputs.builder-cache-key }}
 
     - name: Build Docker image
       id: build
@@ -158,7 +150,6 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
-        PERSISTENT_BUILDER: ${{ steps.builder.outputs.persistent }}
         REUSE_BUILDER: ${{ inputs.setup-builder == 'false' }}
         SECRET_TURBO_TEAM: ${{ inputs.turbo-team }}
         SECRET_TURBO_TOKEN: ${{ inputs.turbo-token }}
@@ -177,11 +168,9 @@ runs:
 
         [ -n "${INPUT_PLATFORMS}" ] && ARGS+=( --platform "${INPUT_PLATFORMS}" )
         [ -n "${INPUT_TARGET}" ] && ARGS+=( --target "${INPUT_TARGET}" )
-        # Persistent builders retain layers on disk. A second build in the same
-        # job also has the first build's cache: importing a multi-GB registry
-        # cache again only adds egress. The first standard/fallback build still
-        # imports the registry cache, so a sticky-disk outage can build normally.
-        if [ "${PERSISTENT_BUILDER}" = "true" ] || [ "${REUSE_BUILDER}" = "true" ]; then
+        # A second build in the same job already has the first build's cache:
+        # importing a multi-GB registry cache again only adds egress.
+        if [ "${REUSE_BUILDER}" = "true" ]; then
           echo "::notice::Reusing builder cache; skipping registry cache imports"
         else
           # Cache specs contain commas, so split on newlines only.
@@ -191,12 +180,7 @@ runs:
             [ -n "${cache_from}" ] && ARGS+=( --cache-from "${cache_from}" )
           done <<< "${INPUT_CACHE_FROM}"
         fi
-        # A registry cache export from reused BuildKit state crashes buildkitd
-        # (rpc EOF) after the image is pushed. The persistent builder keeps its
-        # layers on its own disk, so it does not export one.
-        if [ -n "${INPUT_CACHE_TO}" ] && [ "${PERSISTENT_BUILDER}" = "true" ]; then
-          echo "::notice::Persistent builder keeps its own cache; skipping the registry cache export"
-        elif [ -n "${INPUT_CACHE_TO}" ]; then
+        if [ -n "${INPUT_CACHE_TO}" ]; then
           ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
         fi
         [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )

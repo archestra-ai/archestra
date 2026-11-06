@@ -162,7 +162,7 @@ jobs:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     needs: [affected-agent-images]
     if: ${{ inputs.version == '' && needs.affected-agent-images.outputs.images != '[]' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout the repository and build the image.

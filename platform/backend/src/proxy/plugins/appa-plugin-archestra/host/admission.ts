@@ -513,17 +513,6 @@ async function governedAdmission(params: {
             secret: config.openappa.offerSigningSecret,
           })
         : [];
-    // `forkedSession` identifies a single lineage head across stamps and text envelopes.
-    const traced = traceable ? [...stamped, ...receiptSessions] : [];
-    const forkOf =
-      traced.length > 0 && callerId && identity.sessionId
-        ? await forkedSession({
-            organizationId: agent.organizationId,
-            sessionId: identity.sessionId,
-            traced,
-            scope: (session) => scopedSessionId(callerId, session),
-          })
-        : undefined;
     fillAppaSessionHeaders(headers, identity);
     let session = sessionFromHeaders({
       headers,
@@ -560,8 +549,6 @@ async function governedAdmission(params: {
         400,
         "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
       );
-    if (forkOf && callerId)
-      session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
     if (callerId && session.session_id === `${callerId}@${agent.id}`) {
       // Every conversation of this credential on this agent now shares one
       // root: a turn ending in one releases the offers of the others.
@@ -582,6 +569,25 @@ async function governedAdmission(params: {
         ...facts,
       },
     });
+    // A verified child can replay its parent's receipts and its own native
+    // history before the bare native ID has ever governed a root session.
+    // Resolve the signed child binding first: ordinary fork tracing applies
+    // only to requests that did not bind to a child trajectory.
+    const traced =
+      traceable && !trajectory.child ? [...stamped, ...receiptSessions] : [];
+    const forkOf =
+      traced.length > 0 && callerId && identity.sessionId
+        ? await forkedSession({
+            organizationId: agent.organizationId,
+            sessionId: identity.sessionId,
+            traced,
+            scope: (session) => scopedSessionId(callerId, session),
+          })
+        : undefined;
+    if (forkOf && callerId) {
+      session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
+      trajectory.session = session;
+    }
     if (await startedUnenforced(trajectory.session)) {
       // The session started while enforcement was off, or a person
       // superyelled it. OpenAPPA never governs it: the request goes on as
@@ -590,7 +596,12 @@ async function governedAdmission(params: {
         { sessionId: session.session_id },
         "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
       );
-      return { kind: "ungoverned" };
+      return {
+        kind: "ungoverned",
+        ...(trajectory.session.parent_id && !ingress.clientCompaction
+          ? { withdrawnChildReturn: true as const }
+          : {}),
+      };
     }
     // A side review, such as a Codex auto-review, copies the history of the
     // session it reviews into a thread of its own. When that session is out
@@ -690,7 +701,11 @@ async function governedAdmission(params: {
 // ===
 
 export type OpenappaAdmission =
-  | { kind: "ungoverned" }
+  | {
+      kind: "ungoverned";
+      /** Verified waived child, whose earlier return instructions no longer apply. */
+      withdrawnChildReturn?: true;
+    }
   /** Enforcement is off; OpenAPPA records the session for when it turns on. */
   | { kind: "observed"; trustedContext: AppaTrustedContext }
   | {

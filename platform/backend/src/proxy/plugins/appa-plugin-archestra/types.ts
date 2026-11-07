@@ -14,6 +14,11 @@ export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
 
+/** Withdraw prior child-return guidance after an operator waiver. */
+export const APPA_WITHDRAWN_CHILD_RETURN = Symbol(
+  "archestra.appa.withdrawn-child-return",
+);
+
 export type AppaChildTrajectoryReceiptOutput = {
   footer: string;
   inHistory: boolean;

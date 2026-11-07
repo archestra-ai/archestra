@@ -12,6 +12,7 @@ import logger from "@/logging";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import type { OpenAppaSession } from "./service";
 import { toolCallArgumentsText } from "./tool-call-arguments";
 import type { DeclaredToolSpelling } from "./wire";
@@ -80,6 +81,15 @@ export function isReportingToolCall(params: {
     return true;
   const [target] = normalizeToolCallsForPolicy([call], resolution);
   const shortName = archestraMcpBranding.getToolShortName(target.toolCallName);
+  if (shortName === "execute_remedy_plan") {
+    // Reporting recovery may finish an offered approval. A standalone child
+    // return declaration belongs to ordinary work; retaining its "spawn now"
+    // result after withholding the spawn history can restart the task in a loop.
+    const args = asRecord(parseJson(target.toolCallArgs));
+    return (
+      typeof args?.offer_id === "string" && args.offer_id.trim().length > 0
+    );
+  }
   return REPORTING_TOOLS.some((name) => name === shortName);
 }
 

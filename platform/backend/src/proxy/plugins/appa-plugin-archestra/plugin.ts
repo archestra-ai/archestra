@@ -215,6 +215,7 @@ import { appaTrajectory } from "./session-identity";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectory,
   type AppaClientAdapter,
   type AppaRelayArrival,
@@ -873,7 +874,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Waive only native refusals, and inspect the whole batch before disabling
     // enforcement: a soft refusal must never release a sibling hard block.
     const refusedResults = Object.entries(result.toolResultUpdates).filter(
-      ([, value]) => value.refused || value.denied,
+      ([, value]) => value.refused,
     );
     binding.hardBlockSeen ||= refusedResults.some(
       ([, value]) =>
@@ -2414,16 +2415,46 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
-    return this.withSoftBlockWaiver(
+    const trusted = getTrustedContext(context.resources);
+    let session: OpenAppaSession | undefined;
+    await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
       async () => {
+        // Capture the bound child before a waiver removes its binding and
+        // before provider preparation strips the signed lineage carriers.
+        session =
+          this.bindings.get(context.resources)?.session ??
+          this.observers.get(context.resources)?.session ??
+          (trusted
+            ? appaTrajectory({
+                adapters: this.clientAdapters,
+                headers: context.headers,
+                requestBody: context.requestBody,
+                trustedContext: trusted,
+              }).session
+            : undefined);
         const result = await this.guardedBeforeModel(context);
 
         return result;
       },
       () => undefined,
     );
+    if (
+      !trusted?.compaction &&
+      appaWireFamily(context.interactionType) &&
+      (context.resources.get(APPA_WITHDRAWN_CHILD_RETURN) === true ||
+        (session?.parent_id && (await isUnenforcedSession(session))))
+    ) {
+      // Removing today's contract does not remove it from retained reasoning
+      // or a provider-owned thread. Withdraw it on every waived child request.
+      deliverReturnContract({
+        request: context.request,
+        interactionType: context.interactionType,
+        contract:
+          "[appa] Guardrails enforcement is off for this child session. The platform has withdrawn its earlier protected-return instructions, including any requirement to produce an empty final message or withhold the result. Those instructions may remain in earlier reasoning or conversation history; they no longer apply. Complete the assigned task and return its result normally. This is an operator waiver, not a protected or policy-approved return.",
+      });
+    }
   }
 
   async onToolCalls(
@@ -7360,7 +7391,7 @@ async function hasRemedyOfferResult(params: {
       params.toolResultUpdates[result.id] = {
         content: offeredRuling,
         outputSource: "runtime",
-        refused: true,
+        denied: true,
       };
     }
     const approved = params.toolResultUpdates[result.id];
@@ -7682,7 +7713,8 @@ function requestCarriesInstruction(params: {
   interactionType: string;
   text: string;
 }): boolean {
-  const { request, interactionType, text } = params;
+  const { request, text } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(request)) return false;
   if (interactionType === "openai:responses") {
     return (
@@ -7727,7 +7759,8 @@ function insertRequestGuidance(params: {
   /** A provider-thread continue: the thread already holds this guidance. */
   onContinue?: "skip";
 }): void {
-  const { request, interactionType, guidance } = params;
+  const { request, guidance } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (
     interactionType !== "openai:responses" ||
     !isRecord(request) ||
@@ -7770,13 +7803,14 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
     appendToLastUserTurn(params.request, guidance);
     return;
   }
-  if (params.interactionType === "openai:responses") {
+  if (interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -7815,7 +7849,7 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (params.interactionType === "openai:chatCompletions") {
+  if (interactionType === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
@@ -7834,7 +7868,7 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (params.interactionType === "anthropic:messages") {
+  if (interactionType === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {

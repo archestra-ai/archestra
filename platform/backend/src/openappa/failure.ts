@@ -86,6 +86,12 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
   const refusal = unansweredAnnotation(message);
   if (!refusal) return null;
   const name = JSON.stringify(summarize(refusal.annotator, MAX_NAME));
+  if (
+    refusal.annotator === "archestra.llm-annotator" &&
+    refusal.reason === "non_success" &&
+    refusal.status === "409"
+  )
+    return `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`;
   const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[refusal.reason] ?? "gave no answer"}. The call did not run.`;
   return refusal.transient
     ? `${head} Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.`
@@ -512,6 +518,7 @@ function defect(code: RuntimeFailureCode): Failure {
 function unansweredAnnotation(message: string): {
   annotator: string;
   reason: string;
+  status: string | undefined;
   transient: boolean;
 } | null {
   const match = UNANSWERED_ANNOTATION.exec(message.replace(MASK_PREFIX, ""));
@@ -524,7 +531,7 @@ function unansweredAnnotation(message: string): {
     TRANSIENT_NO_ANSWER.has(reason) ||
     (reason === "non_success" &&
       (status === undefined || status === "429" || status.startsWith("5")));
-  return { annotator, reason, transient };
+  return { annotator, reason, status, transient };
 }
 
 /**

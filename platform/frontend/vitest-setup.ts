@@ -1,6 +1,12 @@
 // https://testing-library.com/docs/svelte-testing-library/setup/#vitest
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { afterAll, vi } from "vitest";
+
+// findBy* and waitFor give up after 1s by default. A loaded CI runner can take
+// longer than that to render a page and settle its queries; test timeouts
+// still bound a test that never gets there.
+configure({ asyncUtilTimeout: 5000 });
 
 // JSDOM has no layout engine or ResizeObserver. Components can subscribe to
 // size changes; tests that exercise resizing supply their own observer callback.

@@ -1,3 +1,22 @@
-# Workflow and CI configuration require maintainer review — changes here
-# affect the trust boundary every other PR runs under.
-/.github/ @archestra-ai/engineering
+# Changes to these paths need an approval from a member of
+# @archestra-ai/engineering other than the author. They decide what CI runs
+# with release secrets and cloud credentials, so one compromised account must
+# not be able to change them alone. Everything else merges without review.
+#
+# The "code-owner-review" ruleset enforces this (archestra-ai/infra,
+# github/org). Team membership lives there too (github/org/teams.tf).
+#
+# Keep the list short: every path here needs a second person on each PR that
+# touches it.
+# Release Please's manifest and the changelogs are not owned, so release PRs
+# stay self-merge.
+
+/.github/workflows/                                 @archestra-ai/engineering
+/.github/actions/                                   @archestra-ai/engineering
+# Scripts the workflows run, including the release and publishing steps.
+/.github/scripts/                                   @archestra-ai/engineering
+# The benchmark job's image and entrypoint, which run with its credentials.
+/.github/bench/                                     @archestra-ai/engineering
+/.github/release-please/release-please-config.json  @archestra-ai/engineering
+/.github/dependabot.yml                             @archestra-ai/engineering
+/.github/CODEOWNERS                                 @archestra-ai/engineering

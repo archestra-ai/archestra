@@ -24,7 +24,7 @@ const allowed = (kind, file) =>
     ? file === "docs/openapi.json"
     : kind === "screenshots" && screenshot.test(file);
 const eligible = (pr, repo) =>
-  pr?.user?.login === "archestra-ci[bot]" &&
+  pr?.user?.login === "archestra-releaser[bot]" &&
   isPlatformReleasePr(pr, `${repo.owner}/${repo.repo}`);
 
 function validIdentity(value) {

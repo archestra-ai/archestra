@@ -57,7 +57,7 @@ function fixture(t, initialMarkdown = markdown) {
   const source = {
     number: 12,
     state: "open",
-    user: { login: "archestra-ci[bot]" },
+    user: { login: "archestra-releaser[bot]" },
     base: { sha: sourceSha, ref: "main" },
     head: {
       sha: sourceSha,

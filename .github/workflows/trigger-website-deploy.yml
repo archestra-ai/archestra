@@ -27,7 +27,9 @@ jobs:
     name: Refresh archestra.ai Docs
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: website-deploy
+    environment:
+      name: website-deploy
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read
     steps:

@@ -101,7 +101,7 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
@@ -120,7 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only, so the
     # handoff fixture is dispatched from one of those branches too.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read # Check out the repository; the App token makes every write.
       id-token: write # Required for Workload Identity Federation in downstream release jobs.
@@ -390,7 +392,7 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true
@@ -542,7 +544,9 @@ jobs:
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
@@ -843,7 +847,9 @@ jobs:
     if: ${{ inputs.publisher-smoke-version != '' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 30
     permissions:
       contents: read # Check out the chart and publication scripts.

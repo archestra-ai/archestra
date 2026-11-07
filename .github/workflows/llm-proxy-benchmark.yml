@@ -119,7 +119,7 @@ jobs:
     # A fixed 16 vCPU size keeps the load client, mock and database off the
     # measured web process. Results record the CPU model; comparisons across
     # different CPUs are suppressed.
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 60
     # A generated table commit skips this job. Scope cancellation here so
     # that commit cannot cancel the successful run publishing its own docs.

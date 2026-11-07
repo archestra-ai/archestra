@@ -40,7 +40,7 @@ jobs:
     name: Generate release OpenAPI
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 25
     concurrency:
       group: release-generation-openapi-${{ github.event.pull_request.number }}

@@ -1,5 +1,6 @@
 {
   "bootstrap-sha": "975dd9685457d367d96d55cb50c198715f4dc365",
+  "last-release-sha": "5b52e3248a10dcacd4c028eaafb1adffd861c778",
   "changelog-path": "CHANGELOG.md",
   "changelog-type": "default",
   "pull-request-footer": "",

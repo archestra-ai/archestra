@@ -244,7 +244,9 @@ class HandoffFixture(unittest.TestCase):
 
     def test_lookalike_registry_destinations_are_rejected_before_any_transfer(self):
         for image in ("dockerXio/archestra/platform", "docker.io.evil/archestra/platform",
-                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform"):
+                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform",
+                      # Release names belong to the release-images publisher; runs stage in ci/.
+                      "ghcr.io/archestra-ai/mcp-server-base", "ghcr.io/archestra-ai/ci/nested/mcp-server-base"):
             with patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "destination"):
                 HANDOFF.push(self.index["records"][0], image, "amd64")
             run.assert_not_called()

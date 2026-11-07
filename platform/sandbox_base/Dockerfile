@@ -17,10 +17,14 @@ COPY install-node.sh /tmp/install-node.sh
 # libbrotli1 is listed so apt upgrades the copy the base image ships: Debian's
 # curl decodes Brotli through it. The floor fails the build if the
 # CVE-2026-111497 fix is missing.
+# Upgrade inherited apt packages too; CVE-2026-109518 is fixed in 2.6.2.
 RUN apt-get update -qq \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
-      bash coreutils curl git jq ca-certificates build-essential libbrotli1 unzip zip xz-utils \
+      apt libapt-pkg6.0 bash coreutils curl git jq ca-certificates build-essential libbrotli1 unzip zip xz-utils \
+ && for package in apt libapt-pkg6.0; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 2.6.2 || exit 1; \
+    done \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
  && rm -rf /var/lib/apt/lists/* \
  && sh /tmp/install-node.sh \

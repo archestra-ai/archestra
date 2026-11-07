@@ -41,7 +41,7 @@ jobs:
     name: Publish the prebuilt dev frontend
     # Forks and the private mirror cannot write the public org's packages.
     if: github.repository == 'archestra-ai/archestra'
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 30
     permissions:
       contents: read # Check out the frontend sources.

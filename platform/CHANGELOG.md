@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.81](https://github.com/archestra-ai/archestra/compare/platform-v1.3.80...platform-v1.3.81) (2026-11-07)
+
+
+### Bug Fixes
+
+* **ci:** keep Docker Hub OIDC tokens valid for the whole job (backport [#10379](https://github.com/archestra-ai/archestra/issues/10379) to release/1.3) ([#10381](https://github.com/archestra-ai/archestra/issues/10381)) ([3858540](https://github.com/archestra-ai/archestra/commit/385854069b99a6fad08d2fd2b1a550befbd5ac4c))
+
 ## [1.3.80](https://github.com/archestra-ai/archestra/compare/platform-v1.3.79...platform-v1.3.80) (2026-11-03)
 
 

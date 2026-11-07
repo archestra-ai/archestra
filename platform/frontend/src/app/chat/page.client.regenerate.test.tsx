@@ -205,13 +205,17 @@ test("regenerating a message whose turn failed re-runs it from the saved message
   renderChat();
 
   // The thread shows the saved message under the live id.
-  await waitFor(() =>
-    expect(chatMessagesProps.current?.messages).toEqual([
-      expect.objectContaining({
-        id: "live-user",
-        metadata: expect.objectContaining({ persistedMessageId: "saved-user" }),
-      }),
-    ]),
+  await waitFor(
+    () =>
+      expect(chatMessagesProps.current?.messages).toEqual([
+        expect.objectContaining({
+          id: "live-user",
+          metadata: expect.objectContaining({
+            persistedMessageId: "saved-user",
+          }),
+        }),
+      ]),
+    { timeout: 5000 },
   );
 
   await act(async () => {

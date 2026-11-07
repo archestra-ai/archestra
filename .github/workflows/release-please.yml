@@ -31,7 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only, so the
     # handoff fixture is dispatched from one of those branches too.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
       pull-requests: write # Required for release-please PR creation and updates.
@@ -494,7 +496,9 @@ jobs:
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}

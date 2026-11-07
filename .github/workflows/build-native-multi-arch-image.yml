@@ -149,7 +149,9 @@ jobs:
 
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false # A secrets and branch gate; nothing is deployed.
     needs: [reuse-image]
     if: ${{ !cancelled() && needs.reuse-image.outputs.reused != 'true' }}
     # Keep both architectures native; compile-bound callers may opt into larger runners.
@@ -297,7 +299,9 @@ jobs:
 
   merge-manifests:
     name: Create multi-arch manifest
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false # A secrets and branch gate; nothing is deployed.
     # The build can succeed after reuse-image is skipped. Override the implicit
     # success() check so its skipped ancestor cannot suppress the image tag.
     if: ${{ !cancelled() && inputs.push_image && needs.build-image.result == 'success' }}

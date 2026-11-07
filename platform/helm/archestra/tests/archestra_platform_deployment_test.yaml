@@ -881,6 +881,46 @@ tests:
             name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
             value: '{"images":{"mcp-server-base":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"version":"1.6.0"}'
 
+  - it: should pin the default platform image to its release digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  - it: should use another platform image or tag as configured despite a release digest
+    documentIndex: 1
+    set:
+      archestra.image: registry.example.com/archestra/platform
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry.example.com/archestra/platform:1.6.0"
+
+  - it: should not pin the platform image when its tag differs from the released version
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.1"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.1"
+
   - it: should not set ARCHESTRA_RELEASE_IMAGE_DIGESTS for a chart built outside a release
     documentIndex: 1
     asserts:

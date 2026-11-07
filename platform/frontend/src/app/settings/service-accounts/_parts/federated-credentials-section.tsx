@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/tooltip";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type FederatedCredential,
@@ -442,6 +443,7 @@ function CredentialAddedDialog({
   onClose: () => void;
 }) {
   const docsUrl = getFrontendDocsUrl(DocsPage.PlatformWorkloadIdentity);
+  const appName = useAppName();
   return (
     <FormDialog
       open={!!credential}
@@ -454,7 +456,7 @@ function CredentialAddedDialog({
       <DialogBody className="space-y-2">
         <Label>Sign in from the workload</Label>
         <FieldDescription>
-          Exchange the workload&apos;s OIDC token for an Archestra token, then
+          Exchange the workload&apos;s OIDC token for an {appName} token, then
           send that as a Bearer token.{" "}
           {docsUrl ? (
             <ExternalDocsLink href={docsUrl}>How it works</ExternalDocsLink>

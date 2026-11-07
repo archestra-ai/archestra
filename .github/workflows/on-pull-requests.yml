@@ -1003,11 +1003,11 @@ jobs:
           version=$(pnpm --filter @frontend exec playwright --version | awk '{print $2}')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
+      - name: Restore Playwright browsers
         # The mac mini keeps its browser cache on the persistent disk instead.
         if: runner.os == 'Linux'
         id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
@@ -1028,6 +1028,16 @@ jobs:
           done
           echo "install-deps failed; verifying Chromium launches with existing system libraries"
           pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
+
+      # A merge-queue ref is deleted with its group, and nothing else can read
+      # a cache saved there; each group's 250 MB copy only evicted the main
+      # and PR caches other runs restore.
+      - name: Save Playwright browsers
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true' && github.event_name != 'merge_group'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
       - name: Install Chromium system dependencies
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'

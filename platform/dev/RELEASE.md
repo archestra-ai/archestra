@@ -12,7 +12,7 @@ New companion and agent images publish to `ghcr.io/archestra-ai`. The platform i
 
 Ordinary CI cannot write release images. The repository's `GITHUB_TOKEN` has write access only to the `ghcr.io/archestra-ai/ci/*` packages. The release packages under `ghcr.io/archestra-ai` (companion and agent images) grant the `archestra` repository Read access only. Release jobs push them with `GHCR_RELEASE_PUBLISH_TOKEN`, a `write:packages` token of the release publisher account. That token is a secret of the `release-publish` environment, which only `main` and `release/*` can use, and the account's login is in the `GHCR_RELEASE_PUBLISH_USERNAME` variable. Docker Hub (`archestra/platform`) uses OIDC from the same environment. The `.github/actions/ghcr-login` action picks the credential for the target namespace and fails on a release push without the release token.
 
-A new release package must be created by the release path or by a maintainer, not by CI. In the new package's settings, turn off **Inherit access from source repository**, grant the publisher account **Write**, and give the `archestra` repository **Read** under **Manage Actions access**. Rotate the token before it expires: update the `release-publish` environment secret, then revoke the old token.
+A release that adds an image creates its package, which inherits this repository's write access through the image's source label. Right after that release, open the new package's settings: turn off **Inherit access from source repository**, grant the publisher account **Write**, and set the `archestra` repository to **Read** under **Manage Actions access**. Rotate the token before it expires: update the `release-publish` environment secret, then revoke the old token.
 
 ## Image CVE Gate
 

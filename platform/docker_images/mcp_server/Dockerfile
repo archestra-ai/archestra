@@ -191,7 +191,8 @@ RUN apk add --no-cache \
    # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
-   apk add --no-cache --upgrade "zlib>=1.3.2-r1" && \
+   # CVE-2026-4738: zlib vulnerability (CRITICAL) fixed in 1.4-r0.
+   apk add --no-cache --upgrade "zlib>=1.4-r0" && \
    # Require the Alpine 3.23 musl fix for both installed packages and invalidate
    # cached layers with 1.2.5-r23.
    apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24"

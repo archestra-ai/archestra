@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ""
+      image_registry:
+        description: "Registry to push to: archestra-public, or ghcr.io/archestra-ai/ci to stage a release for the release-images publisher"
+        required: false
+        type: string
+        default: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
       environment:
         description: "GitHub Environment whose OIDC subject the publishing jobs use (release-publish for releases); empty for none"
         required: false
@@ -48,6 +53,7 @@ jobs:
           - agent-openclaw
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
+      packages: write # Stage release images in ghcr.io/archestra-ai/ci.
       id-token: write # Required for Workload Identity Federation.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
@@ -56,10 +62,10 @@ jobs:
       dockerfile: ./platform/agent_images/Dockerfile
       target: ${{ matrix.image }}
       image_name: ${{ matrix.image }}
-      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      image_registry: ${{ inputs.image_registry }}
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_to_gcr }}
-      auth_provider: gar
+      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
       checkout_ref: ${{ inputs.checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}

@@ -1,5 +1,6 @@
 """Exercise publication scripts, stubbing only external CLI boundaries."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,7 @@ class ReleasePublicationTests(unittest.TestCase):
     def run_guard(self, releases=(), *, api_status=0, version="1.3.51", freeze="false", ref="release/1.3"):
         section = WORKFLOW.read_text().split(
             "      - name: Check publication is still allowed\n", 1
-        )[1].split("      - name:", 1)[0]
+        )[1].split("      - name:", 1)[0].split("\n\n  ", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         # Use the workflow's actual --jq expression, not a duplicate of its filter.
         stub = """
@@ -141,45 +142,20 @@ gh() {
             with self.subTest(version=version):
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
 
-    def test_chart_destination_is_independent_and_requires_mcp_reference(self):
-        section = WORKFLOW.read_text().split(
-            "      - name: Publish approved stable artifacts without rebuilding\n", 1
-        )[1].split("      - name:", 1)[0]
-        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
-        mcp_image = "registry.example.invalid/relocated/mcp@sha256:" + "a" * 64
-        platform_image = "archestra/platform@sha256:" + "b" * 64
-        stub = "helm() { printf 'helm %s\\n' \"$*\"; }; docker() { printf 'docker %s\\n' \"$*\"; };\n"
-        for reference in (None, "", mcp_image):
-            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as directory:
-                images = Path(directory) / "release-images"
-                images.mkdir()
-                (images / "platform").write_text(platform_image)
-                if reference is not None:
-                    (images / "mcp-server-base").write_text(reference)
-                result = subprocess.run(
-                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
-                    cwd=directory,
-                    env={**os.environ, "VERSION": "1.4.0"},
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if not reference:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertEqual(result.stdout, "")
-                    continue
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.splitlines(), [
-                    "helm push archestra-platform-1.4.0.tgz "
-                    "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
-                    f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
-                ])
-
-    PLATFORM_IMAGE = "archestra/platform@sha256:" + "b" * 64
+    def test_release_jobs_write_no_public_registry_names(self):
+        # Only the release-images publisher writes public names; this
+        # repository stages in ghcr.io/archestra-ai/ci and attests.
+        for workflow in (WORKFLOW, WORKFLOW.with_name("publish-platform-helm-chart.yml"),
+                         WORKFLOW.with_name("build-platform-release-image.yml")):
+            source = workflow.read_text()
+            with self.subTest(workflow=workflow.name):
+                for command in ("helm push", "imagetools create", "docker push", "skopeo copy",
+                                "auth_provider: dockerhub", "auth_provider: gar"):
+                    self.assertNotIn(command, source)
 
     def run_platform_latest(self, releases=(), *, version, api_status=0, preserve_latest="false"):
         section = WORKFLOW.read_text().split(
-            "      - name: Move the platform latest tag\n", 1
+            "      - name: Decide whether the platform latest tag moves\n", 1
         )[1].split("      - name:", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         # Use the workflow's actual --jq expression, not a duplicate of its filter.
@@ -193,33 +169,30 @@ gh() {
   printf '%s\\n' "$RELEASES" | jq -r "$query"
   return "$API_STATUS"
 }
-docker() { printf 'docker %s\\n' "$*"; }
 """
         with tempfile.TemporaryDirectory() as directory:
-            images = Path(directory) / "release-images"
-            images.mkdir()
-            (images / "platform").write_text(self.PLATFORM_IMAGE)
-            return subprocess.run(
+            output = Path(directory) / "output"
+            result = subprocess.run(
                 ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
                 cwd=directory,
                 env={
                     **os.environ,
                     "RELEASES": json.dumps(releases),
                     "API_STATUS": str(api_status),
-                    "VERSION": version,
-                    "GH_REPO": "fixture/repo",
-                    "PRESERVE_LATEST": preserve_latest,
+                    "VERSION": version, "PRESERVE_LATEST": preserve_latest,
+                    "GH_REPO": "fixture/repo", "GITHUB_OUTPUT": str(output),
                 },
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
+            result.decision = output.read_text().splitlines() if output.exists() else []
+            return result
 
     def test_platform_latest_follows_newest_published_release(self):
         def published(*versions, draft=False):
             return [{"tag_name": f"platform-v{v}", "draft": draft} for v in versions]
 
-        tagged = f"docker buildx imagetools create --tag archestra/platform:latest {self.PLATFORM_IMAGE}"
         for releases, version, moves in (
             ((), "1.4.0-rc.22", True),
             (published("1.4.0-rc.22"), "1.4.0-rc.22", True),  # retry
@@ -239,10 +212,7 @@ docker() { printf 'docker %s\\n' "$*"; }
             with self.subTest(releases=releases, version=version):
                 result = self.run_platform_latest(releases, version=version)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                if moves:
-                    self.assertEqual(result.stdout.splitlines(), [tagged])
-                else:
-                    self.assertNotIn(tagged, result.stdout)
+                self.assertEqual(result.decision, [f"move={'true' if moves else 'false'}"])
 
     def test_previous_release_comes_from_the_same_branch(self):
         section = WORKFLOW.read_text().split(
@@ -295,43 +265,172 @@ docker() { printf 'docker %s\\n' "$*"; }
     def test_platform_latest_stays_when_release_list_fails(self):
         result = self.run_platform_latest(version="1.4.0-rc.22", api_status=1)
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("docker", result.stdout)
+        self.assertEqual(result.decision, [])
         self.assertIn("Cannot list releases", result.stdout)
 
     def test_older_line_patch_never_moves_platform_latest(self):
         result = self.run_platform_latest(version="1.3.80", preserve_latest="true")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("docker", result.stdout)
+        self.assertEqual(result.decision, ["move=false"])
 
-    def test_older_line_patch_publishes_chart_and_github_release_without_latest(self):
-        source = WORKFLOW.read_text()
-        def script(name):
-            section = source.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
-            lines = section.split("        run: |\n", 1)[1].splitlines()
-            script_lines = []
-            for line in lines:
-                if line.strip() and not line.startswith("          "):
-                    break
-                script_lines.append(line)
-            return textwrap.dedent("\n".join(script_lines))
-        with tempfile.TemporaryDirectory() as directory:
-            images = Path(directory) / "release-images"
-            images.mkdir()
-            (images / "mcp-server-base").write_text("registry.example.invalid/mcp@sha256:" + "a" * 64)
-            env = os.environ | {"VERSION": "1.3.80", "TAG_NAME": "platform-v1.3.80", "PRESERVE_LATEST": "true"}
-            result = subprocess.run(
-                ["bash", "-eo", "pipefail", "-c", 'helm() { echo "helm $*"; }; docker() { echo "docker $*"; };\n' + script("Publish approved stable artifacts without rebuilding")],
-                cwd=directory, env=env, capture_output=True, text=True, timeout=10,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("helm push archestra-platform-1.3.80.tgz", result.stdout)
-            self.assertFalse(any(line.startswith("docker ") for line in result.stdout.splitlines()))
-            result = subprocess.run(
-                ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script("Publish GitHub release")],
-                cwd=directory, env=env, capture_output=True, text=True, timeout=10,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("--draft=false --prerelease=false --latest=false", result.stdout)
+    def test_older_line_patch_publishes_github_release_without_latest(self):
+        section = WORKFLOW.read_text().split("      - name: Publish GitHub release\n", 1)[1]
+        lines = section.split("        run: |\n", 1)[1].splitlines()
+        script_lines = []
+        for line in lines:
+            if line.strip() and not line.startswith("          "):
+                break
+            script_lines.append(line)
+        script = textwrap.dedent("\n".join(script_lines))
+        env = os.environ | {"VERSION": "1.3.80", "TAG_NAME": "platform-v1.3.80", "PRESERVE_LATEST": "true"}
+        result = subprocess.run(
+            ["bash", "-eo", "pipefail", "-c", 'gh() { if [ "$1 $2" = "release view" ]; then echo true; else echo "gh $*"; fi; };\n' + script],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--draft=false --prerelease=false --latest=false", result.stdout)
+
+SCRIPTS = Path(__file__).resolve().parent
+DIGEST_A, DIGEST_B = "a" * 64, "b" * 64
+
+
+class PublisherHandoffTests(unittest.TestCase):
+    GAR = "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
+    STAGED = {
+        "platform": f"ghcr.io/archestra-ai/ci/platform@sha256:{DIGEST_B}",
+        "mcp-server-base": f"ghcr.io/archestra-ai/ci/mcp-server-base@sha256:{DIGEST_A}",
+    }
+
+    def collect(self, references, registry="ghcr.io/archestra-ai", chart=None):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        staged = Path(directory.name) / "release-images"
+        staged.mkdir()
+        for name, reference in references.items():
+            (staged / name).write_text(reference)
+        args = ["bash", str(SCRIPTS / "release-subjects.sh"), "release-images", registry]
+        if chart:
+            (Path(directory.name) / chart[0]).write_bytes(chart[1])
+            args.append(chart[0])
+        result = subprocess.run(args, cwd=directory.name, capture_output=True, text=True, timeout=10)
+        outputs = {}
+        for name in ("release-subjects.txt", "release-images.json", "release-pins.json"):
+            path = Path(directory.name) / name
+            outputs[name] = path.read_text() if path.exists() else None
+        return result, outputs
+
+    def test_subjects_use_each_public_name_and_the_chart_file(self):
+        chart = ("archestra-platform-1.4.0.tgz", b"chart")
+        for registry in ("ghcr.io/archestra-ai", self.GAR):
+            with self.subTest(registry=registry):
+                result, outputs = self.collect(self.STAGED, registry, chart)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(sorted(outputs["release-subjects.txt"].splitlines()), sorted([
+                    f"{DIGEST_A}  {registry}/mcp-server-base",
+                    f"{DIGEST_B}  docker.io/archestra/platform",
+                    f"{hashlib.sha256(b'chart').hexdigest()}  archestra-platform-1.4.0.tgz",
+                ]))
+                self.assertEqual(json.loads(outputs["release-images.json"]), {
+                    f"{registry}/mcp-server-base": f"sha256:{DIGEST_A}",
+                    "docker.io/archestra/platform": f"sha256:{DIGEST_B}",
+                })
+                self.assertEqual(json.loads(outputs["release-pins.json"]), {
+                    "mcp-server-base": f"sha256:{DIGEST_A}", "platform": f"sha256:{DIGEST_B}",
+                })
+
+    def test_subjects_reject_references_that_do_not_match_their_image(self):
+        for references, registry in (
+            # Another image's digest under this name.
+            ({**self.STAGED, "mcp-server-base": f"ghcr.io/archestra-ai/ci/agent-codex@sha256:{DIGEST_A}"}, None),
+            # A public name instead of the ci/ staging repository.
+            ({**self.STAGED, "platform": f"docker.io/archestra/platform@sha256:{DIGEST_A}"}, None),
+            ({**self.STAGED, "mcp-server-base": f"ghcr.io/archestra-ai/mcp-server-base@sha256:{DIGEST_A}"}, None),
+            # A tag instead of a digest.
+            ({**self.STAGED, "mcp-server-base": "ghcr.io/archestra-ai/ci/mcp-server-base:1.4.0"}, None),
+            # The platform and mcp-server-base ship with every release.
+            ({"mcp-server-base": self.STAGED["mcp-server-base"]}, None),
+            ({"platform": self.STAGED["platform"]}, None),
+            # Only the known public registries.
+            (self.STAGED, "docker.io/archestra"),
+        ):
+            with self.subTest(references=references, registry=registry):
+                result, _ = self.collect(references, registry or "ghcr.io/archestra-ai")
+                self.assertNotEqual(result.returncode, 0)
+
+    def dispatch(self, *, version, preserve_latest, runs, platform_latest="false", chart=None):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        images = Path(directory.name) / "images.json"
+        images.write_text(json.dumps({"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"}))
+        chart_env = {}
+        if chart is not None:
+            (Path(directory.name) / "chart.tgz").write_bytes(chart)
+            chart_env = {"CHART": str(Path(directory.name) / "chart.tgz")}
+        calls = Path(directory.name) / "calls"
+        # Stub only the GitHub CLI; the script's own --jq filter runs against
+        # the fixture run list.
+        stub = r"""
+gh() {
+  if [ "$1 $2 $3" = "api -X POST" ]; then
+    printf 'dispatch %s ' "$4" >> "$CALLS"; jq -c . >> "$CALLS"; return
+  fi
+  if [ "$1 $2" = "run watch" ]; then echo "watch $3" >> "$CALLS"; return "$WATCH_STATUS"; fi
+  local query=
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --jq ]; then query=$2; shift; fi
+    shift
+  done
+  printf '%s\n' "$RUNS" | jq -r "$query"
+}
+sleep() { :; }
+"""
+        result = subprocess.run(
+            ["bash", "-c", stub + f'source "{SCRIPTS / "release-dispatch.sh"}" "{images}"'],
+            env=os.environ | chart_env | {
+                "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
+                "PLATFORM_LATEST": platform_latest,
+                "PUBLISHER_REPO": "archestra-ai/release-images", "GITHUB_RUN_ID": "77",
+                "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
+                "WATCH_STATUS": "0",
+            },
+            capture_output=True, text=True, timeout=10,
+        )
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        payload = json.loads(lines[0].split(" ", 2)[2]) if lines else None
+        return result, payload, lines[1:]
+
+    def test_dispatch_moves_latest_only_for_the_newest_stable_line(self):
+        runs = [{"id": 5, "display_title": "Publish 1.4.0 [77-2]"}]
+        for version, preserve, latest in (
+            ("1.4.0", "false", True), ("1.3.80", "true", False), ("1.5.0-rc.3", "false", False),
+        ):
+            with self.subTest(version=version):
+                result, payload, rest = self.dispatch(version=version, preserve_latest=preserve, runs=runs)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(payload, {
+                    "event_type": "publish-release-images",
+                    "client_payload": {"request_id": "77-2", "version": version, "latest": latest,
+                                       "platform_latest": False,
+                                       "images": {"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"}},
+                })
+                self.assertEqual(rest, ["watch 5"])
+
+    def test_dispatch_names_the_chart_of_this_run_and_the_platform_latest_decision(self):
+        runs = [{"id": 5, "display_title": "Publish 1.5.0-rc.3 [77-2]"}]
+        result, payload, _ = self.dispatch(version="1.5.0-rc.3", preserve_latest="false", runs=runs,
+                                           platform_latest="true", chart=b"chart")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["client_payload"]["platform_latest"], True)
+        self.assertEqual(payload["client_payload"]["chart"],
+                         {"run_id": 77, "sha256": hashlib.sha256(b"chart").hexdigest()})
+
+    def test_dispatch_waits_only_for_its_own_run(self):
+        runs = [{"id": 4, "display_title": "Publish 1.4.0 [77-1]"},
+                {"id": 3, "display_title": "Publish 1.4.0 [177-2]"}]
+        result, _, rest = self.dispatch(version="1.4.0", preserve_latest="false", runs=runs)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not start", result.stdout)
+        self.assertEqual(rest, [])
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ on:
         required: true
         type: boolean
       auth_provider:
-        description: "Registry auth provider: gar, dockerhub, or none"
+        description: "Registry auth provider: gar, ghcr, dockerhub, or none"
         required: true
         type: string
       dockerfile:
@@ -99,6 +99,7 @@ jobs:
         os_and_arch: ${{ inputs.amd64_only && fromJSON('["linux/amd64"]') || fromJSON('["linux/amd64", "linux/arm64"]') }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
+      packages: write # Push to GHCR with the repository token (auth_provider ghcr).
       id-token: write # Required for Workload Identity Federation when pushing images.
     steps:
       - name: Checkout repository
@@ -107,6 +108,14 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Log in to GHCR
+        if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
+        uses: ./.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
@@ -192,6 +201,7 @@ jobs:
       - build-image
     permissions:
       contents: read # Required to download per-arch digests and publish the merged manifest.
+      packages: write # Push to GHCR with the repository token (auth_provider ghcr).
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
     steps:
       - name: Checkout repository
@@ -210,6 +220,14 @@ jobs:
 
       # No builder setup needed: `docker buildx imagetools` is a pure registry
       # manifest operation and runs on the preinstalled buildx CLI.
+      - name: Log in to GHCR
+        if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
+        uses: ./.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
         uses: ./.github/actions/auth-to-gar

@@ -224,7 +224,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.165.0 \
+RUN pnpm add --global @openai/codex@0.166.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -355,14 +355,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=b2ff08ca31abc28407286fb03a8ce2502e810ab62471d7f5c2b8bf9bda5153b1 ;; \
-      arm64) grok_arch=arm64; checksum=12e6d37a622c7dbaceab524a90cd69c5aee4f16975dd1a98635f8af07e55357a ;; \
+      amd64) grok_arch=x64; checksum=5b364e4caaab71073f1c244b8e086c679ccfa8168cf2cc985693e8b0cf1edac2 ;; \
+      arm64) grok_arch=arm64; checksum=96e571275fdf77dcc16c542f76fa2ddd455afb505f592657295861b7ca13d010 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.70" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.70.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.73" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.73.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -390,8 +390,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /tmp/kimi \
  && cd /tmp/kimi \
- && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
- && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.4.1)" kimi-code.tgz \
+ && echo "cf4a72dc0c5b57dca4381dcf821d858b27196cccbb5d20171f829bd727f28619a4fa5f711fc1fdada6a456f0863182d5c711101a2b502dc80e87c7252d56144f  kimi-code.tgz" | sha512sum -c - \
  && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
  && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
  && cd / && rm -rf /tmp/kimi /root/.npm \

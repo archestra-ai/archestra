@@ -30,11 +30,12 @@ on:
         required: false
         type: string
         default: ""
+      environment:
+        description: "GitHub Environment whose secrets the publishing jobs read (release-publish for releases); empty for none"
+        required: false
+        type: string
+        default: ""
     secrets:
-      DOCKER_USERNAME:
-        required: false
-      DOCKER_PASSWORD:
-        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -65,8 +66,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Reusable callers pass a version, including PRs with the deploy label.
-  # The caller's event can be pull_request, so the version selects publication.
+  # Reusable callers pass a version; direct pull_request and merge_group runs
+  # do not, so the version selects publication.
   build:
     name: Build ${{ matrix.image }}
     if: ${{ inputs.version != '' }}
@@ -88,6 +89,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
+      environment: ${{ inputs.environment }}
       image_directory: ./platform
       dockerfile: ./platform/docker_images/agent/Dockerfile
       target: ${{ matrix.image }}
@@ -100,8 +102,6 @@ jobs:
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -118,8 +118,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # Also covers the compare API that finds a pull request's merge base.
+      # Requesting more breaks the publish callers, which grant only
+      # contents, packages, and id-token to this reusable workflow.
       contents: read # Required to checkout the repository and fetch the diff base.
-      pull-requests: read # Required to find a pull request's merge base.
     outputs:
       images: ${{ steps.diff.outputs.images }}
     steps:
@@ -162,7 +164,7 @@ jobs:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     needs: [affected-agent-images]
     if: ${{ inputs.version == '' && needs.affected-agent-images.outputs.images != '[]' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout the repository and build the image.

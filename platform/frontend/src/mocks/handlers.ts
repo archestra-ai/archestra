@@ -695,6 +695,11 @@ export const handlers: HttpHandler[] = [
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
+  // The agent settings page checks which runtime agents run on the default.
+  ...getJson("/api/organization/agent-settings/default-model-dependents", {
+    agents: [],
+    hiddenBlockingCount: 0,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

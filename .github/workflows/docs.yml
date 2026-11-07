@@ -149,7 +149,7 @@ jobs:
   docs-screenshot-capture:
     name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 25
     permissions:
       contents: read
@@ -166,7 +166,7 @@ jobs:
     name: Docs Screenshots
     # Release PR captures belong to the single generation coordinator.
     if: github.event_name == 'workflow_dispatch' && !inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.
@@ -181,10 +181,12 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write # push the screenshot branch
+          permission-pull-requests: write # open the screenshot PR
 
       - name: Checkout with push credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

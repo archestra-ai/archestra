@@ -1272,6 +1272,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentSettings]: {
     organizationSettings: ["update"],
   },
+  [RouteId.GetDefaultModelRuntimeDependents]: {
+    organizationSettings: ["read"],
+  },
   [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
   },

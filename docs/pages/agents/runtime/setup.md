@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-07
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -101,7 +101,7 @@ Upgrading Archestra moves every agent made from a catalog template onto the new 
 - **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
 - **A turn already running** keeps its image until it ends.
 
-A custom image, or a maintained image pinned by digest, runs exactly as saved.
+A custom image, or a maintained image you pinned by digest alone (`…/agent-codex@sha256:…`, no tag), runs exactly as saved.
 
 ## Troubleshooting
 

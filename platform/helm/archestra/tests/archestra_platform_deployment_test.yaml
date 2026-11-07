@@ -867,6 +867,29 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "NAMESPACE"
 
+  - it: should pass the release image digests the release pipeline recorded
+    documentIndex: 1
+    set:
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          mcp-server-base: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+            value: '{"images":{"mcp-server-base":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"version":"1.6.0"}'
+
+  - it: should not set ARCHESTRA_RELEASE_IMAGE_DIGESTS for a chart built outside a release
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+          any: true
+
   - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1
     set:

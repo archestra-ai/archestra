@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -93,6 +93,10 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: `false`
   - Values: `true`, `false`
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
+
+- **`ARCHESTRA_RELEASE_IMAGE_DIGESTS`** - Digests of the images released with this version: the MCP server base, the p4 shim, and the maintained agent images. The Helm chart of every release sets it, so those images run exactly as released, pinned by digest instead of a tag that could move.
+  - Default: unset (the Docker quickstart and charts built outside a release use the version tags)
+  - Leave it to the chart. A mirror set with [`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY), or an image set with [`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE) or [`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE), runs exactly as you set it. To pin a mirrored image, set its digest in that value: `registry.example.com/mcp-server-base:1.6.0@sha256:…`.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
@@ -802,7 +806,7 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: `localhost`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base image for MCP servers that do not set their own image.
-  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`
+  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/reference/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for each MCP server container.
   - Default: `50m`
@@ -984,7 +988,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Set it when you mirror these images to a private registry.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
-  - Default: `latest` on stable releases, otherwise the platform version
+  - Default: the platform version, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/reference/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
   - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
@@ -1187,7 +1191,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 [Perforce permission sync](/docs/knowledge/connectors/perforce) runs the `p4` CLI in a per-connector pod and needs the Kubernetes orchestrator. Archestra downloads the `p4` binary from Perforce and checks its SHA-256. Air-gapped installs point the URLs at an internal mirror and set matching checksums.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Image of the pod that runs `p4` for permission sync.
-  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`
+  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`, pinned by digest on a released chart (see [`ARCHESTRA_RELEASE_IMAGE_DIGESTS`](/docs/reference/configuration#ARCHESTRA_RELEASE_IMAGE_DIGESTS))
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** - Download URL of the `p4` binary for x86-64 nodes.
   - Default: `https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4`

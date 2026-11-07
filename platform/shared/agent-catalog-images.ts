@@ -8,12 +8,33 @@ export type AgentCatalogId = keyof typeof AGENT_CATALOG_IMAGE_NAMES;
 export const AGENT_CATALOG_IMAGE_REGISTRY = "ghcr.io/archestra-ai";
 
 /**
- * The catalog tag that matches a platform version. The approved stable
- * release moves :latest. Prerelease and commit builds keep their matching
- * image tag instead of pulling an older stable CLI.
+ * Digests of the images a platform release shipped with, keyed by image name
+ * (`mcp-server-base`, `agent-codex`, ...). The release pipeline records them
+ * when it publishes the images and ships them in the Helm chart, so an install
+ * pulls exactly the bytes released, and attested, with its version.
  */
-export function getAgentCatalogImageTag(version: string): string {
-  return /^\d+\.\d+\.\d+$/.test(version) ? "latest" : version;
+export type ReleaseImageDigests = {
+  version: string;
+  images: Record<string, string>;
+};
+
+/**
+ * Pins a release image reference to the digest its release shipped with.
+ * Only `ghcr.io/archestra-ai/<name>:<release version>` is pinned: a mirror,
+ * another tag, or a reference that already has a digest is returned as is,
+ * and so is everything when no digests were shipped (development builds).
+ */
+export function pinReleaseImage(params: {
+  image: string;
+  digests: ReleaseImageDigests | null;
+}): string {
+  const { image, digests } = params;
+  if (!digests || image.includes("@")) return image;
+  const prefix = `${AGENT_CATALOG_IMAGE_REGISTRY}/`;
+  const suffix = `:${digests.version}`;
+  if (!image.startsWith(prefix) || !image.endsWith(suffix)) return image;
+  const digest = digests.images[image.slice(prefix.length, -suffix.length)];
+  return digest ? `${image}@${digest}` : image;
 }
 
 export function getAgentCatalogImages(params: {
@@ -40,14 +61,17 @@ export function getAgentCatalogImages(params: {
  * public registry counts as maintained too, so Agents created before an
  * operator mirrored the images move to the mirror.
  *
- * A digest reference is a deliberate pin, and any other image is the author's
- * own; both launch exactly as saved.
+ * A release pins each maintained image as `<repository>:<version>@<digest>`
+ * (pinReleaseImage). That tag-plus-digest form belongs to the catalog, so it
+ * follows upgrades too. A digest without a tag is the author's deliberate pin,
+ * and any other image is the author's own; both launch exactly as saved.
  */
 export function followAgentCatalogImage(params: {
   image: string;
   catalogImages: Record<AgentCatalogId, string>;
 }): string {
-  if (params.image.includes("@")) return params.image;
+  const at = params.image.indexOf("@");
+  if (at !== -1 && !hasTag(params.image.slice(0, at))) return params.image;
   const repository = imageRepository(params.image);
   for (const [id, name] of Object.entries(AGENT_CATALOG_IMAGE_NAMES) as [
     AgentCatalogId,
@@ -172,10 +196,13 @@ const CATALOG_RUNTIME_PROFILES: Record<
   openclaw: { inferenceProtocol: "openai_chat" },
 };
 
-/** An image reference without its tag. A registry port is not a tag. */
+/** An image reference without its tag and digest. A registry port is not a tag. */
 function imageRepository(image: string): string {
-  const tagSeparator = image.lastIndexOf(":");
-  return tagSeparator > image.lastIndexOf("/")
-    ? image.slice(0, tagSeparator)
-    : image;
+  const name = image.split("@")[0];
+  return hasTag(name) ? name.slice(0, name.lastIndexOf(":")) : name;
+}
+
+/** Whether a reference (without digest) names a tag. A registry port is not one. */
+function hasTag(reference: string): boolean {
+  return reference.lastIndexOf(":") > reference.lastIndexOf("/");
 }

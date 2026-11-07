@@ -320,6 +320,10 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE
   value: {{ include "archestra-platform.mcpRuntimeOwnerRoleName" . | quote }}
 {{- end }}
+{{- if and .Values.archestra.releaseImageDigests (not (hasKey .Values.archestra.env "ARCHESTRA_RELEASE_IMAGE_DIGESTS")) }}
+- name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+  value: {{ .Values.archestra.releaseImageDigests | toJson | quote }}
+{{- end }}
 {{- if .Values.archestra.orchestrator.baseImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}

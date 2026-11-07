@@ -1,5 +1,7 @@
-# https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images#publishing-images-to-docker-hub
-name: Build Docker Hub image
+# Stages the platform release image in ghcr.io/archestra-ai/ci/platform. The
+# archestra-ai/release-images publisher copies the attested digest to
+# docker.io/archestra/platform; this repository cannot write there.
+name: Build platform release image
 
 on:
   workflow_call:
@@ -22,7 +24,7 @@ on:
         type: string
         default: ""
       push_image:
-        description: "Whether to push the image to Docker Hub"
+        description: "Whether to push the image to the ci/ staging registry"
         required: true
         type: boolean
       checkout_ref:
@@ -31,7 +33,7 @@ on:
         type: string
         default: ""
       environment:
-        description: "GitHub Environment whose OIDC subject the publishing jobs use (release-publish for releases); empty for none"
+        description: "GitHub Environment for the build jobs (release-publish for releases, like the companion images); empty for none"
         required: false
         type: string
         default: ""
@@ -39,14 +41,14 @@ on:
 permissions: {}
 
 concurrency:
-  group: build-dockerhub-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
+  group: build-platform-release-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-dockerhub-image:
-    name: Build Docker Hub image
+  build-platform-release-image:
+    name: Build platform release image
     permissions:
-      packages: write # Required by the reusable GHCR-capable publisher.
+      packages: write # Push to the ci/ staging registry.
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
@@ -54,10 +56,10 @@ jobs:
       environment: ${{ inputs.environment }}
       image_directory: ${{ inputs.image_directory }}
       image_name: ${{ inputs.image_name }}
-      image_registry: docker.io/archestra
+      image_registry: ghcr.io/archestra-ai/ci
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_image }}
-      auth_provider: dockerhub
+      auth_provider: ghcr
       # Docker contexts exclude .git, and release builds use an explicit tag.
       # Fetching the full repository history adds ~30s to each native build.
       checkout_fetch_depth: 1

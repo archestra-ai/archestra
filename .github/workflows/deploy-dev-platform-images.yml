@@ -106,7 +106,7 @@ jobs:
       # min, the long pole) produced an image nothing schedules.
       # workflow_dispatch stays multi-arch so a dev build handed to a tester
       # runs natively on Apple Silicon (arm64).
-      # Release images (build-dockerhub-image.yml) are always multi-arch.
+      # Release images (build-platform-release-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-core E2E builder; build arm64 natively.
       amd64_runner: ubuntu-24.04-16core

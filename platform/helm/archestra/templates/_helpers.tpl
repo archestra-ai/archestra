@@ -1309,8 +1309,13 @@ This helper constructs the image reference smartly:
 This maintains backward compatibility with existing deployments that set the full image:tag
 in archestra.image, while also supporting the new imageTag field used by release-please.
 
+A released chart also pins the default image (archestra/platform at the
+chart's own version) to the digest in archestra.releaseImageDigests.images.platform.
+Any other image or tag is used as configured.
+
 Examples:
   image: "archestra/platform", imageTag: "1.0.0" -> "archestra/platform:1.0.0"
+    (released 1.0.0 chart: "archestra/platform:1.0.0@sha256:...")
   image: "archestra/platform:ci-test", imageTag: "1.0.0" -> "archestra/platform:ci-test"
   image: "registry.io:5000/archestra/platform", imageTag: "1.0.0" -> "registry.io:5000/archestra/platform:1.0.0"
 */}}
@@ -1326,7 +1331,13 @@ Examples:
 {{- $image -}}
 {{- else -}}
 {{- /* No tag in image, append imageTag */ -}}
+{{- $pins := .Values.archestra.releaseImageDigests | default dict -}}
+{{- $digest := get ($pins.images | default dict) "platform" -}}
+{{- if and $digest (eq (toString $pins.version) (toString $imageTag)) (has $image (list "archestra/platform" "docker.io/archestra/platform")) -}}
+{{- printf "%s:%s@%s" $image $imageTag $digest -}}
+{{- else -}}
 {{- printf "%s:%s" $image $imageTag -}}
+{{- end -}}
 {{- end -}}
 {{- end }}
 

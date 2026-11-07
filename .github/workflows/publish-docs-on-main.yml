@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/trigger-website-deploy.yml
+    # Passed by name so the website-deploy environment can supply the values.
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}

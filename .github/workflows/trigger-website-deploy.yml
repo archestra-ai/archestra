@@ -4,6 +4,9 @@ name: Publish Docs to archestra.ai
 
 on:
   workflow_call:
+    # The values live in the website-deploy environment (main only). A called
+    # workflow sees an environment secret only when its caller passes it by
+    # name; otherwise it resolves to an empty string.
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
@@ -24,6 +27,7 @@ jobs:
     name: Refresh archestra.ai Docs
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: website-deploy
     permissions:
       contents: read
     steps:

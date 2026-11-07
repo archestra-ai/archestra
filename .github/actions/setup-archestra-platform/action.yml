@@ -56,14 +56,6 @@ inputs:
     description: "Path to the platform directory containing Dockerfile (only used when build-platform-image is true)"
     required: false
     default: "./platform"
-  turbo-team:
-    description: "Turborepo remote caching team (only required when build-platform-image is true)"
-    required: false
-    default: ""
-  turbo-token:
-    description: "Turborepo remote caching token (only required when build-platform-image is true)"
-    required: false
-    default: ""
   mcp-server-base-image-tag:
     description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
     required: false
@@ -137,8 +129,6 @@ runs:
         context: ${{ inputs.platform-context }}
         load: "true"
         tags: ${{ inputs.platform-image-tag }}
-        turbo-team: ${{ inputs.turbo-team }}
-        turbo-token: ${{ inputs.turbo-token }}
 
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}

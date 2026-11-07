@@ -83,7 +83,7 @@ on:
         type: string
         default: gzip
       environment:
-        description: "GitHub Environment for the build and manifest jobs. release-publish is the only OIDC subject allowed to push to Docker Hub. Empty for none."
+        description: "GitHub Environment for the build and manifest jobs. release-publish is the only OIDC subject allowed to push to Docker Hub; staging-build holds the Sentry source-map token, which replaces a same-named caller secret. Empty for none."
         required: false
         type: string
         default: ""
@@ -93,10 +93,6 @@ on:
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TOKEN:
-        required: false
-      TURBOREPO_REMOTE_CACHING_TEAM:
         required: false
 
 permissions: {}
@@ -276,8 +272,6 @@ jobs:
           outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', inputs.image_registry, inputs.image_name) || '' }}
           version: ${{ inputs.version }}
           previous-image: ${{ inputs.previous_image }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           cache-from: ${{ steps.cache-refs.outputs.cache-from }}
           cache-to: ${{ steps.cache-refs.outputs.cache-to }}

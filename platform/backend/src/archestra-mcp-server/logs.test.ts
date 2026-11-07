@@ -19,12 +19,14 @@ test("gateway log tools paginate sessions and enforce own-log visibility", async
   });
   await makeMember(reader.id, organization.id, { role: role.role });
   const agent = await makeAgent({ organizationId: organization.id });
-  const own = await makeInteraction(agent.id, {
-    userId: reader.id,
-    sessionId: "shared-session",
-  });
+  // A session is listed when its newest row passes the visibility filter, so
+  // the reader's row is written last to make it the shared session's head.
   const foreign = await makeInteraction(agent.id, {
     userId: other.id,
+    sessionId: "shared-session",
+  });
+  const own = await makeInteraction(agent.id, {
+    userId: reader.id,
     sessionId: "shared-session",
   });
   const context: ArchestraContext = {

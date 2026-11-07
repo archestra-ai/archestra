@@ -1,14 +1,16 @@
 use crate::{
     Sql,
-    errors::{invalid_input, sql_failure},
+    errors::{invalid_input, panicked, sql_failure},
     input::Input,
     sealed, state_mutex,
 };
 use appa_eventlog::{encryption::StorageCipher, postgres::PostgresError};
 use appa_runtime_api::{HookEvent, SpawnBinding, SpawnRef, TrajectoryId};
+use futures_util::FutureExt;
 use napi_derive::napi;
 use serde::Serialize;
 use serde_json::Value;
+use std::panic::AssertUnwindSafe;
 use std::time::SystemTime;
 
 #[napi(object)]
@@ -1009,4 +1011,79 @@ mod tests {
                 .is_err()
         );
     }
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct ChildRejectionRecord {
+    pub child_session_id: String,
+    pub spawn_call_id: String,
+    pub child_native_id: String,
+    /// Host diagnostic, never an admitted child value.
+    pub notice: String,
+}
+
+/// Reads completed ChildEnd rejections separately from admitted returns.
+/// Only the recorded diagnostic leaves storage; rejected child output never does.
+#[napi(js_name = "loadChildRejections")]
+pub async fn load_child_rejections(
+    organization_id: String,
+    parent_session_id: String,
+) -> napi::Result<Vec<ChildRejectionRecord>> {
+    AssertUnwindSafe(async move {
+        let state = {
+            let slot = state_mutex().lock().await;
+            slot.as_ref()
+                .ok_or_else(|| invalid_input("OpenAPPA is not initialized"))?
+                .clone()
+        };
+        let leased = state.lease().await?;
+        Sql(&leased.state.store)
+            .with_client(move |client| {
+                let receipts = sealed::read(
+                    client,
+                    &StorageCipher::Plain,
+                    sealed::Receipts::All,
+                    &format!(
+                        "o.organization_id=$1 AND EXISTS (\
+                 SELECT 1 FROM openappa_sessions s JOIN openappa_sessions p \
+                   ON p.organization_id=s.organization_id AND p.session_id=s.parent_id \
+                   AND p.root=s.root AND p.caller_id IS NOT DISTINCT FROM s.caller_id \
+                 WHERE s.organization_id=o.organization_id AND s.session_id=o.session_id \
+                   AND s.root=o.root AND s.caller_id IS NOT DISTINCT FROM o.caller_id \
+                   AND p.session_id=$2) \
+                 AND ((COALESCE(o.input->'semantic'->>'event',o.input->>'event')='child_end' \
+                   AND o.decision->>'decision'='block') OR {})",
+                        sealed::ESCAPED
+                    ),
+                    &[&organization_id, &parent_session_id],
+                )?;
+                Ok(receipts
+                    .into_iter()
+                    .filter_map(|receipt| {
+                        if receipt.input_text("event").as_deref() != Some("child_end")
+                            || receipt.decision_text("decision").as_deref() != Some("block")
+                            || receipt.operation_id.ends_with(":echo")
+                            || receipt.decision.get("busy").and_then(Value::as_bool) == Some(true)
+                        {
+                            return None;
+                        }
+                        Some(ChildRejectionRecord {
+                            spawn_call_id: receipt.input_text("spawn_call_id")?,
+                            child_native_id: receipt.input_text("child_native_id")?,
+                            notice: receipt
+                                .decision_text("reason")
+                                .or_else(|| receipt.decision_text("feedback"))
+                                .or_else(|| receipt.decision_text("approved_output"))
+                                .unwrap_or_else(|| "OpenAPPA blocked this operation".into()),
+                            child_session_id: receipt.session_id,
+                        })
+                    })
+                    .collect())
+            })
+            .map_err(sql_failure)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| panicked("OpenAPPA child rejection lookup failed unexpectedly"))?
 }

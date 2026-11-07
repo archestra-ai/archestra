@@ -188,6 +188,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
   },
+  // These provider-account routes authenticate outside ordinary API auth;
+  // grok-native-privacy records their audit with the verified proxy identity.
+  "/v1/xai/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
+  },
+  "/v1/xai/:agentId/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
+  },
   // Disconnecting a client: the resource is the user whose client it was;
   // the snapshot names the client.
   "/api/connected-clients/:clientId": {

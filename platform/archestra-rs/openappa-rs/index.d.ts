@@ -57,6 +57,14 @@ export interface ChildAddressRecord {
   value: string
 }
 
+export interface ChildRejectionRecord {
+  childSessionId: string
+  spawnCallId: string
+  childNativeId: string
+  /** Host diagnostic, never an admitted child value. */
+  notice: string
+}
+
 export interface ChildReturnLookup {
   /** Narrow the authority lookup to one registered child when known. */
   childSessionId?: string
@@ -235,6 +243,12 @@ export declare function listPeerMessages(input: string, policy: DispatchPolicy):
  * verifies an arriving message against; nothing the client carries proves one.
  */
 export declare function loadChildAddresses(organizationId: string, childSessionId: string): Promise<Array<ChildAddressRecord>>
+
+/**
+ * Reads completed ChildEnd rejections separately from admitted returns.
+ * Only the recorded diagnostic leaves storage; rejected child output never does.
+ */
+export declare function loadChildRejections(organizationId: string, parentSessionId: string): Promise<Array<ChildRejectionRecord>>
 
 /**
  * Loads the child returns a parent's family durably crossed, from the

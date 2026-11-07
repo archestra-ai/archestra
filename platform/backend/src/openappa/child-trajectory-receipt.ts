@@ -199,7 +199,10 @@ export function appendChildTrajectoryReceipt(
   return `${footer}\n\n${text}`;
 }
 
-export function stripChildTrajectoryReceipts(text: string): {
+export function stripChildTrajectoryReceipts(
+  text: string,
+  options: { preserveLineBoundaries?: boolean } = {},
+): {
   text: string;
   receipts: AppaChildTrajectoryReceipt[];
 } {
@@ -229,7 +232,16 @@ export function stripChildTrajectoryReceipts(text: string): {
     const end = start + match[0].length;
     const lead = adjacentNewlines(stripped, start, -1);
     const trail = adjacentNewlines(stripped, end, 1);
-    stripped = `${stripped.slice(0, start - lead)}${stripped.slice(end + trail)}`;
+    const leading = stripped.slice(start - lead, start);
+    // In a framed tool result, one newline separates a header from output.
+    // Removing a prefixed receipt must not concatenate that header and value.
+    const boundary =
+      options.preserveLineBoundaries &&
+      (leading === "\n" || leading === "\r\n") &&
+      trail > 0
+        ? leading
+        : "";
+    stripped = `${stripped.slice(0, start - lead)}${boundary}${stripped.slice(end + trail)}`;
   }
   return { text: stripped, receipts };
 }

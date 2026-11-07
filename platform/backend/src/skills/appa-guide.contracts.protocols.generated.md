@@ -90,7 +90,7 @@ For the customer request, the service returns this response to classify the resu
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
 - `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards` and `evidence`. No other key is allowed.
-- `evidence` is an opaque string of at most 1,024 bytes. OpenAPPA does not read it. It is part of the call's identity: the same call with different `evidence` is a different proposal. OpenAPPA sends it to the call's [recorder](references/contracts/annotators.md#recorders).
+- `evidence` is an opaque string of at most 1,024 bytes. OpenAPPA does not read it. It is part of the call's identity: the same call with different `evidence` is a different proposal. OpenAPPA sends it to the call's [recorder](references/contracts/recorders.md#recorders).
 - `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
 - Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
@@ -229,4 +229,3 @@ A consult request does not include the agent's current audience, trust rank, pre
 The service or program returns `{"version":1,"answer":{...}}`. The fields inside `answer` must match the component's response format. Extra fields in the surrounding response object are not allowed.
 
 OpenAPPA rejects a response if the HTTP service reports an error, the program exits with a non-zero status, the request times out, or the response exceeds the size limit or has an invalid format. It cannot use that response to approve a call, deliver cleaned data, or annotate a tool.
-

@@ -132,7 +132,7 @@ export async function fetchXaiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
-  opts?: ModelFetchOptions,
+  opts?: ModelFetchOptions & { boundedDiscovery?: boolean },
 ): Promise<ModelInfo[]> {
   let baseUrl = baseUrlOverride || config.llm.xai.baseUrl;
   let bearer = apiKey;
@@ -188,6 +188,7 @@ export async function fetchXaiModels(
     errorLabel: "xAI models",
     extraHeaders: requestHeaders,
     redirect: subscriptionCredential ? "manual" : undefined,
+    boundedDiscovery: opts?.boundedDiscovery,
   });
 
   return data.data.flatMap((model) => {

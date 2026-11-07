@@ -57,7 +57,7 @@ effects = ["egress"]
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
-| `recorder` | A [recorder](references/contracts/annotators.md#recorders) that receives each released call's records. |
+| `recorder` | A [recorder](references/contracts/recorders.md#recorders) that receives each released call's records. |
 
 An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
@@ -330,4 +330,3 @@ delta = { audience = ["internal"] }
 - Some tools run inside the model provider's service. The integration cannot intercept their results before the model reads them. These tools can declare only static `delta` fields. They cannot declare requirements, annotators, or argument selectors, and cannot appear in `confined_results`.
 
 OpenAPPA rejects configurations that require controls the integration does not support. See integration configuration for the integration's responsibilities.
-

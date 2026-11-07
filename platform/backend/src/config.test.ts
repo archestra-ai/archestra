@@ -61,6 +61,8 @@ import config, {
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
+  // SPDX-SnippetEnd
+  parseLlmMetricsCallerLabels,
   parseLlmProxyPlugins,
   parseLogContentMode,
   parseLogFormat,
@@ -68,7 +70,6 @@ import config, {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   parseMcpIdleHibernationSeconds,
-  // SPDX-SnippetEnd
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
@@ -1286,6 +1287,40 @@ describe("parseActiveUsersRefreshIntervalMs", () => {
     expect(parseActiveUsersRefreshIntervalMs("-1")).toBe(DEFAULT);
     expect(logger.warn).toHaveBeenCalledWith(
       `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "-1", using default ${DEFAULT}`,
+    );
+  });
+});
+
+describe("parseLlmMetricsCallerLabels", () => {
+  test("is off when unset or empty", () => {
+    expect(parseLlmMetricsCallerLabels(undefined)).toEqual({
+      user: false,
+      virtualKey: false,
+    });
+    expect(parseLlmMetricsCallerLabels(" , ")).toEqual({
+      user: false,
+      virtualKey: false,
+    });
+  });
+
+  test("enables each listed group, tolerating case and spacing", () => {
+    expect(parseLlmMetricsCallerLabels("user")).toEqual({
+      user: true,
+      virtualKey: false,
+    });
+    expect(parseLlmMetricsCallerLabels(" Virtual_Key , USER ")).toEqual({
+      user: true,
+      virtualKey: true,
+    });
+  });
+
+  test("ignores and warns about an unknown group", () => {
+    expect(parseLlmMetricsCallerLabels("user,team")).toEqual({
+      user: true,
+      virtualKey: false,
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Ignoring unknown ARCHESTRA_METRICS_LLM_CALLER_LABELS value "team" (expected "user" or "virtual_key")',
     );
   });
 });

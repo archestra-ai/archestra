@@ -49,6 +49,7 @@ Both commands are equivalent — the tilt resource wraps the same compose file �
 ## Metrics
 
 - Prometheus metrics `llm_request_duration_seconds` and `llm_tokens_total` include `provider`, `model`, `agent_id`, `agent_name`, `agent_type`, `source`, and dynamic agent labels as dimensions — deliberately NOT `external_agent_id`, which is client-supplied and unbounded and would explode series cardinality. Do not add it back.
+- Opt-in caller labels (`ARCHESTRA_METRICS_LLM_CALLER_LABELS`: `user_id`/`user_email`, `virtual_key_id`/`virtual_key_name`) go on the LLM counters only, never on histograms (one series per bucket). The proxy handler scopes each request's caller with `llmMetricsCallerScope` (`metrics/llm-caller.ts`), so metric call sites and provider transports don't pass it. With the flag off, label sets are unchanged.
 - `agent_id` is internal.
 - `external_agent_id` comes from the client-provided `X-Archestra-Agent-Id` header and is a label only on `agent_runs_total`.
 - MCP metrics include `agent_id`, `agent_name`, and `agent_type`.

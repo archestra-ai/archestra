@@ -86,6 +86,7 @@ import {
   OrganizationModel,
   UserModel,
   UserTokenModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import type { LimitViolationResponse } from "@/models/limit";
 import ProxyRequestContextModel, {
@@ -97,6 +98,10 @@ import {
   type LlmProxyRequestTelemetry,
 } from "@/observability/llm-proxy-request";
 import { reportsReasoningOutsideCompletion } from "@/observability/metrics/llm-usage";
+import {
+  type LlmMetricsCaller,
+  llmMetricsCallerScope,
+} from "@/observability/metrics/llm-caller";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
@@ -2660,19 +2665,28 @@ async function handleObservedLLMProxy<
       streamTiming,
     };
 
+    // Every LLM metric the request emits from here on, including those the
+    // provider transports record, carries its caller when those labels are on.
+    const metricsCaller = await resolveLlmMetricsCaller({
+      user: resolvedUser,
+      virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+    });
+
     // handleStreaming is self-contained: it persists its own failed-interaction
     // record and routes errors through handleError before its promise settles,
     // so it returns a bare promise (awaiting it here would double-persist via
     // the catch below).
     if (requestAdapter.isStreaming()) {
-      return handleStreaming(
-        client,
-        finalRequest,
-        reply,
-        provider,
-        streamAdapter,
-        ctx,
-        ensureStreamHeaders,
+      return llmMetricsCallerScope.run(metricsCaller, () =>
+        handleStreaming(
+          client,
+          finalRequest,
+          reply,
+          provider,
+          streamAdapter,
+          ctx,
+          ensureStreamHeaders,
+        ),
       );
     }
     // `return await`, not `return`: handleNonStreaming relies on THIS catch for
@@ -2681,7 +2695,9 @@ async function handleObservedLLMProxy<
     // handleError's status mapping (clients get a generic 500 instead of the
     // provider's 429/404/…), skip the failed-interaction record, and get
     // captured as unhandled server exceptions.
-    return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
+    return await llmMetricsCallerScope.run(metricsCaller, () =>
+      handleNonStreaming(client, finalRequest, reply, provider, ctx),
+    );
   } catch (error) {
     const lifecycleError = error;
     telemetry.fail(classifyProxyFailure(error));
@@ -5641,4 +5657,33 @@ function withClaudeSubagentMetadata<TRequest>(
       agent_id: agentId,
     },
   } as TRequest;
+}
+
+/**
+ * The caller of a proxied LLM request, as the opt-in caller labels on the LLM
+ * metrics name it. Only the enabled groups are resolved, so the virtual key's
+ * name is read only when its labels are on.
+ */
+async function resolveLlmMetricsCaller(params: {
+  user: { id: string; email: string } | null | undefined;
+  virtualKeyId: string | undefined;
+}): Promise<LlmMetricsCaller> {
+  const enabled = config.observability.metrics.llmCallerLabels;
+  const { user, virtualKeyId } = params;
+  return {
+    user: enabled.user && user ? { id: user.id, email: user.email } : null,
+    virtualKey:
+      enabled.virtualKey && virtualKeyId
+        ? {
+            id: virtualKeyId,
+            // Cached with the proxy's other configuration reads; renaming the
+            // key invalidates it like any other change to the row.
+            name: await configCache.read(
+              `virtual-key-name:${virtualKeyId}`,
+              async () =>
+                (await VirtualApiKeyModel.findById(virtualKeyId))?.name ?? "",
+            ),
+          }
+        : null,
+  };
 }

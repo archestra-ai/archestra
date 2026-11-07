@@ -1006,6 +1006,33 @@ export const parseActiveUsersRefreshIntervalMs = (
 };
 
 /**
+ * Parse `ARCHESTRA_METRICS_LLM_CALLER_LABELS`: a comma-separated opt-in list of
+ * caller label groups for the LLM metric counters. `user` adds `user_id` and
+ * `user_email`; `virtual_key` adds `virtual_key_id` and `virtual_key_name`.
+ * Off by default because each group adds a series per user or key. Unknown
+ * entries are ignored with a warning.
+ * @public — exported for testability
+ */
+export const parseLlmMetricsCallerLabels = (
+  envValue?: string | undefined,
+): { user: boolean; virtualKey: boolean } => {
+  const labels = { user: false, virtualKey: false };
+  for (const entry of envValue?.split(",") ?? []) {
+    const value = entry.trim().toLowerCase();
+    if (value === "user") {
+      labels.user = true;
+    } else if (value === "virtual_key") {
+      labels.virtualKey = true;
+    } else if (value) {
+      logger.warn(
+        `Ignoring unknown ARCHESTRA_METRICS_LLM_CALLER_LABELS value "${value}" (expected "user" or "virtual_key")`,
+      );
+    }
+  }
+  return labels;
+};
+
+/**
  * Parse virtual key default expiration from environment variable.
  * Must be a non-negative integer (seconds). 0 means "never expires".
  * Returns the default (30 days) for invalid or negative values.
@@ -3638,6 +3665,9 @@ const config = {
       secret: process.env.ARCHESTRA_METRICS_SECRET,
       activeUsersRefreshIntervalMs: parseActiveUsersRefreshIntervalMs(
         process.env.ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS,
+      ),
+      llmCallerLabels: parseLlmMetricsCallerLabels(
+        process.env.ARCHESTRA_METRICS_LLM_CALLER_LABELS,
       ),
     },
     sentry: {

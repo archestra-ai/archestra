@@ -2,7 +2,7 @@
 title: LLM Metrics
 description: Look up LLM latency, token usage, prompt caching, and cost metrics.
 order: 1
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-04
 ---
 
 Track LLM request latency, token usage, and billed spend across providers and models. See [Labels](/docs/admin/observability/metrics#labels) for request and agent dimensions.
@@ -12,6 +12,7 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 | Metric | Type | Extra Labels | Measures |
 | --- | --- | --- | --- |
 | <span id="llm_request_duration_seconds"></span>`llm_request_duration_seconds` | Histogram | `status_code` | Upstream-call latency; streaming measures establishment, not completion. Retries can add observations. |
+| <span id="llm_requests_total"></span>`llm_requests_total` | Counter | `status_code` | Upstream calls, counted like `llm_request_duration_seconds_count`. Retries add calls. |
 | <span id="llm_proxy_request_duration_seconds"></span>`llm_proxy_request_duration_seconds` | Histogram | `provider`, `operation`, `stream`, `outcome`, `error_origin`, `status_code` only | End-to-end logical proxy and unified model API inference duration, including preflight, retries, and full stream completion |
 | <span id="llm_tokens_total"></span>`llm_tokens_total` | Counter | `type` (`input`, `output`) | Tokens used. `input` excludes prompt-cache tokens. |
 | <span id="llm_cache_tokens_total"></span>`llm_cache_tokens_total` | Counter | `cache_type` (`read`, `write`) | Prompt-cache tokens read from or written to the provider cache |
@@ -30,6 +31,28 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 
 `billing_mode` is `metered` for per-token billing and `subscription` for flat-rate subscription credentials. Billed spend is `sum(llm_cost_total{billing_mode="metered"})`. `auth_method` is `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, `internal`, or `unknown`.
 
+## Per-User and Per-Key Labels
+
+Break spend, tokens, and requests down by person or virtual key in Grafana: chart each person's monthly spend, or alert when one key's cost spikes. These labels are off by default, because each one adds a series per user or key. Set [`ARCHESTRA_METRICS_LLM_CALLER_LABELS=user,virtual_key`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_LLM_CALLER_LABELS) to turn on one group or both, then restart.
+
+| Group | Labels | Empty when the request |
+| --- | --- | --- |
+| `user` | `user_id`, `user_email` | names no user, such as a service account, an OAuth client, or a Knowledge Base call |
+| `virtual_key` | `virtual_key_id`, `virtual_key_name` | uses no [standard](/docs/llm-proxy/authentication#standard-virtual-keys) or [passthrough](/docs/llm-proxy/authentication#passthrough-virtual-keys) virtual key |
+
+The counters carry them: `llm_requests_total`, `llm_tokens_total`, `llm_cache_tokens_total`, `llm_cost_total`, `llm_cache_cost_total`, `llm_cache_savings_total`, and `llm_blocked_tools_total`. Histograms do not, because every label combination there costs one series per bucket plus two.
+
+Series grow with the user and key pairs that send traffic, times the labels each counter already has. For example, 1,000 people, each with a personal key and using two models of one provider, add about 18,000 series: 4,000 each for the two token counters and `llm_requests_total` (two types each, or two status codes), and 2,000 each for the three cost counters. The same traffic without these labels needs about 18 series.
+
+- `user_email` puts email addresses in your metrics store. Set [`ARCHESTRA_METRICS_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_SECRET) and limit who can query it, or turn on only `virtual_key`.
+- Renaming a key starts new series under the new name. Group by `virtual_key_id` to sum across renames.
+- With thousands of active users, use [per-user statistics](/docs/llm-proxy/costs-and-limits/costs#per-user-usage) instead.
+
+```promql
+# Billed spend per person over the last 30 days
+sum by (user_email) (increase(llm_cost_total{billing_mode="metered"}[30d]))
+```
+
 ## Streaming Latency
 
 For one request, the difference between client first-byte and upstream first-chunk times includes work before the upstream call, such as authentication and guardrails. Do not subtract aggregate percentiles to estimate that duration.
@@ -46,7 +69,7 @@ Upstream LLM latency, token, cache, and cost observations can carry trace exempl
 
 Track end-to-end request outcomes, throttling, and latency across the [LLM Proxy](/docs/llm-proxy) and unified model API with `llm_proxy_request_duration_seconds`, separating Archestra policy decisions from upstream provider and client failures.
 
-Each observation records one logical inference request from handler entry through completion, including preflight, retries, failovers, and the full response stream. Use `llm_proxy_request_duration_seconds_count` as the request counter; Archestra does not emit a separate counter metric. Use the existing `llm_request_duration_seconds` for upstream-call latency: its count can include retries, and misses preflight refusals and failures after streaming headers.
+Each observation records one logical inference request from handler entry through completion, including preflight, retries, failovers, and the full response stream. Use `llm_proxy_request_duration_seconds_count` as the counter of these logical requests; Archestra does not emit a separate one. Use the existing `llm_request_duration_seconds` for upstream-call latency: its count can include retries, and misses preflight refusals and failures after streaming headers.
 
 The metric covers inference requests handled by the shared proxy and unified model API. It excludes requests rejected by authentication or validation before reaching those handlers, model listing, unsupported passthrough endpoints, and provider file routes.
 

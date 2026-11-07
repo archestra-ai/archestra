@@ -326,7 +326,13 @@ describe("getObservableFetch", () => {
       method: "POST",
     });
     expect(histogramObserve).toHaveBeenCalledTimes(1);
-    expect(counterInc).not.toHaveBeenCalled();
+    // The only counter is the request count; no token counter is touched.
+    expect(counterInc).toHaveBeenCalledTimes(1);
+    expect(counterInc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: expect.objectContaining({ status_code: "200" }),
+      }),
+    );
   });
 
   test("records tokens for Anthropic response format", async () => {

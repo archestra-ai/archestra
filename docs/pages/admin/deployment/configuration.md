@@ -1436,6 +1436,11 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: `300000` (5 minutes)
   - Values: `0` (off), or `30000` and above
 
+- **`ARCHESTRA_METRICS_LLM_CALLER_LABELS`** - Adds [per-user and per-virtual-key labels](/docs/admin/observability/metrics/llm#per-user-and-per-key-labels) to the LLM metric counters.
+  - Default: unset (off)
+  - Values: a comma-separated list of `user` (adds `user_id`, `user_email`) and `virtual_key` (adds `virtual_key_id`, `virtual_key_name`)
+  - Each group adds one series per user or key. Read at startup.
+
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives [Real User Monitoring](/docs/admin/observability#real-user-monitoring) events from the web UI. Setting it turns RUM on.
   - Default: unset (RUM off)
   - Requires an [Enterprise license](/docs/get-started/pricing-model). The backend does not start when this is set without one.

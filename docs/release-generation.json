@@ -1,74 +1,38 @@
 {
   "schema": 1,
-  "sourceSha": "7a2fc7fbb5e1ba1ea73e675ddf6cf16092522e3b",
-  "baseSha": "d1573505f06ecccbce049836eab48c7e7c5d50b8",
-  "runId": 42168609895,
+  "sourceSha": "a5b902246b33b873b8fecc63f7c70254a579d72a",
+  "baseSha": "a0d10d9d76b6866d32f9d48831776c154a1fef06",
+  "runId": 42337111235,
   "attempt": 1,
-  "platformTree": "c8532f782eea2445eda2d42a7bff4e6ba04a8530",
+  "platformTree": "f753efed95bada18232bfb7cbb421c5644371d29",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "93926d09716ce517b6f3eb3c68e7a3d07a5a8497"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_connectors.dark.webp",
-      "blob": "ada4a961fac4fa21e46010c74b5bea9159c4c780"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_connectors.webp",
-      "blob": "73aaa8efb2ff35e64182ff4327a893e080de5d07"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_settings.dark.webp",
-      "blob": "31af2ba096d53f4417c8f6646992007c89b65e08"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/knowledge_settings.webp",
-      "blob": "743e8905ed39981b3bc631f6ef69023ff94e9c71"
+      "blob": "da9509a4a305b2dd4a0ef08e11dcc95d53df2bd2"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
+      "blob": "843d1aac70c3547ec19c6da3944c8644437940a7"
     },
     {
       "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
+      "blob": "00b98a89bd1a572ba97eff47ac245c91f02edae0"
     },
     {
-      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "1525cbe93aeaa48798b2b354631f1281fe3047e2"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-ai-tool-guardrails_overview.dark.webp",
-      "blob": "748620c467f07209ce5d35a8dc2a3afe15bc639b"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-ai-tool-guardrails_overview.webp",
-      "blob": "88889fe29e19f2d136ca7d0fce920d09bb81af1c"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "7b89eb86574572b0d1c3c6d02e9f7855a87b3939"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_batteries.dark.webp",
-      "blob": "1c4bb58b1091278ed39544971c90da5aafbc052f"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_batteries.webp",
-      "blob": "2f61cbb7043634d1de7b9090c2fef9ee5af6d2cd"
+      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
+      "blob": "7e42a16de015763761625b9dd81514c40424fc00"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
-      "blob": "a048b4e6dbc1b507065a9aeabc7626c182e0c85c"
+      "blob": "567539935cc48eb5879d8a45f0c27c4c742c8da2"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
-      "blob": "66c7b7b3056bbb6701384a1d77226ab41c530a5c"
+      "blob": "5a0cc3f6541951108de04db72af104cf24ece272"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "22ddfbe675a3c67ff56f7f6b10b5bbe02442f435"
+      "blob": "24d289f4f502631742d5fa18bb1a4e6193875063"
     }
   ]
 }

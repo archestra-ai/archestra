@@ -20,7 +20,9 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
       pull-requests: write # Required for release-please PR creation and updates.
@@ -359,7 +361,9 @@ jobs:
     # and before anything is published.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
+    environment:
+      name: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
+      deployment: false # A secrets and branch gate; nothing is deployed.
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -426,7 +430,9 @@ jobs:
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
-    environment: releaser
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
@@ -602,7 +608,9 @@ jobs:
       - publish-github-release
     if: ${{ github.ref_name != 'main' && needs.approve-release.outputs.preserve_latest != 'true' }}
     runs-on: ubuntu-latest
-    environment: website-deploy
+    environment:
+      name: website-deploy
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read # Check out the GitHub App token action.
     steps:

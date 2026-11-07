@@ -107,4 +107,3 @@ An attention mark is the name of an approval requirement, such as `sre-signoff`.
 A deployment with one reviewer can permit every mark at once. `permits = { attention = ["*"] }` allows the authority to give every approval the policy declares, under any name a battery or annotator uses. The wildcard MUST be the only entry; `["*", "sre-signoff"]` is a load error.
 
 `blocked` is the reserved mark that denies a call. No authority can list it in `permits.attention`, and `["*"]` does not cover it. A tool that requires `blocked` has no remedy, whatever authorities the policy declares.
-

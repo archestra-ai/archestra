@@ -112,7 +112,7 @@ function main() {
     partFiles.add(appaContractsPartFile(slug));
     fs.writeFileSync(
       path.join(SKILLS_DIR, appaContractsPartFile(slug)),
-      content,
+      `${content.trimEnd()}\n`,
     );
   }
   for (const name of fs.readdirSync(SKILLS_DIR)) {

@@ -40,6 +40,12 @@ export const APPA_CONTRACTS_PARTS = [
     headings: ["## Annotators"],
   },
   {
+    slug: "recorders",
+    summary:
+      "recorders: session memory, recorded fields, and policy declarations. Read before configuring what a session remembers.",
+    headings: ["## Recorders"],
+  },
+  {
     slug: "sanitizers-authorities",
     summary:
       "sanitizers (permitted transitions, tool outputs and inputs) and authorities (permissions, tags, hints). Read before adding a sanitizer or an approval authority.",

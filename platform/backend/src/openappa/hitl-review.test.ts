@@ -4,6 +4,7 @@ import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { AppaClaudeCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/claude-code";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
@@ -335,6 +336,8 @@ test("asks Claude Code one line and previews the call in full", async () => {
       "**slack\\_\\_send\\_message call**",
       "```yaml\nchannel: '#general'\ntext: Hello\n```",
     ].join("\n\n"),
+    plainCallPreview:
+      "Full review text.\n\nFull arguments (YAML, not summarized):\nchannel: '#general'\ntext: Hello\n\n\nApprove lets this exact call run. Deny keeps it blocked.",
     header: "Approval",
     options: [
       { label: "Approve", description: "Allow this exact tool call." },
@@ -434,6 +437,87 @@ test("leaves a long tool description off the plain card and escapes an unsafe on
   const unsafe = await stage("offer-unsafe", "Read a file\u202e backwards.");
   expect(unsafe).toContain("Tool description:");
   expect(unsafe).not.toContain("\u202e");
+});
+
+test.each([
+  {
+    tool: "Write",
+    args: {
+      file_path: String.raw`C:\Users\synthetic\AppData\Local\Temp\appa-approve-707b3425-d96c-4858-8a6f-31569618091d\.mcp.json`,
+      content: '{"mcpServers":{}}',
+    },
+  },
+  {
+    tool: "Bash",
+    args: {
+      command: 'echo **literal** __text__ `code`  two spaces\n"second line"',
+      description: "Keep the exact command",
+    },
+  },
+  {
+    tool: "Edit",
+    args: {
+      file_path: String.raw`C:\Users\synthetic\folder with spaces\notes.md`,
+      old_string: "# Original\n*literal*",
+      new_string: "# Replacement\n" + "Exact **text**  ".repeat(200),
+    },
+  },
+])("Grok previews $tool without Markdown scaffolding or artificial wraps and binds its exact answer", async ({
+  tool,
+  args,
+}) => {
+  const active = session(`grok-plain-${tool}`);
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool,
+      arguments: JSON.stringify(args),
+    },
+  });
+  const review = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  if (!review) throw new Error("Missing review");
+  const native = new AppaGrokAdapter().nativeQuestion;
+  const card = native.fromAskUser(review).questions[0];
+  expect(card.question).toBe(review.shortQuestion);
+  expect(card.question).not.toContain("file_path");
+  const preview = card.options[0].preview;
+  if (!preview) throw new Error("Missing plain review preview");
+  expect(preview).toContain("the readers must be the public audience");
+  expect(preview).not.toContain(`**${tool}`);
+  expect(preview).not.toContain("```yaml");
+  expect(card.options[1].preview).toBe(preview);
+  const marker = "Full arguments (YAML, not summarized):\n";
+  const tail = "\n\nApprove lets this exact call run. Deny keeps it blocked.";
+  const yaml = preview.slice(
+    preview.indexOf(marker) + marker.length,
+    -tail.length,
+  );
+  expect(loadYaml(yaml)).toEqual(args);
+  if ("file_path" in args) expect(preview).toContain(args.file_path);
+  for (const label of ["Approve", "Deny"]) {
+    const opening = `User has answered your questions: "${card.question}"="${label}"`;
+    const ending = ". You can now continue with the user's answers in mind.";
+    for (const content of [
+      `${opening}${ending}`,
+      `${opening} selected preview:\n${preview}${ending}`,
+    ]) {
+      expect(native.rulingFromResult({ content }, review)).toBe(
+        label === "Approve" ? "approve" : "deny",
+      );
+    }
+    for (const content of [
+      `${opening} selected preview:\n${review.callPreview}${ending}`,
+      `${opening} selected preview:\n${preview} altered${ending}`,
+      `User has answered your questions: "${review.question}"="${label}"${ending}`,
+    ]) {
+      expect(native.rulingFromResult({ content }, review)).toBe("unrecognized");
+    }
+  }
 });
 
 test("shows a command in full under its description, wrapped to the pane", async () => {

@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
+import { stripChildTrajectoryReferences } from "./child-trajectory-reference-format";
+import { grokChildOutputs } from "./grok-child-return";
+import { parseGrokDurableHistory } from "./grok-durable-history";
 
 export type AppaChildReturnCompletion = {
   value: string;
@@ -71,6 +74,9 @@ export function collectAndStripChildReturns(
     codexMailboxReturns?: boolean;
     /** Copilot CLI reads a finished background agent with `read_agent`. */
     copilotAgentReports?: boolean;
+    grokSubagentReturns?: boolean;
+    /** Internal recursion guard for the native memory extractor's transcript. */
+    grokDurableHistory?: false;
     onRefusal?: RefusalSink;
   } = {},
 ): CollectedChildReturns {
@@ -79,7 +85,11 @@ export function collectAndStripChildReturns(
   };
   const nativeResultCallIds = collectNativeResultCallIds(
     body,
-    options.copilotAgentReports ? COPILOT_REPORT_TOOLS : undefined,
+    options.grokSubagentReturns
+      ? GROK_COMPLETION_TOOLS
+      : options.copilotAgentReports
+        ? COPILOT_REPORT_TOOLS
+        : undefined,
   );
   const copilotReadAgentIds = options.copilotAgentReports
     ? collectCopilotReadAgentIds(body)
@@ -95,6 +105,82 @@ export function collectAndStripChildReturns(
     readOrReport(options.onRefusal, value, () => rewrite(value, context));
   const rewrite = (value: unknown, context: WalkContext): unknown => {
     if (typeof value === "string") {
+      if (options.grokSubagentReturns && !context.assistantOrigin) {
+        const history = parseGrokDurableHistory(value);
+        if (history) {
+          if (options.grokDurableHistory === false)
+            throw new ApiError(
+              409,
+              "OpenAPPA withheld a nested Grok memory transcript.",
+            );
+          // Decode before scanning: escaped examples are not live envelopes,
+          // while actual child outputs still require the retained crossing.
+          const nested = collectAndStripChildReturns(
+            { messages: history.messages },
+            { ...options, grokDurableHistory: false },
+          );
+          collected.completions.push(...nested.completions);
+          return history.serialize();
+        }
+      }
+      if (options.grokSubagentReturns && !context.assistantOrigin) {
+        const convert = (text: string): string | undefined => {
+          const outputs = grokChildOutputs(text);
+          if (!outputs) return undefined;
+          return JSON.stringify({
+            status: Object.fromEntries(
+              outputs.map((output) => {
+                if (output.status !== "completed")
+                  return [output.id, { state: output.status }];
+                const nested = { ...context, childNativeId: output.id };
+                const parsed = stripMarker(output.value ?? "", nested, true);
+                recordCompletion(parsed, nested, collected);
+                return [output.id, { completed: parsed.value }];
+              }),
+            ),
+          });
+        };
+        if (context.nativeResultSite) {
+          const converted = convert(value);
+          if (converted !== undefined) return converted;
+        }
+        // Native completions can also arrive beside an unrelated tool result,
+        // or in an idle auto-wake prompt. Check those bytes at the same boundary.
+        const rewritten = value.replace(
+          /<system-reminder>\n?([\s\S]*?)<\/system-reminder>/g,
+          (block, inside: string) => {
+            if (
+              !/^(?:Background subagent |While you were idle, \d+ background subagents? completed:)/.test(
+                inside,
+              )
+            )
+              return block;
+            const start = inside.search(/=== (?:Task |Multi-wait \()/);
+            if (start < 0)
+              throw new ApiError(
+                409,
+                "OpenAPPA withheld an incomplete Grok child notification.",
+              );
+            const converted = convert(inside.slice(start).trimEnd());
+            if (!converted)
+              throw new ApiError(
+                409,
+                "OpenAPPA withheld an invalid Grok child notification.",
+              );
+            return `<system-reminder>\n${converted}\n</system-reminder>`;
+          },
+        );
+        if (
+          (context.toolResultEnvelope || value.includes("<system-reminder>")) &&
+          (rewritten.includes("<subagent_result>") ||
+            rewritten.includes("<subagent_meta>"))
+        )
+          throw new ApiError(
+            409,
+            "OpenAPPA withheld an unrecognized Grok child notification.",
+          );
+        if (rewritten !== value) return rewritten;
+      }
       // OpenCode and Kilo Code acknowledge a background launch in the task's
       // own framing, and Kilo Code wraps the notice in <task_result>. The
       // acknowledgement returns nothing, so it stays as the client sent it
@@ -335,6 +421,10 @@ const MARKER = new RegExp(
   "gm",
 );
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
+const GROK_COMPLETION_TOOLS = new Set([
+  "spawn_subagent",
+  "get_command_or_subagent_output",
+]);
 
 function stripMarker(
   value: string,
@@ -349,7 +439,9 @@ function stripMarker(
   // A complete child reply can carry its trajectory proof before the return
   // marker. That proof is transport metadata. It is not part of the admitted
   // value and is not lineage evidence for the parent.
-  const returnValue = stripChildTrajectoryReceipts(value).text;
+  const returnValue = stripChildTrajectoryReferences(
+    stripChildTrajectoryReceipts(value).text,
+  ).text;
   const pattern = new RegExp(MARKER.source, "g");
   const matches = [...returnValue.matchAll(pattern)];
   if (matches.length === 0) {

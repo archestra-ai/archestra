@@ -21,6 +21,7 @@ type PolicyTarget = {
   toolCallName: string;
   toolCallArgs: string;
   isRunToolDispatchTarget?: boolean;
+  isNativeDispatchTarget?: boolean;
 };
 
 /**

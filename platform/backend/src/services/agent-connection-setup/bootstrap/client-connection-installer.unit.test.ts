@@ -500,21 +500,31 @@ test.each([
   { serverName: "prod_gateway", runs: true, signInStatus: 1, pi: true },
   { serverName: "prod_gateway", runs: true, signInStatus: 0, kimi: true },
   { serverName: "prod_gateway", runs: true, signInStatus: 1, kimi: true },
+  { serverName: "prod_gateway", runs: true, signInStatus: 0, grok: true },
+  { serverName: "prod_gateway", runs: true, signInStatus: 1, grok: true },
 ])("Windows sign-in for $serverName (exit $signInStatus) reports success only after sign-in completes", async ({
   serverName,
   runs,
   signInStatus,
   pi,
   kimi,
+  grok,
 }) => {
   // Kimi Code signs in through a Node.js helper in the home directory.
-  const command = pi
-    ? ["arcpi", "--reconnect"]
-    : kimi
-      ? ["node", "~/.archestra/kimi-code/lifecycle.cjs", "sign-in"]
-      : ["opencode", "mcp", "auth", serverName];
+  // Grok signs in through an inline Node.js script, not a shell command line.
+  const command = grok
+    ? [
+        "node",
+        "-e",
+        "require(require('node:os').homedir() + '/.archestra/grok/sign-in.cjs')",
+      ]
+    : pi
+      ? ["arcpi", "--reconnect"]
+      : kimi
+        ? ["node", "~/.archestra/kimi-code/lifecycle.cjs", "sign-in"]
+        : ["opencode", "mcp", "auth", serverName];
   const ending = {
-    label: "OpenCode",
+    label: grok ? "Grok" : "OpenCode",
     appName: "Test",
     parts: [],
     signIn: {
@@ -528,6 +538,7 @@ test.each([
   };
   scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\nWrite-Host 'setup'\n`;
   const calls: Array<{ command: string; args: unknown }> = [];
+  const spawnOptions: unknown[] = [];
   const output: string[] = [];
   await new Promise<void>((resolve, reject) => {
     runInNewContext(CLIENT_CONNECTION_INSTALLER, {
@@ -557,7 +568,11 @@ test.each([
       console: {
         log: (message: string) => {
           output.push(message);
-          if (message.includes("Next: open")) resolve();
+          if (
+            message.includes("Next: open") ||
+            message.includes("Grok setup is incomplete")
+          )
+            resolve();
         },
         error: (message: string) => reject(new Error(message)),
       },
@@ -577,8 +592,9 @@ test.each([
         if (name === "node:child_process")
           return {
             spawn,
-            spawnSync: (command: string, args: unknown) => {
+            spawnSync: (command: string, args: unknown, options: unknown) => {
               calls.push({ command, args });
+              spawnOptions.push(options);
               expect(output.join("\n")).not.toContain("Signed in.");
               return {
                 status: command === "powershell.exe" ? 0 : signInStatus,
@@ -591,7 +607,9 @@ test.each([
   });
   expect(calls[0]?.command).toBe("powershell.exe");
   expect(output.join("\n")).toContain(
-    "connection settings are saved. MCP sign-in is still required.",
+    grok
+      ? "Browser authorization can be completed or renewed below."
+      : "connection settings are saved. MCP sign-in is still required.",
   );
   expect(output.join("\n")).not.toContain("is connected");
   expect(output.join("\n").includes("Signed in.")).toBe(
@@ -601,7 +619,17 @@ test.each([
     runs && signInStatus !== 0,
   );
   const signIn = calls.slice(1);
-  if (runs) {
+  if (grok) {
+    expect(signIn).toEqual([
+      { command: process.execPath, args: command.slice(1) },
+    ]);
+    expect(spawnOptions[1]).toMatchObject({ shell: false });
+    expect(output.join("\n")).toContain(
+      "Authorize now? This opens Test in your browser.",
+    );
+    expect(output.join("\n")).not.toContain("/mcps");
+    expect(output.join("\n")).not.toContain("mcp doctor");
+  } else if (runs) {
     expect(signIn).toEqual([
       {
         command:
@@ -630,19 +658,88 @@ test.each([
   }
 });
 
-test.each([
-  { answer: "", starts: true },
-  { answer: "n\n", starts: false },
-])("offers to start the agent through the interactive shell (answer $answer)", async ({
+test.each<{
+  answer: string;
+  starts: boolean;
+  grok: boolean;
+  launchStatus?: number;
+  nativeLogin?: boolean;
+  loginStatus?: number;
+  platform?: "linux" | "win32";
+}>([
+  { answer: "", starts: true, grok: false },
+  { answer: "n\n", starts: false, grok: false },
+  { answer: "", starts: true, grok: true },
+  { answer: "", starts: true, grok: true, launchStatus: 23 },
+  { answer: "n\n", starts: false, grok: true },
+  ...(["linux", "win32"] as const).flatMap((platform) => [
+    {
+      answer: "y\n\n",
+      starts: true,
+      grok: true,
+      nativeLogin: true,
+      loginStatus: 0,
+      platform,
+    },
+    {
+      answer: "y\n\n",
+      starts: false,
+      grok: true,
+      nativeLogin: true,
+      loginStatus: 17,
+      platform,
+    },
+    {
+      answer: "\n\n",
+      starts: true,
+      grok: true,
+      nativeLogin: true,
+      loginStatus: 17,
+      platform,
+    },
+    {
+      answer: "n\n\n",
+      starts: true,
+      grok: true,
+      nativeLogin: true,
+      loginStatus: 0,
+      platform,
+    },
+  ]),
+])("runs Grok login before managed launch and preserves failures (answer $answer, grok=$grok, platform=$platform, login=$loginStatus)", async ({
   answer,
   starts,
+  grok,
+  launchStatus = 0,
+  nativeLogin = false,
+  loginStatus = 0,
+  platform = grok ? "win32" : "linux",
 }) => {
   const ending = {
-    label: "Claude Code",
+    label: grok ? "Grok" : "Claude Code",
     appName: "Test",
     parts: [],
     signIn: null,
-    launch: { command: ["claude", "hi there"], text: "claude 'hi there'" },
+    ...(nativeLogin
+      ? {
+          providerSignIn: {
+            label: "SuperGrok in the managed Grok profile",
+            command: ["node", "~/.archestra/grok/login.cjs"],
+            text: "node ~/.archestra/grok/login.cjs",
+            howTo: "Run the managed login helper to sign in later.",
+          },
+        }
+      : {}),
+    launch: grok
+      ? {
+          command: [
+            "node",
+            "-e",
+            "require(require('node:os').homedir() + '/.archestra/grok/launch.cjs')",
+          ],
+          text: "node '<shell-only display; must not execute>'",
+        }
+      : { command: ["claude", "hi there"], text: "claude 'hi there'" },
     notes: [],
   };
   scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\necho setup\n`;
@@ -651,6 +748,7 @@ test.each([
   const typed = Buffer.from(answer);
   let offset = 0;
   const sigintListeners: unknown[] = [];
+  let managedExit: number | undefined;
   await new Promise<void>((resolve, reject) => {
     runInNewContext(CLIENT_CONNECTION_INSTALLER, {
       __filename: join(directory, "connect.cjs"),
@@ -662,10 +760,10 @@ test.each([
           "--url",
           namedLoopbackOrigin(),
           "--client",
-          "claude-code",
+          grok ? "grok-build" : "claude-code",
           "--no-open",
         ],
-        platform: "linux",
+        platform,
         execPath: process.execPath,
         env: { NO_COLOR: "1", SHELL: "/bin/zsh" },
         stdout: { isTTY: true, write: (text: string) => output.push(text) },
@@ -675,6 +773,9 @@ test.each([
         removeListener: (event: string, listener: unknown) => {
           if (event === "SIGINT")
             sigintListeners.splice(sigintListeners.indexOf(listener), 1);
+        },
+        set exitCode(code: number) {
+          managedExit = code;
         },
       },
       Buffer,
@@ -715,12 +816,21 @@ test.each([
             spawn,
             spawnSync: (command: string, args: unknown, options: unknown) => {
               calls.push({ command, args, options });
-              if (command === "/bin/zsh") {
+              if (
+                command === process.execPath &&
+                (args as string[])[0]?.endsWith("login.cjs")
+              ) {
+                expect(sigintListeners).toHaveLength(0);
+                return { status: loginStatus };
+              }
+              if (command === "/bin/zsh" || command === process.execPath) {
                 // The agent owns Ctrl+C while it runs.
                 expect(sigintListeners).toHaveLength(1);
                 setTimeout(resolve, 0);
               }
-              return { status: 0 };
+              return {
+                status: command === process.execPath ? launchStatus : 0,
+              };
             },
           };
         throw new Error(`Unexpected module ${name}`);
@@ -728,7 +838,59 @@ test.each([
     });
   });
   const shellRuns = calls.filter((call) => call.command === "/bin/zsh");
-  expect(output.join("\n")).toContain("Start Claude Code now? [Y/n]");
+  const loginSkipped = nativeLogin && !/^\s*y/i.test(answer.split("\n")[0]);
+  const loginFailed = nativeLogin && !loginSkipped && loginStatus !== 0;
+  expect(output.join("\n").includes(`Start ${ending.label} now? [Y/n]`)).toBe(
+    !loginFailed,
+  );
+  if (grok) {
+    expect(managedExit).toBe(
+      loginFailed
+        ? loginStatus
+        : starts && launchStatus !== 0
+          ? launchStatus
+          : undefined,
+    );
+    expect(output.join("\n")).not.toContain("is connected to");
+    expect(shellRuns).toEqual([]);
+    expect(calls.filter((call) => call.command === process.execPath)).toEqual([
+      ...(nativeLogin && !loginSkipped
+        ? [
+            {
+              command: process.execPath,
+              args: [
+                join("C:/User name 日本語", ".archestra", "grok", "login.cjs"),
+              ],
+              options: { stdio: [7, "inherit", "inherit"], shell: false },
+            },
+          ]
+        : []),
+      ...(starts
+        ? [
+            {
+              command: process.execPath,
+              args: ending.launch.command.slice(1),
+              options: { stdio: [7, "inherit", "inherit"], shell: false },
+            },
+          ]
+        : []),
+    ]);
+    if (nativeLogin) {
+      expect(output.join("\n")).toContain(
+        "This is separate from MCP gateway authorization.",
+      );
+      expect(output.join("\n")).toContain(
+        loginSkipped
+          ? "Native sign-in skipped."
+          : loginFailed
+            ? "Subscription sign-in did not finish."
+            : "Proxy guardrails admission is still pending",
+      );
+    }
+    expect(sigintListeners).toHaveLength(0);
+    expect(output.join("\n").includes("Next: open")).toBe(!starts);
+    return;
+  }
   if (starts) {
     expect(shellRuns).toEqual([
       {

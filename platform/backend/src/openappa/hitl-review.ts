@@ -598,6 +598,19 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
     callPreview: previewText({ preview, accepted, summary: review.summary }),
+    // Grok's preview is plain text and wraps to the actual terminal width.
+    // Generate it from the reviewed data; stripping Markdown from the other
+    // preview would also strip literal payload characters and retain its wraps.
+    plainCallPreview: [
+      ...(accepted
+        ? acceptedBlock(accepted)
+        : [formatReviewQuestion(review.text)]),
+      ...summaryBlock(review.summary),
+      Object.keys(args).length
+        ? `Full arguments (YAML, not summarized):\n${dumpYaml(args, { lineWidth: -1, noRefs: true })}`
+        : "This call has no arguments.",
+      "Approve lets this exact call run. Deny keeps it blocked.",
+    ].join("\n\n"),
     header: "Approval",
     options,
     allowMultiple: false,

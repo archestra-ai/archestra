@@ -198,7 +198,7 @@ export function ConnectPage() {
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
   const tools = choices.tools ? data.totalTools : 0;
-  const skills = data.skillsEnabled ? skillsSorted : [];
+  const skills = parts.skills && data.skillsEnabled ? skillsSorted : [];
   const plugins = parts.plugins
     ? data.keptPlugins(client, picks.pluginIds)
     : [];
@@ -1185,6 +1185,13 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Press Enter when it offers to start Kimi Code, or run the kimi command it prints in a new terminal.",
       ];
+    case "grok-build":
+      return [
+        "Open a new terminal and run grok to use the managed startup check. In the current terminal, use node ~/.archestra/grok/launch.cjs (PowerShell: node $HOME/.archestra/grok/launch.cjs). The first governed LLM reply shows its server-issued protected session receipt.",
+        "Your native SuperGrok login and model catalog are reused. Use /model or -m to select a native model; Archestra protection stays separate in the session receipt. To renew login, use /login inside Grok or node ~/.archestra/grok/login.cjs. MCP authorization remains separate: node ~/.archestra/grok/sign-in.cjs.",
+        "Protected foreground and background subagents are supported, including resume. Workflows, monitors and scheduled execution remain blocked. Use an interactive session for approvals.",
+        "Disconnect with node ~/.archestra/grok/disconnect.cjs; unrelated settings and logins are preserved.",
+      ];
     case "copilot-cli":
       return [
         "If you connected an LLM provider, its settings are saved in providers.json and the model in settings.json. Leave COPILOT_MODEL and the COPILOT_PROVIDER_* variables unset.",
@@ -1456,7 +1463,7 @@ function ProfileCard({
   // Servers and skills show whenever the org offers them, even empty, so
   // the card keeps its shape; then they say so in place of a list. Plugins
   // only show once this agent has one.
-  const skillsOn = data.skillsEnabled;
+  const skillsOn = data.skillsEnabled && data.partsFor(client).skills;
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
   const guardrailsDocsUrl = getFrontendDocsUrl(

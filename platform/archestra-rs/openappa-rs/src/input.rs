@@ -183,6 +183,7 @@ pub(crate) enum HookEventKind {
     Yell,
     Prompt,
     TurnEnd,
+    ChildTurnEnd,
     ChildEnd,
     /// A return that does not end the child. The value crosses as a stop's
     /// would. Open tool calls stay open; the runtime refuses the return until
@@ -337,6 +338,13 @@ pub(crate) fn validate(input: &Input) -> napi::Result<()> {
         HookEventKind::Prompt | HookEventKind::TurnEnd | HookEventKind::ChildEnd => {
             required(&input.operation_id, "operation_id")?;
         }
+        HookEventKind::ChildTurnEnd => {
+            required(&input.operation_id, "operation_id")?;
+            required(&input.parent_id, "parent_id")?;
+            if input.output.is_some() {
+                return Err(invalid_input("an empty child turn cannot carry output"));
+            }
+        }
         HookEventKind::ChildReturn => {
             required(&input.operation_id, "operation_id")?;
             required(&input.parent_id, "parent_id")?;
@@ -405,6 +413,22 @@ mod tests {
                 "{claimed} must not select a route"
             );
         }
+    }
+
+    #[test]
+    fn empty_child_completion_requires_a_child_and_cannot_carry_output() {
+        let mut value = serde_json::json!({
+            "organization_id": "organization", "session_id": "child",
+            "event": "child_turn_end", "operation_id": "empty-end",
+        });
+        let input = serde_json::from_value(value.clone()).unwrap();
+        assert!(super::validate(&input).is_err());
+        value["parent_id"] = serde_json::json!("parent");
+        let input = serde_json::from_value(value.clone()).unwrap();
+        assert!(super::validate(&input).is_ok());
+        value["output"] = serde_json::json!("");
+        let input = serde_json::from_value(value).unwrap();
+        assert!(super::validate(&input).is_err());
     }
 
     #[test]

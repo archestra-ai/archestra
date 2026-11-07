@@ -152,6 +152,9 @@ class XaiResponseAdapter implements LLMResponseAdapter<XaiResponse> {
       this.delegate.toRefusalResponse(refusalMessage, contentMessage),
     );
   }
+  withReplacedText(text: string) {
+    return this.delegate.withReplacedText(text);
+  }
   withRewrittenToolCalls(
     toolCalls: Array<{ id: string; name: string; arguments: string }>,
   ) {

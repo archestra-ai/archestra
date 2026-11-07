@@ -27,6 +27,7 @@ These clients work without extra configuration:
 - **OpenCode**
 - **Kilo Code**
 - **Kimi Code**
+- **Grok Build CLI**
 
 Connect the client to the LLM Proxy and the MCP Gateway on the [connection page](/docs/get-started/connect). The client needs both: the LLM Proxy checks each tool call, and the MCP Gateway gives the agent the tools to handle a block, such as [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans) and [`yell`](/docs/reference/archestra-mcp-server#yell).
 
@@ -36,6 +37,31 @@ Kimi Code shows a review in its own question form: choose **Inspect**, **Allow**
 
 - Subagents run under Guardrails only as new foreground `Agent` calls. A background, resumed, or swarm subagent is refused before it starts.
 - Setup starts Kimi Code in Ask When Needed mode, so the guardrail helpers run without a prompt. Kimi Code 2.3.3 cannot approve single gateway tools, so this mode also runs your other gateway calls and routine commands without asking. It still asks before dangerous commands and shows reviews.
+### Grok Native Tools
+
+Choose **Grok Build** on the connection page, complete setup, and start `grok` in a new terminal. Subscription mode retains native model names, reasoning options and `/model` selection while routing inference through Archestra. This setup configures the CLI, not Grok Bot desktop.
+
+Interactive startup shows configuration, skill sync, model discovery and proxy routing progress on stderr. Routing remains pending server admission; startup is not proof that a session is protected. The first eligible governed reply displays the server-issued `protected session` receipt, as it does for other native clients. This is a reply indicator, not a persistent Grok status-bar badge. Quiet, JSON, headless and non-terminal runs keep native stdout unchanged. APPA checks run in the proxy, never in client hooks.
+
+The launcher uses a dedicated profile for native skills and managed hook isolation. Grok reads and refreshes the ordinary native login directly; `/login` and `node ~/.archestra/grok/login.cjs` renew that same login. Credentials are never copied, and conflicting native routing policies stop launch.
+
+Grok's paired provider-hosted web and X search capability is unavailable on this connection. The protected catalog does not advertise it; unsupported tool declarations remain blocked.
+
+Grok's **Opt out** and **Opt in** controls update your xAI coding-data-sharing preference. Changes are audited; a rejected update leaves Grok's cached preference unchanged.
+
+The proxy reads Grok's native session header and checks tool calls before returning them for execution. Shell commands, file reads, edits, writes and searches use the coding-tool policy. The starter policy includes the `target_file` argument binding for Grok reads; existing custom policies are not changed. Other recognized tools still go through policy evaluation. Unknown native tools are refused.
+
+Subagents inherit their parent's labels and return only through a declared return contract. Foreground results, completed background results and native completion notifications pass through the same return checks. Partial, failed and cancelled task output is withheld. Reading raw native session files is refused.
+
+Resuming a completed protected child retains its labels and original return contract, even though Grok assigns it another native ID. Only a verified child of the current parent can be resumed. Workflows, monitors and scheduled execution remain unavailable.
+
+Managed Grok sessions support native direct messages from a parent to its child and between eligible siblings. Guardrails checks the sender, recipient and message before the recipient model reads it. Messages that require different labels stay held until the recipient completes the offered remedy. Delivery acceptance is separate from the child’s checked return. Nested spawning and child-to-root messaging remain unavailable in Grok.
+
+Grok discovers MCP tools through `search_tool` and calls them with `use_tool`. The proxy checks the dispatched target and its arguments, not just the wrapper. Unsigned targets cannot acquire platform remedy authority from their names. Nested dispatchers are refused. The MCP Gateway independently checks the actual call in the same session. Gateway tool names use a Grok-compatible spelling; policy identities and permissions stay unchanged. Interactive Grok sessions can show native approval questions. Headless or unanswered questions never approve a call.
+
+The proxy verifies gateway signatures preserved in Grok's `search_tool` results before treating a deferred tool as a platform tool. It checks the exact target and arguments inside `use_tool`, then returns allowed calls and remedy notices in that same format. A target string alone grants no platform authority. If discovery results are missing after compaction, rediscover the gateway tools before requesting a remedy. Native approval answers bind to the issued question and session; JSON or unrecognized answers do not approve a call.
+
+The protocol was checked with Grok Build 1.0.70, including native login, model selection, resume, skill discovery and synthetic policy reviews. Synthetic upstream checks do not verify paid subscription inference. Directly launching the underlying executable bypasses this connection.
 
 ### Review Calls in OpenCode and Kilo Code
 

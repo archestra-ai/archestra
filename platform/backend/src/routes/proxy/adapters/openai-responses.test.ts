@@ -266,11 +266,16 @@ describe("OpenAI Responses execution terminal guard", () => {
       ...openAiResponsesAdapterFactory,
       provider: "github-copilot" as const,
     };
+    const nativeGrok = {
+      ...openAiResponsesAdapterFactory,
+      provider: "xai" as const,
+      interactionType: "xai:responses" as const,
+    };
     const nativeCopilot = {
       ...alias,
       interactionType: "github-copilot:responses" as const,
     };
-    for (const adapter of [alias, nativeCopilot]) {
+    for (const adapter of [alias, nativeGrok, nativeCopilot]) {
       await expect(
         (async () => {
           for await (const _chunk of await adapter.executeStream(

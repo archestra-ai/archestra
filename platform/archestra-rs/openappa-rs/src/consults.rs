@@ -2,7 +2,7 @@
 //! `openappa_external_consults`: a dataset, never an input to a decision.
 use appa_eventlog::postgres::PostgresError;
 use appa_runtime::api::{
-    ConsultBackend, ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, NoAnswerClass,
+    ConsultBackend, ConsultRecord, ConsultTranscriber, ExternalOutcome, ExternalRole, NoAnswerClass,
 };
 use serde_json::{Value, json};
 use std::{
@@ -26,7 +26,7 @@ struct Buffered {
     dropped: usize,
 }
 
-impl ConsultRecorder for ConsultBuffer {
+impl ConsultTranscriber for ConsultBuffer {
     fn record(&self, record: ConsultRecord) {
         let mut buffered = self.buffered.lock().unwrap_or_else(PoisonError::into_inner);
         if buffered.records.len() < BUFFER_CAP {
@@ -296,7 +296,7 @@ fn outcome_name(outcome: ExternalOutcome) -> &'static str {
 mod tests {
     use super::{Attribution, BUFFER_CAP, ConsultBuffer, backend_name, outcome_name, role_name};
     use appa_runtime::api::{
-        ConsultBackend, ConsultContext, ConsultRecord, ConsultRecorder, Diagnostics,
+        ConsultBackend, ConsultContext, ConsultRecord, ConsultTranscriber, Diagnostics,
         ExternalOutcome, ExternalRole, NoAnswerClass,
     };
     use serde_json::{Value, json};

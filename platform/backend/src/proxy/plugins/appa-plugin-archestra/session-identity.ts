@@ -4,6 +4,7 @@ import {
   type AppaWireFamily,
   appaSessionIdentity,
 } from "@/openappa/wire";
+import { ApiError } from "@/types/api";
 import { AppaChatAdapter } from "./adapters/chat";
 import {
   AppaClaudeCodeAdapter,
@@ -11,6 +12,7 @@ import {
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
+import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPiAdapter } from "./adapters/pi";
@@ -32,6 +34,7 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     new AppaKimiCodeAdapter(),
     // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
     new AppaClaudeDesktopAdapter(),
+    new AppaGrokAdapter(),
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
     // Before OpenCode: Kilo's setup also sends OpenCode's session header.
@@ -64,7 +67,6 @@ export function extractAppaSessionIdentity(params: {
   headers: Readonly<Record<string, string | string[] | undefined>>;
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
-  if (generic.provenance === "appa-header") return generic;
   const matchContext = {
     headers: params.headers,
     requestBody: params.family ? params.body : undefined,
@@ -72,7 +74,17 @@ export function extractAppaSessionIdentity(params: {
   const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
     candidate.matches(matchContext),
   );
+  if (generic.provenance === "appa-header" && adapter?.id !== "grok-build")
+    return generic;
   const native = adapter?.extractSessionIdentity?.(matchContext);
+  if (generic.provenance === "appa-header") {
+    if (native?.sessionId && generic.sessionId !== native.sessionId)
+      throw new ApiError(
+        400,
+        "Grok native and MCP session headers must identify the same session.",
+      );
+    return generic;
+  }
   if (!native?.sessionId) return generic;
   return {
     ...native,

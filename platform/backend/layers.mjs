@@ -300,6 +300,8 @@ const layerTable = [
   {
     name: "llm-protocol",
     files: [
+      "src/routes/mcp-gateway/grok-tool-names.ts",
+      "src/routes/proxy/adapters/grok-native-catalog.ts",
       "src/knowledge-base/embedding-clients/bedrock-models.ts",
       "src/knowledge-base/embedding-clients/cohere-models.ts",
       "src/knowledge-base/embedding-clients/vertex-models.ts",
@@ -310,6 +312,8 @@ const layerTable = [
       "src/archestra-mcp-server/tool-attestation.ts",
       "src/clients/realtime-audio.ts",
       "src/openappa/child-trajectory-receipt.ts",
+      "src/openappa/child-trajectory-reference-format.ts",
+      "src/openappa/grok-durable-history.ts",
       "src/openappa/compaction-carrier.ts",
       "src/openappa/notice.ts",
       "src/openappa/result-view.ts",
@@ -401,6 +405,7 @@ const layerTable = [
   {
     name: "provider-adapters",
     files: [
+      "src/routes/proxy/adapters/xai-native-session.ts",
       "src/routes/proxy/adapters/anthropic-openai-translator.ts",
       "src/routes/proxy/adapters/anthropic-openai.ts",
       "src/routes/proxy/adapters/anthropic.ts",
@@ -518,6 +523,20 @@ const layerTable = [
     // Connection/bootstrap artifacts, below live execution orchestration.
     name: "connections",
     files: [
+      "src/services/agent-connection-setup/agents/grok.ts",
+      "src/services/agent-connection-setup/guard/clients/grok.ts",
+      "src/services/agent-connection-setup/payloads/grok-config-transaction.ts",
+      "src/services/agent-connection-setup/payloads/grok-config.ts",
+      "src/services/agent-connection-setup/payloads/grok-http.ts",
+      "src/services/agent-connection-setup/payloads/grok-legacy-plugins.ts",
+      "src/services/agent-connection-setup/payloads/grok-loopback-proxy.ts",
+      "src/services/agent-connection-setup/payloads/grok-mcp-sign-in.ts",
+      "src/services/agent-connection-setup/payloads/grok-model-discovery.ts",
+      "src/services/agent-connection-setup/payloads/grok-native-transport.ts",
+      "src/services/agent-connection-setup/payloads/grok-shell.ts",
+      "src/services/agent-connection-setup/payloads/grok-skills.ts",
+      "src/services/agent-connection-setup/payloads/grok-startup.ts",
+      "src/services/agent-connection-setup/payloads/grok-toml.generated.ts",
       "src/services/agent-connection-setup/agents/claude-code.ts",
       "src/services/agent-connection-setup/agents/claude-desktop.ts",
       "src/services/agent-connection-setup/agents/codex.ts",
@@ -787,6 +806,7 @@ const layerTable = [
       {
         project: APP,
         files: [
+          "src/routes/proxy/utils/grok-deferred-tools.ts",
           "src/routes/proxy/image-edit-handler.ts",
           "src/routes/proxy/llm-proxy-auth.ts",
           "src/routes/proxy/llm-proxy-handler.ts",

@@ -161,7 +161,14 @@ export function prepareAppaRequest(params: {
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  const defersTools = declared.some(declaresToolSearch);
+  const grokDeferredTools =
+    params.session?.provenance === "grok-session-header" &&
+    ["search_tool", "use_tool"].every((name) =>
+      entries.some(
+        (entry) => entry.name === name && entry.namespace === undefined,
+      ),
+    );
+  const defersTools = grokDeferredTools || declared.some(declaresToolSearch);
   refuseUnsupportedToolTypes(declared);
   // Provider-run tools never return a client call to gate. Responses web search
   // remains governed by the response adapter, not by its declaration.
@@ -710,7 +717,7 @@ function restoreHistory(params: {
     allowHistoricalControl: params.declaredCount === 0,
     isControlTool: params.ours.control,
   });
-  const noticeCallIds = restoreAppaNotices({
+  const { callIds: noticeCallIds, memoryTexts } = restoreAppaNotices({
     family: params.family,
     body: params.body,
     isNoticeTool: params.ours.notice,
@@ -728,7 +735,10 @@ function restoreHistory(params: {
     ...(historicalControlToolName ? { historicalControlToolName } : {}),
     noticeCallIds,
     changed:
-      (historicalControlToolName ? 1 : 0) + noticeCallIds.size + askUsers,
+      (historicalControlToolName ? 1 : 0) +
+      noticeCallIds.size +
+      memoryTexts +
+      askUsers,
   };
 }
 

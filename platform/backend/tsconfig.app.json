@@ -9,6 +9,7 @@
   // Files pinned here by layers.mjs from excluded directories, including
   // route helpers lower layers import (`exclude` does not apply to `files`).
   "files": [
+    "src/routes/proxy/utils/grok-deferred-tools.ts",
     "src/observability/previous-termination-report.ts",
     "src/auth/better-auth.ts",
     "src/auth/sso-email-reconciliation.ee.ts",
@@ -52,6 +53,20 @@
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
+    "src/services/agent-connection-setup/agents/grok.ts",
+    "src/services/agent-connection-setup/guard/clients/grok.ts",
+    "src/services/agent-connection-setup/payloads/grok-config-transaction.ts",
+    "src/services/agent-connection-setup/payloads/grok-config.ts",
+    "src/services/agent-connection-setup/payloads/grok-http.ts",
+    "src/services/agent-connection-setup/payloads/grok-legacy-plugins.ts",
+    "src/services/agent-connection-setup/payloads/grok-loopback-proxy.ts",
+    "src/services/agent-connection-setup/payloads/grok-mcp-sign-in.ts",
+    "src/services/agent-connection-setup/payloads/grok-model-discovery.ts",
+    "src/services/agent-connection-setup/payloads/grok-native-transport.ts",
+    "src/services/agent-connection-setup/payloads/grok-shell.ts",
+    "src/services/agent-connection-setup/payloads/grok-skills.ts",
+    "src/services/agent-connection-setup/payloads/grok-startup.ts",
+    "src/services/agent-connection-setup/payloads/grok-toml.generated.ts",
     "src/routes/**",
     "src/auth/fastify-plugin/index.ts",
     "src/auth/fastify-plugin/middleware.ts",
@@ -332,6 +347,8 @@
     "src/archestra-mcp-server/tool-attestation.ts",
     "src/clients/realtime-audio.ts",
     "src/openappa/child-trajectory-receipt.ts",
+    "src/openappa/child-trajectory-reference-format.ts",
+    "src/openappa/grok-durable-history.ts",
     "src/openappa/compaction-carrier.ts",
     "src/openappa/notice.ts",
     "src/openappa/result-view.ts",

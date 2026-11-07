@@ -373,6 +373,12 @@ export const RouteId = {
   // Proxy Routes - xAI
   XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
   XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+  XaiListModelsWithDefaultAgent: "xaiListModelsWithDefaultAgent",
+  XaiListModelsWithAgent: "xaiListModelsWithAgent",
+  XaiNativeMetadataWithDefaultAgent: "xaiNativeMetadataWithDefaultAgent",
+  XaiNativeMetadataWithAgent: "xaiNativeMetadataWithAgent",
+  XaiNativePrivacyWithDefaultAgent: "xaiNativePrivacyWithDefaultAgent",
+  XaiNativePrivacyWithAgent: "xaiNativePrivacyWithAgent",
   // Proxy Routes - xAI Responses (served over xAI's chat completions)
   XaiResponsesWithDefaultAgent: "xaiResponsesWithDefaultAgent",
   XaiResponsesWithAgent: "xaiResponsesWithAgent",

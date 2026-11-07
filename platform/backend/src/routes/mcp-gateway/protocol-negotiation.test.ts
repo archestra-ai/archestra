@@ -16,6 +16,7 @@ import {
 } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { grokToolName } from "./grok-tool-names";
 import mcpGatewayRoutes from "./index";
 
 import {
@@ -67,6 +68,73 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     const token = await makeServiceAccountToken({ organizationId: org.id });
     return { agent, token };
   }
+
+  test("Grok gets reversible namespace-safe tool names without changing other clients or unassigned-tool admission", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      toolExposureMode: "full",
+    });
+    const token = await makeServiceAccountToken({
+      organizationId: organization.id,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+      name: "synthetic-tools",
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "synthetic_tools__read_note",
+      parameters: { type: "object" },
+    });
+    await makeAgentTool(agent.id, tool.id);
+    const post = (grok: boolean, method = "tools/list", params = {}) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(
+          token.value,
+          grok ? { "user-agent": "grok-cli/1.0.70" } : {},
+        ),
+        payload: { jsonrpc: "2.0", method, params, id: 91 },
+      });
+    const normal = await post(false);
+    const native = await post(true);
+    const original = normal
+      .json()
+      .result.tools.find((entry: { name: string }) => entry.name === tool.name);
+    expect(original).toBeDefined();
+    expect(native.json().result.tools).toContainEqual({
+      ...original,
+      name: grokToolName(tool.name),
+    });
+    expect(
+      normal.json().result.tools.map((entry: { name: string }) => entry.name),
+    ).toContain(tool.name);
+    const canonical = await post(false, "tools/call", {
+      name: "synthetic_tools__missing",
+      arguments: {},
+    });
+    const encoded = await post(true, "tools/call", {
+      name: grokToolName("synthetic_tools__missing"),
+      arguments: {},
+    });
+    expect(encoded.statusCode).toBe(canonical.statusCode);
+    expect(canonical.json().result.isError).toBe(true);
+    expect(encoded.json().result).toEqual(canonical.json().result);
+    const malformed = await post(true, "tools/call", {
+      name: "synthetic_tools__missing",
+      arguments: {},
+    });
+    expect(malformed.json().error.code).toBe(-32602);
+  });
 
   test("a legacy initialize keeps working and reports the legacy revision", async ({
     makeAgent,

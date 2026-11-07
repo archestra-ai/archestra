@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.5.0-rc.26](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.25...platform-v1.5.0-rc.26) (2026-11-07)
+
+
+### Features
+
+* **auth:** exchange OIDC tokens for short-lived service account tokens ([#10411](https://github.com/archestra-ai/archestra/issues/10411)) ([a5e9617](https://github.com/archestra-ai/archestra/commit/a5e961799790f0f8fd9636bb708026f3733f60bb))
+* **llm-logs:** show runtime handoffs and routing decisions in session trace ([#10344](https://github.com/archestra-ai/archestra/issues/10344)) ([a12c921](https://github.com/archestra-ai/archestra/commit/a12c9211d2786768ad631af770f4bfbded4410d6))
+* **observability:** report errors to Sentry by default, not PostHog ([#10373](https://github.com/archestra-ai/archestra/issues/10373)) ([2f00ba7](https://github.com/archestra-ai/archestra/commit/2f00ba7b135c25195fcab2f828b9a53aace53c06))
+* **release:** pin released images by digest ([#10412](https://github.com/archestra-ai/archestra/issues/10412)) ([5210148](https://github.com/archestra-ai/archestra/commit/52101487b13ca0760d01d0167740bd3bff471e59))
+
+
+### Bug Fixes
+
+* **mcp:** show pod logs inline when Test Connection fails ([#10383](https://github.com/archestra-ai/archestra/issues/10383)) ([d8633c9](https://github.com/archestra-ai/archestra/commit/d8633c997042d214623b02f9ffe81a810889b593))
+* **service-accounts:** use the deployment's app name in the federated credential dialog ([#10419](https://github.com/archestra-ai/archestra/issues/10419)) ([6e06ffa](https://github.com/archestra-ai/archestra/commit/6e06ffa209f35269fbf3502bada6644f7c674401))
+
+
+### Dependencies
+
+* bump the go-dependencies group in /platform/docker/dagger-dockercompat with 3 updates ([#10397](https://github.com/archestra-ai/archestra/issues/10397)) ([abdc7c4](https://github.com/archestra-ai/archestra/commit/abdc7c4e10ed056fdc364586d2da4cf644995baf))
+
 ## [1.5.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.24...platform-v1.5.0-rc.25) (2026-11-07)
 
 

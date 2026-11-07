@@ -340,6 +340,22 @@ describe("isEnterpriseOnlyRoute", () => {
     ).toBe(true);
   });
 
+  it("gates workload identity federation but not the rest of service accounts", () => {
+    expect(
+      isEnterpriseOnlyRoute("/api/service-accounts/sa-1/federated-credentials"),
+    ).toBe(true);
+    expect(
+      isEnterpriseOnlyRoute(
+        "/api/service-accounts/sa-1/federated-credentials/cred-1",
+      ),
+    ).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/workload-identity/token")).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/service-accounts/sa-1")).toBe(false);
+    expect(isEnterpriseOnlyRoute("/api/service-accounts/sa-1/tokens")).toBe(
+      false,
+    );
+  });
+
   it("should return false for regular team routes", () => {
     expect(isEnterpriseOnlyRoute("/api/teams")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/teams/team-123")).toBe(false);

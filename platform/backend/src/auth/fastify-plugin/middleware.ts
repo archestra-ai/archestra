@@ -44,6 +44,7 @@ import {
   SKILL_MARKETPLACE_STATIC_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
+  WORKLOAD_IDENTITY_TOKEN_PATH,
 } from "@/routes/route-paths";
 import {
   appIdFromConnectorPath,
@@ -242,6 +243,9 @@ export class Authnz {
       // GitHub Actions token exchange: the OIDC token in the body is the
       // proof, verified in-route against the gateway's GitHub Actions setting.
       (method === "POST" && url === GITHUB_ACTIONS_TOKEN_PATH) ||
+      // Workload identity token exchange: the OIDC token in the body is the
+      // proof, verified in-route against the account's federated credentials.
+      (method === "POST" && url === WORKLOAD_IDENTITY_TOKEN_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&
@@ -531,7 +535,11 @@ export class Authnz {
       return request.serviceAccountAuthResult;
     }
     try {
-      const result = await ServiceAccountModel.verifyToken(authHeader);
+      // RFC 6750 clients send `Bearer <token>`; the API has always taken the
+      // bare token. Both name the same service-account token.
+      const result = await ServiceAccountModel.verifyToken(
+        authHeader.replace(/^Bearer\s+/i, ""),
+      );
       if (result) {
         request.serviceAccountAuthResult = result;
       }

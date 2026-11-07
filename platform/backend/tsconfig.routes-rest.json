@@ -92,6 +92,7 @@
     "src/routes/runtime-credential/runtime-credential.routes.ts",
     "src/routes/schedule-trigger.ts",
     "src/routes/secrets.ts",
+    "src/routes/service-account-federated-credential/service-account-federated-credential.routes.ts",
     "src/routes/service-account.ts",
     "src/routes/session/session.routes.ts",
     "src/routes/site-notification.ts",
@@ -108,6 +109,7 @@
     "src/routes/user-token.ts",
     "src/routes/user.ts",
     "src/routes/virtual-api-key/virtual-api-key.routes.ts",
+    "src/routes/workload-identity/workload-identity.routes.ts",
     "src/routes/xai-subscription-auth/xai-subscription-auth.routes.ts"
   ],
   "include": [

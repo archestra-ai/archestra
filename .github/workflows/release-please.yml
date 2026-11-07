@@ -511,13 +511,15 @@ jobs:
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
-    # The Helm chart only references the version tag (not image content), so it can run
-    # in parallel with Docker image builds. The publish-github-release job ensures all
-    # artifacts are ready before the release is made visible.
+    # The chart pins the platform's default images to the digests the
+    # release-images publisher verified and published, so it waits for them.
+    # The publish-github-release job ensures all artifacts are ready before the
+    # release is made visible.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: $/.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
+      - publish-ghcr-release-images
     permissions:
       contents: write # Required to publish Helm chart metadata from the repository.
       id-token: write # Required for Workload Identity Federation.
@@ -526,6 +528,7 @@ jobs:
       # Stable charts remain workflow artifacts until the publication job.
       push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      release_image_digests: ${{ needs.publish-ghcr-release-images.outputs.images }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -553,6 +556,9 @@ jobs:
       contents: read # Check out the publication policy script.
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
+    outputs:
+      # {"<image>": "sha256:<digest>"} for the chart to pin.
+      images: ${{ steps.subjects.outputs.images }}
     env:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
@@ -590,8 +596,11 @@ jobs:
           merge-multiple: true
 
       - name: Collect staged release digests
+        id: subjects
         shell: bash
-        run: bash .github/scripts/release-ghcr-subjects.sh release-images
+        run: |
+          bash .github/scripts/release-ghcr-subjects.sh release-images
+          echo "images=$(jq -c . release-ghcr-images.json)" >> "$GITHUB_OUTPUT"
 
       - name: Attest staged release images
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -701,9 +710,9 @@ jobs:
         run: |
           # Quickstart pulls archestra/platform:latest, so it follows the newest
           # published release, release candidates included. Companion and agent
-          # images keep :latest on the stable line: stable platforms reference
-          # the agent images by that tag. This step runs after the companion
-          # images are tagged, so a stable platform never points ahead of them.
+          # images keep :latest on the stable line for anyone who pulls them by
+          # hand; platforms reference their own version's images. This step runs
+          # after the companion images are published.
           PLATFORM_IMAGE=$(cat release-images/platform)
           if [ "$PRESERVE_LATEST" = true ]; then
             echo "Preserving the newer platform latest tag."

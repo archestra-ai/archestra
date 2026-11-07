@@ -1750,12 +1750,12 @@ describe("Agent Runtime catalog images", () => {
     );
   });
 
-  test("follows the stable alias on a stable platform release", async () => {
+  test("uses the platform version on a stable release, not a moving alias", async () => {
     vi.stubEnv("ARCHESTRA_VERSION", "1.3.52");
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
-      "ghcr.io/archestra-ai/agent-claude-code:latest",
+      "ghcr.io/archestra-ai/agent-claude-code:1.3.52",
     );
   });
 
@@ -1780,6 +1780,99 @@ describe("Agent Runtime catalog images", () => {
     expect(cfg.agentRuntime.catalogImages.hermes).toBe(
       "mirror.example:5000/team/agent-hermes:v2",
     );
+  });
+});
+
+describe("release image digests", () => {
+  const digest = (char: string) => `sha256:${char.repeat(64)}`;
+  const shipped = JSON.stringify({
+    version: "1.6.0",
+    images: {
+      "mcp-server-base": digest("a"),
+      "p4-shim": digest("b"),
+      "agent-codex": digest("c"),
+    },
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "");
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", "");
+    vi.stubEnv("ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE", "");
+    vi.stubEnv("ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE", "");
+    vi.stubEnv(
+      "ARCHESTRA_DATABASE_URL",
+      "postgresql://archestra:pass@localhost:5432/archestra",
+    );
+  });
+
+  test("pins the default release images to the digests shipped with this version", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      `ghcr.io/archestra-ai/mcp-server-base:1.6.0@${digest("a")}`,
+    );
+    expect(cfg.kb.perforceShim.image).toBe(
+      `ghcr.io/archestra-ai/p4-shim:1.6.0@${digest("b")}`,
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      `ghcr.io/archestra-ai/agent-codex:1.6.0@${digest("c")}`,
+    );
+    // No digest shipped for this image: it keeps its version tag.
+    expect(cfg.agentRuntime.catalogImages.hermes).toBe(
+      "ghcr.io/archestra-ai/agent-hermes:1.6.0",
+    );
+  });
+
+  test("leaves operator overrides and mirrors exactly as configured", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    vi.stubEnv(
+      "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE",
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "mirror.example");
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      "mirror.example/agent-codex:1.6.0",
+    );
+  });
+
+  test("falls back to version tags when the digests belong to another version or none ship", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.1");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "ghcr.io/archestra-ai/mcp-server-base:1.6.1",
+    );
+
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", "");
+    const { default: dev } = await import("./config");
+    expect(dev.agentRuntime.catalogImages.codex).toBe(
+      "ghcr.io/archestra-ai/agent-codex:1.6.1",
+    );
+  });
+
+  test("rejects a malformed digest map", async () => {
+    const { parseReleaseImageDigests } = await import("./config");
+    for (const rawValue of [
+      "not json",
+      JSON.stringify({ version: "1.6.0", images: { codex: "latest" } }),
+      JSON.stringify({ version: "1.6.0", images: { "../x": digest("a") } }),
+      JSON.stringify({ images: {} }),
+      JSON.stringify({ version: "1.6.0", images: {}, extra: true }),
+    ]) {
+      expect(() =>
+        parseReleaseImageDigests({ rawValue, appVersion: "1.6.0" }),
+      ).toThrow(/ARCHESTRA_RELEASE_IMAGE_DIGESTS/);
+    }
   });
 });
 

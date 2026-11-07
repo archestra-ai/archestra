@@ -24,7 +24,6 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
-  getAgentCatalogImageTag,
   gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
@@ -36,7 +35,9 @@ import {
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  pinReleaseImage,
   providerSupportsChat,
+  type ReleaseImageDigests,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -1639,9 +1640,46 @@ export const getSentryConfig = () =>
     analyticsEnabled: getAnalyticsConfig().enabled,
   });
 
+/**
+ * Parse `ARCHESTRA_RELEASE_IMAGE_DIGESTS`, the digests the release pipeline
+ * writes into the Helm chart: `{"version": "<platform version>", "images":
+ * {"<image name>": "sha256:<hex>"}}`. Digests recorded for another version
+ * (a chart run with a different platform image) are ignored, so the default
+ * images fall back to their version tags. Unset, as in development builds,
+ * there is nothing to pin. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseReleaseImageDigests(params: {
+  rawValue: string | undefined;
+  appVersion: string;
+}): ReleaseImageDigests | null {
+  const raw = params.rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_RELEASE_IMAGE_DIGESTS must be JSON");
+  }
+  if (!isReleaseImageDigests(parsed)) {
+    throw new Error(
+      'ARCHESTRA_RELEASE_IMAGE_DIGESTS must look like {"version": "1.2.3", "images": {"mcp-server-base": "sha256:<64 hex>"}}',
+    );
+  }
+  return parsed.version === params.appVersion ? parsed : null;
+}
+
+const releaseImageDigests = parseReleaseImageDigests({
+  rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
+  appVersion,
+});
+
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
+  pinReleaseImage({
+    image: `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`,
+    digests: releaseImageDigests,
+  });
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -2601,17 +2639,23 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
     /**
      * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
-     * them can move the registry and pin the tag; the tag otherwise follows
-     * the platform version.
+     * them can move the registry and pin the tag; the tag otherwise is the
+     * platform version, pinned to the digest its release shipped with.
      */
-    catalogImages: getAgentCatalogImages({
-      registry:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
-        AGENT_CATALOG_IMAGE_REGISTRY,
-      tag:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
-        getAgentCatalogImageTag(appVersion),
-    }),
+    catalogImages: Object.fromEntries(
+      Object.entries(
+        getAgentCatalogImages({
+          registry:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+            AGENT_CATALOG_IMAGE_REGISTRY,
+          tag:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() || appVersion,
+        }),
+      ).map(([id, image]) => [
+        id,
+        pinReleaseImage({ image, digests: releaseImageDigests }),
+      ]),
+    ) as ReturnType<typeof getAgentCatalogImages>,
     /**
      * Pre-pull the whole catalog onto every runtime node at startup and on
      * each platform version, so a cold-started Agent does not wait on a
@@ -3753,7 +3797,10 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+        pinReleaseImage({
+          image: `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+          digests: releaseImageDigests,
+        }),
       p4Binary: {
         x64: {
           url:
@@ -4232,6 +4279,25 @@ export const shouldRunWorker =
 export default config;
 
 // ===== Internal helpers =====
+
+function isReleaseImageDigests(value: unknown): value is ReleaseImageDigests {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const { version, images, ...rest } = value as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || typeof version !== "string" || !version) {
+    return false;
+  }
+  if (typeof images !== "object" || images === null || Array.isArray(images)) {
+    return false;
+  }
+  return Object.entries(images).every(
+    ([name, digest]) =>
+      /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
+      typeof digest === "string" &&
+      /^sha256:[0-9a-f]{64}$/.test(digest),
+  );
+}
 
 /**
  * Get the environment variable API key for a provider.

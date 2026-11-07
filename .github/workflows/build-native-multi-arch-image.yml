@@ -94,6 +94,12 @@ on:
         required: false
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
         required: false
+      # Release packages (ghcr.io/archestra-ai/<image>) accept pushes only from
+      # this release-publish environment secret; the repository token writes
+      # only ghcr.io/archestra-ai/ci. Callers pass it by name so the
+      # environment can supply it.
+      GHCR_RELEASE_PUBLISH_TOKEN:
+        required: false
 
 permissions: {}
 
@@ -108,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to compare the image's source and build recipe.
-      packages: write # Publish images and caches using the repository token.
+      packages: write # Publish CI images and caches with the repository token.
       id-token: write # Required for GAR authentication; unused by GHCR callers.
     outputs:
       reused: ${{ steps.reuse.outputs.reused }}
@@ -120,13 +126,13 @@ jobs:
           fetch-depth: 2
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
+      # No release credential: release images are never reused, so a release
+      # namespace fails closed here.
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          image-registry: ${{ inputs.image_registry }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
@@ -161,7 +167,7 @@ jobs:
         os_and_arch: ${{ inputs.amd64_only && fromJSON('["linux/amd64"]') || fromJSON('["linux/amd64", "linux/arm64"]') }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
-      packages: write # Publish images and caches using the repository token.
+      packages: write # Publish CI images and caches with the repository token.
       id-token: write # Required for Workload Identity Federation when pushing images.
     steps:
       - name: Checkout repository
@@ -173,11 +179,11 @@ jobs:
 
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          image-registry: ${{ inputs.image_registry }}
+          release-username: ${{ vars.GHCR_RELEASE_PUBLISH_USERNAME }}
+          release-token: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
@@ -306,7 +312,7 @@ jobs:
       - build-image
     permissions:
       contents: read # Required to download per-arch digests and publish the merged manifest.
-      packages: write # Publish images and caches using the repository token.
+      packages: write # Publish CI images and caches with the repository token.
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
     steps:
       - name: Checkout repository
@@ -327,11 +333,11 @@ jobs:
       # manifest operation and runs on the preinstalled buildx CLI.
       - name: Log in to GHCR
         if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
-        uses: ./.github/actions/docker-login
+        uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          image-registry: ${{ inputs.image_registry }}
+          release-username: ${{ vars.GHCR_RELEASE_PUBLISH_USERNAME }}
+          release-token: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}

@@ -90,18 +90,20 @@ class BackportTests(unittest.TestCase):
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
 
-    def test_fork_and_deleted_source_repositories_are_ineligible(self):
-        for repository in [{"full_name": "contributor/fork"}, None]:
+    def test_fork_and_deleted_source_repositories_backport_the_merge_commit(self):
+        for number, repository in enumerate([{"full_name": "contributor/fork"}, None], start=1):
             with self.subTest(repository=repository):
                 self.pr["head"]["repo"] = repository
-                with self.assertRaisesRegex(ValueError, "branches in this repository"):
-                    self.bot.run(42)
-                with self.assertRaisesRegex(ValueError, "branches in this repository"):
-                    self.bot.run(42, "release/1.3")
                 self.bot.poll()
-                self.assertEqual(self.bot.pulls, [])
-                self.assertEqual(self.bot.comments, [])
-                self.assertEqual(self.git("ls-remote", "--heads", "origin", "refs/heads/backport/*"), "")
+                self.assertEqual(len(self.bot.pulls), 1)
+                self.assertEqual(self.bot.pulls[0]["base"], "release/1.3")
+                self.git("fetch", "origin")
+                ref = "origin/backport/release-1.3/pr-42"
+                self.assertEqual(self.git("show", ref + ":feature.txt"), "fixed")
+                self.assertIn(f"(cherry picked from commit {self.pr['merge_commit_sha']})",
+                              self.git("show", "-s", "--format=%B", ref))
+                if number == 1:
+                    self.setUp()
 
     def test_label_before_merge_is_processed_by_later_scan_once(self):
         self.pr["merged"] = False
@@ -287,6 +289,7 @@ for (const eventName of ['push', 'schedule', 'workflow_dispatch', 'pull_request'
   assert.equal(allowed(eventName, {repo:'contributor/fork'}), false, eventName);
 }
 assert.equal(allowed('pull_request', {merged:false}), false);
+// Fork label events carry no secrets; the scheduled poll backports those PRs.
 assert.equal(allowed('pull_request', {headRepo:'contributor/fork'}), false);
 assert.equal(allowed('pull_request', {base:'release/1.3'}), false);
 assert.equal(allowed('pull_request', {label:'bug'}), false);

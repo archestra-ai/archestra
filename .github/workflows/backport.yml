@@ -3,7 +3,8 @@ name: Open Backport PRs
 on:
   push:
     branches: [main]
-  # Only merged PRs from branches in this repository can request backports.
+  # Label events only for PRs from branches in this repository: fork PR events
+  # carry no secrets, so the scheduled poll backports merged fork PRs instead.
   pull_request:
     branches: [main]
     types: [labeled]

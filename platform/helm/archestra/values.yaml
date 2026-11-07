@@ -617,10 +617,19 @@ archestra:
       timeoutSeconds: 45
       failureThreshold: 3
 
+  # Digests of the images released with this chart's version (MCP server base,
+  # p4 shim, Agent catalog images), filled in by the release pipeline. The
+  # platform pins its default images to them, so an install runs exactly the
+  # images released and attested with it. Leave it as is: a mirror or an
+  # explicit image setting is used as configured, and charts built outside a
+  # release ship none, so the images follow their version tags.
+  releaseImageDigests: {}
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
     # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.25" # x-release-please-version
+    # (released charts pin it to its digest; see releaseImageDigests)
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers

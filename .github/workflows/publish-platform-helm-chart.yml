@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ""
+      release_image_digests:
+        description: 'Release image digests ({"<image>": "sha256:<hex>"}) to pin the chart to; empty ships none'
+        required: false
+        type: string
+        default: ""
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -55,6 +60,13 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           registry: europe-west1-docker.pkg.dev
+
+      - name: Pin release image digests
+        if: ${{ inputs.release_image_digests != '' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          DIGESTS: ${{ inputs.release_image_digests }}
+        run: python3 -I ../../../.github/scripts/release-chart-digests.py values.yaml
 
       - name: helm package
         env:

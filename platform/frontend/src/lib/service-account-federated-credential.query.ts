@@ -3,6 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { runBulkAction } from "./bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type FederatedCredential =
@@ -87,6 +88,28 @@ export function useDeleteFederatedCredential(serviceAccountId: string) {
       toast.success("Federated credential deleted");
       invalidate(queryClient, serviceAccountId);
     },
+  });
+}
+
+/**
+ * Deletes several credentials of one account. Reports one outcome for the
+ * whole selection (the caller toasts it), not a toast per credential.
+ */
+export function useBulkDeleteFederatedCredentials(serviceAccountId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (credentials: readonly FederatedCredential[]) =>
+      runBulkAction({
+        items: credentials,
+        describe: (credential) => credential.name,
+        run: async (credential) => {
+          const { error } = await deleteServiceAccountFederatedCredential({
+            path: { id: serviceAccountId, credentialId: credential.id },
+          });
+          if (error) throw toApiError(error);
+        },
+      }),
+    onSettled: () => invalidate(queryClient, serviceAccountId),
   });
 }
 

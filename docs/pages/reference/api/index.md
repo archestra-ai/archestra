@@ -34,7 +34,7 @@ Click your name in the sidebar, go to **API Keys**, and click **Create API Key**
 
 1. Go to **Settings → Service Accounts** and click **Create service account**.
 2. Give it a role that holds only the permissions the job needs.
-3. Open the account and click **Create API key**.
+3. On the account's **API Keys** tab, click **Create key**.
 
 - To export organization-wide costs, the role needs [`llmCost:read`](/docs/reference/permissions#llmCost:read). Add [`member:read`](/docs/reference/permissions#member:read) to break costs down by person, agent, or virtual key; without it, those breakdowns cover only the account's own usage.
 - To export every log, the role needs [`log:read`](/docs/reference/permissions#log:read) and [`log:admin`](/docs/reference/permissions#log:admin).

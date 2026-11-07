@@ -25,7 +25,7 @@ A federated job leaves nothing to rotate or leak: each token it gets expires aft
 A federated credential says which tokens to trust: their issuer, audience, subject, and any other claims you require.
 
 1. Go to **Settings → Service Accounts** and open the account.
-2. Open **Federated credentials** and click **Add federated credential**.
+2. Open the **Federated Credentials** tab and click **Add credential**.
 3. Pick the **Identity provider**. It fills in the **Issuer URL**.
 4. Keep **Audience** as your Archestra URL, unless your issuer requires another value. The job must request its token with this audience.
 5. Enter the **Subject**, exactly as the token's `sub` claim carries it.
@@ -47,7 +47,7 @@ A GitHub Actions job that names an `environment:` gets the environment subject, 
 
 ## Exchange a Token in GitHub Actions
 
-The job asks GitHub for an OIDC token, then trades it for an Archestra token at `/api/workload-identity/token` ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693) token exchange). Copy the request at the bottom of the **Federated credentials** tab: it already holds the account's id.
+The job asks GitHub for an OIDC token, then trades it for an Archestra token at `/api/workload-identity/token` ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693) token exchange). When you add a federated credential, Archestra shows this request with the account's id already filled in.
 
 ```yaml
 permissions:

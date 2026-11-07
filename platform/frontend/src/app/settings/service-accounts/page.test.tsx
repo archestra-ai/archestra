@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -37,56 +37,15 @@ import {
 } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
+import {
+  account,
+  baseHandlers,
+  origin,
+} from "./_parts/service-account.test-data";
 import ServiceAccountsSettingsPage from "./page";
 
-const origin = "http://localhost:9000";
-const account = {
-  id: "account-1",
-  organizationId: "org-1",
-  name: "Automation worker",
-  icon: null,
-  role: "member",
-  teamId: null,
-  disabled: false,
-  tokenCount: 1,
-  activeTokenCount: 1,
-  soonestExpiryAt: null,
-  lastUsedAt: null,
-  labels: [],
-  createdAt: "2026-09-01T00:00:00.000Z",
-  updatedAt: "2026-09-01T00:00:00.000Z",
-  createdBy: null,
-};
-const updates: unknown[] = [];
-const server = setupServer(
-  http.get(`${origin}/api/service-accounts`, () =>
-    HttpResponse.json([account]),
-  ),
-  http.get(`${origin}/api/service-accounts/:id`, () =>
-    HttpResponse.json({ ...account, tokens: [] }),
-  ),
-  http.get(`${origin}/api/service-accounts/labels/keys`, () =>
-    HttpResponse.json([]),
-  ),
-  http.get(`${origin}/api/roles`, () => HttpResponse.json([])),
-  http.get(`${origin}/api/teams`, () =>
-    HttpResponse.json({
-      data: [{ id: "team-platform", name: "Platform" }],
-      pagination: {
-        currentPage: 1,
-        limit: 100,
-        total: 1,
-        totalPages: 1,
-        hasNext: false,
-        hasPrev: false,
-      },
-    }),
-  ),
-  http.patch(`${origin}/api/service-accounts/:id`, async ({ request }) => {
-    updates.push(await request.json());
-    return HttpResponse.json({ ...account, ...(updates.at(-1) as object) });
-  }),
-);
+const server = setupServer(...baseHandlers);
+const push = vi.fn();
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
@@ -99,13 +58,12 @@ afterAll(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
-  updates.length = 0;
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
   vi.mocked(usePathname).mockReturnValue("/settings/service-accounts");
   vi.mocked(useRouter).mockReturnValue({
-    push: vi.fn(),
+    push,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
@@ -123,178 +81,20 @@ beforeEach(() => {
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
 });
 
-test("edits a service account from its table action", async () => {
+test("opens an account's page from its row and its editor from the pencil", async () => {
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
+  renderPage();
+
+  await user.click(await screen.findByText("Never used"));
+  expect(push).toHaveBeenCalledWith(`/settings/service-accounts/${account.id}`);
 
   await user.click(
-    await screen.findByRole("button", {
+    screen.getByRole("button", {
       name: "Edit service account Automation worker",
     }),
   );
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  await user.clear(within(dialog).getByLabelText("Display name"));
-  await user.type(
-    within(dialog).getByLabelText("Display name"),
-    "Automation runner",
-  );
-  await user.click(within(dialog).getByRole("button", { name: "Save" }));
-  await waitFor(() =>
-    expect(updates).toEqual([
-      { name: "Automation runner", icon: null, role: "member", labels: [] },
-    ]),
-  );
-});
-
-test("links a service account to a team", async () => {
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Edit service account Automation worker",
-    }),
-  );
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  await user.click(within(dialog).getByRole("combobox", { name: "Team" }));
-  await user.click(await screen.findByRole("option", { name: "Platform" }));
-  await user.click(within(dialog).getByRole("button", { name: "Save" }));
-
-  await waitFor(() =>
-    expect(updates).toEqual([
-      {
-        name: "Automation worker",
-        icon: null,
-        role: "member",
-        teamId: "team-platform",
-        labels: [],
-      },
-    ]),
-  );
-});
-
-test("shows key guidance and the request example after the table", async () => {
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Edit service account Automation worker",
-    }),
-  );
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  await user.click(within(dialog).getByRole("button", { name: "API keys" }));
-
-  const guidance = within(dialog).getByText(
-    /Keys let scripts and integrations call the/,
-  );
-  const example = within(dialog).getByText(
-    /Authenticate a request as this service account/,
-  );
-  const table = within(dialog).getByRole("table");
-  expect(
-    table.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    table.compareDocumentPosition(example) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-});
-
-test("keeps label drafts when Advanced collapses and saves them with the account", async () => {
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Edit service account Automation worker",
-    }),
-  );
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  expect(within(dialog).getByLabelText("Label key")).not.toBeVisible();
-  await user.click(within(dialog).getByRole("button", { name: "Advanced" }));
-  await user.type(within(dialog).getByLabelText("Label key"), "environment");
-  await user.type(within(dialog).getByLabelText("Label value"), "preview");
-  await user.click(within(dialog).getByRole("button", { name: "Advanced" }));
-  expect(within(dialog).getByLabelText("Label key")).not.toBeVisible();
-  await user.click(within(dialog).getByRole("button", { name: "API keys" }));
-  await user.click(within(dialog).getByRole("button", { name: "General" }));
-  await user.click(within(dialog).getByRole("button", { name: "Save" }));
-  await waitFor(() =>
-    expect(updates).toEqual([
-      {
-        name: account.name,
-        icon: null,
-        role: "member",
-        labels: [{ key: "environment", value: "preview" }],
-      },
-    ]),
-  );
-});
-
-test("explains missing keys through a compact sidebar tooltip", async () => {
-  server.use(
-    http.get(`${origin}/api/service-accounts/:id`, () =>
-      HttpResponse.json({
-        ...account,
-        tokenCount: 0,
-        activeTokenCount: 0,
-        tokens: [],
-      }),
-    ),
-  );
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-  await user.click(await screen.findByRole("button", { name: account.name }));
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  const indicator = await within(dialog).findByRole("img", {
-    name: "API key status",
-  });
-  expect(
-    within(dialog).queryByText("This service account cannot authenticate"),
-  ).not.toBeInTheDocument();
-  expect(within(dialog).queryByText("No keys")).not.toBeInTheDocument();
-  await user.hover(indicator);
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "This service account has no API keys, so it cannot authenticate. Create one to start using it.",
+  expect(push).toHaveBeenLastCalledWith(
+    `/settings/service-accounts/${account.id}/edit`,
   );
 });
 
@@ -326,46 +126,6 @@ test("summarizes multiple roles and reveals the full assignment in a tooltip", a
     expect(within(tooltip).getByText(name)).toBeVisible();
 });
 
-test("read-only viewers can expand labels without being allowed to edit them", async () => {
-  vi.mocked(useHasPermissions).mockImplementation(
-    (permissions) =>
-      ({
-        data: !permissions.serviceAccount?.includes("update"),
-        isPending: false,
-      }) as unknown as ReturnType<typeof useHasPermissions>,
-  );
-  server.use(
-    http.get(`${origin}/api/service-accounts`, () =>
-      HttpResponse.json([
-        { ...account, labels: [{ key: "environment", value: "preview" }] },
-      ]),
-    ),
-  );
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-  await user.click(await screen.findByRole("button", { name: account.name }));
-  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
-  const advanced = within(dialog).getByRole("button", { name: "Advanced" });
-  expect(advanced).toBeEnabled();
-  await user.click(advanced);
-  expect(within(dialog).getByText("environment:")).toBeVisible();
-  expect(within(dialog).getByLabelText("Label key")).toBeDisabled();
-  expect(
-    within(dialog).getByRole("button", { name: "Remove label" }),
-  ).toBeDisabled();
-  expect(
-    within(dialog).queryByRole("button", { name: "Save" }),
-  ).not.toBeInTheDocument();
-});
-
 test("offers row edits only on accounts the user holds an update grant for", async () => {
   mockServiceAccountGrants([
     { resource: "serviceAccount", action: "update", scope: "another-account" },
@@ -388,27 +148,7 @@ test("offers row edits only on accounts the user holds an update grant for", asy
   ).not.toBeInTheDocument();
 });
 
-test("searches API key names and restores results after clearing", async () => {
-  const tokens = ["Deployment key", "Backup key"].map((name, index) => ({
-    id: `key-${index}`,
-    name,
-    tokenStart: `preview-${index}`,
-    disabled: false,
-    expiresAt: null,
-    lastUsedAt: null,
-    createdAt: account.createdAt,
-  }));
-  server.use(
-    http.get(`${origin}/api/service-accounts/:id`, () =>
-      HttpResponse.json({
-        ...account,
-        tokens,
-        tokenCount: 2,
-        activeTokenCount: 2,
-      }),
-    ),
-  );
-  const user = userEvent.setup();
+function renderPage() {
   render(
     <QueryClientProvider
       client={
@@ -418,23 +158,7 @@ test("searches API key names and restores results after clearing", async () => {
       <ServiceAccountsSettingsPage />
     </QueryClientProvider>,
   );
-  await user.click(await screen.findByRole("button", { name: account.name }));
-  await user.click(screen.getByRole("button", { name: "API keys" }));
-  expect(await screen.findByText("Deployment key")).toBeVisible();
-  expect(screen.getByText("Backup key")).toBeVisible();
-  const search = screen.getByPlaceholderText("Search API keys by name");
-  await user.type(search, "DEPLOY");
-  await waitFor(() =>
-    expect(screen.queryByText("Backup key")).not.toBeInTheDocument(),
-  );
-  expect(screen.getByText("Deployment key")).toBeVisible();
-  await user.clear(search);
-  expect(await screen.findByText("Backup key")).toBeVisible();
-  await user.type(search, "unknown");
-  expect(
-    await screen.findByText("No API keys match your filters"),
-  ).toBeVisible();
-});
+}
 
 function mockServiceAccountGrants(
   grants: { resource: string; action: string; scope: string }[],
@@ -443,80 +167,3 @@ function mockServiceAccountGrants(
     data: grants,
   } as unknown as ReturnType<typeof useScopedCapabilities>);
 }
-
-test("adds a federated credential with exact claim conditions", async () => {
-  const created: unknown[] = [];
-  server.use(
-    http.get(`${origin}/api/service-accounts/:id/federated-credentials`, () =>
-      HttpResponse.json(
-        created.map((body, index) => ({
-          ...(body as object),
-          id: `00000000-0000-4000-8000-00000000000${index}`,
-          serviceAccountId: account.id,
-          lastUsedAt: null,
-          createdAt: account.createdAt,
-          updatedAt: account.createdAt,
-        })),
-      ),
-    ),
-    http.post(
-      `${origin}/api/service-accounts/:id/federated-credentials`,
-      async ({ request }) => {
-        const body = await request.json();
-        created.push(body);
-        return HttpResponse.json({
-          ...(body as object),
-          id: "00000000-0000-4000-8000-000000000000",
-          serviceAccountId: account.id,
-          lastUsedAt: null,
-          createdAt: account.createdAt,
-          updatedAt: account.createdAt,
-        });
-      },
-    ),
-  );
-  const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <ServiceAccountsSettingsPage />
-    </QueryClientProvider>,
-  );
-  await user.click(await screen.findByRole("button", { name: account.name }));
-  await user.click(
-    screen.getByRole("button", { name: "Federated credentials" }),
-  );
-  expect(await screen.findByText("No federated credentials")).toBeVisible();
-
-  await user.click(
-    screen.getByRole("button", { name: "Add federated credential" }),
-  );
-  const dialog = await screen.findByRole("dialog", {
-    name: "Add federated credential",
-  });
-  await user.type(within(dialog).getByLabelText("Name"), "infra apply");
-  await user.type(
-    within(dialog).getByLabelText("Subject"),
-    "repo:acme/infra:environment:production",
-  );
-  await user.click(
-    within(dialog).getByRole("button", { name: "Add condition" }),
-  );
-  await user.type(within(dialog).getByLabelText("Claim 1"), "repository");
-  await user.type(within(dialog).getByLabelText("Value 1"), "acme/infra");
-  await user.click(within(dialog).getByRole("button", { name: "Add" }));
-
-  await waitFor(() => expect(created).toHaveLength(1));
-  expect(created[0]).toEqual({
-    name: "infra apply",
-    // GitHub Actions is the default provider.
-    issuer: "https://token.actions.githubusercontent.com",
-    audience: window.location.origin,
-    subject: "repo:acme/infra:environment:production",
-    claimConditions: { repository: "acme/infra" },
-  });
-  expect(await screen.findByText("infra apply")).toBeVisible();
-});

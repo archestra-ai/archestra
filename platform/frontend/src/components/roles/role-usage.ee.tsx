@@ -393,7 +393,7 @@ function useUsageData(role: Role): UsageData {
       id: account.id,
       name: account.name,
       detail: account.disabled ? "Disabled" : "",
-      href: `/settings/service-accounts?search=${encodeURIComponent(account.name)}`,
+      href: `/settings/service-accounts/${account.id}`,
     }));
   return {
     teams: {

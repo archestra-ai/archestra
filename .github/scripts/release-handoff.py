@@ -230,7 +230,7 @@ def verify_archive(selection, image, arch, directory):
 
 
 def push(record, image, arch):
-    if not re.fullmatch(r"(?:docker\.io/archestra/platform|ghcr\.io/archestra-ai/[a-z0-9-]+)", image):
+    if not re.fullmatch(r"(?:docker\.io/archestra/platform|ghcr\.io/archestra-ai/ci/[a-z0-9-]+)", image):
         raise ValueError("Unexpected release image destination")
     directory = Path(os.environ["CANDIDATE_DIR"])
     # The archive has already passed checksum and provenance verification.

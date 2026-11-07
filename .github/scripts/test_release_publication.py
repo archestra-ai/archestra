@@ -10,15 +10,13 @@ import unittest
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / "workflows/release-please.yml"
+POLICY = Path(__file__).resolve().parent / "release-publication-policy.sh"
 
 
 class ReleasePublicationTests(unittest.TestCase):
     def run_guard(self, releases=(), *, api_status=0, version="1.3.51", freeze="false", ref="release/1.3"):
-        section = WORKFLOW.read_text().split(
-            "      - name: Check publication is still allowed\n", 1
-        )[1].split("      - name:", 1)[0]
-        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
-        # Use the workflow's actual --jq expression, not a duplicate of its filter.
+        script = POLICY.read_text()
+        # Use the script's actual --jq expression, not a duplicate of its filter.
         stub = """
 gh() {
   local query=
@@ -222,7 +220,7 @@ gh() {
                     self.assertNotEqual(result.returncode, 0)
                     self.assertFalse(output.exists())
 
-    def test_chart_destination_is_independent_and_requires_mcp_reference(self):
+    def test_chart_publication_requires_mcp_reference_and_writes_no_ghcr_tags(self):
         section = WORKFLOW.read_text().split(
             "      - name: Publish stable artifacts without rebuilding\n", 1
         )[1].split("      - name:", 1)[0]
@@ -250,10 +248,10 @@ gh() {
                     self.assertEqual(result.stdout, "")
                     continue
                 self.assertEqual(result.returncode, 0, result.stderr)
+                # GHCR tags, :latest included, belong to the release-images publisher.
                 self.assertEqual(result.stdout.splitlines(), [
                     "helm push archestra-platform-1.4.0.tgz "
                     "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
-                    f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
                 ])
 
     PLATFORM_IMAGE = "docker.io/archestra/platform@sha256:" + "b" * 64
@@ -412,6 +410,119 @@ docker() { printf 'docker %s\\n' "$*"; }
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("--draft=false --prerelease=false --latest=false", result.stdout)
+
+
+SCRIPTS = Path(__file__).resolve().parent
+DIGEST_A, DIGEST_B = "a" * 64, "b" * 64
+
+
+class GhcrPublicationTests(unittest.TestCase):
+    def collect(self, references):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        staged = Path(directory.name) / "release-images"
+        staged.mkdir()
+        for name, reference in references.items():
+            (staged / name).write_text(reference)
+        result = subprocess.run(
+            ["bash", str(SCRIPTS / "release-ghcr-subjects.sh"), "release-images"],
+            cwd=directory.name, capture_output=True, text=True, timeout=10,
+        )
+        outputs = {}
+        for name in ("release-ghcr-subjects.txt", "release-ghcr-images.json"):
+            path = Path(directory.name) / name
+            outputs[name] = path.read_text() if path.exists() else None
+        return result, outputs
+
+    def test_subjects_use_public_names_and_skip_docker_hub(self):
+        result, outputs = self.collect({
+            "mcp-server-base": f"ghcr.io/archestra-ai/ci/mcp-server-base@sha256:{DIGEST_A}",
+            "agent-codex": f"ghcr.io/archestra-ai/ci/agent-codex@sha256:{DIGEST_B}",
+            "platform": f"docker.io/archestra/platform@sha256:{DIGEST_A}",
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(outputs["release-ghcr-subjects.txt"].splitlines()), [
+            f"{DIGEST_A}  ghcr.io/archestra-ai/mcp-server-base",
+            f"{DIGEST_B}  ghcr.io/archestra-ai/agent-codex",
+        ])
+        self.assertEqual(json.loads(outputs["release-ghcr-images.json"]), {
+            "mcp-server-base": f"sha256:{DIGEST_A}", "agent-codex": f"sha256:{DIGEST_B}",
+        })
+
+    def test_subjects_reject_references_that_do_not_match_their_image(self):
+        for references in (
+            # Another image's digest under this name.
+            {"mcp-server-base": f"ghcr.io/archestra-ai/ci/agent-codex@sha256:{DIGEST_A}"},
+            # A release name instead of the ci/ staging repository.
+            {"mcp-server-base": f"ghcr.io/archestra-ai/mcp-server-base@sha256:{DIGEST_A}"},
+            # A tag instead of a digest.
+            {"mcp-server-base": "ghcr.io/archestra-ai/ci/mcp-server-base:1.4.0"},
+            # mcp-server-base ships with every release.
+            {"agent-codex": f"ghcr.io/archestra-ai/ci/agent-codex@sha256:{DIGEST_A}"},
+        ):
+            with self.subTest(references=references):
+                result, _ = self.collect(references)
+                self.assertNotEqual(result.returncode, 0)
+
+    def dispatch(self, *, version, preserve_latest, runs):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        images = Path(directory.name) / "images.json"
+        images.write_text(json.dumps({"mcp-server-base": f"sha256:{DIGEST_A}"}))
+        calls = Path(directory.name) / "calls"
+        # Stub only the GitHub CLI; the script's own --jq filter runs against
+        # the fixture run list.
+        stub = r"""
+gh() {
+  if [ "$1 $2 $3" = "api -X POST" ]; then
+    printf 'dispatch %s ' "$4" >> "$CALLS"; jq -c . >> "$CALLS"; return
+  fi
+  if [ "$1 $2" = "run watch" ]; then echo "watch $3" >> "$CALLS"; return "$WATCH_STATUS"; fi
+  local query=
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --jq ]; then query=$2; shift; fi
+    shift
+  done
+  printf '%s\n' "$RUNS" | jq -r "$query"
+}
+sleep() { :; }
+"""
+        result = subprocess.run(
+            ["bash", "-c", stub + f'source "{SCRIPTS / "release-ghcr-dispatch.sh"}" "{images}"'],
+            env=os.environ | {
+                "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
+                "PUBLISHER_REPO": "archestra-ai/release-images", "GITHUB_RUN_ID": "77",
+                "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
+                "WATCH_STATUS": "0",
+            },
+            capture_output=True, text=True, timeout=10,
+        )
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        payload = json.loads(lines[0].split(" ", 2)[2]) if lines else None
+        return result, payload, lines[1:]
+
+    def test_dispatch_moves_latest_only_for_the_newest_stable_line(self):
+        runs = [{"id": 5, "display_title": "Publish 1.4.0 [77-2]"}]
+        for version, preserve, latest in (
+            ("1.4.0", "false", True), ("1.3.80", "true", False), ("1.5.0-rc.3", "false", False),
+        ):
+            with self.subTest(version=version):
+                result, payload, rest = self.dispatch(version=version, preserve_latest=preserve, runs=runs)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(payload, {
+                    "event_type": "publish-release-images",
+                    "client_payload": {"request_id": "77-2", "version": version, "latest": latest,
+                                       "images": {"mcp-server-base": f"sha256:{DIGEST_A}"}},
+                })
+                self.assertEqual(rest, ["watch 5"])
+
+    def test_dispatch_waits_only_for_its_own_run(self):
+        runs = [{"id": 4, "display_title": "Publish 1.4.0 [77-1]"},
+                {"id": 3, "display_title": "Publish 1.4.0 [177-2]"}]
+        result, _, rest = self.dispatch(version="1.4.0", preserve_latest="false", runs=runs)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not start", result.stdout)
+        self.assertEqual(rest, [])
 
 
 if __name__ == "__main__":

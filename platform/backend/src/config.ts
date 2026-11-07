@@ -2657,6 +2657,16 @@ const config = {
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
     ),
     /**
+     * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
+     * GKE Sandbox node pool, so a run's processes do not share the node's
+     * kernel. Privileged runtimes never receive it: gVisor cannot host a
+     * privileged container, and their nested Docker needs one. Unset runs
+     * with the cluster's default runtime.
+     */
+    runtimeClassName:
+      process.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME?.trim() ||
+      undefined,
+    /**
      * How long a launched run may stay Pending before it is declared failed.
      * Covers node scale-up of a dedicated (scale-to-zero) Agent Runtime pool plus a
      * cold multi-GB image pull, which together overran the old fixed 5-minute

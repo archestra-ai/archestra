@@ -121,7 +121,11 @@ describe("useLlmModels", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // A failed fetch plus its retry can outlast waitFor's 1 s default on a
+    // loaded CI runner, so allow more time for the recovery to land.
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), {
+      timeout: 5_000,
+    });
     expect(result.current.data).toHaveLength(1);
     expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
   });

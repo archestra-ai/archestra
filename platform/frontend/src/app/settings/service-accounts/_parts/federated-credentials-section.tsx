@@ -456,8 +456,8 @@ function CredentialAddedDialog({
       <DialogBody className="space-y-2">
         <Label>Sign in from the workload</Label>
         <FieldDescription>
-          Exchange the workload&apos;s OIDC token for an {appName} token,
-          then send that as a Bearer token.{" "}
+          Exchange the workload&apos;s OIDC token for an {appName} token, then
+          send that as a Bearer token.{" "}
           {docsUrl ? (
             <ExternalDocsLink href={docsUrl}>How it works</ExternalDocsLink>
           ) : null}

@@ -137,9 +137,9 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `json` (one JSON object per line), `pretty` (colorized text)
   - The OTLP log exporter always receives structured records.
 
-- **`ARCHESTRA_ANALYTICS`** - Sends product analytics, instance heartbeats, and error reports to Archestra. Error reports go to Archestra's Sentry: the error and its stack trace, with request bodies, headers, query strings, emails, and recognizable credentials removed. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
+- **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images; off in development
-  - Values: `disabled` turns it off, error reports included. Any other value turns it on.
+  - Values: `disabled` turns it off. Any other value turns it on.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
   - Default: Archestra's PostHog project
@@ -147,17 +147,6 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_HOST`** - PostHog API host for analytics.
   - Default: `https://eu.i.posthog.com`
-
-- **`ARCHESTRA_SENTRY_BACKEND_DSN`** - Sends backend errors to your own Sentry project instead of Archestra's, with traces, logs, and profiles.
-  - Default: Archestra's Sentry project, errors only, unless analytics is off
-  - A DSN set here reports even with [`ARCHESTRA_ANALYTICS=disabled`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS).
-
-- **`ARCHESTRA_SENTRY_FRONTEND_DSN`** - Sends browser and frontend server errors to your own Sentry project instead of Archestra's, with traces and logs.
-  - Default: Archestra's Sentry project, errors only, unless analytics is off
-  - A DSN set here reports even with [`ARCHESTRA_ANALYTICS=disabled`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS).
-
-- **`ARCHESTRA_SENTRY_ENVIRONMENT`** - Environment tag on error reports.
-  - Default: `self-hosted` for reports to Archestra's project; otherwise `production` in the Docker images
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Blocks the app for all users with a full-screen message.
   - Default: unset (maintenance mode off)

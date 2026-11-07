@@ -1505,6 +1505,20 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`** - Set to `true` to export persisted administrative audit event metadata as OTLP logs through the configured OpenTelemetry endpoint. Default: `false`. Delivery is best-effort; see [Audit log export](/docs/admin/observability/audit-logs).
 
+- **`ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT`** - OTLP/HTTP endpoint that receives the audit export instead of [`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT). Set it to keep audit records apart from backend logs and traces, such as in a collector only your security team reads.
+  - Default: unset (audit records use the shared endpoint)
+  - Records go to `/v1/logs`. The shared endpoint's credentials are never sent here.
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME`** - Username for basic authentication to the audit endpoint.
+  - Default: unset. Used only together with [`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD).
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD`** - Password for basic authentication to the audit endpoint.
+  - Default: unset. Used only together with [`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME).
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER`** - Bearer token for the audit endpoint.
+  - Default: unset
+  - Takes precedence over basic authentication.
+
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.
   - Default: `0` (keep forever)
 

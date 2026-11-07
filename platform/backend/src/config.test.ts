@@ -17,6 +17,7 @@ import config, {
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
+  getAuditLogOtelExporter,
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
@@ -438,6 +439,40 @@ describe("getOtlpAuthHeaders", () => {
 
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("getAuditLogOtelExporter", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("shares the backend log pipeline when no endpoint is set", () => {
+    expect(getAuditLogOtelExporter(undefined)).toBeNull();
+    expect(getAuditLogOtelExporter("  ")).toBeNull();
+  });
+
+  test("sends to the logs path of its own endpoint with only its own credentials", () => {
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "shared-token";
+    delete process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER;
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318/")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: undefined,
+    });
+
+    process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER = "audit-token";
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: { Authorization: "Bearer audit-token" },
     });
   });
 });

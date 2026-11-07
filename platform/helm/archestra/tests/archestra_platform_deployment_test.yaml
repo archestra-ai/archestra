@@ -2426,6 +2426,21 @@ tests:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-otel-exporter-otlp-auth-bearer
 
+  - it: should use secretKeyRef for ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER: "audit-bearer-token"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-audit-log-otel-auth-bearer
+
   - it: should use secretKeyRef for ARCHESTRA_METRICS_SECRET when provided
     documentIndex: 1
     set:

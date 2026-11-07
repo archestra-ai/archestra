@@ -188,6 +188,24 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
 export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
   buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
 
+/**
+ * The audit log's own OTLP log exporter, or null when
+ * ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT is unset and audit records share the
+ * backend's log pipeline. A dedicated collector gets only its own credentials:
+ * the shared OTLP credentials belong to a different destination.
+ * @public — exported for testability
+ */
+export const getAuditLogOtelExporter = (
+  envValue: string | undefined = process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT,
+): Pick<OTLPExporterNodeConfigBase, "url" | "headers"> | null => {
+  const endpoint = envValue?.trim();
+  if (!endpoint) return null;
+  return {
+    url: getOtelExporterOtlpLogEndpoint(endpoint),
+    headers: buildOtlpAuthHeaders("ARCHESTRA_AUDIT_LOG_OTEL_AUTH"),
+  };
+};
+
 const buildOtlpAuthHeaders = (
   envPrefix: string,
 ): Record<string, string> | undefined => {
@@ -4243,6 +4261,7 @@ const config = {
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    otelExporter: getAuditLogOtelExporter(),
     // Retention is enterprise-licensed; the boot-time assertion in
     // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(

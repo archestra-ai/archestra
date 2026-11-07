@@ -14,8 +14,9 @@ name: Warm E2E Image Caches
 
 on:
   schedule:
-    # Daily, before European working hours; re-warms after any LRU eviction.
-    - cron: "17 4 * * *"
+    # Every six hours: re-warms after any eviction from the 10 GB repository
+    # cache limit, which a busy queue day reaches. All-hit runs are near-free.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
   push:
     branches:

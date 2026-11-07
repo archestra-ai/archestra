@@ -258,7 +258,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
     def test_backport_prs_run_checks_while_release_bot_prs_remain_exempt(self):
         workflow = Path(__file__).parents[1] / "workflows/on-pull-requests.yml"
         conditions = [line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()
-                      if "if: " in line and "archestra-ci[bot]" in line]
+                      if "if: " in line and "archestra-releaser[bot]" in line]
         self.assertTrue(conditions)
         program = r"""
 const vm = require('node:vm');
@@ -267,7 +267,7 @@ const conditions = JSON.parse(process.argv[1]);
 for (const condition of conditions) {
   for (const [login, ref, expected] of [
     ['archestra-ci[bot]', 'backport/release-1.3/pr-42', true],
-    ['archestra-ci[bot]', 'release-please--branches--main', false],
+    ['archestra-releaser[bot]', 'release-please--branches--main', false],
     ['contributor', 'fix/example', true],
     ['archestra-contributor-pr-bot[bot]', 'docs/example', false],
   ]) {

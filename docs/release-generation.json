@@ -1,38 +1,38 @@
 {
   "schema": 1,
-  "sourceSha": "a5b902246b33b873b8fecc63f7c70254a579d72a",
-  "baseSha": "a0d10d9d76b6866d32f9d48831776c154a1fef06",
-  "runId": 42337111235,
+  "sourceSha": "c3822c83eae93e65f7b2e7fb1ff45d8c8d149b94",
+  "baseSha": "6e06ffa209f35269fbf3502bada6644f7c674401",
+  "runId": 42418716425,
   "attempt": 1,
-  "platformTree": "f753efed95bada18232bfb7cbb421c5644371d29",
+  "platformTree": "092f0ff8d89db96a0edd3155fdba476b25d5039e",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "da9509a4a305b2dd4a0ef08e11dcc95d53df2bd2"
+      "blob": "9029b04fec2523f63203af9a52e4dc1ab270a830"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
-      "blob": "843d1aac70c3547ec19c6da3944c8644437940a7"
+      "path": "docs/assets/automated_screenshots/knowledge_settings.dark.webp",
+      "blob": "111e07b3897f8053dd3ad4be05a60dfb72d85971"
     },
     {
-      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
-      "blob": "00b98a89bd1a572ba97eff47ac245c91f02edae0"
+      "path": "docs/assets/automated_screenshots/knowledge_settings.webp",
+      "blob": "cbb510be71e30c34a50f213146e0f5cfdfdb2d73"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
+      "blob": "e2ef3db27a56d0adfa3bf5e44037e2b55f42ef50"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
+      "blob": "4f863d43780e3548bbfea454e1ad70f7ff9c0c4f"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
-      "blob": "7e42a16de015763761625b9dd81514c40424fc00"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
-      "blob": "567539935cc48eb5879d8a45f0c27c4c742c8da2"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
-      "blob": "5a0cc3f6541951108de04db72af104cf24ece272"
+      "blob": "aba7c0eedbcd61f1a1a0378bf4ad76a8febee80f"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "24d289f4f502631742d5fa18bb1a4e6193875063"
+      "blob": "c34bee93659320d260a38f874e93939d14365f2d"
     }
   ]
 }

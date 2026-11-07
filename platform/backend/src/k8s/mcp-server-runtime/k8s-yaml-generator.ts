@@ -427,6 +427,29 @@ export function resolvePlaceholders(
 }
 
 /**
+ * The name of the container in a custom deployment YAML whose image is the
+ * `${archestra.docker_image}` placeholder, i.e. the container that runs the
+ * catalog's image. Null when no container uses the placeholder (the YAML names
+ * its own image) or the YAML does not parse.
+ */
+export function findDockerImagePlaceholderContainer(
+  yamlString: string,
+): string | null {
+  try {
+    const parsed = yaml.load(yamlString) as k8s.V1Deployment | undefined;
+    const containers = parsed?.spec?.template?.spec?.containers;
+    if (!Array.isArray(containers)) return null;
+    const container = containers.find(
+      (candidate) =>
+        candidate?.image === placeholder("archestra", "docker_image"),
+    );
+    return typeof container?.name === "string" ? container.name : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Parses YAML and merges it with system-managed values.
  *
  * ## Protected Fields (always overwritten)

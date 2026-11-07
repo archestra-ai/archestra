@@ -216,6 +216,7 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import { compatiblePoolMembers } from "./model-pool-capabilities";
 import {
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
   MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
@@ -2507,6 +2508,14 @@ async function handleObservedLLMProxy<
         ? { ...asRecord(providerRequest), tool_choice: "none" }
         : providerRequest
     ) as TRequest;
+
+    if (modelPoolPlan && poolWire) {
+      modelPoolPlan.members = await compatiblePoolMembers({
+        members: modelPoolPlan.members,
+        wire: poolWire,
+        request: finalRequest,
+      });
+    }
 
     // The native Converse routes receive the complete client history. Check
     // the outbound text against the catalog window before calling Bedrock;

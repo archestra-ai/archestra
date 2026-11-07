@@ -1,4 +1,5 @@
 import {
+  ERROR_REPORTING_DATA_COLLECTION,
   isAnalyticsEnabled,
   resolveErrorReporting,
   scrubErrorReportBreadcrumb,
@@ -122,7 +123,7 @@ function getBaseOptions(reporting: FrontendErrorReporting) {
   return {
     dsn: reporting.dsn,
     environment: reporting.environment,
-    sendDefaultPii: false,
+    dataCollection: ERROR_REPORTING_DATA_COLLECTION,
     // Errors only: no trace headers on outgoing requests.
     ...(reporting.errorsOnly && { tracePropagationTargets: [] }),
     beforeSend: scrubErrorReportEvent,

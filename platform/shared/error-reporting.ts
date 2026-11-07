@@ -61,6 +61,31 @@ export function resolveErrorReporting(params: {
 }
 
 /**
+ * Sentry's `dataCollection` option with every collection category off, for
+ * every Sentry client (backend, and the Next.js browser, server and edge
+ * runtimes).
+ *
+ * This is Sentry's replacement for the deprecated `sendDefaultPii`, which is
+ * removed in SDK v11. Setting `dataCollection` at all switches the SDK's
+ * baseline to "collect everything", so each category is listed here; one left
+ * out would be collected. With `userInfo` off the SDK also tells Sentry not to
+ * infer the sender's IP address.
+ *
+ * https://docs.sentry.io/platforms/javascript/guides/node/data-management/data-collected/
+ */
+export const ERROR_REPORTING_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  stackFrameVariables: false,
+};
+
+/**
  * Remove private content from an error report, in place.
  *
  * Keeps what groups and explains an error (exception type, stack frames,
@@ -70,6 +95,10 @@ export function resolveErrorReporting(params: {
  */
 export function scrubErrorReportEvent<T extends object>(event: T): T {
   const report = event as ReportShape;
+
+  // The Node SDK sends the host name, which in Kubernetes is the pod name and
+  // so carries the deployment's release name.
+  delete report.server_name;
 
   if (report.request) {
     delete report.request.headers;
@@ -168,6 +197,7 @@ const MAX_STRING_LENGTH = 2000;
 const MAX_DEPTH = 6;
 
 type ReportShape = {
+  server_name?: unknown;
   message?: unknown;
   logentry?: { message?: unknown; params?: unknown };
   request?: {
@@ -203,9 +233,13 @@ type BreadcrumbShape = {
 /**
  * Keys whose values are credentials (matched anywhere in the key) or
  * conversation and request content (matched as the whole key).
+ *
+ * The credential terms follow the key names Sentry's SDK and its server-side
+ * default scrubbers treat as sensitive, minus the ones that are too short to
+ * match safely as a substring ("key", "sid", "sso").
  */
 const SECRET_KEY_PATTERN =
-  /authorization|cookie|password|passwd|secret|token|api[-_]?key|credential|private[-_]?key/i;
+  /auth|bearer|cookie|credential|csrf|jwt|passwd|password|private[-_]?key|pwd|api[-_]?key|saml|secret|session|token|xsrf/i;
 const CONTENT_KEYS = new Set([
   "arguments",
   "args",

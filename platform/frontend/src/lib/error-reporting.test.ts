@@ -108,7 +108,11 @@ describe("errorReporting", () => {
     expect(options).toMatchObject({
       dsn: expect.stringMatching(/\.sentry\.io\//),
       environment: "self-hosted",
-      sendDefaultPii: false,
+      dataCollection: expect.objectContaining({
+        userInfo: false,
+        httpHeaders: false,
+        httpBodies: [],
+      }),
       tracePropagationTargets: [],
     });
     expect(options.tracesSampleRate).toBeUndefined();

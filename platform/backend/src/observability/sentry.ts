@@ -1,4 +1,5 @@
 import {
+  ERROR_REPORTING_DATA_COLLECTION,
   scrubErrorReportBreadcrumb,
   scrubErrorReportEvent,
 } from "@archestra/shared/error-reporting";
@@ -287,7 +288,7 @@ function getBaseOptions(): Sentry.NodeOptions {
     dsn,
     environment: sentryEnvironment,
     release: version,
-    sendDefaultPii: false,
+    dataCollection: ERROR_REPORTING_DATA_COLLECTION,
     /**
      * Disable Sentry's automatic OpenTelemetry setup: tracing/sdk.ts owns it.
      * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/

@@ -179,6 +179,9 @@ describe("scrubErrorReportEvent", () => {
         },
         toolCall: { name: "search", arguments: { q: "private" } },
         accessToken: "private",
+        sessionCookie: "private",
+        oauthState: "private",
+        jwt: "private",
         long: "x".repeat(5000),
       },
     });
@@ -192,6 +195,9 @@ describe("scrubErrorReportEvent", () => {
       },
       toolCall: { name: "search", arguments: "[Filtered]" },
       accessToken: "[Filtered]",
+      sessionCookie: "[Filtered]",
+      oauthState: "[Filtered]",
+      jwt: "[Filtered]",
     });
     expect((event.extra.long as string).length).toBeLessThanOrEqual(2001);
   });
@@ -208,6 +214,16 @@ describe("scrubErrorReportEvent", () => {
       error_type: "secrets_backend_unavailable",
       secrets_backend_error: "permission denied for token=[Filtered]",
     });
+  });
+
+  test("drops the server name, which names the deployment's pod", () => {
+    const event = scrubErrorReportEvent({
+      server_name: "acme-archestra-platform-7d9f8-x2k4q",
+      exception: { values: [{ type: "Error", value: "boom" }] },
+    });
+
+    expect(event).not.toHaveProperty("server_name");
+    expect(event.exception.values[0].value).toBe("boom");
   });
 });
 

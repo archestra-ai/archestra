@@ -60,6 +60,7 @@ describe("filterErrorEvent", () => {
         data: { messages: [{ content: "Private conversation" }] },
         query_string: "token=private-query",
       },
+      user: { id: "user-1", email: "private-user@example.com" },
     };
 
     const result = filterErrorEvent(
@@ -76,6 +77,7 @@ describe("filterErrorEvent", () => {
       method: "POST",
       url: "https://app.example.com/api/chat",
     });
+    expect(result?.user).toEqual({ id: "user-1" });
     expect(JSON.stringify(result)).not.toContain("private-");
     expect(JSON.stringify(result)).not.toContain("Private conversation");
   });

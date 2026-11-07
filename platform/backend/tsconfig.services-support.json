@@ -62,7 +62,6 @@
     "src/services/environments/environment.ts",
     "src/services/environments/network-policy-match.ts",
     "src/services/environments/remote-server-network-policy.ts",
-    "src/services/error-tracking.ts",
     "src/services/git-credentials.ts",
     "src/services/github-actions-access.ts",
     "src/services/github-app-config.ts",

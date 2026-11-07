@@ -123,19 +123,12 @@ export const WithAuthCheck: React.FC<
 
   const inProgress = isAuthInitializing;
 
-  // Set Sentry user context when user is authenticated
+  // Attribute error reports to the signed-in user by opaque id only: reports
+  // can leave the deployment, so no email or name goes with them.
+  const userId = session?.user?.id;
   useEffect(() => {
-    if (session?.user) {
-      errorReporting.setUser({
-        id: session.user.id,
-        email: session.user.email,
-        username: session.user.name || session.user.email,
-      });
-    } else {
-      // Clear user context when not authenticated
-      errorReporting.setUser(null);
-    }
-  }, [session?.user]);
+    errorReporting.setUser(userId ? { id: userId } : null);
+  }, [userId]);
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {

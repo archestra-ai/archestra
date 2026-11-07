@@ -131,7 +131,7 @@ class BackportTests(unittest.TestCase):
         self.assertEqual(self.git("show", "-s", "--format=%an <%ae>", ref), "Test <test@example.com>")
         self.assertEqual(
             self.git("show", "-s", "--format=%cn <%ce>", ref),
-            "archestra-ci[bot] <222894074+archestra-ci[bot]@users.noreply.github.com>",
+            "archestra-automation-prs[bot] <222894074+archestra-automation-prs[bot]@users.noreply.github.com>",
         )
 
     def test_duplicate_event_and_closed_pr_do_not_create_duplicates(self):
@@ -299,8 +299,8 @@ const assert = require('node:assert/strict');
 const conditions = JSON.parse(process.argv[1]);
 for (const [job, condition] of Object.entries(conditions)) {
   for (const [login, ref, headRepo, expected] of [
-    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
-    ['archestra-ci[bot]', 'release-please--branches--main', 'archestra-ai/archestra', false],
+    ['archestra-automation-prs[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
+    ['archestra-automation-prs[bot]', 'release-please--branches--main', 'archestra-ai/archestra', false],
     ['archestra-releaser[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
     ['contributor', 'fix/example', 'archestra-ai/archestra', false],
     ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', job === 'openappa-native-tests'],
@@ -349,7 +349,7 @@ const owners = JSON.parse(env.ASSIGNEE_LOGINS);
 const coreTeam = JSON.parse(env.CORE_TEAM_LOGINS);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 function pr(number, login, ref, extra = {}) {
-  return {number, user: {login, name: 'archestra-ci (bot)'}, draft: false,
+  return {number, user: {login, name: 'archestra-automation-prs (bot)'}, draft: false,
     updated_at: new Date().toISOString(), requested_reviewers: [],
     head: {ref, repo: {full_name: 'archestra-ai/archestra'}}, ...extra};
 }
@@ -360,11 +360,11 @@ function pr(number, login, ref, extra = {}) {
     if (!enabled) continue;
 
     // Neither the triggering actor nor a display name determines the PR author.
-    for (const actor of ['maintainer', 'archestra-ci[bot]']) {
+    for (const actor of ['maintainer', 'archestra-automation-prs[bot]']) {
       const prs = [
-        pr(1, 'archestra-ci[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
+        pr(1, 'archestra-automation-prs[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
         pr(2, 'archestra-releaser[bot]', 'release-please--branches--main'),
-        pr(3, 'archestra-ci[bot]', 'other/change'),
+        pr(3, 'archestra-automation-prs[bot]', 'other/change'),
         pr(4, 'contributor', 'fix/example'),
         pr(5, 'contributor', 'backport/manual', {base: {ref: 'release/1.4'}}),
         pr(6, 'archestra-task-envs[bot]', 'task/example'),
@@ -374,7 +374,7 @@ function pr(number, login, ref, extra = {}) {
         pr(10, 'contributor', 'draft/change', {draft: true}),
         pr(11, 'contributor', 'assigned/change', {requested_reviewers: [{login: owners[0]}]}),
         pr(12, 'contributor', 'reviewed/change'),
-        pr(13, 'archestra-ci', 'fix/lookalike'),
+        pr(13, 'archestra-automation-prs', 'fix/lookalike'),
       ];
       const requests = [];
       const pulls = {list: 'list', listReviews: 'listReviews',

@@ -12,6 +12,9 @@ import {
 export const receiptPath = "docs/release-generation.json";
 export const generationCommit = "docs: generate release artifacts";
 export const generationWorkflow = ".github/workflows/release-pr-generation.yml";
+// The archestra-automation-prs App's bot user. The ID survives an App rename;
+// the login does not.
+export const automationBotUserId = 222894074;
 const sha = /^[a-f0-9]{40}$/;
 const screenshot =
   /^docs\/assets\/automated_screenshots\/[a-zA-Z0-9_.-]+\.webp$/;
@@ -158,7 +161,8 @@ export async function generatedReceipt({
     commit.commit.message.split("\n")[0] !== generationCommit ||
     // GitHub signs App-created Git database commits as web-flow, with the
     // authenticated App as author. An unsigned bot email is not provenance.
-    commit.author?.login !== "archestra-ci[bot]" ||
+    commit.author?.id !== automationBotUserId ||
+    commit.author?.type !== "Bot" ||
     commit.committer?.login !== "web-flow" ||
     commit.commit.verification?.verified !== true ||
     commit.parents?.length !== 1 ||

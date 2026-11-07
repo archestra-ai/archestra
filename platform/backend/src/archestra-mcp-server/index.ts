@@ -90,6 +90,7 @@ import {
   tools as knowledgeManagementTools,
 } from "./knowledge-management";
 import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
+import { toolEntries as logToolEntries, tools as logTools } from "./logs";
 import {
   toolEntries as mcpGatewayToolEntries,
   tools as mcpGatewayTools,
@@ -197,6 +198,7 @@ function getToolEntries(): Partial<
       ...mcpServerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
+      ...logToolEntries,
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
@@ -235,6 +237,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpServerTools,
       ...teamTools,
       ...limitTools,
+      ...logTools,
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,

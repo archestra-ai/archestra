@@ -317,7 +317,7 @@ for (const [job, condition] of Object.entries(conditions)) {
   const mergeGroupCondition = condition.replace(/needs\.([\w-]+)/g, "needs['$1']");
   const evaluate = (inputs) => vm.runInNewContext(mergeGroupCondition, {
     github: {event_name: 'merge_group'}, always: () => true, cancelled: () => false,
-    needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}, 'supply-chain-policy': {result: 'success'}},
+    needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}},
   });
   const changed = {result: 'success', outputs: {backend: 'true', frontend: 'true', platform_rust: 'true', ai_labs: 'true'}};
   const unchanged = {result: 'success', outputs: {backend: 'false', frontend: 'false', platform_rust: 'false', ai_labs: 'false'}};

@@ -97,10 +97,12 @@ archestra:
     # Identifiers and endpoints, not credentials.
     ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://grafana-alloy.archestra.svc.cluster.local:4318/v1/traces"
-    # Export audit events as OTLP logs to the same collector. Alloy forwards
-    # the archestra-audit scope to the organization's security log archive
+    # Export audit events as OTLP logs, on their own endpoint and only there,
+    # to the audit collector that writes them to the organization's security
+    # log archive. Alloy does not carry them.
     # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
     ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
+    ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
     # Labels this installation's records environment=staging in the archive.
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=staging"
     ARCHESTRA_SENTRY_BACKEND_DSN: "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232"

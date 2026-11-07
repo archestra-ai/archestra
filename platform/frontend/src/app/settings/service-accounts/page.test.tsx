@@ -22,6 +22,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
 vi.mock("@/app/settings/layout", () => ({
@@ -34,6 +35,7 @@ import {
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ServiceAccountsSettingsPage from "./page";
 
@@ -118,6 +120,7 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: null,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useEnterpriseFeature).mockReturnValue(true);
 });
 
 test("edits a service account from its table action", async () => {
@@ -440,3 +443,80 @@ function mockServiceAccountGrants(
     data: grants,
   } as unknown as ReturnType<typeof useScopedCapabilities>);
 }
+
+test("adds a federated credential with exact claim conditions", async () => {
+  const created: unknown[] = [];
+  server.use(
+    http.get(`${origin}/api/service-accounts/:id/federated-credentials`, () =>
+      HttpResponse.json(
+        created.map((body, index) => ({
+          ...(body as object),
+          id: `00000000-0000-4000-8000-00000000000${index}`,
+          serviceAccountId: account.id,
+          lastUsedAt: null,
+          createdAt: account.createdAt,
+          updatedAt: account.createdAt,
+        })),
+      ),
+    ),
+    http.post(
+      `${origin}/api/service-accounts/:id/federated-credentials`,
+      async ({ request }) => {
+        const body = await request.json();
+        created.push(body);
+        return HttpResponse.json({
+          ...(body as object),
+          id: "00000000-0000-4000-8000-000000000000",
+          serviceAccountId: account.id,
+          lastUsedAt: null,
+          createdAt: account.createdAt,
+          updatedAt: account.createdAt,
+        });
+      },
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+  await user.click(await screen.findByRole("button", { name: account.name }));
+  await user.click(
+    screen.getByRole("button", { name: "Federated credentials" }),
+  );
+  expect(await screen.findByText("No federated credentials")).toBeVisible();
+
+  await user.click(
+    screen.getByRole("button", { name: "Add federated credential" }),
+  );
+  const dialog = await screen.findByRole("dialog", {
+    name: "Add federated credential",
+  });
+  await user.type(within(dialog).getByLabelText("Name"), "infra apply");
+  await user.type(
+    within(dialog).getByLabelText("Subject"),
+    "repo:acme/infra:environment:production",
+  );
+  await user.click(
+    within(dialog).getByRole("button", { name: "Add condition" }),
+  );
+  await user.type(within(dialog).getByLabelText("Claim 1"), "repository");
+  await user.type(within(dialog).getByLabelText("Value 1"), "acme/infra");
+  await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+  await waitFor(() => expect(created).toHaveLength(1));
+  expect(created[0]).toEqual({
+    name: "infra apply",
+    // GitHub Actions is the default provider.
+    issuer: "https://token.actions.githubusercontent.com",
+    audience: window.location.origin,
+    subject: "repo:acme/infra:environment:production",
+    claimConditions: { repository: "acme/infra" },
+  });
+  expect(await screen.findByText("infra apply")).toBeVisible();
+});

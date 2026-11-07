@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
@@ -84,6 +85,11 @@ import {
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { FederatedCredentialsTab } from "./federated-credentials-tab";
+// SPDX-SnippetEnd
 import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
 type ServiceAccountFormValues = {
@@ -111,10 +117,11 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
  */
 const EXAMPLE_KEY = "<YOUR_KEY>";
 
-type DetailTab = "general" | "keys";
+type DetailTab = "general" | "keys" | "federated";
 const NAV_ITEMS = [
   { id: "general" as const, label: "General" },
   { id: "keys" as const, label: "API keys" },
+  { id: "federated" as const, label: "Federated credentials" },
 ];
 
 /** Sentinel for "no filter", matching the service accounts list beside it. */
@@ -157,6 +164,12 @@ export function ServiceAccountDialog({
   const bulkTokenAction = useBulkServiceAccountTokenAction();
 
   const [isTokenDialogOpen, setIsTokenDialogOpen] = useState(false);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const federationAvailable = useEnterpriseFeature("core");
+  const [isFederatedDialogOpen, setIsFederatedDialogOpen] = useState(false);
+  // SPDX-SnippetEnd
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [keyToDelete, setKeyToDelete] = useState<ServiceAccountToken | null>(
     null,
@@ -442,6 +455,9 @@ export function ServiceAccountDialog({
       activeSection={activeTab}
       navItems={NAV_ITEMS.map((item) => ({
         ...item,
+        ...(item.id === "federated" && !federationAvailable
+          ? { disabled: true, status: "Enterprise license required" }
+          : {}),
         indicator:
           item.id === "keys" && healthExplanation ? (
             <Tooltip>
@@ -513,6 +529,25 @@ export function ServiceAccountDialog({
             >
               <Plus className="h-4 w-4" />
               Create API key
+            </PermissionButton>
+          </>
+        ) : activeTab === "federated" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Close
+            </Button>
+            <PermissionButton
+              permissions={{ serviceAccount: ["update"] }}
+              permissionScope={serviceAccountId}
+              type="button"
+              onClick={() => setIsFederatedDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Add federated credential
             </PermissionButton>
           </>
         ) : (
@@ -748,6 +783,18 @@ export function ServiceAccountDialog({
               </div>
             </BulkActionsScope>
           ) : null}
+          {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+          {activeTab === "federated" && federationAvailable ? (
+            <FederatedCredentialsTab
+              serviceAccountId={serviceAccountId}
+              canUpdate={!!canUpdateServiceAccounts}
+              createOpen={isFederatedDialogOpen}
+              onCreateOpenChange={setIsFederatedDialogOpen}
+            />
+          ) : null}
+          {/* SPDX-SnippetEnd */}
           {/* Kept mounted on every tab, so Save commits its edits. Someone who
               may manage access but not edit the account saves it on its own. */}
           <div hidden={activeTab !== "general"}>

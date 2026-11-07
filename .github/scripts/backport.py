@@ -6,8 +6,14 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
+
+
+# Labels for a branch missing from backport-targets.json are answered only on
+# recent merges, so enabling the scan does not comment on old PRs.
+DISABLED_TARGET_REPORT_WINDOW = timedelta(days=1)
 
 
 class ManualBackportRequired(Exception):
@@ -37,8 +43,27 @@ class Backporter:
             for issue in requests:
                 if "pull_request" not in issue:
                     continue
-                branch = f"backport/{target.replace('/', '-')}/pr-{issue['number']}"
+                branch = backport_branch(issue["number"], target)
                 if branch in heads:
+                    continue
+                try:
+                    self.run(issue["number"], target)
+                except ValueError as error:
+                    print(f"Ignoring ineligible PR #{issue['number']}: {error}")
+        self.answer_disabled_targets()
+
+    def answer_disabled_targets(self):
+        # The scan above only queries enabled targets, so a label for any other
+        # release branch would otherwise get no backport and no explanation.
+        cutoff = (datetime.now(timezone.utc) - DISABLED_TARGET_REPORT_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
+        labels = self.api(f"repos/{self.repo}/labels?per_page=100", paginate=True)
+        for label in labels:
+            target = label["name"].removeprefix("backport ")
+            if target == label["name"] or target in self.targets or not re.fullmatch(r"release/\d+\.\d+", target):
+                continue
+            query = urlencode({"state": "closed", "labels": label["name"], "since": cutoff, "per_page": 100})
+            for issue in self.api(f"repos/{self.repo}/issues?{query}", paginate=True):
+                if ((issue.get("pull_request") or {}).get("merged_at") or "") < cutoff:
                     continue
                 try:
                     self.run(issue["number"], target)
@@ -72,7 +97,9 @@ class Backporter:
             if not re.fullmatch(r"release/\d+\.\d+", target):
                 raise ValueError("Backport labels must use backport release/X.Y")
             if target not in self.targets:
-                self.report(number, target, "This branch is not enabled in .github/backport-targets.json. No backport was created.")
+                # Stay quiet when someone already opened the backport by hand.
+                if not self.find_backport(number, target):
+                    self.report(number, target, "This branch is not enabled in .github/backport-targets.json. No backport was created; open one by hand if this release needs the change.")
                 continue
             try:
                 if has_schema_changes(files):
@@ -83,9 +110,8 @@ class Backporter:
 
     def backport(self, pr, target, sha, is_merge):
         number = pr["number"]
-        branch = f"backport/{target.replace('/', '-')}/pr-{number}"
-        query = urlencode({"state": "all", "head": f"{self.repo.split('/')[0]}:{branch}", "base": target})
-        existing = self.api(f"repos/{self.repo}/pulls?{query}")
+        branch = backport_branch(number, target)
+        existing = self.find_backport(number, target)
         if existing:
             print(f"Backport already exists: {existing[0]['html_url']} ({existing[0]['state']})")
             return
@@ -129,6 +155,11 @@ class Backporter:
             finally:
                 self.git("worktree", "remove", "--force", str(worktree))
 
+    def find_backport(self, number, target):
+        branch = backport_branch(number, target)
+        query = urlencode({"state": "all", "head": f"{self.repo.split('/')[0]}:{branch}", "base": target})
+        return self.api(f"repos/{self.repo}/pulls?{query}")
+
     def report(self, number, target, message):
         marker = f"<!-- archestra-backport:{number}:{target} -->"
         body = f"{marker}\nBackport to `{target}`: {message}"
@@ -162,6 +193,10 @@ class Backporter:
                    *args]
         return subprocess.run(command, cwd=cwd or self.checkout, text=True, capture_output=True,
                               check=check, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+
+
+def backport_branch(number, target):
+    return f"backport/{target.replace('/', '-')}/pr-{number}"
 
 
 def has_schema_changes(files):

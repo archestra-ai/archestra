@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +22,8 @@ class FakeGitHubBackporter(backport.Backporter):
         self.pr = pr
         self.pulls = []
         self.comments = []
+        self.merged_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.labels = [{"name": f"backport release/1.{minor}"} for minor in (2, 3, 4)] + [{"name": "bug"}]
 
     def api(self, endpoint, payload=None, *, method=None, paginate=False):
         if endpoint == "repos/fixture/repository":
@@ -33,9 +36,12 @@ class FakeGitHubBackporter(backport.Backporter):
             if "head" in query:
                 return [pr for pr in pulls if pr["head"] == query["head"][0].split(":")[1]]
             return [{**pr, "head": {"ref": pr["head"], "repo": {"full_name": self.repo}}} for pr in pulls]
+        if endpoint.startswith("repos/fixture/repository/labels?"):
+            return self.labels
         if "issues?" in endpoint:
             label = parse_qs(urlparse(endpoint).query)["labels"][0]
-            return [{"number": 42, "pull_request": {}, "updated_at": "2020-01-01T00:00:00Z"}] if any(item["name"] == label for item in self.pr["labels"]) else []
+            issue = {"number": 42, "pull_request": {"merged_at": self.merged_at}, "updated_at": "2020-01-01T00:00:00Z"}
+            return [issue] if any(item["name"] == label for item in self.pr["labels"]) else []
         if endpoint.endswith("/pulls") and payload:
             pr = {**payload, "state": "open", "html_url": "https://github.com/fixture/repository/pull/43"}
             self.pulls.append(pr)
@@ -225,6 +231,26 @@ class BackportTests(unittest.TestCase):
         self.bot.poll()
         self.assertEqual(len(self.bot.pulls), 1)
         self.assertEqual(len(self.bot.comments), 1)
+
+    def test_poll_answers_labels_for_targets_that_are_not_enabled(self):
+        self.pr["labels"] = [{"name": "backport release/1.2"}, {"name": "backport release/1.4"}]
+        self.bot.poll()
+        self.bot.poll()
+        self.assertEqual([pr["base"] for pr in self.bot.pulls], ["release/1.4"])
+        notices = [comment["body"] for comment in self.bot.comments if "release/1.2" in comment["body"]]
+        self.assertEqual(len(notices), 1)
+        self.assertIn("not enabled", notices[0])
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", "refs/heads/backport/release-1.2/*"), "")
+
+    def test_poll_leaves_old_or_hand_made_disabled_target_requests_alone(self):
+        self.pr["labels"] = [{"name": "backport release/1.2"}]
+        self.bot.merged_at = "2020-01-01T00:00:00Z"
+        self.bot.poll()
+        self.assertEqual(self.bot.comments, [])
+        self.bot.merged_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.bot.pulls.append({"base": "release/1.2", "head": "backport/release-1.2/pr-42", "state": "open"})
+        self.bot.poll()
+        self.assertEqual(self.bot.comments, [])
 
     def test_poll_ignores_closed_unmerged_requests(self):
         self.pr["merged"] = False

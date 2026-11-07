@@ -138,7 +138,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && !inputs.validation_only) ||
       (github.event_name == 'pull_request' &&
-       github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+       github.event.pull_request.user.login == 'archestra-releaser[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.event.pull_request.head.ref, 'release-please--'))
     runs-on: ubuntu-24.04-8core

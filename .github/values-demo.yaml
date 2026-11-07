@@ -37,6 +37,38 @@ archestra:
     # re-enable what values-staging-demo-shared.yaml turns off for staging.
     ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "false"
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "false"
+    # TODO(before merge): replace with the value currently held in the
+    # ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL repository secret.
+    ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
+
+  # Every credential, including the session, encryption and offer-signing
+  # keys the chart would otherwise generate, comes from the archestra-demo-runtime Secret
+  # that archestra-ai/infra syncs from GCP Secret Manager (gcp/gke/apps/
+  # runtime-secrets, one key per env var). These entries replace the chart's
+  # generated values. Never also set these names under env: an env entry,
+  # even "", would replace the synced value.
+  envFromSecrets:
+    - name: ARCHESTRA_AUTH_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SECRET
+    - name: ARCHESTRA_AUTH_SESSION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+    - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD
+    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   gkeBackendConfig:
     enabled: true

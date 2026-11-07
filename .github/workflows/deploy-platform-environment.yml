@@ -16,36 +16,6 @@ on:
         required: true
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: true
-      AUTH_ADMIN_EMAIL:
-        required: true
-      AUTH_ADMIN_PASSWORD:
-        required: true
-      METRICS_SECRET:
-        required: false
-      OTEL_EXPORTER_OTLP_ENDPOINT:
-        required: false
-      AUTH_SECRET:
-        required: false
-      BACKEND_DSN:
-        required: false
-      FRONTEND_DSN:
-        required: false
-      OUTLOOK_TENANT_ID:
-        required: false
-      OUTLOOK_CLIENT_ID:
-        required: false
-      OUTLOOK_CLIENT_SECRET:
-        required: false
-      CHAT_ANTHROPIC_API_KEY:
-        required: false
-      MICROSOFT_365_COPILOT_CLIENT_ID:
-        required: false
-      MICROSOFT_365_COPILOT_TENANT_ID:
-        required: false
-      MFILES_VAF_ADD_ON_GITHUB_TOKEN:
-        required: false
-      CONTENT_ENCRYPTION_SECRET:
-        required: false
 
 permissions: {}
 
@@ -92,32 +62,19 @@ jobs:
         env:
           TARGET_ENVIRONMENT: ${{ inputs.environment }}
           PLATFORM_IMAGE_TAG: ${{ inputs.version }}
-          AUTH_ADMIN_EMAIL: ${{ secrets.AUTH_ADMIN_EMAIL }}
-          AUTH_ADMIN_PASSWORD: ${{ secrets.AUTH_ADMIN_PASSWORD }}
-          METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-          BACKEND_DSN: ${{ secrets.BACKEND_DSN }}
-          FRONTEND_DSN: ${{ secrets.FRONTEND_DSN }}
-          OUTLOOK_TENANT_ID: ${{ secrets.OUTLOOK_TENANT_ID }}
-          OUTLOOK_CLIENT_ID: ${{ secrets.OUTLOOK_CLIENT_ID }}
-          OUTLOOK_CLIENT_SECRET: ${{ secrets.OUTLOOK_CLIENT_SECRET }}
-          CHAT_ANTHROPIC_API_KEY: ${{ secrets.CHAT_ANTHROPIC_API_KEY }}
-          MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.MICROSOFT_365_COPILOT_CLIENT_ID }}
-          MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.MICROSOFT_365_COPILOT_TENANT_ID }}
-          MFILES_VAF_ADD_ON_GITHUB_TOKEN: ${{ secrets.MFILES_VAF_ADD_ON_GITHUB_TOKEN }}
-          CONTENT_ENCRYPTION_SECRET: ${{ secrets.CONTENT_ENCRYPTION_SECRET }}
         run: |
           case "$TARGET_ENVIRONMENT" in
             staging)
               release=archestra-platform
               namespace=archestra
               values_file=.github/values-staging.yaml
+              runtime_secret=archestra-platform-runtime
               ;;
             demo)
               release=archestra-demo
               namespace=archestra-demo
               values_file=.github/values-demo.yaml
+              runtime_secret=archestra-demo-runtime
               ;;
             *)
               echo "Unsupported deployment environment" >&2
@@ -125,49 +82,15 @@ jobs:
               ;;
           esac
 
-          # Secrets reach Helm through a values file, never --set: --set splits
-          # on commas and echoes the remainder in its parse error, which
-          # GitHub's masking does not catch. jq reads each value from the
-          # environment, so secrets stay off the command line and are always
-          # written as strings. The file is the last --values, so it keeps
-          # the precedence --set had over the checked-in values files.
-          secret_values="$RUNNER_TEMP/deploy-secret-values.json"
-          trap 'rm -f "$secret_values"' EXIT
-          (
-            umask 077
-            jq -n --arg target "$TARGET_ENVIRONMENT" '
-              def secret($name): $ENV[$name] // "";
-              {
-                archestra: {
-                  env: {
-                    ARCHESTRA_AUTH_ADMIN_EMAIL: secret("AUTH_ADMIN_EMAIL"),
-                    ARCHESTRA_AUTH_ADMIN_PASSWORD: secret("AUTH_ADMIN_PASSWORD"),
-                    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: secret("MFILES_VAF_ADD_ON_GITHUB_TOKEN")
-                  }
-                }
-              }
-              * if $target == "staging" then
-                {
-                  archestra: {
-                    env: {
-                      ARCHESTRA_METRICS_SECRET: secret("METRICS_SECRET"),
-                      ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: secret("OTEL_EXPORTER_OTLP_ENDPOINT"),
-                      ARCHESTRA_AUTH_SECRET: secret("AUTH_SECRET"),
-                      ARCHESTRA_SENTRY_BACKEND_DSN: secret("BACKEND_DSN"),
-                      ARCHESTRA_SENTRY_FRONTEND_DSN: secret("FRONTEND_DSN"),
-                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID: secret("OUTLOOK_TENANT_ID"),
-                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID: secret("OUTLOOK_CLIENT_ID"),
-                      ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: secret("OUTLOOK_CLIENT_SECRET"),
-                      ARCHESTRA_CHAT_ANTHROPIC_API_KEY: secret("CHAT_ANTHROPIC_API_KEY"),
-                      ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID: secret("MICROSOFT_365_COPILOT_CLIENT_ID"),
-                      ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID: secret("MICROSOFT_365_COPILOT_TENANT_ID"),
-                      ARCHESTRA_CONTENT_ENCRYPTION_SECRET: secret("CONTENT_ENCRYPTION_SECRET")
-                    }
-                  }
-                }
-              else {} end
-            ' > "$secret_values"
-          )
+          # Application credentials never pass through this workflow. Each
+          # installation reads them from a Kubernetes Secret that
+          # archestra-ai/infra syncs from GCP Secret Manager; the values files
+          # reference it through archestra.envFromSecrets. Without it the
+          # migration hook and pods cannot start, so stop before upgrading.
+          if ! kubectl get secret "$runtime_secret" --namespace "$namespace" --output name >/dev/null; then
+            echo "::error::Secret $runtime_secret is missing in namespace $namespace; it is synced by archestra-ai/infra." >&2
+            exit 1
+          fi
 
           # Development deployments select the platform and runtime companions
           # from one CI registry; chart defaults remain for released installs.
@@ -180,7 +103,6 @@ jobs:
             --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${CI_IMAGE_REGISTRY}/mcp-server-base:${PLATFORM_IMAGE_TAG}"
             --values .github/values-staging-demo-shared.yaml
             --values "$values_file"
-            --values "$secret_values"
             --atomic --timeout 15m
           )
 
@@ -203,7 +125,7 @@ jobs:
             cat "$profile_log"
             echo "::endgroup::"
           }
-          trap 'show_profile; rm -f "$secret_values"' EXIT
+          trap show_profile EXIT
 
           # Deploy jobs run with cancel-in-progress: false in a per-environment
           # concurrency group, so no other Helm operation can be legitimately

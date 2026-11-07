@@ -300,7 +300,8 @@ const conditions = JSON.parse(process.argv[1]);
 for (const [job, condition] of Object.entries(conditions)) {
   for (const [login, ref, headRepo, expected] of [
     ['archestra-ci[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
-    ['archestra-ci[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
+    ['archestra-ci[bot]', 'release-please--branches--main', 'archestra-ai/archestra', false],
+    ['archestra-releaser[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
     ['contributor', 'fix/example', 'archestra-ai/archestra', false],
     ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', job === 'openappa-native-tests'],
     ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'contributor/fork', false],
@@ -362,7 +363,7 @@ function pr(number, login, ref, extra = {}) {
     for (const actor of ['maintainer', 'archestra-ci[bot]']) {
       const prs = [
         pr(1, 'archestra-ci[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
-        pr(2, 'archestra-ci[bot]', 'release-please--branches--main'),
+        pr(2, 'archestra-releaser[bot]', 'release-please--branches--main'),
         pr(3, 'archestra-ci[bot]', 'other/change'),
         pr(4, 'contributor', 'fix/example'),
         pr(5, 'contributor', 'backport/manual', {base: {ref: 'release/1.4'}}),

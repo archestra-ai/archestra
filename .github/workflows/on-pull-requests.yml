@@ -193,10 +193,10 @@ jobs:
   # queue entry. Release PR Generation owns publication of all generated files.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-releaser[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
     # Turbo fans out six check tasks; @frontend:check:ci also runs
     # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     # Backstop: every check here finishes well under 20m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally
     # orphan and hold the step's log pipe open, leaving a *finished* job
@@ -456,7 +456,7 @@ jobs:
     # the Dagger SDK integration this job enforces passed. Any other outcome
     # runs it, so a failed SDK integration still fails this required check.
     if: always() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.platform_rust != 'false' || needs.dagger-sdk-integration.result != 'success')
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -534,7 +534,7 @@ jobs:
     # In the queue it follows the backend inputs (which include the Rust
     # crates and migrations), running whenever the classification failed.
     if: ${{ !cancelled() && ((github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.backend != 'false')) || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))) }}
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20
@@ -634,7 +634,7 @@ jobs:
     # Skips only when the classification succeeded and found no ai-labs input.
     if: ${{ !cancelled() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.ai_labs != 'false') }}
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-24.04-8core' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -747,14 +747,14 @@ jobs:
           { echo '### Queue jobs for this merge group'; echo '```'; echo "${decisions}"; echo '```'; } >> "${GITHUB_STEP_SUMMARY}"
 
   # Restore/build native dependencies once before allocating test shards.
-  # Use the same Ubicloud image as the main-branch native cache publisher;
+  # Use the same runner image as the main-branch native cache publisher;
   # a cold cache must not compile the same four addons on every shard.
   # Keep this on Ubuntu 24.04 x64, matching the consumers' glibc/architecture.
   backend-test-dependencies:
     name: Prepare Backend Test Dependencies
     needs: [changed-inputs]
     if: github.event_name == 'merge_group' && needs.changed-inputs.outputs.backend == 'true'
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 30
     permissions:
       contents: read
@@ -857,7 +857,7 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     needs: [changed-inputs, backend-test-dependencies]
     if: github.event_name == 'merge_group' && needs.changed-inputs.outputs.backend == 'true'
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
     timeout-minutes: 25
@@ -979,7 +979,7 @@ jobs:
     needs: [changed-inputs]
     if: ${{ !cancelled() && github.event_name == 'merge_group' && (needs.changed-inputs.result != 'success' || needs.changed-inputs.outputs.frontend != 'false') }}
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-16-ubuntu-2404' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-24.04-16core' }} # zizmor: ignore[self-hosted-runner] merge-queue only, behind the MAC_MINI_CI kill switch.
     permissions:
       contents: read
     defaults:
@@ -1156,7 +1156,7 @@ jobs:
   # jobs; if no mac-mini job has made ANY progress within the grace window it
   # flips the MAC_MINI_CI kill switch off and cancels this run so the merge
   # queue ejects the PR immediately. Re-queueing uses the hosted fallback
-  # runners (GitHub for Rust checks, Ubicloud for frontend). Re-enable with:
+  # GitHub-hosted runners. Re-enable with:
   # gh variable set MAC_MINI_CI --body on
   mac-mini-watchdog:
     name: Mac Mini Watchdog
@@ -1177,7 +1177,7 @@ jobs:
       # variable (it has actions_variables:write).
       - name: Generate token for the kill switch
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

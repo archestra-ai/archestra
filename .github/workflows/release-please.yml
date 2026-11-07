@@ -774,6 +774,7 @@ jobs:
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image
       - publish-platform-helm-chart
+      - publish-release-images
       - publish-github-release
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
@@ -807,6 +808,7 @@ jobs:
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image.result }}
           HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
+          IMAGES_RESULT: ${{ needs.publish-release-images.result }}
           PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
         run: |
           if [ -z "${SLACK_WEBHOOK_URL}" ]; then
@@ -816,12 +818,13 @@ jobs:
           TEXT=":rotating_light: *Platform release failed* — \`${VERSION:-unknown}\`
           A job in the release pipeline failed, so release artifacts may not have published.
           • release-please: \`${RP_RESULT}\`
-          • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
+          • platform image (staged): \`${PLATFORM_RESULT}\`
           • MCP server image: \`${MCP_RESULT}\`
           • agent catalog images: \`${AGENT_CATALOG_RESULT}\`
           • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
+          • publish images and chart (release-images): \`${IMAGES_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`
           Check whether \`platform-v${VERSION}\` is already published. If it is still a draft, start a *new* Release Please workflow run on this branch to recover the complete artifact set. 'Rerun failed jobs' cannot regenerate artifacts from successful jobs.
           <${RUN_URL}|View failed CI run> · <https://github.com/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml|Start a new release run>"

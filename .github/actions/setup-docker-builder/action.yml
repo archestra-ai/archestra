@@ -5,3 +5,9 @@ runs:
   steps:
     - name: Setup Docker builder
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      with:
+        # The post-job `docker buildx rm` deletes the builder's multi-GB state
+        # and took 74-118s after every platform image build, holding the E2E
+        # test jobs that wait on it. A GitHub-hosted VM is discarded after the
+        # job anyway; keep the cleanup only where a runner is reused.
+        cleanup: ${{ runner.environment != 'github-hosted' }}

@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.24](https://github.com/archestra-ai/archestra/compare/platform-v1.4.23...platform-v1.4.24) (2026-11-07)
+
+
+### Features
+
+* **agent-runtime:** run unprivileged Agent Runtime pods under a configurable RuntimeClass (backport [#10351](https://github.com/archestra-ai/archestra/issues/10351) to release/1.4) ([#10376](https://github.com/archestra-ai/archestra/issues/10376)) ([df19fbf](https://github.com/archestra-ai/archestra/commit/df19fbf64f6d2895e987cf7cfa916470cb4bad43))
+
+
+### Bug Fixes
+
+* **agent-runtime:** return conflict for terminal run cancellation (backport release/1.4) ([#10328](https://github.com/archestra-ai/archestra/issues/10328)) ([22da2ca](https://github.com/archestra-ai/archestra/commit/22da2ca08864225205caa15a7a1af37af01d0c68))
+* **agents:** show and fix runtime agents that block a default model (backport release/1.4) ([#10350](https://github.com/archestra-ai/archestra/issues/10350)) ([e0f27d0](https://github.com/archestra-ai/archestra/commit/e0f27d0066d797870a4935063f1de6da6870106b))
+* **agents:** truncate long model placeholder on agent edit page (backport release/1.4) ([#10342](https://github.com/archestra-ai/archestra/issues/10342)) ([3e94dcc](https://github.com/archestra-ai/archestra/commit/3e94dcc2509802e9f9abc7b846b269d50a7882e2))
+* **frontend:** allow dialog popovers to scroll (backport release/1.4) ([#10336](https://github.com/archestra-ai/archestra/issues/10336)) ([8b278a8](https://github.com/archestra-ai/archestra/commit/8b278a8879350157c2ab030127fcbea60062fc7a))
+* **mcp:** show pod logs inline when Test Connection fails (backport release/1.4) ([#10387](https://github.com/archestra-ai/archestra/issues/10387)) ([78cd99f](https://github.com/archestra-ai/archestra/commit/78cd99f44aadbf1045ce2043b2d3329605451235))
+* **openappa:** redact quoted credential values in linear time (backport release/1.4) ([#10200](https://github.com/archestra-ai/archestra/issues/10200)) ([ad43169](https://github.com/archestra-ai/archestra/commit/ad431691582ac30da1466c88fe5c155d8848fb49))
+* **openappa:** support GitHub Enterprise in the github battery (backport release/1.4) ([#10330](https://github.com/archestra-ai/archestra/issues/10330)) ([7566211](https://github.com/archestra-ai/archestra/commit/7566211fbf317cab706ac07017be861cb4e5b5ba))
+
+
+### Performance Improvements
+
+* **teams:** reuse authenticated caller when listing teams (backport release/1.4) ([#10329](https://github.com/archestra-ai/archestra/issues/10329)) ([f97d0dc](https://github.com/archestra-ai/archestra/commit/f97d0dcfe5ad46727f552e1b12ea38a4f090622b))
+
+
+### Miscellaneous Chores
+
+* **release/1.4:** release platform 1.4.23 ([#10324](https://github.com/archestra-ai/archestra/issues/10324)) ([6c2704f](https://github.com/archestra-ai/archestra/commit/6c2704fb0f8d4bf9370caf127891db4e7e5718ab))
+
 ## [1.4.23](https://github.com/archestra-ai/archestra/compare/platform-v1.4.22...platform-v1.4.23) (2026-11-07)
 
 

@@ -517,6 +517,18 @@ archestra:
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
+    serviceAccount:
+      # Run the Job under a hook-only <fullname>-migrate ServiceAccount, created
+      # right before it on each upgrade with the platform ServiceAccount's
+      # annotations and imagePullSecrets. Without it, the Job uses the platform
+      # ServiceAccount, which Helm updates only after the hook: a changed
+      # annotation such as iam.gke.io/gcp-service-account reaches the Job one
+      # upgrade late. Grant the cloud identity to this account name too, or the
+      # Job loses it: on GKE, roles/iam.workloadIdentityUser for
+      # serviceAccount:<project>.svc.id.goog[<namespace>/<fullname>-migrate] on
+      # the Google service account; on EKS, the role's trust-policy subject
+      # system:serviceaccount:<namespace>:<fullname>-migrate.
+      create: false
 
   # Verifies that this cluster actually enforces NetworkPolicy, by running the
   # experiment rather than inferring it. After each install/upgrade two throwaway

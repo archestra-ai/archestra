@@ -288,7 +288,10 @@ class WorkflowHandoffTests(unittest.TestCase):
             # Workload Identity trust for this file does not accept.
             self.assertIn("    permissions: {}", job)
             self.assertNotIn("id-token", job)
-            self.assertIn("APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}", job)
+            # The key lives only in the releaser environment (main, release/*).
+            self.assertIn("      environment: releaser\n", job)
+            self.assertIn("APP_ID: ${{ secrets.APP_ID }}", job)
+            self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", job)
             self.assertIn("target-branch: ${{ github.ref_name }}", job)
         self.assertIn("needs: [release-policy, release-please]", callers["release-pr"])
 
@@ -323,6 +326,7 @@ class WorkflowHandoffTests(unittest.TestCase):
         # Credentials stay in the original release job; native publishers use
         # only same-run artifact downloads, with no new App secrets or scopes.
         self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", native)
+        self.assertNotIn("APP_PRIVATE_KEY", native)
         self.assertNotIn("actions: read", native)
 
 

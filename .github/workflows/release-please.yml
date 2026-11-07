@@ -97,13 +97,16 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
+      # The archestra-releaser App's key lives only in this environment, which
+      # main and release/* alone can deploy to.
+      environment: releaser
     secrets:
-      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   release-please:
     name: Release Please
@@ -111,6 +114,9 @@ jobs:
     # The fixture skips release-policy and create-releases.
     if: ${{ !cancelled() && (inputs.handoff-fixture || needs.create-releases.result == 'success') }}
     runs-on: ubuntu-latest
+    # Holds the archestra-releaser App's key; main and release/* only, so the
+    # handoff fixture is dispatched from one of those branches too.
+    environment: releaser
     permissions:
       contents: read # Check out the repository; the App token makes every write.
       id-token: write # Required for Workload Identity Federation in downstream release jobs.
@@ -136,8 +142,8 @@ jobs:
           permission-actions: read
           # Read draft releases and create release tags; the fixture only reads.
           permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       # All releases start as drafts. Both channels publish automatically after
       # all artifacts are ready.
@@ -380,13 +386,16 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@ec618a434b933bcd826401c4c615210f2f56d2a0 # v1.16.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true
+      # The archestra-releaser App's key lives only in this environment, which
+      # main and release/* alone can deploy to.
+      environment: releaser
     secrets:
-      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image

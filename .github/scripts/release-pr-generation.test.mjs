@@ -9,6 +9,7 @@ import {
   benchmarkPayload,
 } from "./proxy-benchmark-baseline.mjs";
 import {
+  automationBotUserId,
   blobSha,
   generatedReceipt,
   generationCommit,
@@ -100,7 +101,7 @@ function fixture(t, initialMarkdown = markdown) {
   const state = {
     base: sourceSha,
     writes: 0,
-    author: "archestra-ci[bot]",
+    authorId: automationBotUserId,
     verified: true,
     run: {
       path: generationWorkflow,
@@ -177,7 +178,7 @@ function fixture(t, initialMarkdown = markdown) {
         return {
           data: {
             sha: ref,
-            author: { login: state.author },
+            author: { id: state.authorId, type: "Bot" },
             committer: { login: "web-flow" },
             parents,
             commit: {
@@ -475,7 +476,7 @@ test("source changes and forged generation subjects cannot suppress generation",
     `refs/heads/${f.context.payload.pull_request.head.ref}`,
     generated,
   ]);
-  f.state.author = "human";
+  f.state.authorId = 1;
   assert.equal(
     await selectGeneration({ ...f.args, context: f.finalContext() }),
     true,
@@ -541,6 +542,20 @@ test("unchanged generators still attest completion once and then stop", async (t
     false,
   );
   assert.equal(f.state.writes, 1);
+});
+
+test("provenance requires the automation App's bot user, whatever its login", async (t) => {
+  const f = fixture(t);
+  await publishGeneration(f.args);
+  assert.notEqual(
+    await generatedReceipt({ ...f.args, context: f.finalContext() }),
+    null,
+  );
+  f.state.authorId = automationBotUserId + 1;
+  assert.equal(
+    await generatedReceipt({ ...f.args, context: f.finalContext() }),
+    null,
+  );
 });
 
 test("unsigned bot attribution is not accepted as GitHub App provenance", async (t) => {

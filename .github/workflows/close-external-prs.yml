@@ -30,7 +30,7 @@ permissions: {}
 env:
   # Bots that open PRs as part of automated processes (release-please, dependabot,
   # backports, task envs) are never closed by this workflow.
-  EXEMPT_BOT_LOGINS: '["archestra-ci[bot]","archestra-releaser[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
+  EXEMPT_BOT_LOGINS: '["archestra-automation-prs[bot]","archestra-releaser[bot]","dependabot[bot]","archestra-task-envs[bot]"]'
   CLOSE_MARKER: "<!-- archestra-close-external-prs -->"
   CLOSE_COMMENT: |
     We take contributions as human-written text, not code — see https://www.archestra.ai/docs/contributing.

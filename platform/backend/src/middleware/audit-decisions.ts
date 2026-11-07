@@ -38,6 +38,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -980,6 +981,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountsTable: {
     audited: true,
     model: ServiceAccountModel,
+  },
+  serviceAccountFederatedCredentialsTable: {
+    audited: true,
+    model: ServiceAccountFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,

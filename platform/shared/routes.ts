@@ -598,6 +598,15 @@ export const RouteId = {
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
+  GetServiceAccountFederatedCredentials:
+    "getServiceAccountFederatedCredentials",
+  CreateServiceAccountFederatedCredential:
+    "createServiceAccountFederatedCredential",
+  UpdateServiceAccountFederatedCredential:
+    "updateServiceAccountFederatedCredential",
+  DeleteServiceAccountFederatedCredential:
+    "deleteServiceAccountFederatedCredential",
+  ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",

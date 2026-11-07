@@ -218,6 +218,13 @@ export const AuditEventNameSchema = z.enum([
   "serviceAccount.deleted",
   "serviceAccount.bulk_deleted",
   "serviceAccount.bulk_updated",
+  // An OIDC token exchanged for a short-lived token of the account, or a
+  // refused attempt (outcome says which). Written by the public token
+  // endpoint, not a route hook.
+  "serviceAccount.token_exchanged",
+  "serviceAccountFederatedCredential.created",
+  "serviceAccountFederatedCredential.updated",
+  "serviceAccountFederatedCredential.deleted",
   "skill.created",
   "skill.updated",
   // Soft-deleted across a batch of skills in one request. Distinct from the

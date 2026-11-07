@@ -88,6 +88,19 @@ describe("getAccountHealth", () => {
     );
   });
 
+  it("treats an account with a federated credential as able to sign in without a key", () => {
+    const federated = { ...healthy, federatedCredentialCount: 1 };
+    for (const keys of [
+      { tokenCount: 0, activeTokenCount: 0 },
+      { tokenCount: 1, activeTokenCount: 0 },
+    ]) {
+      expect(getAccountHealth({ ...federated, ...keys }, NOW)).toBe("active");
+    }
+    expect(getAccountHealth({ ...federated, disabled: true }, NOW)).toBe(
+      "disabled",
+    );
+  });
+
   it("reports an account whose soonest key expiry is near as expiring", () => {
     expect(
       getAccountHealth(

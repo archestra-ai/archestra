@@ -43,6 +43,8 @@ type AccountLike = {
   tokenCount: number;
   activeTokenCount: number;
   soonestExpiryAt: string | Date | null;
+  /** Trust policies that let a workload sign in without any key. */
+  federatedCredentialCount?: number;
 };
 
 export function getKeyStatus(key: KeyLike, now: Date = new Date()): KeyStatus {
@@ -58,9 +60,12 @@ export function getAccountHealth(
   now: Date = new Date(),
 ): AccountHealth {
   if (account.disabled) return "disabled";
-  if (account.tokenCount === 0) return "no-keys";
+  // An account a workload signs in to with its own OIDC token needs no key.
+  const federated = (account.federatedCredentialCount ?? 0) > 0;
+  if (account.tokenCount === 0) return federated ? "active" : "no-keys";
   // Has keys, none of which would authenticate: expired, disabled, or both.
-  if (account.activeTokenCount === 0) return "no-usable-keys";
+  if (account.activeTokenCount === 0)
+    return federated ? "active" : "no-usable-keys";
   const soonestExpiryAt = toDate(account.soonestExpiryAt);
   if (soonestExpiryAt && isWithinWarningWindow(soonestExpiryAt, now)) {
     return "expiring";

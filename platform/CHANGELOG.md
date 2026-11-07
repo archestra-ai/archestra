@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0-rc.26](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.25...platform-v1.5.0-rc.26) (2026-11-07)
+
+
+### Features
+
+* **llm-logs:** show runtime handoffs and routing decisions in session trace ([#10344](https://github.com/archestra-ai/archestra/issues/10344)) ([a12c921](https://github.com/archestra-ai/archestra/commit/a12c9211d2786768ad631af770f4bfbded4410d6))
+* **observability:** report errors to Sentry by default, not PostHog ([#10373](https://github.com/archestra-ai/archestra/issues/10373)) ([2f00ba7](https://github.com/archestra-ai/archestra/commit/2f00ba7b135c25195fcab2f828b9a53aace53c06))
+
+
+### Bug Fixes
+
+* **mcp:** show pod logs inline when Test Connection fails ([#10383](https://github.com/archestra-ai/archestra/issues/10383)) ([d8633c9](https://github.com/archestra-ai/archestra/commit/d8633c997042d214623b02f9ffe81a810889b593))
+
+
+### Dependencies
+
+* bump the go-dependencies group in /platform/docker/dagger-dockercompat with 3 updates ([#10397](https://github.com/archestra-ai/archestra/issues/10397)) ([abdc7c4](https://github.com/archestra-ai/archestra/commit/abdc7c4e10ed056fdc364586d2da4cf644995baf))
+
 ## [1.5.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.24...platform-v1.5.0-rc.25) (2026-11-07)
 
 

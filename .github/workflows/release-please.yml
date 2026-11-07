@@ -25,48 +25,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-please:
-    name: Release Please
-    if: ${{ inputs.handoff-fixture || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
+  release-policy:
+    name: Check release policy
+    if: ${{ !inputs.handoff-fixture && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to update manifests and release metadata in the repository.
-      pull-requests: write # Required for release-please PR creation and updates.
-      issues: write # Required for release-please issue comments and labels.
-      id-token: write # Required for Workload Identity Federation in downstream release jobs.
+      contents: read # Check out the repository and its release refs.
     outputs:
-      handoff_fixture: ${{ inputs.handoff-fixture }}
-      platform_should_publish: ${{ steps.resolve-release.outputs.should_publish }}
-      platform_version: ${{ steps.resolve-release.outputs.version }}
-      platform_tag_name: ${{ steps.resolve-release.outputs.tag_name }}
-      platform_checkout_ref: ${{ steps.resolve-release.outputs.checkout_ref }}
-      platform_previous_version: ${{ steps.previous-release.outputs.version }}
+      requested: ${{ steps.policy.outputs.requested }}
+      create_pr: ${{ steps.policy.outputs.create_pr }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: ${{ inputs.handoff-fixture && 1 || '0' }}
+          fetch-depth: 0
           persist-credentials: false
 
       # Recheck after merge against current release refs, before creating a release.
       - name: Check migration upgrade paths across release tracks
-        if: ${{ !inputs.handoff-fixture }}
         working-directory: ./platform
         env:
           BASE_BRANCH: ${{ github.ref_name }}
         run: python3 ../.github/scripts/check-migration-upgrades.py --base-branch "$BASE_BRANCH"
 
-      - name: Generate a token
-        id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
-        with:
-          permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}
-          permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
       - name: Validate branch release policy
-        if: ${{ !inputs.handoff-fixture }}
         id: policy
         env:
           BRANCH: ${{ github.ref_name }}
@@ -98,25 +80,64 @@ jobs:
             echo "create_pr=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # release-please runs in TWO invocations (releases first, then PRs) instead of one.
-      # A single invocation creates the GitHub release for a just-merged release PR as a
-      # DRAFT (no git tag yet) and then immediately builds the next release PR in the same
-      # process. That PR build looks up the manifest version's tag (e.g. platform-v1.3.3),
-      # finds nothing, loses its "commits since last release" anchor, and walks deep
-      # history — where old `Release-As: 1.3.0` commits force the new PR to a bogus stale
-      # version with a months-long changelog (self-healing only on the next push to main).
-      # Splitting lets us create the git tag for the draft release BEFORE the PR build, so
-      # the version calculation is always anchored to the real latest release.
-      - name: Create releases for merged release PRs
-        if: ${{ !inputs.handoff-fixture }}
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        id: release-please
+  # release-please runs in TWO invocations (releases first, then PRs) instead of one.
+  # A single invocation creates the GitHub release for a just-merged release PR as a
+  # DRAFT (no git tag yet) and then immediately builds the next release PR in the same
+  # process. That PR build looks up the manifest version's tag (e.g. platform-v1.3.3),
+  # finds nothing, loses its "commits since last release" anchor, and walks deep
+  # history — where old `Release-As: 1.3.0` commits force the new PR to a bogus stale
+  # version with a months-long changelog (self-healing only on the next push to main).
+  # Splitting lets us create the git tag for the draft release BEFORE the PR build, so
+  # the version calculation is always anchored to the real latest release.
+  #
+  # Both passes run through the organization's shared workflow, which authenticates
+  # as the release App and never with GITHUB_TOKEN. It runs no cloud sign-in: steps
+  # that use Workload Identity stay in this file's jobs, which the trust names.
+  create-releases:
+    name: Create releases for merged release PRs
+    needs: release-policy
+    permissions: {} # The shared workflow writes with the release App token only.
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    with:
+      target-branch: ${{ github.ref_name }}
+      skip-github-pull-request: true
+    secrets:
+      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
+  release-please:
+    name: Release Please
+    needs: [release-policy, create-releases]
+    # The fixture skips release-policy and create-releases.
+    if: ${{ !cancelled() && (inputs.handoff-fixture || needs.create-releases.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Check out the repository; the App token makes every write.
+      id-token: write # Required for Workload Identity Federation in downstream release jobs.
+    outputs:
+      handoff_fixture: ${{ inputs.handoff-fixture }}
+      platform_should_publish: ${{ steps.resolve-release.outputs.should_publish }}
+      platform_version: ${{ steps.resolve-release.outputs.version }}
+      platform_tag_name: ${{ steps.resolve-release.outputs.tag_name }}
+      platform_checkout_ref: ${{ steps.resolve-release.outputs.checkout_ref }}
+      platform_previous_version: ${{ steps.previous-release.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ steps.generate-token.outputs.token }}
-          config-file: .github/release-please/release-please-config.json
-          manifest-file: .github/release-please/.release-please-manifest.json
-          target-branch: ${{ github.ref_name }}
-          skip-github-pull-request: true
+          fetch-depth: ${{ inputs.handoff-fixture && 1 || '0' }}
+          persist-credentials: false
+
+      - name: Generate a token
+        id: generate-token
+        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        with:
+          # Read scanned queue artifacts from other runs.
+          permission-actions: read
+          # Read draft releases and create release tags; the fixture only reads.
+          permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       # All releases start as drafts. Both channels publish automatically after
       # all artifacts are ready.
@@ -135,13 +156,13 @@ jobs:
         if: ${{ !inputs.handoff-fixture }}
         id: resolve-release
         env:
-          ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
-          ACTION_VERSION: ${{ steps.release-please.outputs['platform--version'] }}
-          ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          ACTION_RELEASE_SHA: ${{ steps.release-please.outputs['platform--sha'] }}
+          ACTION_RELEASE_CREATED: ${{ fromJSON(needs.create-releases.outputs.releases || '{}')['platform--release_created'] }}
+          ACTION_VERSION: ${{ fromJSON(needs.create-releases.outputs.releases || '{}')['platform--version'] }}
+          ACTION_TAG_NAME: ${{ fromJSON(needs.create-releases.outputs.releases || '{}')['platform--tag_name'] }}
+          ACTION_RELEASE_SHA: ${{ fromJSON(needs.create-releases.outputs.releases || '{}')['platform--sha'] }}
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
+          REQUESTED_VERSION: ${{ needs.release-policy.outputs.requested }}
         run: |
           if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
             echo "::error::Release-please produced a version other than the merged manifest."
@@ -334,29 +355,6 @@ jobs:
           echo "version=${PREVIOUS_TAG#platform-v}" >> "${GITHUB_OUTPUT}"
           echo "Previous release: ${PREVIOUS_TAG:-none}"
 
-      - name: Create or update the next release PR
-        if: ${{ !inputs.handoff-fixture && (steps.policy.outputs.create_pr == 'true') }}
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        # Native rolling PRs on each branch. Pause only for consumed cutover overrides,
-        # which must be cleared after the seed/final release has built successfully.
-        id: release-please-pr
-        with:
-          token: ${{ steps.generate-token.outputs.token }}
-          config-file: .github/release-please/release-please-config.json
-          manifest-file: .github/release-please/.release-please-manifest.json
-          target-branch: ${{ github.ref_name }}
-          skip-github-release: true
-
-      - name: Log release-please outputs
-        if: ${{ !inputs.handoff-fixture }}
-        # HACK to get toJson to sorta print the output to the console without failing this job
-        continue-on-error: true
-        env:
-          RELEASE_OUTPUTS: ${{ toJson(steps.release-please.outputs) }}
-          PR_OUTPUTS: ${{ toJson(steps.release-please-pr.outputs) }}
-        run: |
-          echo "$RELEASE_OUTPUTS"
-          echo "$PR_OUTPUTS"
       - name: Verify non-publishing cross-run fixture with the existing App
         if: ${{ inputs.handoff-fixture }}
         env:
@@ -374,6 +372,22 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Native rolling PRs on each branch, after the release tag exists. Pause only for
+  # consumed cutover overrides, which must be cleared after the seed/final release has
+  # built successfully.
+  release-pr:
+    name: Create or update the next release PR
+    needs: [release-policy, release-please]
+    if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
+    permissions: {} # The shared workflow writes with the release App token only.
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    with:
+      target-branch: ${{ github.ref_name }}
+      skip-github-release: true
+    secrets:
+      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
@@ -388,9 +402,8 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      environment: release-publish
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -408,9 +421,8 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      environment: release-publish
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -430,9 +442,8 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      environment: release-publish
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -452,9 +463,8 @@ jobs:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      environment: release-publish
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -480,12 +490,7 @@ jobs:
       previous_version: ${{ needs.release-please.outputs.platform_previous_version }}
       push_image: true
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      environment: release-publish
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
@@ -513,6 +518,8 @@ jobs:
     # No failed or skipped build is acceptable. Publish automatically after all builds.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
+    # Docker Hub OIDC grants push only to this environment (main, release/*).
+    environment: release-publish
     concurrency:
       # Serialize publication within each release channel.
       group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
@@ -588,7 +595,7 @@ jobs:
 
       - name: Authenticate to artifact registry
         if: ${{ github.ref_name != 'main' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
         with:
           service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -597,8 +604,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: $/.github/actions/docker-login
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
       - name: Log in to GHCR
         uses: $/.github/actions/docker-login
@@ -730,11 +737,27 @@ jobs:
       - publish-github-release
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
     steps:
+      # The webhook lives in GCP Secret Manager. A dedicated service account
+      # reads only the alerting secrets, so no repository secret holds it.
+      - name: Authenticate to read the alerting webhook
+        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        with:
+          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Read the alerting webhook
+        id: alerting
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
+        with:
+          secrets: |-
+            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
+
       - name: Post failure alert to Slack
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           VERSION: ${{ needs.release-please.outputs.platform_version }}
           RP_RESULT: ${{ needs.release-please.result }}
@@ -747,7 +770,7 @@ jobs:
           PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
         run: |
           if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            echo "::warning::SLACK_ALERTING_WEBHOOK_URL not set; skipping Slack alert."
+            echo "::warning::The alerting webhook secret is empty; skipping Slack alert."
             exit 0
           fi
           TEXT=":rotating_light: *Platform release failed* — \`${VERSION:-unknown}\`

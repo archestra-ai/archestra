@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, ChevronDown, ExternalLink, Plus, X } from "lucide-react";
-import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
@@ -30,19 +29,6 @@ import {
 } from "@/lib/agent-options.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { cn } from "@/lib/utils/tailwind";
-
-/**
- * Keeps the list scrollable inside a modal dialog.
- *
- * The list portals to `<body>` so a short dialog cannot clip it (the dialog is
- * `overflow-hidden`). A modal dialog locks scrolling by preventDefaulting, at
- * the document, every wheel and touch move outside its own subtree; stopping
- * them at the list keeps them from reaching that lock.
- */
-const keepScrollInList = {
-  onWheelCapture: (event: React.WheelEvent) => event.stopPropagation(),
-  onTouchMoveCapture: (event: React.TouchEvent) => event.stopPropagation(),
-};
 
 export type AgentSelectorAgent = {
   id: string;
@@ -266,7 +252,7 @@ function SingleAgentSelector({
               {hint}
             </div>
           )}
-          <CommandList className="min-h-0 flex-1" {...keepScrollInList}>
+          <CommandList className="min-h-0 flex-1">
             <CommandEmpty>
               {remoteState?.isLoading ? (
                 <span>Loading agents...</span>
@@ -500,10 +486,7 @@ function MultiAgentSelector({
             }}
             placeholder={searchPlaceholder}
           />
-          <CommandList
-            className="max-h-[260px] min-h-0 flex-1 overflow-y-auto"
-            {...keepScrollInList}
-          >
+          <CommandList className="max-h-[260px] min-h-0 flex-1 overflow-y-auto">
             <CommandEmpty>
               {remoteState?.isLoading ? (
                 <span>Loading agents...</span>

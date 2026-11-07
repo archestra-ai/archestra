@@ -6,8 +6,7 @@ name: Frontend Dev Cache
 # dev stack on a clean checkout of a published commit installs the build
 # instead of making it (a cold build holds about 3.5 GiB); after an edit it
 # starts its build from the cache. platform/scripts/frontend-prebuilt.mjs
-# computes the key, packs and installs. The registry deletes both artifacts
-# 14 days after they were pushed.
+# computes the key, packs and installs.
 
 on:
   push:
@@ -40,13 +39,15 @@ concurrency:
 jobs:
   publish:
     name: Publish the prebuilt dev frontend
+    # Forks and the private mirror cannot write the public org's packages.
+    if: github.repository == 'archestra-ai/archestra'
     runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read # Check out the frontend sources.
-      id-token: write # Required for Workload Identity Federation.
+      packages: write # Publish the cache to GHCR.
     env:
-      REPOSITORY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/frontend-dev-cache
+      REPOSITORY: ghcr.io/archestra-ai/ci/frontend-dev-cache
       # As an Agent Runtime's stack builds: no source maps.
       ARCHESTRA_DEV_LITE_SOURCE_MAPS: "false"
     steps:
@@ -66,13 +67,12 @@ jobs:
           rm -f platform/.env
           echo "value=$(bash platform/scripts/dev-lite.sh frontend-artifact key)" >> "$GITHUB_OUTPUT"
 
-      - name: Authenticate to Google Artifact Registry
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+      - name: Log in to GHCR
+        uses: $/.github/actions/docker-login
         with:
-          # The development deploy identity, as napi-dev-cache.yml uses it.
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Check for a published entry
         id: published

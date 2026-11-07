@@ -1,8 +1,38 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { renderSchemaRows } from "./codegen-archestra-mcp-server-docs";
+import {
+  generateDocsFiles,
+  renderSchemaRows,
+} from "./codegen-archestra-mcp-server-docs";
 
 describe("codegen-archestra-mcp-server-docs", () => {
+  test("keeps the committed date when no page changed, and moves it when one did", () => {
+    const committed = generateDocsFiles({
+      readFile: () => null,
+      today: "2026-01-01",
+    });
+    expect(Object.keys(committed)).toContain("index.md");
+    expect(Object.keys(committed).length).toBeGreaterThan(1);
+
+    const rerun = generateDocsFiles({
+      readFile: (name) => committed[name] ?? null,
+      today: "2026-01-02",
+    });
+    expect(rerun).toEqual(committed);
+
+    const [topicPage] = Object.keys(committed).filter(
+      (name) => name !== "index.md",
+    );
+    const afterToolChange = generateDocsFiles({
+      readFile: (name) =>
+        name === topicPage ? "stale page" : (committed[name] ?? null),
+      today: "2026-01-02",
+    });
+    for (const content of Object.values(afterToolChange)) {
+      expect(content).toContain("lastUpdated: 2026-01-02");
+    }
+  });
+
   test("renders compact nullable types without losing nested fields", () => {
     const rows = renderSchemaRows({
       type: "object",

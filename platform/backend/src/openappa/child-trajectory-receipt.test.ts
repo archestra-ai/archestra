@@ -256,6 +256,7 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
       callerId: BINDING.callerId,
       spawnerNativeId: BINDING.spawnerNativeId,
     };
+    expect(early).not.toHaveProperty("childNativeId");
     // Ownership verification does not claim an unknown native identity.
     expect(verifyChildTrajectoryReceipt({ ...scope, receipt: early })).toBe(
       true,
@@ -284,33 +285,6 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         ...scope,
         receipt: early,
         childNativeId: BINDING.childNativeId,
-      }),
-    ).toBe(false);
-  });
-
-  test("signs marker-only bindings without attesting to a later native child id", () => {
-    const footer = mintChildTrajectoryReceipt({
-      ...BINDING,
-      childNativeId: undefined,
-    });
-    const [receipt] = stripChildTrajectoryReceipts(footer ?? "").receipts;
-
-    expect(receipt).not.toHaveProperty("childNativeId");
-    expect(
-      verifyChildTrajectoryReceipt({
-        receipt,
-        organizationId: BINDING.organizationId,
-        callerId: BINDING.callerId,
-        spawnerNativeId: BINDING.spawnerNativeId,
-      }),
-    ).toBe(true);
-    expect(
-      verifyChildTrajectoryReceipt({
-        receipt,
-        organizationId: BINDING.organizationId,
-        callerId: BINDING.callerId,
-        spawnerNativeId: BINDING.spawnerNativeId,
-        childNativeId: "later-native-id",
       }),
     ).toBe(false);
   });

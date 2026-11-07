@@ -31,11 +31,12 @@ on:
         required: false
         type: string
         default: ""
+      environment:
+        description: "GitHub Environment whose secrets the publishing jobs read (release-publish for releases); empty for none"
+        required: false
+        type: string
+        default: ""
     secrets:
-      DOCKER_USERNAME:
-        required: false
-      DOCKER_PASSWORD:
-        required: false
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
@@ -53,8 +54,7 @@ concurrency:
 
 jobs:
   # workflow_call path (release-please / deploy-dev): callers always pass a
-  # version, so gate on it — `github.event_name` is the CALLER's event here and
-  # can itself be pull_request (deploy-dev's label trigger).
+  # version, so gate on it — `github.event_name` is the CALLER's event here.
   build-p4-shim-image:
     name: Build p4 Shim Image
     if: ${{ inputs.version != '' }}
@@ -64,6 +64,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
+      environment: ${{ inputs.environment }}
       image_directory: ./platform/docker_images/p4_shim
       dockerfile: ./platform/docker_images/p4_shim/Dockerfile
       image_name: p4-shim
@@ -75,8 +76,6 @@ jobs:
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/p4_shim", ".github/workflows/build-p4-shim-docker-image.yml"]'
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
@@ -88,7 +87,7 @@ jobs:
   validate-p4-shim-image:
     name: Validate p4 Shim Image Build
     if: ${{ inputs.version == '' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     permissions:
       contents: read # Required to checkout the repository and build the image.
     steps:

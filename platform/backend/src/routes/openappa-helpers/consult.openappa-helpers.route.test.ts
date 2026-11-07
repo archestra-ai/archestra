@@ -255,20 +255,6 @@ describe("battery helper bridge", () => {
     ).toBe(502);
   });
 
-  test("a helper that exits non-zero answers 502", async ({
-    makeInternalMcpCatalog,
-  }) => {
-    const install = await installBoundGithub(makeInternalMcpCatalog);
-    stubSandbox({ exitCode: 3, stdout: "", stderr: "traceback" });
-
-    const response = await consult({
-      installId: install.id,
-      authorization: bridgeBearer(),
-    });
-
-    expect(response.statusCode).toBe(502);
-  });
-
   test("a failed consult reports why it failed and with which exit status", async ({
     makeInternalMcpCatalog,
   }) => {

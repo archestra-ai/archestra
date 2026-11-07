@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.5.0-rc.25](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.24...platform-v1.5.0-rc.25) (2026-11-07)
+
+
+### Features
+
+* **agent-runtime:** run unprivileged Agent Runtime pods under a configurable RuntimeClass (gVisor on staging) ([#10351](https://github.com/archestra-ai/archestra/issues/10351)) ([9308d78](https://github.com/archestra-ai/archestra/commit/9308d780ea122e8df06a5abfedf91fb0184d029a))
+* **helm:** connect to Cloud SQL through the Auth Proxy with IAM login ([#10358](https://github.com/archestra-ai/archestra/issues/10358)) ([89b30bd](https://github.com/archestra-ai/archestra/commit/89b30bdcf0926ff4fe4b0599ef7a8253fb4af31d))
+
+
+### Bug Fixes
+
+* **agent-runtime:** return conflict for terminal run cancellation ([#10326](https://github.com/archestra-ai/archestra/issues/10326)) ([ebf5b1e](https://github.com/archestra-ai/archestra/commit/ebf5b1e97ff633dc151689e2d727e792c21f567a))
+* **agents:** compact auto-routed model control on agent edit page ([#10323](https://github.com/archestra-ai/archestra/issues/10323)) ([05d3252](https://github.com/archestra-ai/archestra/commit/05d3252fdee5f5c4ae23bb2e9f1ab6567e867779))
+* **agents:** show and fix runtime agents that block a default model ([#10332](https://github.com/archestra-ai/archestra/issues/10332)) ([2fafff1](https://github.com/archestra-ai/archestra/commit/2fafff10bc19b9d37ab33e560c3778f6a3ccfc5a))
+* **chat:** send M4A/AAC voice clips inline to audio-capable Gemini models ([#10327](https://github.com/archestra-ai/archestra/issues/10327)) ([9a698ab](https://github.com/archestra-ai/archestra/commit/9a698abc05ed42af467490bcd56421879a8b85b9))
+* **ci:** move remaining CI images and dev caches to GHCR ([#10335](https://github.com/archestra-ai/archestra/issues/10335)) ([73b6f4f](https://github.com/archestra-ai/archestra/commit/73b6f4fcd41bd26323412aab29895f281ccd261a))
+* **docs:** keep MCP server reference date stable when tools are unchanged ([#10377](https://github.com/archestra-ai/archestra/issues/10377)) ([a0d10d9](https://github.com/archestra-ai/archestra/commit/a0d10d9d76b6866d32f9d48831776c154a1fef06))
+* **frontend:** allow dialog popovers to scroll ([#10331](https://github.com/archestra-ai/archestra/issues/10331)) ([2176894](https://github.com/archestra-ai/archestra/commit/2176894b1acdd699ce61a0ac24b92c1ee95724ad))
+* **helm:** optional hook ServiceAccount for the migration Job ([#10361](https://github.com/archestra-ai/archestra/issues/10361)) ([8c9a3ad](https://github.com/archestra-ai/archestra/commit/8c9a3ada3d8dafd5b3591ebd781b20c4908c9fe9))
+* **openappa:** admit the runtime's guardrail consults while a pod drains ([#10339](https://github.com/archestra-ai/archestra/issues/10339)) ([b8e1e10](https://github.com/archestra-ai/archestra/commit/b8e1e105a748815b0f8e550941b97e615241ce5a))
+* **openappa:** fail closed when the unattended note or admission waiver hits an outage ([#10308](https://github.com/archestra-ai/archestra/issues/10308)) ([3bef36c](https://github.com/archestra-ai/archestra/commit/3bef36c6f295e7f30b3095a2efdbeda8ac84d376))
+
+
+### Performance Improvements
+
+* **costs:** serve cost statistics from hourly and daily usage rollups ([#10318](https://github.com/archestra-ai/archestra/issues/10318)) ([fed47d7](https://github.com/archestra-ai/archestra/commit/fed47d744e16f121349e04102bef635c7f9f7421))
+* **teams:** reuse authenticated caller when listing teams ([#10325](https://github.com/archestra-ai/archestra/issues/10325)) ([4fb690c](https://github.com/archestra-ai/archestra/commit/4fb690cb7936f2c3a7eec9a5d870b5495b394eff))
+
+
+### Dependencies
+
+* bump uuid from 1.28.0 to 1.29.0 in /platform/archestra-rs in the rust-dependencies group ([#10281](https://github.com/archestra-ai/archestra/issues/10281)) ([de6032c](https://github.com/archestra-ai/archestra/commit/de6032cd1fb05a4e9d78ff96a1bdb6a9d6fbfe07))
+
+
+### Code Refactoring
+
+* **openappa:** route APPA GitHub calls through one bounded client ([#10307](https://github.com/archestra-ai/archestra/issues/10307)) ([ff2929a](https://github.com/archestra-ai/archestra/commit/ff2929a9c0bab662d319325b6f5e7e31ab9ebfc0))
+
+
+### Miscellaneous Chores
+
+* update client versions ([#10321](https://github.com/archestra-ai/archestra/issues/10321)) ([36702da](https://github.com/archestra-ai/archestra/commit/36702da76eadb6d223f825a86c4b6e2663f39ae3))
+
 ## [1.5.0-rc.24](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.23...platform-v1.5.0-rc.24) (2026-11-06)
 
 

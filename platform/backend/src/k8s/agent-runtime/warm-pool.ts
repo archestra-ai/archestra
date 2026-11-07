@@ -234,6 +234,7 @@ class AgentWarmPoolManager {
           workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,
+          runtimeClassName: config.agentRuntime.runtimeClassName,
           imagePullSecrets: [],
           effectiveNetworkPolicy,
           taskId: "",

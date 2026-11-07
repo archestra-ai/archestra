@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SupportedProvider } from "./model-constants";
 import {
   collapseWhitespace,
   exceedsCharLimit,
@@ -686,7 +687,10 @@ export type SupportedChatUploadMimeType =
   | "application/x-yaml"
   | "application/yaml"
   | "application/xml"
+  | "audio/aac"
   | "audio/flac"
+  | "audio/m4a"
+  | "audio/mp4"
   | "audio/mpeg"
   | "audio/mp3"
   | "audio/ogg"
@@ -970,6 +974,8 @@ export function getMediaType(file: FileLikeWithMediaType): string {
     svg: "image/svg+xml",
     bmp: "image/bmp",
     ico: "image/x-icon",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
     mp4: "video/mp4",
     webm: "video/webm",
     mov: "video/quicktime",
@@ -998,10 +1004,12 @@ export function getMediaType(file: FileLikeWithMediaType): string {
  * file part whose mediaType is absent is not sent as a document the provider
  * would reject — it is referenced as a sandbox file instead. Pass
  * `undefined`/`null` modalities to fall back to a safe readable default
- * (text + images + PDF).
+ * (text + images + PDF). `provider` adds the formats only that provider's
+ * request conversion accepts (see {@link PROVIDER_EXTRA_AUDIO_MIME_TYPES}).
  */
 export function getModelReadableMimeTypes(
   modalities: ModelInputModality[] | null | undefined,
+  provider?: SupportedProvider | null,
 ): Set<string> {
   // Treat an empty array the same as null — "capabilities unknown" — rather
   // than "reads nothing".
@@ -1018,6 +1026,12 @@ export function getModelReadableMimeTypes(
       }
     }
   }
+  const extraAudio = provider && PROVIDER_EXTRA_AUDIO_MIME_TYPES[provider];
+  if (extraAudio && source.includes("audio")) {
+    for (const type of extraAudio) {
+      mimeTypes.add(type);
+    }
+  }
   return mimeTypes;
 }
 
@@ -1026,3 +1040,17 @@ const DEFAULT_READABLE_MODALITIES: ModelInputModality[] = [
   "image",
   "pdf",
 ];
+
+/**
+ * Audio formats readable only on some providers, on top of the shared `audio`
+ * list. Gemini passes any audio media type through as inline data and accepts
+ * AAC/M4A (the format of Slack voice clips, reported as `audio/mp4`). They are
+ * kept out of the shared list because OpenAI's chat conversion throws on any
+ * audio type other than WAV/MP3, which would fail the turn instead of staging
+ * the file into the sandbox.
+ */
+const PROVIDER_EXTRA_AUDIO_MIME_TYPES: Partial<
+  Record<SupportedProvider, readonly SupportedChatUploadMimeType[]>
+> = {
+  gemini: ["audio/mp4", "audio/m4a", "audio/aac"],
+};

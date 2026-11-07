@@ -70,7 +70,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      serviceAccountName: {{ include "archestra-platform.migrationJobServiceAccountName" . }}
       restartPolicy: Never
       initContainers:
         {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}

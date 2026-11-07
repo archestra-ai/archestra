@@ -74746,6 +74746,7 @@ export type GetLlmProxyLogSummariesResponses = {
                 name: string;
             }> | null;
             responseTextPreview?: string | null;
+            autoRouted: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -75036,6 +75037,149 @@ export type GetLlmProxyLogSessionLineageResponses = {
 };
 
 export type GetLlmProxyLogSessionLineageResponse = GetLlmProxyLogSessionLineageResponses[keyof GetLlmProxyLogSessionLineageResponses];
+
+export type GetLlmProxyLogSessionHandoffsData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/llm-proxy-logs/sessions/{sessionId}/handoffs';
+};
+
+export type GetLlmProxyLogSessionHandoffsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmProxyLogSessionHandoffsError = GetLlmProxyLogSessionHandoffsErrors[keyof GetLlmProxyLogSessionHandoffsErrors];
+
+export type GetLlmProxyLogSessionHandoffsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Runs this session started, oldest first.
+         */
+        handedTo: Array<{
+            /**
+             * The run's stable id: its first turn's task id.
+             */
+            runId: string;
+            /**
+             * The run's own LLM session: its workload name.
+             */
+            llmSessionId: string;
+            /**
+             * The LLM session that started the run.
+             */
+            originLlmSessionId: string;
+            agentName: string;
+            title: string;
+            startedAt: string;
+        }>;
+        /**
+         * This session started more runs than `handedTo` lists.
+         */
+        handedToTruncated: boolean;
+        /**
+         * When this is a run's own session: that run, with the session that started it.
+         */
+        handedFrom: {
+            /**
+             * The run's stable id: its first turn's task id.
+             */
+            runId: string;
+            /**
+             * The run's own LLM session: its workload name.
+             */
+            llmSessionId: string;
+            /**
+             * The LLM session that started the run.
+             */
+            originLlmSessionId: string;
+            agentName: string;
+            title: string;
+            startedAt: string;
+        } | null;
+        /**
+         * Moves between the origin session and its runs, oldest first. A move to the side that already holds the work is left out.
+         */
+        moves: Array<{
+            kind: 'push' | 'pull' | 'steer';
+            runId: string;
+            mcpToolCallId: string;
+            /**
+             * When the gateway call that made the move ended.
+             */
+            at: string;
+        }>;
+    };
+};
+
+export type GetLlmProxyLogSessionHandoffsResponse = GetLlmProxyLogSessionHandoffsResponses[keyof GetLlmProxyLogSessionHandoffsResponses];
 
 export type GetLlmProxyLogExternalAgentIdsData = {
     body?: never;

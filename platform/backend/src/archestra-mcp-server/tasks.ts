@@ -721,6 +721,9 @@ async function launchDelegatedTask(params: {
             }),
           }
         : undefined;
+    // The caller's LLM session, when the gateway or chat knows it exactly:
+    // recorded on the run so the session trace can show the handoff.
+    const originLlmSessionId = context.tokenAuth?.llmSessionId;
     const taskRow = await startDetachedAgentTask({
       actor,
       agentId: agent.id,
@@ -729,6 +732,15 @@ async function launchDelegatedTask(params: {
       systemParams: {
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
+        ...(originLlmSessionId
+          ? {
+              onRuntimeSessionCreated: ({ taskId }) =>
+                AgentRunModel.setOriginLlmSessionId({
+                  taskId,
+                  originLlmSessionId,
+                }),
+            }
+          : {}),
         routeCategory: completionTarget
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,

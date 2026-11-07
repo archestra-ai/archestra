@@ -789,6 +789,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionHandoffs]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},

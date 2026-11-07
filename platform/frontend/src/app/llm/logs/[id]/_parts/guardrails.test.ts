@@ -337,6 +337,7 @@ function row(overrides: Partial<InteractionSummary> = {}): InteractionSummary {
     model: "claude-sonnet-4-5",
     baselineModel: null,
     billingMode: "metered",
+    autoRouted: false,
     inputTokens: 10,
     inputTokensEstimated: false,
     outputTokens: 5,

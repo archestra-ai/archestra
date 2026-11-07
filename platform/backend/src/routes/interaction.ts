@@ -18,12 +18,14 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import RoutingDecisionModel from "@/models/routing-decision";
+import { getSessionHandoffs } from "@/services/session-handoffs";
 import {
   ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
   InteractionSummarySchema,
   SelectInteractionSchema,
+  SessionHandoffsSchema,
   SessionLineageSchema,
   SessionSummarySchema,
   UserInfoSchema,
@@ -403,6 +405,35 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           clientSessionId: sessionId,
           ...(canSeeAllLogs ? {} : { callerId: `user:${user.id}` }),
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy-logs/sessions/:sessionId/handoffs",
+    {
+      schema: {
+        operationId: RouteId.GetLlmProxyLogSessionHandoffs,
+        description:
+          "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. `log:read` covers the caller's own runs; `log:admin` covers every run in the organization.",
+        tags: ["LLM Proxy Logs"],
+        params: z.object({ sessionId: z.string().min(1).max(1024) }),
+        response: constructResponseSchema(SessionHandoffsSchema),
+      },
+    },
+    async ({ params: { sessionId }, user, organizationId }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      return reply.send(
+        await getSessionHandoffs({
+          organizationId,
+          sessionId,
+          ...(canSeeAllLogs ? {} : { ownUserId: user.id }),
         }),
       );
     },

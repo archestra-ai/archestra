@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_MCP_SERVER_NAME,
   type CursorQuery,
   type PaginationQuery,
   redactCatalogToolArguments,
@@ -499,6 +500,59 @@ class McpToolCallModel {
     return rows.flatMap((row) =>
       row.sessionId ? [{ ...row, sessionId: row.sessionId }] : [],
     );
+  }
+
+  /**
+   * A session's gateway calls to the named tools, oldest first, with their
+   * arguments and results readable (a locked row keeps its sentinel). Only
+   * calls the Archestra server ran count, so another server's tool of the
+   * same short name never matches. `userId` limits them to that user's calls.
+   */
+  static async findArchestraCallsBySession(params: {
+    organizationId: string;
+    sessionId: string;
+    toolNames: string[];
+    userId?: string;
+    limit: number;
+  }): Promise<
+    {
+      id: string;
+      toolName: string | null;
+      toolCall: unknown;
+      toolResult: unknown;
+      isError: boolean | null;
+      createdAt: Date;
+    }[]
+  > {
+    if (params.toolNames.length === 0) return [];
+    const table = schema.mcpToolCallsTable;
+    const rows = await db
+      .select({
+        id: table.id,
+        toolName: MCP_TOOL_CALL_TOOL_NAME,
+        toolCall: table.toolCall,
+        toolResult: table.toolResult,
+        isError: table.isError,
+        encryptedChatConversationId: table.encryptedChatConversationId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.sessionId, params.sessionId),
+          eq(table.mcpServerName, ARCHESTRA_MCP_SERVER_NAME),
+          inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
+          ...(params.userId ? [eq(table.userId, params.userId)] : []),
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .orderBy(asc(table.createdAt))
+      .limit(params.limit);
+    return rows.map((row) => {
+      const { encryptedChatConversationId: _locked, ...readable } =
+        readMcpToolCallRow(row);
+      return readable;
+    });
   }
 
   static async findById(

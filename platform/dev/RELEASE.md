@@ -8,6 +8,12 @@ Archestra uses two release pipelines:
 
 New companion and agent images publish to `ghcr.io/archestra-ai`. The platform image remains on Docker Hub at `archestra/platform`, and the Helm OCI chart keeps its existing GAR URL. Scanned OCI archives upload by immutable digest without temporary `candidate-` tags. Existing released images remain at their original addresses.
 
+### Release Registry Credentials
+
+Ordinary CI cannot write release images. The repository's `GITHUB_TOKEN` has write access only to the `ghcr.io/archestra-ai/ci/*` packages. The release packages under `ghcr.io/archestra-ai` (companion and agent images) grant the `archestra` repository Read access only. Release jobs push them with `GHCR_RELEASE_PUBLISH_TOKEN`, a `write:packages` token of the release publisher account. That token is a secret of the `release-publish` environment, which only `main` and `release/*` can use, and the account's login is in the `GHCR_RELEASE_PUBLISH_USERNAME` variable. Docker Hub (`archestra/platform`) uses OIDC from the same environment. The `.github/actions/ghcr-login` action picks the credential for the target namespace and fails on a release push without the release token.
+
+A release that adds an image creates its package, which inherits this repository's write access through the image's source label. Right after that release, open the new package's settings: turn off **Inherit access from source repository**, grant the publisher account **Write**, and set the `archestra` repository to **Read** under **Manage Actions access**. Rotate the token before it expires: update the `release-publish` environment secret, then revoke the old token.
+
 ## Image CVE Gate
 
 Release Please PR updates on `main` and `release/X.Y` must pass image scanning before queue entry. Every update builds the Platform full/slim, MCP Server Base, and p4 Shim candidates from that event's synthetic merge commit. A successful scan applies only to that PR head, base, and merge candidate; a changed revision requires a new run. An API error, build error, scanner error, cancellation, or missing result blocks the gate. The policy remains fixable critical/high CVEs.

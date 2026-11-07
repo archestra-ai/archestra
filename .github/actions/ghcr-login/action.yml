@@ -1,0 +1,65 @@
+name: GHCR Login
+description: |
+  Log in to ghcr.io with the one credential that may write the target
+  namespace. Release packages (ghcr.io/archestra-ai/<image>) do not give this
+  repository's GITHUB_TOKEN write access: only the release publisher token,
+  an environment secret of release-publish (main and release/* only), can push
+  them. CI packages (ghcr.io/archestra-ai/ci/...) use the job's GITHUB_TOKEN.
+
+inputs:
+  image-registry:
+    description: "Registry prefix the job writes, e.g. ghcr.io/archestra-ai or ghcr.io/archestra-ai/ci"
+    required: true
+  release-username:
+    description: "Account that owns release-token (vars.GHCR_RELEASE_PUBLISH_USERNAME); release namespace only"
+    required: false
+    default: ""
+  release-token:
+    description: "Release publisher token (secrets.GHCR_RELEASE_PUBLISH_TOKEN from release-publish); release namespace only"
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Select GHCR credential
+      id: credential
+      shell: bash
+      env:
+        IMAGE_REGISTRY: ${{ inputs.image-registry }}
+        HAS_RELEASE_USERNAME: ${{ inputs.release-username != '' }}
+        HAS_RELEASE_TOKEN: ${{ inputs.release-token != '' }}
+      run: |
+        set -euo pipefail
+        case "${IMAGE_REGISTRY}" in
+          ghcr.io/archestra-ai)
+            if [ "${HAS_RELEASE_USERNAME}" != true ] || [ "${HAS_RELEASE_TOKEN}" != true ]; then
+              echo "::error::Release packages under ghcr.io/archestra-ai accept pushes only with GHCR_RELEASE_PUBLISH_TOKEN (release-publish environment secret) and the GHCR_RELEASE_PUBLISH_USERNAME variable. Pass both; the repository token cannot write these packages."
+              exit 1
+            fi
+            echo "kind=release" >> "${GITHUB_OUTPUT}"
+            ;;
+          ghcr.io/archestra-ai/ci | ghcr.io/archestra-ai/ci/*)
+            echo "kind=ci" >> "${GITHUB_OUTPUT}"
+            ;;
+          *)
+            echo "::error::Unsupported GHCR namespace: ${IMAGE_REGISTRY}"
+            exit 1
+            ;;
+        esac
+
+    - name: Log in with the release publisher token
+      if: ${{ steps.credential.outputs.kind == 'release' }}
+      uses: $/.github/actions/docker-login
+      with:
+        registry: ghcr.io
+        username: ${{ inputs.release-username }}
+        password: ${{ inputs.release-token }}
+
+    - name: Log in with the repository token
+      if: ${{ steps.credential.outputs.kind == 'ci' }}
+      uses: $/.github/actions/docker-login
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}

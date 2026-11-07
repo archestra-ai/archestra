@@ -29,6 +29,7 @@ import {
 } from "@sentry/opentelemetry";
 import config from "@/config";
 import logger from "@/logging";
+import { auditLogExporter } from "@/observability/audit-log-export";
 import sentryClient from "@/observability/sentry";
 import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
@@ -254,5 +255,5 @@ if (sentryTracingEnabled && sentryClient) {
 
 // The server owns signals and flushes telemetry after requests and audit writes.
 export async function shutdownTelemetry(): Promise<void> {
-  await sdk.shutdown();
+  await Promise.all([sdk.shutdown(), auditLogExporter.shutdown()]);
 }

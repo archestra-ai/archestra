@@ -278,6 +278,12 @@ export function buildAgentRuntimeSandbox(
                 })),
               }
             : {}),
+          // A sandboxing runtime (gVisor) gives the run its own kernel. It
+          // cannot host a privileged container, so a privileged run, which
+          // needs one for nested Docker, keeps the node's default runtime.
+          ...(spec.runtimeClassName && !spec.privileged
+            ? { runtimeClassName: spec.runtimeClassName }
+            : {}),
           // The agent authenticates to the platform with credentials mounted
           // from a Secret; it has no business reading the cluster's API.
           automountServiceAccountToken: false,

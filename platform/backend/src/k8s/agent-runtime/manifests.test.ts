@@ -273,6 +273,25 @@ describe("buildAgentRuntimeSandbox", () => {
     ).toBe(true);
   });
 
+  it("sandboxes only unprivileged runs with the configured RuntimeClass", () => {
+    expect(
+      buildAgentRuntimeSandbox(SPEC).spec.podTemplate.spec?.runtimeClassName,
+    ).toBeUndefined();
+
+    const sandboxed = { ...SPEC, runtimeClassName: "gvisor" };
+    expect(
+      buildAgentRuntimeSandbox(sandboxed).spec.podTemplate.spec
+        ?.runtimeClassName,
+    ).toBe("gvisor");
+    // gVisor cannot run a privileged container; such a pod would never start.
+    const privileged = buildAgentRuntimeSandbox({
+      ...sandboxed,
+      privileged: true,
+    }).spec.podTemplate.spec;
+    expect(privileged?.runtimeClassName).toBeUndefined();
+    expect(privileged?.containers[0]?.securityContext?.privileged).toBe(true);
+  });
+
   it("requests durable storage for the workspace", () => {
     expect(
       buildAgentRuntimeSandbox(SPEC).spec.volumeClaimTemplates[0].spec.resources

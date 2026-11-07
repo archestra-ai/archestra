@@ -479,6 +479,9 @@ RUN apk --no-cache upgrade && \
     # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
     # so the explicit floors both guarantee the fixed version and bust the cache.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
+    # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
+    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.

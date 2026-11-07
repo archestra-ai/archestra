@@ -267,7 +267,7 @@ function fixture() {
   const source = {
     number: 12,
     state: "open",
-    user: { login: "archestra-ci[bot]" },
+    user: { login: "archestra-releaser[bot]" },
     head: {
       sha,
       ref: "release-please--branches--main--components--platform",

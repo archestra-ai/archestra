@@ -15,7 +15,7 @@ jobs:
       group: release-generation-select-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     if: >-
-      github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+      github.event.pull_request.user.login == 'archestra-releaser[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.head_ref, 'release-please--branches--') &&
       endsWith(github.head_ref, '--components--platform')

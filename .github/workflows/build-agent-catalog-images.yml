@@ -40,6 +40,10 @@ on:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
+      # Release-publish environment secret; the only credential that can push
+      # release packages. Passed by name so the environment supplies it.
+      GHCR_RELEASE_PUBLISH_TOKEN:
+        required: false
   merge_group:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -85,7 +89,7 @@ jobs:
           - agent-copilot
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
-      packages: write # Publish CI images with the repository token.
+      packages: write # Publish CI images with the repository token; release images use the release token.
       id-token: write # Required for Workload Identity Federation.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
@@ -104,6 +108,7 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
   # Picks the Dockerfile targets the change can affect, from the diff against
   # the merge group's base or the pull request's merge base. The rules live in

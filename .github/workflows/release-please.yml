@@ -395,7 +395,7 @@ jobs:
     needs:
       - release-please
     permissions:
-      packages: write # Required by the reusable GHCR-capable publisher.
+      packages: write # Required by the reusable publisher; release packages use the release token.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -406,6 +406,8 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      # Release packages accept pushes only from this release-publish secret.
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
@@ -425,6 +427,8 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      # Release packages accept pushes only from this release-publish secret.
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
   build-and-push-p4-shim-docker-image:
     name: Build and push p4 Shim Docker image
@@ -435,7 +439,7 @@ jobs:
     needs:
       - release-please
     permissions:
-      packages: write # Required by the reusable GHCR-capable publisher.
+      packages: write # Required by the reusable publisher; release packages use the release token.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -446,6 +450,8 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      # Release packages accept pushes only from this release-publish secret.
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
@@ -456,7 +462,7 @@ jobs:
     needs:
       - release-please
     permissions:
-      packages: write # Required by the reusable GHCR-capable publisher.
+      packages: write # Required by the reusable publisher; release packages use the release token.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -467,6 +473,8 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      # Release packages accept pushes only from this release-publish secret.
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
@@ -534,7 +542,6 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       contents: write # Attach the saved chart and publish the release.
-      packages: write # Publish new release images to GHCR.
       id-token: write # Keep publishing the Helm chart at its existing GAR URL.
     env:
       GH_TOKEN: ${{ github.token }}
@@ -607,12 +614,14 @@ jobs:
           username: archestra
           dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
 
+      # Moves release image tags with the release publisher token; the
+      # repository token cannot write release packages.
       - name: Log in to GHCR
-        uses: $/.github/actions/docker-login
+        uses: $/.github/actions/ghcr-login
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          image-registry: ghcr.io/archestra-ai
+          release-username: ${{ vars.GHCR_RELEASE_PUBLISH_USERNAME }}
+          release-token: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}
 
       - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}

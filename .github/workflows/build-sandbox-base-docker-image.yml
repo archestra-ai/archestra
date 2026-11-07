@@ -35,6 +35,10 @@ on:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
+      # Release-publish environment secret; the only credential that can push
+      # release packages. Passed by name so the environment supplies it.
+      GHCR_RELEASE_PUBLISH_TOKEN:
+        required: false
 
 permissions: {}
 
@@ -79,7 +83,7 @@ jobs:
       - sandbox-base-lockfile-check
     permissions:
       contents: read # Required to checkout the repository and build the image.
-      packages: write # Publish CI images with the repository token.
+      packages: write # Publish CI images with the repository token; release images use the release token.
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
@@ -97,3 +101,4 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GHCR_RELEASE_PUBLISH_TOKEN: ${{ secrets.GHCR_RELEASE_PUBLISH_TOKEN }}

@@ -32,7 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     # The website deploy app key lives only in this environment, so the job
     # reads it directly instead of through a caller's secrets.
-    environment: website-deploy
+    environment:
+      name: website-deploy
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read
     steps:

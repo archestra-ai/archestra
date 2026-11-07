@@ -3,9 +3,10 @@
 
 Replaces the chart's `releaseImageDigests: {}` line with
 {"version": VERSION, "images": DIGESTS} before `helm package`. DIGESTS is
-release-ghcr-images.json from publish-ghcr-release-images: the digests the
-release-images publisher verified and copied. The platform pins its default
-images to them (ARCHESTRA_RELEASE_IMAGE_DIGESTS).
+release-pins.json from release-subjects.sh: the staged digests the release
+attests and the release-images publisher copies unchanged. The chart pins the
+platform image to its entry; the platform pins its default images to the rest
+(ARCHESTRA_RELEASE_IMAGE_DIGESTS).
 
 Usage: VERSION=1.2.3 DIGESTS='{"mcp-server-base": "sha256:..."}' \
   release-chart-digests.py path/to/values.yaml

@@ -208,7 +208,7 @@ jobs:
   # codegen can commit its docs/openapi.json version bump to the PR.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-releaser[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
     # Turbo fans out six check tasks; @frontend:check:ci also runs
     # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
     runs-on: ubicloud-standard-16-ubuntu-2404

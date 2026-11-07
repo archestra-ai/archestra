@@ -29,6 +29,9 @@ jobs:
     name: Release Please
     if: ${{ inputs.handoff-fixture || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
+    # Holds the archestra-releaser App's key; main and release/* only, so the
+    # handoff fixture is dispatched from one of those branches too.
+    environment: releaser
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
       pull-requests: write # Required for release-please PR creation and updates.
@@ -62,8 +65,8 @@ jobs:
         with:
           permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}
           permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Validate branch release policy
         if: ${{ !inputs.handoff-fixture }}

@@ -302,6 +302,7 @@ class WorkflowHandoffTests(unittest.TestCase):
         # Credentials stay in the original release job; native publishers use
         # only same-run artifact downloads, with no new App secrets or scopes.
         self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", native)
+        self.assertNotIn("APP_PRIVATE_KEY", native)
         self.assertNotIn("actions: read", native)
 
 

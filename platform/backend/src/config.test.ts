@@ -29,6 +29,7 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getRumOtlpAuthHeaders,
+  getSentryConfig,
   getTrustedOrigins,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
@@ -157,6 +158,68 @@ describe("getAnalyticsConfig", () => {
         key: "ph_custom",
         host: "https://posthog.example.com",
       },
+    });
+  });
+});
+
+describe("getSentryConfig", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", undefined);
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  test("reports errors only to Archestra's project by default in production", () => {
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: expect.stringMatching(
+        /^https:\/\/[0-9a-f]+@[\w.]+\.sentry\.io\/\d+$/,
+      ),
+      environment: "self-hosted",
+      errorsOnly: true,
+    });
+  });
+
+  test("ARCHESTRA_ANALYTICS=disabled turns default error reporting off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+
+    expect(getSentryConfig().enabled).toBe(false);
+  });
+
+  test("stays off in development unless analytics is turned on", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(getSentryConfig().enabled).toBe(false);
+
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "enabled");
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      environment: "development",
+    });
+  });
+
+  test("an explicit DSN reports to that project with full diagnostics, even with analytics off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+    vi.stubEnv(
+      "ARCHESTRA_SENTRY_BACKEND_DSN",
+      "https://key@sentry.example.com/7",
+    );
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", "Staging");
+
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: "https://key@sentry.example.com/7",
+      environment: "staging",
+      errorsOnly: false,
+    });
+  });
+
+  test("an empty DSN falls back to the default project", () => {
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", "");
+
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      errorsOnly: true,
     });
   });
 });

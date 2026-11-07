@@ -47,18 +47,25 @@ const {
       verboseTracing,
       tracesSampleRate,
     },
-    sentry: { enabled: sentryEnabled },
+    sentry: { enabled: sentryEnabled, errorsOnly: sentryErrorsOnly },
   },
 } = config;
 
 /**
+ * Whether Sentry receives traces. Reporting to Archestra's default project is
+ * errors only, so tracing stays exactly as the deployment configured it.
+ */
+const sentryTracingEnabled = sentryEnabled && !sentryErrorsOnly;
+
+/**
  * Whether to enable infrastructure auto-instrumentations (HTTP, pg, DNS, net).
  *
- * When Sentry is configured, auto-instrumentations are always enabled so Sentry
- * receives full traces for internal debugging. A FilteringSpanProcessor ensures
- * only GenAI/MCP spans reach the customer-facing OTLP endpoint.
+ * When Sentry traces (an explicitly configured DSN), auto-instrumentations are
+ * always enabled so Sentry receives full traces for debugging. A
+ * FilteringSpanProcessor ensures only GenAI/MCP spans reach the
+ * customer-facing OTLP endpoint.
  *
- * When Sentry is not configured, auto-instrumentations are only enabled if
+ * Otherwise auto-instrumentations are only enabled if
  * ARCHESTRA_OTEL_VERBOSE_TRACING=true.
  */
 const enableAutoInstrumentations = infrastructureSpansEnabled();
@@ -110,7 +117,7 @@ class AgentSpanFilterProcessor implements SpanProcessor {
 // Build the OTLP span processor — filtered when Sentry is enabled
 const otlpBatchProcessor = new BatchSpanProcessor(traceExporter);
 const otlpProcessor: SpanProcessor =
-  sentryEnabled && !verboseTracing
+  sentryTracingEnabled && !verboseTracing
     ? new AgentSpanFilterProcessor(otlpBatchProcessor)
     : otlpBatchProcessor;
 
@@ -120,8 +127,8 @@ const spanProcessors: SpanProcessor[] = [
   new PipelineSpanProcessor(new SessionOperationLogProcessor(), "otlp"),
 ];
 
-// Add Sentry span processor if Sentry is enabled (receives ALL spans, unfiltered)
-if (sentryEnabled) {
+// Add Sentry span processor if Sentry traces (receives ALL spans, unfiltered)
+if (sentryTracingEnabled) {
   spanProcessors.push(
     new PipelineSpanProcessor(new SentrySpanProcessor(), "diagnostics"),
   );
@@ -153,7 +160,7 @@ const sdk = new NodeSDK({
      * When Sentry is enabled, it instruments Fastify automatically so we skip this.
      * https://docs.sentry.io/platforms/javascript/guides/fastify/migration/v7-to-v8/v8-opentelemetry/
      */
-    ...(!sentryEnabled && enableAutoInstrumentations
+    ...(!sentryTracingEnabled && enableAutoInstrumentations
       ? [
           new FastifyOtelInstrumentation({
             registerOnInitialization: true,
@@ -166,7 +173,7 @@ const sdk = new NodeSDK({
     getNodeAutoInstrumentations({
       "@opentelemetry/instrumentation-http": getHttpInstrumentationConfig({
         enabled: enableAutoInstrumentations,
-        errorTrackingEnabled: sentryEnabled,
+        errorTrackingEnabled: sentryTracingEnabled,
       }),
       "@opentelemetry/instrumentation-undici": {
         enabled: enableAutoInstrumentations,
@@ -189,11 +196,13 @@ const sdk = new NodeSDK({
     }),
   ],
   /**
-   * If Sentry is configured, add Sentry components for proper integration
+   * If Sentry is configured, add Sentry components for proper integration.
+   * The context manager also keeps error-only reporting's per-request scopes
+   * apart.
    */
   contextManager: sentryEnabled ? new Sentry.SentryContextManager() : undefined,
   sampler:
-    sentryEnabled && sentryClient
+    sentryTracingEnabled && sentryClient
       ? new PipelineSampler(
           new ParentBasedSampler({
             root: new TraceIdRatioBasedSampler(tracesSampleRate),
@@ -204,7 +213,7 @@ const sdk = new NodeSDK({
       : new ParentBasedSampler({
           root: new TraceIdRatioBasedSampler(tracesSampleRate),
         }),
-  textMapPropagator: sentryEnabled ? new SentryPropagator() : undefined,
+  textMapPropagator: sentryTracingEnabled ? new SentryPropagator() : undefined,
   // Use multiple span processors to send traces to both Sentry and OTLP endpoints
   spanProcessors,
   // Export pino logs (with trace context) to the OTLP endpoint
@@ -218,10 +227,13 @@ sdk.start();
 logger.debug(
   {
     sentryEnabled,
-    tracesSampleRate: sentryEnabled ? "managed by Sentry" : tracesSampleRate,
+    sentryTracingEnabled,
+    tracesSampleRate: sentryTracingEnabled
+      ? "managed by Sentry"
+      : tracesSampleRate,
     verboseTracing,
     enableAutoInstrumentations,
-    otlpFiltering: sentryEnabled && !verboseTracing,
+    otlpFiltering: sentryTracingEnabled && !verboseTracing,
     otlpTraceEndpoint: traceExporterConfig.url,
     otlpLogEndpoint: logExporterConfig.url,
     spanProcessorCount: spanProcessors.length,
@@ -230,8 +242,8 @@ logger.debug(
   "OpenTelemetry SDK initialized with trace and log pipelines",
 );
 
-// Validate Sentry + OpenTelemetry integration if Sentry is configured
-if (sentryClient) {
+// Validate Sentry + OpenTelemetry integration if Sentry traces
+if (sentryTracingEnabled && sentryClient) {
   try {
     Sentry.validateOpenTelemetrySetup();
     logger.info("Sentry + OpenTelemetry integration validated successfully");

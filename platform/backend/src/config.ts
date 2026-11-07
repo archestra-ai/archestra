@@ -40,6 +40,10 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import {
+  isAnalyticsEnabled,
+  resolveErrorReporting,
+} from "@archestra/shared/error-reporting";
 import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
@@ -86,7 +90,6 @@ dotenv.config({
   quiet: true,
 });
 
-const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
@@ -160,6 +163,13 @@ export function parseChatopsWebhookBaseUrl(rawValue: string | undefined) {
 
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
+
+/**
+ * Archestra's Sentry project for backend errors. A DSN only allows sending
+ * events to the project, so it is public by design.
+ */
+const DEFAULT_SENTRY_BACKEND_DSN =
+  "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232";
 
 /**
  * Determines OTLP authentication headers based on environment variables
@@ -1591,19 +1601,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 
 /** @public — exported for testability */
 export const getAnalyticsConfig = () => {
-  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
-  // Evaluated at call time (not the module-level `isProduction`) so tests can
-  // exercise both environments.
-  const isProductionEnv = ["production", "prod"].includes(
-    process.env.NODE_ENV?.toLowerCase() ?? "",
-  );
   return {
-    // Analytics (PostHog product analytics, instance heartbeats, and backend
-    // error tracking) defaults to on only in production builds. Local dev and
-    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
-    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
-    // wins in both directions ("disabled" → off, any other value → on).
-    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    // Analytics (PostHog product analytics, instance heartbeats, and error
+    // reports to Archestra's Sentry) defaults to on only in production builds.
+    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
+    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // which always wins in both directions ("disabled" → off, any other value
+    // → on). Evaluated at call time so tests can exercise both environments.
+    enabled: isAnalyticsEnabled({
+      analytics: process.env.ARCHESTRA_ANALYTICS,
+      nodeEnv: process.env.NODE_ENV,
+    }),
     posthog: {
       key:
         process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
@@ -1614,6 +1622,22 @@ export const getAnalyticsConfig = () => {
     },
   };
 };
+
+/**
+ * Backend error reporting. Without ARCHESTRA_SENTRY_BACKEND_DSN, errors (and
+ * only errors) go to Archestra's Sentry project while analytics is on. An
+ * explicit DSN reports to that project with full diagnostics, independent of
+ * ARCHESTRA_ANALYTICS.
+ * @public — exported for testability
+ */
+export const getSentryConfig = () =>
+  resolveErrorReporting({
+    dsnOverride: process.env.ARCHESTRA_SENTRY_BACKEND_DSN,
+    defaultDsn: DEFAULT_SENTRY_BACKEND_DSN,
+    environmentOverride: process.env.ARCHESTRA_SENTRY_ENVIRONMENT,
+    nodeEnv: process.env.NODE_ENV,
+    analyticsEnabled: getAnalyticsConfig().enabled,
+  });
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -3641,10 +3665,7 @@ const config = {
       ),
     },
     sentry: {
-      enabled: sentryDsn !== "",
-      dsn: sentryDsn,
-      environment:
-        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+      ...getSentryConfig(),
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
         0.1,

@@ -104,7 +104,7 @@ export class Authnz {
     }
 
     // Set Sentry user context after successful authentication
-    this.setSentryUserContext(request.user, request);
+    this.setSentryUserContext(request.user);
 
     logger.trace(
       {
@@ -686,25 +686,12 @@ export class Authnz {
   };
 
   /**
-   * Sets the Sentry user context for better error tracking and attribution
+   * Attribute error reports to the signed-in user by opaque id only. Error
+   * reports can leave the deployment, so no email, name or IP goes with them.
    */
-  public setSentryUserContext = (
-    user: { id: string; email?: string; name?: string },
-    request: FastifyRequest,
-  ): void => {
+  public setSentryUserContext = (user: { id: string }): void => {
     try {
-      // Extract IP address from request headers
-      const ipAddress =
-        (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-        (request.headers["x-real-ip"] as string) ||
-        request.ip;
-
-      Sentry.setUser({
-        id: user.id,
-        email: user.email,
-        username: user.name || user.email,
-        ip_address: ipAddress,
-      });
+      Sentry.setUser({ id: user.id });
     } catch (_error) {
       // Silently fail if Sentry is not configured or there's an error
       // We don't want authentication to fail due to Sentry issues

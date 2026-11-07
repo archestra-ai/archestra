@@ -137,7 +137,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `json` (one JSON object per line), `pretty` (colorized text)
   - The OTLP log exporter always receives structured records.
 
-- **`ARCHESTRA_ANALYTICS`** - Sends product analytics, instance heartbeats, and backend error reports to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
+- **`ARCHESTRA_ANALYTICS`** - Sends usage analytics and telemetry to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images; off in development
   - Values: `disabled` turns it off. Any other value turns it on.
 

@@ -18,6 +18,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     icon: null,
     environments: [],
     labels: [],
+    builtInUpdateAvailable: false,
     agentName: null,
     name,
     description: `${name} description`,

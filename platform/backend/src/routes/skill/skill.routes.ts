@@ -60,6 +60,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   builtInSkillShippedWrite,
   findBuiltInSkillBySourceRef,
+  hasNewerBuiltInDefault,
 } from "@/skills/built-in-skills";
 import {
   discoverSkills,
@@ -160,6 +161,14 @@ const GithubSkillSourceSchema = z
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
+const BuiltInUpdateAvailableSchema = z
+  .boolean()
+  .describe(
+    "True for a built-in skill whose copy was edited, so it no longer " +
+      "receives updates, while this deployment ships a newer default. " +
+      "Resetting the skill applies that default.",
+  );
+
 /**
  * Someone a personal skill has been shared with by name. Such a skill stays
  * `scope = 'personal'` and carries grants beside it, so this is what tells a
@@ -190,6 +199,7 @@ const SkillListItemSchema = SkillResponseSchema.extend({
    */
   usageUserCount: z.number(),
   labels: z.array(LabelWithDetailsSchema),
+  builtInUpdateAvailable: BuiltInUpdateAvailableSchema,
 });
 
 /** A skill with its resource files, team, and environment assignments. */
@@ -199,6 +209,7 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
   labels: z.array(LabelWithDetailsSchema),
+  builtInUpdateAvailable: BuiltInUpdateAvailableSchema,
 });
 
 /** One immutable version with its resource-file snapshots. */
@@ -757,6 +768,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
           labels: labelsBySkill.get(skill.id) ?? [],
+          builtInUpdateAvailable: hasNewerBuiltInDefault(skill),
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -2161,6 +2173,7 @@ async function loadSkillDetail(skill: Skill) {
     users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
     labels,
+    builtInUpdateAvailable: hasNewerBuiltInDefault(skill),
   };
 }
 

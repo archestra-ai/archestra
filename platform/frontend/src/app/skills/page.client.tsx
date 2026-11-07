@@ -8,6 +8,7 @@ import {
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
+  ArrowUpCircle,
   BookOpen,
   Braces,
   ChartColumn,
@@ -1442,6 +1443,20 @@ function ListedSkillName({
           </TooltipTrigger>
           <TooltipContent>
             Body is rendered with Handlebars at activation.
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {standalone?.builtInUpdateAvailable && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="shrink-0 gap-1">
+              <ArrowUpCircle className="h-3 w-3" />
+              Update available
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            This copy was edited, so it no longer gets updates. Open it to reset
+            it to the current default.
           </TooltipContent>
         </Tooltip>
       )}

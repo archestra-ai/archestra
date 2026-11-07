@@ -106,6 +106,7 @@ function makeSkillListItem(
     createdByServiceAccountId: null,
     authorName: "Admin User",
     labels: [],
+    builtInUpdateAvailable: false,
     createdBy: null,
     scope: "org",
     icon: null,

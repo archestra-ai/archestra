@@ -110,6 +110,48 @@ describe("POST /api/skills/:id/reset", () => {
     );
   });
 
+  test("flags an edited copy that missed a newer default until it is reset", async () => {
+    const id = await getBaseSkillId();
+    // An edited copy last written by an older release: sync preserves the
+    // edit, so the copy keeps that release's revision.
+    await SkillModel.updateWithFiles({
+      id,
+      skill: { content: "tampered", sourceCommit: "older-release" },
+    });
+    await syncBuiltInSkills();
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/skills/${id}`,
+    });
+    expect(detail.json()).toMatchObject({ builtInUpdateAvailable: true });
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/skills?limit=100&offset=0",
+    });
+    const listed = list
+      .json()
+      .data.find((skill: { id: string }) => skill.id === id);
+    expect(listed).toMatchObject({ builtInUpdateAvailable: true });
+
+    const reset = await app.inject({
+      method: "POST",
+      url: `/api/skills/${id}/reset`,
+    });
+    expect(reset.json()).toMatchObject({ builtInUpdateAvailable: false });
+  });
+
+  test("does not flag an edited copy when nothing newer ships", async () => {
+    const id = await getBaseSkillId();
+    await SkillModel.updateWithFiles({ id, skill: { content: "tampered" } });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/skills/${id}`,
+    });
+    expect(detail.json()).toMatchObject({ builtInUpdateAvailable: false });
+  });
+
   test("rejects resetting a non-built-in skill", async () => {
     const manual = await SkillModel.createWithFiles({
       skill: {

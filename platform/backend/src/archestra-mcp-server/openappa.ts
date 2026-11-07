@@ -1377,6 +1377,7 @@ const registry = defineArchestraTools([
                 const prepared = await getHitlAskUserArguments({
                   session: reviewSession,
                   offerIds: [remedy.offer_id],
+                  presentation: "form",
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);

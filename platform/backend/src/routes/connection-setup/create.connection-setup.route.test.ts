@@ -31,6 +31,38 @@ describe("POST /api/connection-setups", () => {
   let organizationId: string;
   let user: User;
 
+  test("Grok delivers authorized shared skills without native plugin registration", async ({
+    makeSkill,
+  }) => {
+    const skill = await makeSkill(organizationId, {
+      authorId: user.id,
+      access: "org",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "grok-build",
+        baseUrl: "http://localhost:9000/v1",
+        skills: { skillIds: [skill.id], ttlDays: null },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.clientId).toBe("grok-build");
+    expect(setup?.includeSkills).toBe(true);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("/skills/marketplace.git");
+    expect(script.body).toContain("syncGrokSkills");
+  });
+
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -66,6 +98,64 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("at least one");
+  });
+
+  test("Grok defaults to native subscription without an organization provider key and requires platform attribution", async () => {
+    const selection = {
+      clientId: "grok-build",
+      platform: "windows",
+      baseUrl: "http://localhost:9000/v1",
+      provider: "xai",
+    };
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: selection,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const token = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(token);
+    expect(setup?.proxyAuth).toBe("native-session");
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${token}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("archNodeScript");
+    const optedOut = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: { ...selection, attributePassthrough: false },
+    });
+    expect(optedOut.statusCode).toBe(400);
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: selection,
+    });
+    expect(forbidden.statusCode, forbidden.body).toBe(403);
+  });
+
+  test.each([
+    { clientId: "codex", provider: "xai" },
+    { clientId: "grok-build", provider: "openai" },
+  ])("native subscription rejects mismatched client/provider %j", async (selection) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        ...selection,
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "native-session",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
   });
 
   test.each([

@@ -9,46 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# OpenAPPA v0.35.1: conditional publication (#685), the replay-only
-# appa/do_something call (#670), the [aliases]
-# table (#666), void returns for marked spawns (#665), typed refusal classes
-# (#681), live policy revisions with snapshot views (#677); then on main,
-# replay steps without `expect` (#688) and the deployment targets each
-# battery lists (#691), loopback requests staying local (#692),
-# parallel subagent spawns waiting for the earlier bind (#694), and plain
-# errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
-# and the generic coding battery (#697); then v0.37.0 and libpq TLS
-# parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
-# the attestation offered only where the parent covers its rank (#713),
-# and the archestra battery's agent-run rules (#716); then explicit
-# no-remedy refusal feedback (#720), a failed subagent reported as stopped
-# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
-# escape (#724); then v0.38.0 and the remedy's vouch spent at its claim
-# (#725), shorter block feedback (#726), the replay stand-in (#739), a
-# subagent's return declared without review or ahead of its spawn (#763), and
-# the required readers named in reviews and block reasons (#764); then
-# v0.38.1 and zip 9, which fixes the archive extract advisories (#680); then
-# context-provider answers trimmed largest first (#769), refusal detail in
-# provider errors (#770), more shell shapes for the GitHub provider (#771),
-# the consult budget in `APPA_CONSULT_TIMEOUT_MS` (#772), and context-provider
-# and deployment hints (#773), and the GitHub context provider answering the
-# GH_TOKEN, git config, assignment, and heredoc shapes it used to decline (#775);
-# then the annotator label-guide fixes and the claude-code verdict cache (#782),
-# result trust judged by open-write surfaces (#783), a narrowing's impact
-# that leaves per-call labeled tools unjudged (#784), a dotenv file matched in
-# the coding shell credential floor as a path, not a substring (#785), and a
-# peer read admitted under unscoped output sanitizers while its result is not
-# confined (#786); then Google Drive sharing settings for Google Workspace
-# audiences (#750), the project's own toolchain releases kept out of the
-# label-guide trust gate (#788), every Archestra built-in tool labeled (#789),
-# and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
-# then the planner-cap lint's redispatch index (#792), the battery scripts'
-# run lines (#793), kagent demo fixes (#794, #796), and a credential link
-# declaration that requires an internal audience (#798).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3" }
+# OpenAPPA #807: typed child-turn completion with the recorded return contract.
+# Pin the reviewed release before merging this integration.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "52426a85d91301266ff5ec6765bf7487d06848ef", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "52426a85d91301266ff5ec6765bf7487d06848ef" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "52426a85d91301266ff5ec6765bf7487d06848ef", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "52426a85d91301266ff5ec6765bf7487d06848ef" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

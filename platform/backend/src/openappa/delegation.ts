@@ -17,6 +17,8 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import config from "@/config";
+import { stripChildTrajectoryReceipts } from "./child-trajectory-receipt";
+import { stripChildTrajectoryReferences } from "./child-trajectory-reference-format";
 import { withoutTrajectoryStamp } from "./trajectory-stamp";
 import { type AppaWireFamily, chatMessages, responsesItems } from "./wire";
 
@@ -170,7 +172,14 @@ export function collectDelegationMarkers(params: {
   openingPrompt?: (text: string) => string;
 }): AppaDelegationMarker[] {
   return userTexts(params).flatMap((text) => {
-    const marker = trailingMarker(text, params.openingPrompt);
+    // Continuations append an actor receipt after the prompt proof. Some
+    // routes collect before ingress scrubs that receipt; both orders must
+    // bind the same original prompt.
+    const marker = trailingMarker(
+      stripChildTrajectoryReceipts(stripChildTrajectoryReferences(text).text)
+        .text,
+      params.openingPrompt,
+    );
     return marker ? [marker] : [];
   });
 }
@@ -580,7 +589,12 @@ function spawnFields(name: unknown): readonly string[] {
   // A client's tools retain their names across provider protocols. OpenCode,
   // for example, sends `task` through both Chat Completions and Anthropic.
   const normalized = normalizedNativeToolName(name);
-  if (normalized === "Agent" || normalized === "Task" || normalized === "task")
+  if (
+    normalized === "Agent" ||
+    normalized === "Task" ||
+    normalized === "task" ||
+    normalized === "spawn_subagent"
+  )
     return ["prompt"];
   if (normalized === "spawn_agent") return ["message", "items"];
   return [];
@@ -652,7 +666,7 @@ function stripTextArgument(
 ): boolean {
   const value = args[field];
   if (typeof value !== "string") return false;
-  const stripped = stripMarkerLines(value);
+  const stripped = stripMarkerLines(stripChildTrajectoryReceipts(value).text);
   if (stripped === value) return false;
   args[field] = stripped;
   return true;

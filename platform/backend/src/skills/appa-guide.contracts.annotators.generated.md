@@ -141,4 +141,3 @@ Alternatively, use a built-in annotator. The available options are:
 Set `builtin` on `[[policy.annotator]]`, as in the Claude Code example above. An annotator with `builtin` cannot also have an `[externals.annotators.<name>]` section. Unlike sanitizers and authorities, annotators do not accept `builtin` under `[externals]`.
 
 `claude-code` runs the local `claude` command and requires Claude Code on the machine running OpenAPPA. On Windows, `claude` must resolve to `claude.exe`: OpenAPPA cannot start the `claude.cmd` shim that npm installs. `llm` requires model settings under `[externals.llm]` and the key they name. `jev` requires `[externals.jev]` and its key, judges the complete call, so its annotator cannot declare `inputs`, and needs a mandate that admits at least two trust ranks. OpenAPPA rejects a configuration with a missing implementation, an unknown implementation name, or a model implementation whose key is not set.
-

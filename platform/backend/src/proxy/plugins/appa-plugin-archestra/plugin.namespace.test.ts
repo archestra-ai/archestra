@@ -4,8 +4,11 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { peerProofAuthorizes, verifyPeerProof } from "@/openappa/peer-claims";
 import * as appaService from "@/openappa/service";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
+import { grokToolName } from "@/routes/mcp-gateway/grok-tool-names";
+import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT, type AppaTrustedContext } from "./types";
 
@@ -45,6 +48,172 @@ describe("AppaPluginArchestra namespace controls", () => {
         "If the latest ruling offers no remedy plan, stop that blocked action",
       );
       expect(guidance).not.toContain("mcp__foreign");
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "unknown_native_command",
+    "workflow",
+    "scheduler_create",
+  ])("Grok refuses %s before evaluation or release, including mixed batches", async (name) => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const context = namespaceContext();
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-session-id": "synthetic-session",
+    };
+    const evaluate = vi.spyOn(appaService, "evaluateToolCalls");
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "safe",
+            name: "read_file",
+            arguments: '{"target_file":"README.md"}',
+          },
+          { id: "unsupported", name, arguments: "{}" },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_unsupported_native_tool",
+          blockedToolName: name,
+          blockedToolId: "unsupported",
+        },
+      });
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      evaluate.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Grok sends direct native tools to policy and does not treat a deferred MCP dispatcher as a platform control", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const context = namespaceContext();
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-session-id": "synthetic-session",
+    };
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }, { kind: "allow" }]);
+    try {
+      await plugin.onSessionInit(context);
+      expect(
+        await plugin.onToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "shell",
+              name: "run_terminal_command",
+              arguments: '{"command":"pwd","description":"Show directory"}',
+            },
+            {
+              id: "dispatch",
+              name: "use_tool",
+              arguments:
+                '{"tool_name":"gateway__archestra__execute_remedy_plan","tool_input":{"offer_id":"untrusted"}}',
+            },
+          ],
+        }),
+      ).toBeUndefined();
+      const calls = evaluate.mock.calls[0]?.[1];
+      expect(calls).toHaveLength(2);
+      expect(calls?.[0]).toMatchObject({ name: "run_terminal_command" });
+      expect(calls?.[1]).toMatchObject({ name: "use_tool" });
+      const resolution = evaluate.mock.calls[0]?.[2];
+      expect(resolution?.canonicalize("run_terminal_command")).toBe("Bash");
+      expect(resolution?.canonicalize("use_tool")).toBe("use_tool");
+      expect(
+        normalizeToolCallsForPolicy(calls ?? [], {
+          canonicalize: resolution.canonicalize,
+          looseRunToolDispatch: false,
+          nativeDispatch: resolution.nativeDispatch,
+        })[1],
+      ).toEqual({
+        toolCallName: `unverified.${grokToolName("gateway__archestra__execute_remedy_plan")}`,
+        toolCallArgs: '{"offer_id":"untrusted"}',
+        isNativeDispatchTarget: true,
+      });
+    } finally {
+      evaluate.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Grok refuses a guessed platform target before policy evaluation and tells the model to discover its catalog name", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const context = namespaceContext();
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-session-id": "synthetic-session",
+    };
+    const evaluate = vi.spyOn(appaService, "evaluateToolCalls");
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "guessed",
+            name: "use_tool",
+            arguments: JSON.stringify({
+              tool_name: "archestra__list_skills",
+              tool_input: {},
+            }),
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_unsupported_native_tool",
+          blockedToolId: "guessed",
+          contentMessage: expect.stringContaining(
+            "copy its complete tool_name",
+          ),
+        },
+      });
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      evaluate.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Grok cannot conceal a disallowed native spawn behind its local MCP dispatcher", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const context = namespaceContext();
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-session-id": "synthetic-session",
+    };
+    await plugin.onSessionInit(context);
+    try {
+      expect(
+        await plugin.onToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "hidden",
+              name: "use_tool",
+              arguments: JSON.stringify({
+                tool_name: "spawn_subagent",
+                tool_input: { prompt: "synthetic task" },
+              }),
+            },
+          ],
+        }),
+      ).toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_unsupported_native_tool" },
+      });
     } finally {
       await plugin.onCleanup(context);
     }

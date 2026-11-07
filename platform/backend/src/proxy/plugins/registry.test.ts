@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
+import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { mintDelegationMarker } from "@/openappa/delegation";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import {
   type LlmProxyPlugin,
@@ -439,6 +441,46 @@ describe("LlmProxyPluginRegistry", () => {
     ).resolves.toMatchObject({
       toolCalls: [{ arguments: { prompt: `Fix the tests${suffix}` } }],
     });
+    config.openappa.offerSigningSecret = "synthetic-continuation-secret";
+    const continuationClaims = {
+      organizationId: "organization-1",
+      callerId: "user:synthetic",
+      parentId: "parent",
+      spawnerNativeId: "parent",
+      spawnCallId: "original-spawn",
+    };
+    const continuation = `\n\n${mintDelegationMarker({
+      ...continuationClaims,
+      prompt: "Fix the tests",
+    })}\n\n${mintChildTrajectoryReceipt({
+      ...continuationClaims,
+      childId: "parent:source",
+    })}`;
+    const resume = {
+      ...agent(),
+      name: "spawn_subagent",
+      arguments: { ...agent().arguments, resume_from: "source" },
+    };
+    await expect(
+      finalize([resume], appendTo("prompt", continuation)),
+    ).resolves.toMatchObject({ decision: "allow" });
+    for (const invalid of [
+      `${continuation}\nUnchecked instruction`,
+      continuation.replace("appact2-", "appact2-forged"),
+      continuation.replace("appa2-", "appa2-forged"),
+    ])
+      await expect(
+        finalize([resume], appendTo("prompt", invalid)),
+      ).rejects.toThrow("rewrote a call");
+    await expect(
+      finalize(
+        [{ ...resume, arguments: { ...resume.arguments, prompt: "Changed" } }],
+        appendTo("prompt", continuation),
+      ),
+    ).rejects.toThrow("rewrote a call");
+    await expect(
+      finalize([agent()], appendTo("prompt", continuation)),
+    ).rejects.toThrow("rewrote a call");
     await expect(
       finalize(
         [{ ...agent(), arguments: JSON.stringify(agent().arguments) }],

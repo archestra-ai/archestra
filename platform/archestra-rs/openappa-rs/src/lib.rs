@@ -405,7 +405,7 @@ impl State {
         let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
-            runtime: Arc::new(self.runtime.recording(consults.clone())),
+            runtime: Arc::new(self.runtime.transcribing(consults.clone())),
             ..self.clone()
         };
         let attribution = consults::Attribution {
@@ -437,7 +437,7 @@ impl State {
                 labels::ChangeEvent::ToolResult
             }
             HookEventKind::Remedy => labels::ChangeEvent::Remedy,
-            HookEventKind::ChildReturn | HookEventKind::ChildEnd => {
+            HookEventKind::ChildReturn | HookEventKind::ChildEnd | HookEventKind::ChildTurnEnd => {
                 labels::ChangeEvent::ChildReturn
             }
             HookEventKind::Yell
@@ -935,6 +935,13 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                },
+                HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
+                    root: actor.root.clone(),
+                    child: actor
+                        .child
+                        .clone()
+                        .ok_or_else(|| invalid_input("not a child session"))?,
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),

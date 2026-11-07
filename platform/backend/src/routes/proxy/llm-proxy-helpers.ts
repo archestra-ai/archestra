@@ -126,8 +126,12 @@ export function normalizeToolCallsForPolicy(
   toolCallName: string;
   toolCallArgs: string;
   isRunToolDispatchTarget?: boolean;
+  isNativeDispatchTarget?: boolean;
 }> {
   return toolCalls.map((tc) => {
+    const nativeDispatch = resolution.nativeDispatch?.(tc);
+    if (nativeDispatch)
+      return { ...nativeDispatch, isNativeDispatchTarget: true };
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {

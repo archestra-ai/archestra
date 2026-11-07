@@ -60,7 +60,10 @@ import {
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { account, baseHandlers, origin } from "./service-account.test-data";
 import { ServiceAccountDetailPage } from "./service-account-detail-page";
 
@@ -105,6 +108,9 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: null,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
   vi.mocked(useEnterpriseFeature).mockReturnValue(true);
 });
 

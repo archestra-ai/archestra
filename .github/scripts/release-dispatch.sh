@@ -2,7 +2,8 @@
 # Asks the release-images publisher to copy the attested ci/ digests, and the
 # attested chart from this run, to their public names, then waits for its run.
 # Inputs: VERSION, PRESERVE_LATEST, PLATFORM_LATEST, CHART (the chart archive,
-# optional), PUBLISHER_REPO, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT; GH_TOKEN may
+# optional), SMOKE (true for a dry run to scratch names), PUBLISHER_REPO,
+# GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT; GH_TOKEN may
 # dispatch to and read Actions runs of PUBLISHER_REPO.
 set -euo pipefail
 
@@ -20,11 +21,13 @@ fi
 request_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 jq -n --arg id "$request_id" --arg version "$VERSION" --argjson latest "$latest" \
   --argjson platform_latest "${PLATFORM_LATEST:-false}" --argjson chart "$chart" \
+  --argjson smoke "${SMOKE:-false}" \
   --slurpfile images "$images_file" \
   '{event_type: "publish-release-images",
     client_payload: ({request_id: $id, version: $version, latest: $latest,
                       platform_latest: $platform_latest, images: $images[0]}
-                     + if $chart then {chart: $chart} else {} end)}' \
+                     + if $chart then {chart: $chart} else {} end
+                     + if $smoke then {smoke: true} else {} end)}' \
   | gh api -X POST "repos/$PUBLISHER_REPO/dispatches" --input -
 
 # The dispatch API returns no run ID; the publisher puts request_id in its run name.

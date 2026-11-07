@@ -228,9 +228,17 @@ gh() {
                          WORKFLOW.with_name("build-platform-release-image.yml")):
             source = workflow.read_text()
             with self.subTest(workflow=workflow.name):
-                for command in ("helm push", "imagetools create", "docker push", "skopeo copy",
+                for command in ("helm push", "imagetools create", "docker push",
                                 "auth_provider: dockerhub", "auth_provider: gar"):
                     self.assertNotIn(command, source)
+                # skopeo only stages, into ci/ (the publisher dry run).
+                for copy in source.split("skopeo copy")[1:]:
+                    command = copy.split("\n")[0]
+                    rest = copy.split("\n")[1:]
+                    while command.rstrip().endswith("\\") and rest:
+                        command += " " + rest.pop(0)
+                    destination = [arg for arg in command.split() if arg.startswith('"docker://')][-1]
+                    self.assertTrue(destination.startswith('"docker://ghcr.io/archestra-ai/ci/'), destination)
 
     def run_platform_latest(self, releases=(), *, version, api_status=0, preserve_latest="false"):
         section = WORKFLOW.read_text().split(
@@ -436,7 +444,7 @@ class PublisherHandoffTests(unittest.TestCase):
                 result, _ = self.collect(references, registry or "ghcr.io/archestra-ai")
                 self.assertNotEqual(result.returncode, 0)
 
-    def dispatch(self, *, version, preserve_latest, runs, platform_latest="false", chart=None):
+    def dispatch(self, *, version, preserve_latest, runs, platform_latest="false", chart=None, smoke="false"):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         images = Path(directory.name) / "images.json"
@@ -467,7 +475,7 @@ sleep() { :; }
             ["bash", "-c", stub + f'source "{SCRIPTS / "release-dispatch.sh"}" "{images}"'],
             env=os.environ | chart_env | {
                 "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
-                "PLATFORM_LATEST": platform_latest,
+                "PLATFORM_LATEST": platform_latest, "SMOKE": smoke,
                 "PUBLISHER_REPO": "archestra-ai/release-images", "GITHUB_RUN_ID": "77",
                 "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
                 "WATCH_STATUS": "0",
@@ -502,6 +510,16 @@ sleep() { :; }
         self.assertEqual(payload["client_payload"]["platform_latest"], True)
         self.assertEqual(payload["client_payload"]["chart"],
                          {"run_id": 77, "sha256": hashlib.sha256(b"chart").hexdigest()})
+
+    def test_dry_run_dispatch_is_marked_as_smoke(self):
+        runs = [{"id": 5, "display_title": "Publish 0.0.0-smoke.77 [77-2]"}]
+        result, payload, _ = self.dispatch(version="0.0.0-smoke.77", preserve_latest="true", runs=runs,
+                                           chart=b"chart", smoke="true")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["client_payload"]["smoke"], True)
+        self.assertEqual(payload["client_payload"]["latest"], False)
+        _, payload, _ = self.dispatch(version="1.4.0", preserve_latest="false", runs=runs)
+        self.assertNotIn("smoke", payload["client_payload"])
 
     def test_dispatch_waits_only_for_its_own_run(self):
         runs = [{"id": 4, "display_title": "Publish 1.4.0 [77-1]"},

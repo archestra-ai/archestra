@@ -1,5 +1,5 @@
 name: Release Please
-run-name: ${{ inputs.handoff-fixture && 'Non-publishing image handoff fixture' || 'Release Please' }}
+run-name: ${{ inputs.handoff-fixture && 'Non-publishing image handoff fixture' || inputs.publisher-smoke-version && 'Publisher dry run' || 'Release Please' }}
 
 on:
   push:
@@ -16,6 +16,10 @@ on:
         description: "Tiny scratch-image fixture artifact from this branch's PR workflow"
         type: string
         default: ""
+      publisher-smoke-version:
+        description: "Run only a release-images dry run with this published version's images (main only; writes scratch names only)"
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -27,7 +31,7 @@ concurrency:
 jobs:
   release-policy:
     name: Check release policy
-    if: ${{ !inputs.handoff-fixture && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+    if: ${{ !inputs.handoff-fixture && !inputs.publisher-smoke-version && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Check out the repository and its release refs.
@@ -830,6 +834,104 @@ jobs:
           <${RUN_URL}|View failed CI run> · <https://github.com/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml|Start a new release run>"
           jq -n --arg text "$TEXT" '{text: $text}' \
             | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"
+
+  publisher-smoke:
+    name: Publisher dry run
+    # Proves the release-images path before a release depends on it: the same
+    # attestation, verification, registry logins and copies, to scratch names
+    # only (publisher-smoke-<request> tags, archestra-public/publisher-smoke).
+    if: ${{ inputs.publisher-smoke-version != '' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    # Holds the archestra-releaser App's key; main and release/* only.
+    environment: releaser
+    timeout-minutes: 30
+    permissions:
+      contents: read # Check out the chart and publication scripts.
+      packages: write # Stage the smoke digests in ghcr.io/archestra-ai/ci.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    env:
+      SOURCE_VERSION: ${{ inputs.publisher-smoke-version }}
+      VERSION: 0.0.0-smoke.${{ github.run_id }}
+      PUBLISHER_REPO: archestra-ai/release-images
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Real release digests, already public, staged like a release stages them.
+      - name: Stage the published images
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          [[ "$SOURCE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] \
+            || { echo "::error::publisher-smoke-version must be a published release version"; exit 1; }
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
+          mkdir -p release-images
+          while read -r name source; do
+            skopeo copy --all --preserve-digests --retry-times 3 --digestfile digest \
+              "docker://$source:$SOURCE_VERSION" "docker://ghcr.io/archestra-ai/ci/$name:publisher-smoke-$GITHUB_RUN_ID"
+            echo "ghcr.io/archestra-ai/ci/$name@$(cat digest)" > "release-images/$name"
+          done <<'IMAGES'
+          platform docker.io/archestra/platform
+          mcp-server-base ghcr.io/archestra-ai/mcp-server-base
+          IMAGES
+          skopeo logout ghcr.io
+
+      - name: Package a smoke chart
+        working-directory: platform/helm/archestra
+        run: helm package . --version "$VERSION" --app-version "$VERSION" --destination "$GITHUB_WORKSPACE"
+
+      - name: Preserve the smoke chart for the publisher
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-helm-chart
+          path: archestra-platform-${{ env.VERSION }}.tgz
+          if-no-files-found: error
+
+      # One destination per registry: Docker Hub (platform), GHCR and
+      # Artifact Registry (mcp-server-base).
+      - name: Collect smoke subjects
+        shell: bash
+        run: |
+          bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          mv release-subjects.txt smoke-subjects.txt
+          mv release-images.json smoke-ghcr.json
+          bash .github/scripts/release-subjects.sh release-images europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+          grep ' europe-west1-docker.pkg.dev/' release-subjects.txt >> smoke-subjects.txt
+          jq -s add smoke-ghcr.json release-images.json > smoke-images.json
+          cat smoke-images.json
+
+      - name: Attest smoke images and chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: smoke-subjects.txt
+
+      - name: Generate a publisher token
+        id: publisher-token
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        with:
+          owner: archestra-ai
+          repositories: release-images
+          # Send the repository_dispatch and watch the run it starts.
+          permission-contents: write
+          permission-actions: read
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Run the publisher dry run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
+          PRESERVE_LATEST: "true"
+          PLATFORM_LATEST: "false"
+          SMOKE: "true"
+          CHART: archestra-platform-${{ env.VERSION }}.tgz
+        run: bash .github/scripts/release-dispatch.sh smoke-images.json
 
   verify-handoff-fixture:
     name: Verify non-publishing artifact handoff

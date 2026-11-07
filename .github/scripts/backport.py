@@ -75,8 +75,9 @@ class Backporter:
         default = self.api(f"repos/{self.repo}")["default_branch"]
         if not pr["merged"] or pr["base"]["ref"] != default:
             raise ValueError("Only merged default-branch PRs can be backported")
-        if (pr.get("head", {}).get("repo") or {}).get("full_name") != self.repo:
-            raise ValueError("Only PRs from branches in this repository can be backported")
+        # Fork PRs are eligible: only the reviewed merge commit on the default
+        # branch is cherry-picked, never the contributor's branch, and only
+        # maintainers can add backport labels.
         sha = pr["merge_commit_sha"]
         if not re.fullmatch(r"[0-9a-f]{40}", sha):
             raise ValueError("Invalid merge commit SHA")

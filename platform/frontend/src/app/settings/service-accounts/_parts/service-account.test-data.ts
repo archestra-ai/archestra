@@ -1,6 +1,7 @@
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import { HttpResponse, http } from "msw";
 
-export const origin = "http://localhost:9000";
+export const origin = DEFAULT_INTERNAL_API_BASE_URL;
 
 export const account = {
   id: "account-1",

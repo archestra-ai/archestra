@@ -134,7 +134,8 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_LIST_LLM_SESSIONS_SHORT_NAME,
     title: "List LLM Sessions",
-    description: "List paginated gateway sessions with usage summaries and session IDs.",
+    description:
+      "List paginated gateway sessions with usage summaries and session IDs.",
     schema: SessionListArgsSchema,
     async handler({ args, context }) {
       try {
@@ -163,7 +164,8 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_GET_LLM_SESSION_LOGS_SHORT_NAME,
     title: "Get LLM Session Logs",
-    description: "Fetch paginated request and response logs for a gateway session.",
+    description:
+      "Fetch paginated request and response logs for a gateway session.",
     schema: SessionLogsArgsSchema,
     async handler({ args, context }) {
       try {

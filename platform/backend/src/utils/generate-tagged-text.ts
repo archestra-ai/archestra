@@ -36,6 +36,7 @@ export async function generateTaggedText(params: {
   maxOutputTokens?: number;
   temperature?: number;
   abortSignal?: AbortSignal;
+  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
   /** Normalize the extracted text. Defaults to trimming. */
   sanitize?: (text: string) => string;
 }): Promise<string | null> {
@@ -46,6 +47,7 @@ export async function generateTaggedText(params: {
     maxOutputTokens: params.maxOutputTokens,
     temperature: params.temperature,
     abortSignal: params.abortSignal,
+    providerOptions: params.providerOptions,
   };
 
   const first = await generateText({ model, system, prompt, ...options });

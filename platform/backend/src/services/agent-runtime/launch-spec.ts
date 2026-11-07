@@ -492,6 +492,7 @@ export async function buildAgentRunLaunchSpec(params: {
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
+      runtimeClassName: config.agentRuntime.runtimeClassName,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
       inputFileCount: params.inputFiles?.length ?? 0,

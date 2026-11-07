@@ -55,7 +55,9 @@ jobs:
     # Only merge groups reach this job (release-image-policy.py). The
     # merge-queue-build environment admits gh-readonly-queue/main/* and
     # gh-readonly-queue/release/*/* refs and holds the Sentry build secret.
-    environment: merge-queue-build
+    environment:
+      name: merge-queue-build
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     permissions:
       contents: read

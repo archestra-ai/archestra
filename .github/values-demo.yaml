@@ -39,7 +39,7 @@ archestra:
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "false"
     # TODO(before merge): replace with the value currently held in the
     # ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL repository secret.
-    ARCHESTRA_AUTH_ADMIN_EMAIL: "__FILL_ME__"
+    ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
 
   # Every credential, including the session, encryption and offer-signing
   # keys the chart would otherwise generate, comes from the archestra-demo-runtime Secret

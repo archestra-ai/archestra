@@ -157,6 +157,7 @@ vi.mock("./audit-log-registry", async () => {
   };
 });
 
+import config, { parseTrustProxy } from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import logger from "@/logging";
@@ -1090,6 +1091,59 @@ describe("registerAuditLogHook", () => {
       // inject() uses loopback; should not be the spoofed forwarded value
       // when trustProxy=false (Fastify default in test env).
       expect(rows[0].sourceIp).not.toBe("1.2.3.4");
+    });
+
+    // The deployed path for the web UI: load balancer -> bundled frontend ->
+    // backend over 127.0.0.1. The frontend passes the load balancer's
+    // X-Forwarded-For on unchanged, and inject() connects from 127.0.0.1 too.
+    describe("behind a configured load balancer and the bundled frontend", () => {
+      const originalTrustProxy = config.api.trustProxy;
+      let proxiedApp: FastifyInstanceWithZod;
+
+      beforeEach(async () => {
+        config.api.trustProxy = parseTrustProxy("10.94.2.0/28");
+        proxiedApp = createFastifyInstance();
+        injectAuth(proxiedApp, user, orgId, "session");
+        registerAuditLogHook(proxiedApp);
+        proxiedApp.post("/api/things", async () => ({
+          id: KNOWN_RESOURCE_ID,
+          name: "New Thing",
+        }));
+        await proxiedApp.ready();
+      });
+
+      afterEach(async () => {
+        config.api.trustProxy = originalTrustProxy;
+        await proxiedApp.close();
+      });
+
+      async function sourceIpFor(forwardedFor: string) {
+        await proxiedApp.inject({
+          method: "POST",
+          url: "/api/things",
+          headers: { "x-forwarded-for": forwardedFor },
+        });
+        await settle();
+        const rows = await getRows();
+        expect(rows).toHaveLength(1);
+        return rows[0].sourceIp;
+      }
+
+      test("records the client the load balancer saw", async () => {
+        expect(await sourceIpFor("203.0.113.7, 10.94.2.2")).toBe("203.0.113.7");
+      });
+
+      test("ignores addresses the client prepended itself", async () => {
+        expect(await sourceIpFor("198.51.100.66, 203.0.113.7, 10.94.2.2")).toBe(
+          "203.0.113.7",
+        );
+      });
+
+      test("stops at the first hop that is not a trusted proxy", async () => {
+        expect(await sourceIpFor("203.0.113.7, 198.51.100.66")).toBe(
+          "198.51.100.66",
+        );
+      });
     });
   });
 

@@ -67,8 +67,9 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 - **`ARCHESTRA_TRUST_PROXY`** - Trusts the `X-Forwarded-*` headers of a reverse proxy or load balancer. Rate limits and audit logs then see each client's IP.
   - Default: `false`
-  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `35.191.0.0/16,130.211.0.0/22`
+  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `10.0.0.0/23,10.0.2.2`
   - Prefer the IP list. With `true`, any caller can set `X-Forwarded-For` and pick the IP it is rate-limited and audited under.
+  - List every proxy between the client and Archestra, including a load balancer's own IP when it adds one to `X-Forwarded-For`, as Google Cloud Application Load Balancers do. A list always trusts loopback, which is how the web UI reaches the API.
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long the API and web servers keep an idle keep-alive connection open, in milliseconds.
   - Default: `620000`

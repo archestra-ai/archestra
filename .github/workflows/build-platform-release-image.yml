@@ -1,5 +1,5 @@
 # Stages the platform release image in ghcr.io/archestra-ai/ci/platform. The
-# archestra-ai/release-images publisher copies the attested digest to
+# archestra-ai/release-publisher publisher copies the attested digest to
 # docker.io/archestra/platform; this repository cannot write there.
 name: Build platform release image
 

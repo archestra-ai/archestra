@@ -70,7 +70,7 @@ export function buildTeamsManifest(params: {
               },
               {
                 title: "/sign-out",
-                description: "Stop the bot reading your group-chat files",
+                description: "Stop the bot reading your files",
                 type: "prompt",
                 prompt: "/sign-out",
               },

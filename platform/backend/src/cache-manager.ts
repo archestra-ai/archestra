@@ -145,6 +145,8 @@ export const CacheKey = {
   TeamsFileSignIn: "teams-file-sign-in",
   /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
   TeamsFileSignInState: "teams-file-sign-in-state",
+  /** Page URL of an MS Teams channel's files folder, learned from a sender's sign-in */
+  TeamsChannelFilesFolder: "teams-channel-files-folder",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",

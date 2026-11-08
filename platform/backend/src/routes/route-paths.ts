@@ -14,7 +14,7 @@ export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
 /**
  * Where a Teams user starts and finishes signing in to the bot so it can read
- * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the files they share in channels and group chats. Public: the pending sign-in key and OAuth state are
  * the proof, and the ChatOps webhook prefix is already allowlisted.
  */
 export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";

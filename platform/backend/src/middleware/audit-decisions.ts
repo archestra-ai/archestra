@@ -926,7 +926,7 @@ export const AUDIT_DECISIONS = {
   chatopsMsTeamsUserConnectionsTable: {
     audited: false,
     reason:
-      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+      "a Teams user's own sign-in for reading the files they share with the bot, created and removed only by that user from Teams; tokens live in the secrets manager",
   },
   chatopsUserAdmissionsTable: {
     audited: false,

@@ -36,7 +36,12 @@ import {
   msTeamsUserSignIn,
 } from "@/agents/chatops/ms-teams-user-sign-in";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
 import { mimeFromExtension } from "@/skills-sandbox/mime-sniff";
@@ -1445,10 +1450,11 @@ class MSTeamsProvider implements ChatOpsProvider {
    * permission plus a read grant on the team's site, and without one the
    * file comes back as skipped.
    *
-   * Group-chat files sit in each sender's OneDrive, which a site grant does
-   * not cover. When group-chat sign-in is on, those are read with the
-   * sender's own delegated token, and come back as `sign_in_required` until
-   * the sender has signed in.
+   * With file sign-in on, the sender's own delegated access covers what the
+   * app's grant does not, and a file comes back as `sign_in_required` until
+   * the sender has signed in. Group-chat files sit in each sender's OneDrive,
+   * which a site grant never covers. A channel file is still tried with the
+   * app's grant first, so a team an admin already granted needs no sign-in.
    */
   async downloadMessageFiles(
     message: IncomingChatMessage,
@@ -1490,10 +1496,14 @@ class MSTeamsProvider implements ChatOpsProvider {
         }));
       if (files.length === 0) return [];
 
-      const userClient =
-        conversationType === "groupChat"
-          ? this.userSignInClient(message)
-          : null;
+      const userClient = this.userSignInClient(message);
+      if (userClient && conversationType === "channel") {
+        return await this.downloadChannelFilesAsSender({
+          message,
+          files,
+          client: userClient,
+        });
+      }
       if (!userClient || !files.some((f) => isOneDriveUrl(f.contentUrl))) {
         return this.downloadTeamsFiles(files);
       }
@@ -1501,6 +1511,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         tenantId: userClient.tenantId,
         aadObjectId: message.senderId,
         client: userClient,
+        access: "own",
       });
       if (!userAccessToken) {
         // Files outside any OneDrive are still tried with the app's grant.
@@ -1534,10 +1545,12 @@ class MSTeamsProvider implements ChatOpsProvider {
   }
 
   /**
-   * Ask the sender of a group-chat message to sign in so the bot can read the
-   * files they shared, and hold the message until they have. The card goes to
-   * the chat itself (Teams has no private message in a group chat), but its
-   * link only completes for the sender's own account.
+   * Ask the sender of a channel or group-chat message to sign in so the bot
+   * can read the files they shared, and hold the message until they have.
+   * The card goes to the conversation itself (Teams has no private message
+   * there), but its link only completes for the sender's own account. A
+   * channel sign-in asks for every file the sender can open, since channel
+   * files live in the team's site rather than the sender's OneDrive.
    * @returns Whether the card was posted and the message is now held
    */
   async requestFileSignIn(params: {
@@ -1551,6 +1564,8 @@ class MSTeamsProvider implements ChatOpsProvider {
       const signInUrl = await msTeamsUserSignIn.createPendingSignIn({
         tenantId: client.tenantId,
         message,
+        access:
+          message.metadata?.conversationType === "channel" ? "all" : "own",
       });
       await this.sendActivityToConversation(
         message,
@@ -1668,13 +1683,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   ): Promise<ChatMessage | undefined> {
     const client = this.graphClient;
     if (!client) return undefined;
-    const teamId =
-      message.workspaceId && isUuid(message.workspaceId)
-        ? message.workspaceId
-        : await this.lookupTeamIdFromChannel(
-            message.channelId,
-            message.workspaceId || undefined,
-          );
+    const teamId = await this.channelTeamId(message);
     if (!teamId) return undefined;
     const messages = client.teams
       .byTeamId(teamId)
@@ -1687,6 +1696,169 @@ class MSTeamsProvider implements ChatOpsProvider {
           .replies.byChatMessageId1(messageId)
           .get()
       : messages.byChatMessageId(messageId).get();
+  }
+
+  private async channelTeamId(
+    message: IncomingChatMessage,
+  ): Promise<string | null> {
+    return message.workspaceId && isUuid(message.workspaceId)
+      ? message.workspaceId
+      : this.lookupTeamIdFromChannel(
+          message.channelId,
+          message.workspaceId || undefined,
+        );
+  }
+
+  /**
+   * A channel message's files, with file sign-in on. Until the sender has
+   * signed in for channel files, the app's site grant is tried, and a file it
+   * is denied comes back as `sign_in_required` only when a sign-in could read
+   * it. Once they have, files in the channel's own folder are read with their
+   * token, and any other file still with the app's grant.
+   */
+  private async downloadChannelFilesAsSender(params: {
+    message: IncomingChatMessage;
+    files: TeamsFileAttachment[];
+    client: MsTeamsOAuthClient;
+  }): Promise<ThreadFileOutcome[]> {
+    const { message, files, client } = params;
+    const userAccessToken = await msTeamsUserSignIn.getAccessToken({
+      tenantId: client.tenantId,
+      aadObjectId: message.senderId,
+      client,
+      access: "all",
+    });
+    if (!userAccessToken) {
+      const folderWebUrl = await this.knownChannelFolderWebUrl(message);
+      return this.downloadTeamsFiles(files, undefined, {
+        signInCanRead: (fileUrl) =>
+          isOneDriveUrl(fileUrl) ||
+          !folderWebUrl ||
+          itemPathWithin(fileUrl, folderWebUrl) !== null,
+      });
+    }
+    const channelFolder = await this.getChannelFilesFolder({
+      message,
+      accessToken: userAccessToken,
+    });
+    if (channelFolder) {
+      await this.rememberChannelFolderWebUrl({
+        message,
+        webUrl: channelFolder.webUrl,
+      });
+    }
+    return this.downloadTeamsFiles(files, undefined, {
+      userAccessToken,
+      channelFolder: channelFolder ?? undefined,
+    });
+  }
+
+  /**
+   * The page URL of the channel's files folder, as last seen through a
+   * sender's sign-in. The app's own `Sites.Selected` grant cannot look it
+   * up, so before anyone in the channel has signed in it is unknown.
+   */
+  private async knownChannelFolderWebUrl(
+    message: IncomingChatMessage,
+  ): Promise<string | null> {
+    const teamId = await this.channelTeamId(message);
+    if (!teamId) return null;
+    return (
+      (await cacheManager.get<string>(
+        channelFolderCacheKey(teamId, message.channelId),
+      )) ?? null
+    );
+  }
+
+  private async rememberChannelFolderWebUrl(params: {
+    message: IncomingChatMessage;
+    webUrl: string;
+  }): Promise<void> {
+    const teamId = await this.channelTeamId(params.message);
+    if (!teamId) return;
+    try {
+      await cacheManager.set(
+        channelFolderCacheKey(teamId, params.message.channelId),
+        params.webUrl,
+        CHANNEL_FOLDER_CACHE_TTL_MS,
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not remember the channel's files folder",
+      );
+    }
+  }
+
+  /**
+   * The channel's files folder, as the signed-in sender sees it. Teams keeps
+   * a file sent in a channel there, in its team's (or private channel's)
+   * SharePoint site.
+   */
+  private async getChannelFilesFolder(params: {
+    message: IncomingChatMessage;
+    accessToken: string;
+  }): Promise<ChannelFilesFolder | null> {
+    const teamId = await this.channelTeamId(params.message);
+    if (!teamId) return null;
+    try {
+      const response = await fetch(
+        `${GRAPH_V1}/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(params.message.channelId)}/filesFolder`,
+        { headers: { Authorization: `Bearer ${params.accessToken}` } },
+      );
+      if (!response.ok) {
+        logger.info(
+          { status: response.status },
+          "[MSTeamsProvider] The sender's sign-in could not open the channel's files folder",
+        );
+        return null;
+      }
+      const folder = (await response.json()) as {
+        id?: string;
+        webUrl?: string;
+        parentReference?: { driveId?: string };
+      };
+      const driveId = folder.parentReference?.driveId;
+      if (!folder.id || !folder.webUrl || !driveId) return null;
+      return { driveId, folderId: folder.id, webUrl: folder.webUrl };
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not look up the channel's files folder",
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Fetch a file shared from SharePoint or OneDrive. With the sender's token,
+   * a file in the channel's own folder or in the sender's own OneDrive is
+   * read as them; anything else only with the app's site grant.
+   */
+  private async fetchReferencedFile(params: {
+    fileUrl: string;
+    userAccessToken?: string;
+    channelFolder?: ChannelFilesFolder;
+  }): Promise<Response> {
+    const { fileUrl, userAccessToken, channelFolder } = params;
+    if (userAccessToken) {
+      const folderPath =
+        channelFolder && itemPathWithin(fileUrl, channelFolder.webUrl);
+      if (channelFolder && folderPath) {
+        // Follow only validated download redirects, dropping credentials across origins.
+        return fetchTeamsFile(
+          `${GRAPH_V1}/drives/${encodeURIComponent(channelFolder.driveId)}/items/${encodeURIComponent(channelFolder.folderId)}:/${encodeGraphPath(folderPath)}:/content`,
+          { headers: { Authorization: `Bearer ${userAccessToken}` } },
+        );
+      }
+      if (isOneDriveUrl(fileUrl)) {
+        return this.fetchOneDriveFileAsUser({
+          fileUrl,
+          accessToken: userAccessToken,
+        });
+      }
+    }
+    return this.fetchSharePointFile(fileUrl);
   }
 
   /**
@@ -1741,25 +1913,14 @@ class MSTeamsProvider implements ChatOpsProvider {
       webUrl?: string;
     };
     if (!drive.id || !drive.webUrl) return new Response(null, { status: 404 });
-    const file = new URL(params.fileUrl);
-    const driveUrl = new URL(drive.webUrl);
-    const fileSegments = sharePointFileSegments(file.pathname);
-    const driveSegments = pathSegments(driveUrl.pathname);
-    const inDrive =
-      file.hostname.toLowerCase() === driveUrl.hostname.toLowerCase() &&
-      fileSegments.length > driveSegments.length &&
-      driveSegments.every(
-        (segment, i) =>
-          fileSegments[i]?.toLowerCase() === segment.toLowerCase(),
-      );
-    if (!inDrive) {
+    const itemPath = itemPathWithin(params.fileUrl, drive.webUrl);
+    if (!itemPath) {
       logger.info(
-        { host: file.hostname },
-        "[MSTeamsProvider] A group-chat file is not in its sender's OneDrive",
+        { host: safeHostname(params.fileUrl) },
+        "[MSTeamsProvider] A shared file is not in its sender's OneDrive",
       );
       return new Response(null, { status: 404 });
     }
-    const itemPath = fileSegments.slice(driveSegments.length);
     // Follow only validated download redirects, dropping credentials across origins.
     return fetchTeamsFile(
       `${GRAPH_V1}/drives/${encodeURIComponent(drive.id)}/root:/${encodeGraphPath(itemPath)}:/content`,
@@ -1878,8 +2039,17 @@ class MSTeamsProvider implements ChatOpsProvider {
     files: TeamsFileAttachment[],
     serviceUrl?: string,
     options?: {
-      /** The sender's delegated token, for files in their own OneDrive. */
+      /**
+       * The sender's delegated token, for files in their own OneDrive or in
+       * `channelFolder`.
+       */
       userAccessToken?: string;
+      channelFolder?: ChannelFilesFolder;
+      /**
+       * Whether the sender's sign-in could read a shared file. One Graph
+       * denies comes back as `sign_in_required` then, not `download_failed`.
+       */
+      signInCanRead?: (fileUrl: string) => boolean;
     },
   ): Promise<ThreadFileOutcome[]> {
     if (files.length === 0) return [];
@@ -1976,12 +2146,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
 
         const response = isSharePointReference
-          ? options?.userAccessToken && isOneDriveUrl(attachment.contentUrl)
-            ? await this.fetchOneDriveFileAsUser({
-                fileUrl: attachment.contentUrl,
-                accessToken: options.userAccessToken,
-              })
-            : await this.fetchSharePointFile(attachment.contentUrl)
+          ? await this.fetchReferencedFile({
+              fileUrl: attachment.contentUrl,
+              userAccessToken: options?.userAccessToken,
+              channelFolder: options?.channelFolder,
+            })
           : await fetchTeamsFile(
               attachment.contentUrl,
               { headers },
@@ -1997,10 +2166,16 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Failed to download attachment",
           );
+          const denied = response.status === 401 || response.status === 403;
           skip({
             name: attachment.name,
             sizeBytes: attachment.size,
-            reason: "download_failed",
+            reason:
+              isSharePointReference &&
+              denied &&
+              options?.signInCanRead?.(attachment.contentUrl)
+                ? "sign_in_required"
+                : "download_failed",
           });
           continue;
         }
@@ -2674,6 +2849,49 @@ function sharePointFileSegments(pathname: string): string[] {
     : segments;
 }
 
+/**
+ * A file's path inside a folder or library, given both page URLs, or null
+ * when the file is not inside it.
+ */
+function itemPathWithin(
+  fileUrl: string,
+  containerUrl: string,
+): string[] | null {
+  try {
+    const file = new URL(fileUrl);
+    const container = new URL(containerUrl);
+    const fileSegments = sharePointFileSegments(file.pathname);
+    const containerSegments = pathSegments(container.pathname);
+    const inside =
+      file.hostname.toLowerCase() === container.hostname.toLowerCase() &&
+      fileSegments.length > containerSegments.length &&
+      containerSegments.every(
+        (segment, i) =>
+          fileSegments[i]?.toLowerCase() === segment.toLowerCase(),
+      );
+    return inside ? fileSegments.slice(containerSegments.length) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A channel's files folder in its team's SharePoint document library. */
+interface ChannelFilesFolder {
+  driveId: string;
+  folderId: string;
+  webUrl: string;
+}
+
+/** A renamed channel moves its folder; a sender's next sign-in relearns it. */
+const CHANNEL_FOLDER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function channelFolderCacheKey(
+  teamId: string,
+  channelId: string,
+): AllowedCacheKey {
+  return `${CacheKey.TeamsChannelFilesFolder}-${teamId}:${channelId}`;
+}
+
 /** A document page needs Graph; signed download URLs must stay untouched. */
 function isSharePointFilePage(value: string): boolean {
   try {
@@ -2731,8 +2949,8 @@ function sourceMessageId(message: IncomingChatMessage): string {
 }
 
 /**
- * The card that asks a group-chat sender to sign in. Its button opens
- * Archestra's sign-in link in the browser.
+ * The card that asks a channel or group-chat sender to sign in. Its button
+ * opens Archestra's sign-in link in the browser.
  */
 function buildFileSignInCard(params: {
   senderName: string;
@@ -2761,7 +2979,7 @@ function buildFileSignInCard(params: {
         },
         {
           type: "TextBlock",
-          text: "Files in group chats are stored in your OneDrive, so I can only open them with your permission. Sign in once with your Microsoft account and I'll answer this message right after. I can read only your own files, and only the ones you share with me.",
+          text: "I can only open this with your permission. Sign in once with your Microsoft account and I'll answer this message right after. I see only files you can already open, and only the ones you share with me.",
           wrap: true,
           spacing: "Small",
         },
@@ -3042,4 +3260,5 @@ const LEGACY_MENU_COMMANDS = new Map([
   ["show current agent for this conversation", "/status"],
   ["show available commands", "/help"],
   ["stop the bot reading your group-chat files", "/sign-out"],
+  ["stop the bot reading your files", "/sign-out"],
 ]);

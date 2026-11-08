@@ -4,7 +4,7 @@ Archestra uses two release pipelines:
 - **Beta:** Automatic releases from `main` (for example, `1.4.0-beta.2`).
 - **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
-[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
+[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`. Every image and chart is published by archestra-ai/release-publisher, which holds each stable release until a second person approves it.
 
 ## Image CVE Gate
 
@@ -136,7 +136,7 @@ Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
 ## Test And Approve Stable
 
-Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable-release` environment approval. Test these exact artifacts before approving:
+Merging a release PR on `release/X.Y` builds the artifacts and asks archestra-ai/release-publisher to publish them. The publisher run waits at **Approve stable release** for an Engineering member who did not merge or start the release (the release workflow's publish step links the run). Test these exact artifacts before approving:
 
 1. [ ] Confirm all build jobs in the workflow run completed successfully.
 2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts.
@@ -144,35 +144,34 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
 4. [ ] Test a clean install and an upgrade from the previous stable version:
    - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
    - Confirm existing data remains intact after upgrade.
-5. [ ] Have a second maintainer approve the `stable-release` environment in GitHub Actions.
+5. [ ] Have a second maintainer approve the publisher run's `stable-release` environment in archestra-ai/release-publisher. Its Plan job summary lists the digests to compare.
    - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
    - A rerun or new candidate requires a fresh approval after its artifacts are verified.
+   - Approve within six hours: the release workflow's publish job waits no longer.
 6. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points Docker `latest` to the new version.
 
 ## Troubleshooting
 
 - **Build failure:** Inspect the failure and re-run failed jobs in the same workflow run.
 - **Testing fails before approval:**
-  1. Cancel the workflow run.
+  1. Reject the publisher run's approval and cancel the workflow run.
   2. Delete the GitHub draft release. Keep the git tag. (Unapproved draft releases block other releases).
   3. Fix the issue on `main`, backport to the release branch, and cut a new version. Never reuse an existing version number.
 - **Partial publication:**
   1. Do not publish artifacts or move `latest` manually.
   2. Inspect GitHub releases and container registries.
    3. Keep the existing draft release and git tag. Re-run failed jobs in the original workflow run using the saved artifacts.
-   4. Obtain explicit authorization before approving a retry that waits for `stable-release`.
+   4. Obtain explicit authorization before approving a retry that waits for the release-publisher stable approval.
    5. If the retry fails or state remains inconsistent, stop and investigate.
 
 <details>
 <summary>One-time setup — initial rollout</summary>
 
 1. [ ] Freeze existing release automation and close obsolete release PRs.
-2. [ ] Create GitHub environment `beta-release` without required approvals.
-3. [ ] Create GitHub environment `stable-release` with required reviewers, self-review prevention, and deployment restricted to `release/*`.
-4. [ ] Add branch protection rules for `release/*`.
-5. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). In its release-tooling-only PR, keep the manifest at that tag's version; set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
-6. [ ] On `main`, configure beta settings with temporary `release-as: 1.4.0-beta.1`.
-7. [ ] Confirm registry credentials work for release branches.
-8. [ ] Unfreeze releases once branches and environments are ready.
+2. [ ] Add branch protection rules for `release/*`.
+3. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). In its release-tooling-only PR, keep the manifest at that tag's version; set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
+4. [ ] On `main`, configure beta settings with temporary `release-as: 1.4.0-beta.1`.
+5. [ ] Confirm registry credentials work for release branches.
+6. [ ] Unfreeze releases once branches and credentials are ready.
 
 </details>

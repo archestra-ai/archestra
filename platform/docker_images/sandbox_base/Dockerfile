@@ -18,15 +18,18 @@ FROM ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim@sha256:db955a4c5fd85c9e0
 # model is never tempted to `pip install` into a location the venv won't see).
 # libbrotli1 is listed so apt upgrades the copy the base image ships: Debian's
 # nodejs and curl decode Brotli through it. The floor fails the build if the
-# CVE-2026-111497 fix is missing.
+# CVE-2026-111497 fix is missing. zlib1g is listed for the same reason: the base
+# ships it, and the floor fails the build without the CVE-2026-85091 and
+# CVE-2026-76844 fix.
 # Upgrade inherited apt packages too; CVE-2026-109518 is fixed in 3.0.4.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 unzip zip \
+      apt libapt-pkg7.0 bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 zlib1g unzip zip \
  && for package in apt libapt-pkg7.0; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge 3.0.4 || exit 1; \
     done \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \

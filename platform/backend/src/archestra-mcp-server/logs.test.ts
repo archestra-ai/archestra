@@ -40,9 +40,8 @@ test("gateway log tools paginate sessions and enforce own-log visibility", async
       | "get_llm_interaction"
       | "list_llm_sessions"
       | "get_llm_session_logs",
-    args: object,
-  ) =>
-    executeArchestraTool(getArchestraToolFullName(name), args, context);
+    args: Record<string, unknown>,
+  ) => executeArchestraTool(getArchestraToolFullName(name), args, context);
 
   const interactions = await call("list_llm_interactions", {
     user_id: other.id,

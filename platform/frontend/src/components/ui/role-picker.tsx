@@ -267,7 +267,7 @@ export function RolePicker({
             placeholder="Search roles..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="h-10 border-0 px-0 shadow-none focus-visible:ring-0"
+            className="h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
         </div>
         {searching ? (

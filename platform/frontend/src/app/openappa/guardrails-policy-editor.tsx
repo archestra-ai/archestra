@@ -2,22 +2,25 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { OnMount } from "@monaco-editor/react";
-import { ExternalLink, TriangleAlert } from "lucide-react";
+import { ExternalLink, LockKeyhole, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import {
   type PolicyDeclarations,
   useEffectivePolicy,
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { batteryDisplayName } from "./_parts/battery-display-name";
 import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
 import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";
@@ -28,7 +31,11 @@ import {
   enforcedStatus,
 } from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
-import { GithubManagedPolicyNotice } from "./_parts/github-managed-policy-notice";
+import {
+  GithubManagedPolicyNotice,
+  githubPolicyFileUrl,
+} from "./_parts/github-managed-policy-notice";
+import { OpenAppaChatButton } from "./_parts/openappa-chat-button";
 import {
   annotationDecorations,
   focusPolicyLine,
@@ -44,7 +51,6 @@ export function GuardrailsPolicyEditor({
   focusLine?: number;
 }) {
   const declarations = usePolicyDeclarations();
-  const policy = useGuardrailsPolicy();
   const router = useRouter();
   const [tab, setTab] = useState<"policy" | "effective">("policy");
   const effective = useEffectivePolicy(tab === "effective");
@@ -114,13 +120,6 @@ export function GuardrailsPolicyEditor({
               </>
             ) : (
               <>
-                {policy.data && (
-                  <output className="text-xs text-muted-foreground">
-                    {policy.data.revision === 0
-                      ? "Not yet saved"
-                      : `Revision ${policy.data.revision}`}
-                  </output>
-                )}
                 {/* Last, so on a phone the bare icon sits on the card's edge
                     above the picker's end rather than floating mid-row. */}
                 <Button
@@ -175,6 +174,12 @@ function RootPolicySource({
   declarations: PolicyDeclarations | null | undefined;
 }) {
   const policy = useGuardrailsPolicy();
+  const sync = useAppaGithubSync();
+  const { data: canUpdate } = useHasPermissions({
+    guardrailsPolicy: ["update"],
+  });
+  const managed = declarations?.managedInGithub === true;
+  const editUrl = managed ? githubPolicyFileUrl(sync.data, "edit") : null;
   if (policy.isLoading)
     return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
   if (policy.isError || !policy.data)
@@ -187,6 +192,30 @@ function RootPolicySource({
     );
   return (
     <div className="overflow-hidden rounded-b-lg border bg-background">
+      <InlineNotice variant="neutral">
+        <LockKeyhole aria-hidden />
+        <span className="font-medium">Read-only source</span>
+        <InlineNoticeText>
+          {managed
+            ? "Change this policy in its connected repository."
+            : canUpdate
+              ? "Change this policy with the configuration agent in chat."
+              : "Ask an administrator to change this policy."}
+        </InlineNoticeText>
+        {editUrl && (
+          <Button asChild size="xs" variant="outline" className="ml-auto">
+            <a href={editUrl} target="_blank" rel="noopener noreferrer">
+              <span>Edit in repository</span>
+              <ExternalLink aria-hidden />
+            </a>
+          </Button>
+        )}
+        {!managed && canUpdate && (
+          <OpenAppaChatButton size="xs" variant="outline" className="ml-auto">
+            <span>Change in chat</span>
+          </OpenAppaChatButton>
+        )}
+      </InlineNotice>
       <AnnotatedEditor
         content={policy.data.content}
         focusLine={focusLine}

@@ -15,7 +15,7 @@ export default function EditRolePage() {
   const { id } = useParams<{ id: string }>();
   return (
     <ErrorBoundary>
-      <RoleEditPage roleId={id} />
+      <RoleEditPage roleId={decodeURIComponent(id)} />
     </ErrorBoundary>
   );
 }

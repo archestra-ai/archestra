@@ -888,9 +888,9 @@ const registry = defineArchestraTools([
           before: before.content,
           after,
         });
+        // Tool targets are classified once below, for warnings and metadata alike.
         const validation = await guardrailsPolicyService.validate(after, {
           organizationId,
-          userId,
           previous: before.content,
         });
         const [sync, validations] = await Promise.all([
@@ -917,9 +917,10 @@ const registry = defineArchestraTools([
               previous: before.content,
             })
           : [];
-        const unresolvedTargets = targets.some(
-          (target) => ruleTargetWarning(target) !== null,
+        const targetWarnings = targets.flatMap(
+          (target) => ruleTargetWarning(target) ?? [],
         );
+        const unresolvedTargets = targetWarnings.length > 0;
         return policyChangeResult({
           stage: "preview",
           validations,
@@ -937,6 +938,7 @@ const registry = defineArchestraTools([
           before: before.content,
           after,
           ...validation,
+          warnings: [...validation.warnings, ...targetWarnings],
           // A model that only read the skill ends its turn on the preview;
           // the next step is repeated here, where it decides what to do next.
           ...(validation.valid &&

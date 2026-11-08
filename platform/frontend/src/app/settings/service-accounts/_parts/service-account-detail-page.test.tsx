@@ -127,6 +127,23 @@ function renderWithClient(ui: React.ReactNode) {
   );
 }
 
+test("leads the overview with what the account is for", async () => {
+  server.use(
+    http.get(`${origin}/api/service-accounts/:id`, () =>
+      HttpResponse.json({
+        ...account,
+        description: "Syncs tickets into the support knowledge base",
+        tokens: [],
+      }),
+    ),
+  );
+  renderWithClient(<ServiceAccountDetailPage serviceAccountId={account.id} />);
+
+  expect(
+    await screen.findByText("Syncs tickets into the support knowledge base"),
+  ).toBeVisible();
+});
+
 test("gives API keys and federated credentials a tab each", async () => {
   searchParams = new URLSearchParams({ tab: "api-keys" });
   const { unmount } = renderWithClient(

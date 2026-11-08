@@ -153,6 +153,102 @@ describe("service account routes", () => {
     expect(invalid.statusCode).toBe(400);
   });
 
+  test("persists and audits a description, and a blank one clears it", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Nightly sync",
+        role: MEMBER_ROLE_NAME,
+        description: "  Copies tickets into the knowledge base every night  ",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().id;
+    expect(created.json().description).toBe(
+      "Copies tickets into the knowledge base every night",
+    );
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((item: { id: string }) => item.id === id).description,
+    ).toBe("Copies tickets into the knowledge base every night");
+
+    // Editing another field leaves it alone; a blank value clears it.
+    await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${id}`,
+      payload: { name: "Nightly ticket sync" },
+    });
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${id}`,
+      payload: { description: "   " },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().description).toBeNull();
+
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: expect.objectContaining({
+            description: "Copies tickets into the knowledge base every night",
+          }),
+          after: expect.objectContaining({ description: null }),
+        }),
+      ]),
+    );
+  });
+
+  test("assigns fixed roles a caller holds and refuses ones carrying permissions they lack", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // The caller holds no basic role: only fixed ones, composed. Granting
+    // reads their permissions through the same resolution a request does.
+    const composer = await makeUser();
+    await makeMember(composer.id, organizationId, {
+      role: "fixed:service-accounts:writer,fixed:agents:reader",
+    });
+    user = composer;
+
+    const granted = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Agent lister",
+        role: "fixed:agents:reader,fixed:service-accounts:reader",
+      },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+    expect(granted.json().role).toBe(
+      "fixed:agents:reader,fixed:service-accounts:reader",
+    );
+
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "User manager", role: "fixed:users:writer" },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.message).toContain("member:create");
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Typo", role: "fixed:agents:readr" },
+    });
+    expect(unknown.statusCode).toBe(400);
+  });
+
   test("a custom access-policy editor can create an account with a role sharing items they cannot manage", async ({
     makeCustomRole,
     makeAgent,
@@ -599,6 +695,41 @@ describe("service account API authentication", () => {
         name: "Read-only automation",
       },
     ]);
+  });
+
+  test("authorizes a token from the fixed roles on its account", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const tokenFor = async (role: string) => {
+      const account = await ServiceAccountModel.create({
+        organizationId: organization.id,
+        name: role,
+        role,
+        createdBy: null,
+      });
+      const token = await ServiceAccountModel.createToken({
+        serviceAccountId: account.id,
+        organizationId: organization.id,
+        name: "Route token",
+      });
+      return token.token;
+    };
+    const labelKeys = async (role: string) =>
+      app.inject({
+        method: "GET",
+        url: "/api/service-accounts/labels/keys",
+        headers: { authorization: await tokenFor(role) },
+      });
+
+    expect((await labelKeys("fixed:service-accounts:reader")).statusCode).toBe(
+      200,
+    );
+    expect(
+      (await labelKeys("fixed:agents:reader,fixed:service-accounts:reader"))
+        .statusCode,
+    ).toBe(200);
+    expect((await labelKeys("fixed:agents:reader")).statusCode).toBe(403);
   });
 
   test("reuses service account token verification during request authentication", async ({

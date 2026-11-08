@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-07
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -86,6 +86,20 @@ Roles control organization actions, such as creating resources and managing user
 | Admin | Full organization administration, including everyone's logs and user impersonation. |
 
 See the [exact permission matrix](/docs/reference/permissions#predefined-roles). To change a member's roles, open **Settings → Users**, choose **Change role** on their row, and save with **Update Roles**.
+
+## Compose Access from Fixed Roles
+
+Give someone exactly what their job needs without writing a custom role: assign a few fixed roles, such as **Agent Writer** and **Log Reader**, and their permissions add up. Fixed roles are built in, grouped by area, and cannot be edited.
+
+1. Open the role picker where roles are assigned: **Change role** on a row in **Settings → Users**, **Inherited Roles** on a team, or **Roles** on a service account.
+2. Pick a group on the left, such as **Agents** or **MCP**, and check the roles you need on the right. The checkbox beside a group takes all of its roles.
+3. Click **Update**, then save.
+
+What to know:
+
+- Each fixed role grants a few permissions, such as [`agent:read`](/docs/reference/permissions#agent:read). **Settings → Roles → Fixed roles** lists them, and the [permissions reference](/docs/reference/permissions#fixed-roles) has the full table.
+- A fixed role opens a page, not every item on it. Which agents or servers someone sees still depends on what is shared with them.
+- To start a custom role from a fixed one, open it and choose **New role from this one**.
 
 <span id="custom-roles"></span>
 

@@ -151,8 +151,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       assertCustomRolesLicensed();
 
-      // Cannot update predefined roles
-      if (OrganizationRoleModel.isPredefinedRole(roleId)) {
+      // Cannot update built-in (predefined or fixed) roles
+      if (OrganizationRoleModel.isBuiltInRole(roleId)) {
         throw new ApiError(403, "Cannot update predefined roles");
       }
 
@@ -370,7 +370,7 @@ async function assertRoleIdentifierIsFree(
     );
   }
 
-  if (OrganizationRoleModel.isPredefinedRole(roleIdentifier)) {
+  if (OrganizationRoleModel.isBuiltInRole(roleIdentifier)) {
     throw new ApiError(
       400,
       `"${roleIdentifier}" is a predefined role name and cannot be used for a custom role`,

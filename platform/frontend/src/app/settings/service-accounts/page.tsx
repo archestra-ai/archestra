@@ -8,6 +8,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  StickyNote,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -167,7 +168,12 @@ export default function ServiceAccountsSettingsPage() {
     const now = new Date();
 
     return serviceAccounts.filter((account) => {
-      if (query && !account.name.toLowerCase().includes(query)) return false;
+      if (
+        query &&
+        !account.name.toLowerCase().includes(query) &&
+        !account.description?.toLowerCase().includes(query)
+      )
+        return false;
       if (roleFilter !== ALL && !account.role.split(",").includes(roleFilter))
         return false;
       if (
@@ -275,6 +281,12 @@ export default function ServiceAccountsSettingsPage() {
             icon={<AgentIcon icon={row.original.icon} size={20} />}
             labels={row.original.labels}
             href={`/settings/service-accounts/${row.original.id}`}
+            underlineOnHover={false}
+            nameIndicator={
+              row.original.description ? (
+                <DescriptionNote description={row.original.description} />
+              ) : undefined
+            }
           />
         ),
       },
@@ -372,7 +384,7 @@ export default function ServiceAccountsSettingsPage() {
                 search={
                   <SearchInput
                     objectNamePlural="service accounts"
-                    searchFields={["name"]}
+                    searchFields={["name", "description"]}
                     className={filterSearchClass}
                   />
                 }
@@ -579,6 +591,27 @@ export default function ServiceAccountsSettingsPage() {
 }
 
 // === Internal helpers
+
+/** A quiet marker that the account has a description; hover to read it. */
+function DescriptionNote({ description }: { description: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={`Description: ${description}`}
+          className="flex rounded-sm text-muted-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <StickyNote className="size-3.5" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+        {description}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function RolesCell({ role }: { role: string }) {
   const roles = role.split(",").map((value) => formatRoleName(value.trim()));

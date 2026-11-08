@@ -21,6 +21,7 @@
     "./citation-quotes": "./citation-quotes.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
     "./error-reporting": "./error-reporting.ts",
+    "./fixed-roles": "./fixed-roles.ts",
     "./gemini-models": "./gemini-models.ts",
     "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",

@@ -17,7 +17,13 @@ import {
   editorPermissions,
   memberPermissions,
   platformAdminPermissions,
+  withDerivedPermissions,
 } from "@archestra/shared/access-control";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { fixedRoles } from "@archestra/shared/fixed-roles";
+// SPDX-SnippetEnd
 import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
 import { getCurrentAdapter } from "@better-auth/core/context";
@@ -142,6 +148,20 @@ const adminRole = ac.newRole(allAvailableActions);
 const platformAdminRole = ac.newRole(platformAdminPermissions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+// Fixed roles live in code, not in `organization_role`, so Better Auth only
+// knows them from this map: without it, its own endpoints (invitations,
+// member role changes) would reject a fixed role as unknown and authorize a
+// holder as if they lacked it.
+const fixedAcRoles = Object.fromEntries(
+  fixedRoles.map((fixed) => [
+    fixed.role,
+    ac.newRole(withDerivedPermissions(fixed.permission)),
+  ]),
+);
+// SPDX-SnippetEnd
 
 export const auth = betterAuth({
   appName: APP_NAME,
@@ -219,6 +239,7 @@ export const auth = betterAuth({
         platform_admin: platformAdminRole,
         editor: editorRole,
         member: memberRole,
+        ...fixedAcRoles,
       },
       schema: {
         organizationRole: {
@@ -243,6 +264,7 @@ export const auth = betterAuth({
             platform_admin: platformAdminRole,
             editor: editorRole,
             member: memberRole,
+            ...fixedAcRoles,
           },
         },
       },

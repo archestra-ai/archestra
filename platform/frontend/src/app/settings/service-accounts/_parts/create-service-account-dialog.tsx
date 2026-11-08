@@ -16,12 +16,14 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoleSelect } from "@/components/ui/role-select";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreateServiceAccount } from "@/lib/service-account.query";
 import { formatRoleName } from "@/lib/utils/role";
 import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
 /**
- * Creating a service account takes only a name, its roles and a team, so it
+ * Creating a service account takes only a name, a description, its roles and
+ * a team, so it
  * is a dialog. It then opens the account's page, where its API keys and
  * federated credentials are added. Labels are set later on the edit page.
  */
@@ -50,6 +52,7 @@ export function CreateServiceAccountDialog({
     const account = await createMutation
       .mutateAsync({
         name: values.name.trim(),
+        description: values.description.trim() || null,
         icon: values.icon,
         role: values.role,
         ...(values.teamId ? { teamId: values.teamId } : {}),
@@ -86,6 +89,19 @@ export function CreateServiceAccountDialog({
               {...form.register("name")}
             />
           </IdentityFields>
+          <div className="space-y-2">
+            <Label htmlFor="service-account-description">
+              Description{" "}
+              <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="service-account-description"
+              placeholder="What this account is for, and who runs it"
+              rows={2}
+              maxLength={1000}
+              {...form.register("description")}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="service-account-role">Roles</Label>
             <RoleSelect
@@ -143,6 +159,7 @@ export function CreateServiceAccountDialog({
 
 type CreateValues = {
   name: string;
+  description: string;
   icon: string | null;
   role: string;
   teamId: string | null;
@@ -150,6 +167,7 @@ type CreateValues = {
 
 const DEFAULT_VALUES: CreateValues = {
   name: "",
+  description: "",
   icon: null,
   role: "member",
   teamId: null,

@@ -20,6 +20,8 @@ const serviceAccountsTable = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** What the account is for, so the next person knows before touching it. */
+    description: text("description"),
     /** Emoji, built-in logo identifier, or image data URL, as on agents. */
     icon: text("icon"),
     role: text("role").notNull(),

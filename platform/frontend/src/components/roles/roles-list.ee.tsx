@@ -35,6 +35,7 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -44,17 +45,71 @@ import {
   useDeleteRole,
   useRolesPaginated,
 } from "@/lib/role.query";
+import { FixedRolesReference } from "./fixed-roles-reference.ee";
 import { downloadRoleAsJson } from "./role-export";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
 /**
- * Enterprise Edition roles list. Every role opens on its own page; custom
- * roles are created, edited and deleted there, predefined ones are read-only.
+ * Enterprise Edition roles page: the roles an organization assigns as wholes
+ * (basic and custom) in the table, and the fixed roles it composes access
+ * from in a reference of their own. Fixed roles are dozens of small,
+ * read-only parts; mixed into the table they would bury the handful of
+ * roles an admin actually manages there.
  */
 export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   const router = useRouter();
   const setActionButton = useSetSettingsAction();
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const view = searchParams.get("view") === "fixed" ? "fixed" : "roles";
+
+  useEffect(() => {
+    setActionButton(
+      <PermissionButton
+        permissions={{ ac: ["create"] }}
+        size="sm"
+        onClick={() => router.push("/settings/roles/new")}
+      >
+        <Plus className="h-4 w-4" />
+        Create Custom Role
+      </PermissionButton>,
+    );
+
+    return () => setActionButton(null);
+  }, [setActionButton, router]);
+
+  return (
+    <div className="space-y-4">
+      <Tabs
+        value={view}
+        onValueChange={(next) =>
+          updateQueryParams({
+            view: next === "fixed" ? "fixed" : null,
+            name: null,
+            page: null,
+          })
+        }
+      >
+        <TabsList>
+          <TabsTrigger value="roles">Basic &amp; custom roles</TabsTrigger>
+          <TabsTrigger value="fixed">Fixed roles</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === "fixed" ? (
+        <FixedRolesReference />
+      ) : (
+        <RolesTable headerAction={headerAction} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Every role opens on its own page; custom roles are created, edited and
+ * deleted there, predefined ones are read-only.
+ */
+function RolesTable({ headerAction }: { headerAction?: ReactNode }) {
+  const router = useRouter();
   const {
     pageIndex,
     pageSize,
@@ -93,21 +148,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     );
 
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
-
-  useEffect(() => {
-    setActionButton(
-      <PermissionButton
-        permissions={{ ac: ["create"] }}
-        size="sm"
-        onClick={() => router.push("/settings/roles/new")}
-      >
-        <Plus className="h-4 w-4" />
-        Create Custom Role
-      </PermissionButton>,
-    );
-
-    return () => setActionButton(null);
-  }, [setActionButton, router]);
 
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {

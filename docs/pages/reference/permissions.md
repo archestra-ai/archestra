@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-08
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -81,6 +81,74 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | OAuth Clients | `read` |
 | Teams | `read` |
 
+
+## Fixed Roles
+
+Each fixed role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
+
+| Group | Role | Identifier | Permissions |
+|-------|------|------------|-------------|
+| Agents | Agent Reader | `fixed:agents:reader` | `agent:read` |
+| Agents | Agent Writer | `fixed:agents:writer` | `agent:read`, `agent:create`, `agent:delete` |
+| Agents | Agent Runtime Configurator | `fixed:agents:runtime-configurator` | `agent:read`, `agent:configure-runtime` |
+| Skills | Skill Reader | `fixed:skills:reader` | `skill:read` |
+| Skills | Skill Writer | `fixed:skills:writer` | `skill:read`, `skill:create`, `skill:delete` |
+| Plugins | Plugin Reader | `fixed:plugins:reader` | `plugin:read` |
+| Plugins | Plugin Writer | `fixed:plugins:writer` | `plugin:read`, `plugin:create`, `plugin:update`, `plugin:delete` |
+| Apps | App Reader | `fixed:apps:reader` | `app:read` |
+| Apps | App Writer | `fixed:apps:writer` | `app:read`, `app:create` |
+| Guardrails | Guardrails Reader | `fixed:guardrails:reader` | `guardrailsPolicy:read` |
+| Guardrails | Guardrails Writer | `fixed:guardrails:writer` | `guardrailsPolicy:read`, `guardrailsPolicy:update` |
+| Chat & Projects | Chat User | `fixed:chat:user` | `chat:read`, `chat:create`, `chat:update`, `chat:delete` |
+| Chat & Projects | Chat Full View | `fixed:chat:full-view` | `chat:read`, `chat:full-view` |
+| Chat & Projects | Project Reader | `fixed:projects:reader` | `project:read` |
+| Chat & Projects | Project Writer | `fixed:projects:writer` | `project:read`, `project:create`, `project:update`, `project:delete` |
+| Knowledge | Knowledge Reader | `fixed:knowledge:reader` | `knowledgeSource:read`, `knowledgeSource:query` |
+| Knowledge | Knowledge Writer | `fixed:knowledge:writer` | `knowledgeSource:read`, `knowledgeSource:create`, `knowledgeSource:update`, `knowledgeSource:delete`, `knowledgeSource:query` |
+| MCP | MCP Gateway Reader | `fixed:mcp-gateways:reader` | `mcpGateway:read` |
+| MCP | MCP Gateway Writer | `fixed:mcp-gateways:writer` | `mcpGateway:read`, `mcpGateway:create`, `mcpGateway:delete` |
+| MCP | MCP Registry Reader | `fixed:mcp-registry:reader` | `mcpRegistry:read` |
+| MCP | MCP Registry Writer | `fixed:mcp-registry:writer` | `mcpRegistry:read`, `mcpRegistry:create` |
+| MCP | MCP Server Reader | `fixed:mcp-servers:reader` | `mcpServerInstallation:read` |
+| MCP | MCP Server Writer | `fixed:mcp-servers:writer` | `mcpServerInstallation:read`, `mcpServerInstallation:create`, `mcpServerInstallation:update`, `mcpServerInstallation:delete` |
+| Environments | Environment Reader | `fixed:environments:reader` | `environment:read` |
+| Environments | Environment Writer | `fixed:environments:writer` | `environment:read`, `environment:create`, `environment:update`, `environment:delete` |
+| LLM | LLM Proxy Reader | `fixed:llm-proxy:reader` | `llmProxy:read` |
+| LLM | LLM Proxy Writer | `fixed:llm-proxy:writer` | `llmProxy:read`, `llmProxy:update` |
+| LLM | Provider Key Reader | `fixed:llm-provider-keys:reader` | `llmProviderApiKey:read` |
+| LLM | Provider Key Writer | `fixed:llm-provider-keys:writer` | `llmProviderApiKey:read`, `llmProviderApiKey:create` |
+| LLM | Virtual Key Reader | `fixed:llm-virtual-keys:reader` | `llmVirtualKey:read` |
+| LLM | Virtual Key Writer | `fixed:llm-virtual-keys:writer` | `llmVirtualKey:read`, `llmVirtualKey:create` |
+| LLM | Model Reader | `fixed:llm-models:reader` | `llmModel:read` |
+| LLM | Model Writer | `fixed:llm-models:writer` | `llmModel:read`, `llmModel:update` |
+| LLM Costs & Limits | Cost Reader | `fixed:llm-costs:reader` | `llmCost:read` |
+| LLM Costs & Limits | Limit Reader | `fixed:llm-limits:reader` | `llmLimit:read` |
+| LLM Costs & Limits | Limit Writer | `fixed:llm-limits:writer` | `llmLimit:read`, `llmLimit:create`, `llmLimit:update`, `llmLimit:delete` |
+| Logs & Audit | Log Reader | `fixed:logs:reader` | `log:read` |
+| Logs & Audit | Log Admin | `fixed:logs:admin` | `log:read`, `log:admin` |
+| Logs & Audit | Audit Log Reader | `fixed:audit-log:reader` | `auditLog:read` |
+| Logs & Audit | Audit Log Admin | `fixed:audit-log:admin` | `auditLog:read`, `auditLog:admin` |
+| Users & Teams | User Reader | `fixed:users:reader` | `member:read` |
+| Users & Teams | User Writer | `fixed:users:writer` | `member:read`, `member:create`, `member:update`, `member:delete` |
+| Users & Teams | User Impersonator | `fixed:users:impersonator` | `member:read`, `member:impersonate` |
+| Users & Teams | Team Reader | `fixed:teams:reader` | `team:read` |
+| Users & Teams | Team Writer | `fixed:teams:writer` | `team:read`, `team:create`, `team:update`, `team:delete` |
+| Roles & Access | Role Reader | `fixed:roles:reader` | `ac:read` |
+| Roles & Access | Role Writer | `fixed:roles:writer` | `ac:read`, `ac:create`, `ac:update`, `ac:delete` |
+| Roles & Access | Access Policy Reader | `fixed:access-policies:reader` | `accessPolicies:read` |
+| Roles & Access | Access Policy Writer | `fixed:access-policies:writer` | `accessPolicies:read`, `accessPolicies:update` |
+| Roles & Access | Identity Provider Reader | `fixed:identity-providers:reader` | `identityProvider:read` |
+| Roles & Access | Identity Provider Writer | `fixed:identity-providers:writer` | `identityProvider:read`, `identityProvider:create`, `identityProvider:update`, `identityProvider:delete` |
+| API Access | API Key Reader | `fixed:api-keys:reader` | `apiKey:read` |
+| API Access | API Key Writer | `fixed:api-keys:writer` | `apiKey:read`, `apiKey:create`, `apiKey:delete` |
+| API Access | Service Account Reader | `fixed:service-accounts:reader` | `serviceAccount:read` |
+| API Access | Service Account Writer | `fixed:service-accounts:writer` | `serviceAccount:read`, `serviceAccount:create` |
+| API Access | OAuth Client Reader | `fixed:oauth-clients:reader` | `oauthClient:read` |
+| API Access | OAuth Client Writer | `fixed:oauth-clients:writer` | `oauthClient:read`, `oauthClient:create` |
+| API Access | Credential Reader | `fixed:credentials:reader` | `credential:read` |
+| API Access | Credential Writer | `fixed:credentials:writer` | `credential:read`, `credential:create` |
+| Organization | Organization Settings Reader | `fixed:organization-settings:reader` | `organizationSettings:read` |
+| Organization | Organization Settings Writer | `fixed:organization-settings:writer` | `organizationSettings:read`, `organizationSettings:update` |
 
 <span id="llm-api-permissions"></span>
 

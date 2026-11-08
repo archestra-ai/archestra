@@ -15,7 +15,8 @@ export default function RolePage() {
   const { id } = useParams<{ id: string }>();
   return (
     <ErrorBoundary>
-      <RoleDetailPage roleId={id} />
+      {/* A fixed role's id carries colons, which arrive percent-encoded. */}
+      <RoleDetailPage roleId={decodeURIComponent(id)} />
     </ErrorBoundary>
   );
 }

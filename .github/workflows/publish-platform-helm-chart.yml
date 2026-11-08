@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Packages the chart for the release run. The archestra-ai/release-images
+  # Packages the chart for the release run. The archestra-ai/release-publisher
   # publisher pushes it to Artifact Registry once the release attests it.
   publish-platform-helm-chart:
     name: Publish platform Helm chart

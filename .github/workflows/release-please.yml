@@ -507,7 +507,7 @@ jobs:
     needs: [release-please, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@fb2dd1c87da6257b29602da7dfff1a231d98825c # .github#68 (repin to the tag)
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@99f2e3eb74603dbe4b785982467aed3ab28fc082 # v1.20.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

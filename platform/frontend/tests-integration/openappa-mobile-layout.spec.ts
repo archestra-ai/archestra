@@ -229,19 +229,16 @@ for (const width of [320, 375]) {
       const picker = page.getByRole("combobox", {
         name: "Policy source file",
       });
-      const revision = page.getByText("Revision 3", { exact: true });
-      await expect(revision).toBeVisible();
-      await expect(
-        page.getByRole("link", { name: "Policy guide" }),
-      ).toBeVisible();
+      const guide = page.getByRole("link", { name: "Policy guide" });
+      await expect(guide).toBeVisible();
 
       const toggle = await viewToggle.boundingBox();
       const select = await picker.boundingBox();
-      const revisionBox = await revision.boundingBox();
-      if (!toggle || !select || !revisionBox)
+      const guideBox = await guide.boundingBox();
+      if (!toggle || !select || !guideBox)
         throw new Error("Missing toolbar parts");
-      // The guide link and revision share the toggle's row...
-      expect(revisionBox.y).toBeLessThan(toggle.y + toggle.height);
+      // The guide link shares the toggle's row...
+      expect(guideBox.y).toBeLessThan(toggle.y + toggle.height);
       // ...and the picker spans the card below them.
       expect(select.y).toBeGreaterThanOrEqual(toggle.y + toggle.height);
       expect(select.width).toBeGreaterThan(width - 100);

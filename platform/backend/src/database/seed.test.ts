@@ -154,7 +154,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(35);
+    expect(originalToolIds).toHaveLength(39);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -423,7 +423,7 @@ Be neurodiversity friendly.
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(35);
+    ).toHaveLength(39);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -542,7 +542,7 @@ Be neurodiversity friendly.
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(35);
+    expect(managedToolIds).toHaveLength(39);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -588,7 +588,7 @@ Be neurodiversity friendly.
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(32);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(36);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -598,7 +598,7 @@ Be neurodiversity friendly.
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(35);
+    expect(assigned).toHaveLength(39);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 
@@ -662,6 +662,51 @@ Be neurodiversity friendly.
     );
     expect(writeToolIds).toHaveLength(6);
     expect(assigned.filter((id) => writeToolIds.includes(id))).toEqual([]);
+  });
+
+  test("adds LLM log tools to existing OpenAPPA agents on repeated startup sync", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    const organization = await makeOrganization();
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    const agentId =
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id ?? "";
+    const logToolIds = await ToolModel.findBuiltInToolIdsByNames(
+      (
+        [
+          "list_llm_interactions",
+          "get_llm_interaction",
+          "list_llm_sessions",
+          "get_llm_session_logs",
+        ] as const
+      ).map((shortName) => archestraMcpBranding.getToolName(shortName)),
+    );
+    expect(logToolIds).toHaveLength(4);
+    const current = await AgentToolModel.findToolIdsByAgent(agentId);
+    await db
+      .delete(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.agentToolsTable.toolId, logToolIds),
+        ),
+      );
+
+    await syncOpenAppaConfigAgentCapabilities();
+    await syncOpenAppaConfigAgentCapabilities();
+
+    const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
+    expect(assigned.sort()).toEqual(current.sort());
+    expect(assigned).toEqual(expect.arrayContaining(logToolIds));
   });
 
   test("leaves the OpenAPPA agent's tools alone while OpenAPPA is disabled", async ({

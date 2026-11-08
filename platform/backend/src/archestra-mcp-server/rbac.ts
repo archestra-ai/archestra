@@ -165,6 +165,10 @@ export const TOOL_PERMISSIONS: Record<
   delete_limit: { resource: "llmLimit", action: "delete" },
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
+  list_llm_interactions: { resource: "log", action: "read" },
+  get_llm_interaction: { resource: "log", action: "read" },
+  list_llm_sessions: { resource: "log", action: "read" },
+  get_llm_session_logs: { resource: "log", action: "read" },
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },

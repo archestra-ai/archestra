@@ -432,15 +432,6 @@ jobs:
         with:
           subject-checksums: release-subjects.txt
 
-      - name: Generate a release token
-        id: release-token
-        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
-        with:
-          # Draft releases are listed only with push access.
-          permission-contents: write
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: Decide whether the platform latest tag moves
         id: platform-latest
         shell: bash

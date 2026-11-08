@@ -436,81 +436,48 @@ class PublisherHandoffTests(unittest.TestCase):
                 result, _ = self.collect(references, registry or "ghcr.io/archestra-ai")
                 self.assertNotEqual(result.returncode, 0)
 
-    def dispatch(self, *, version, preserve_latest, runs, platform_latest="false", chart=None):
+    def request(self, *, version, preserve_latest, platform_latest="false",
+                images=None):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        images = Path(directory.name) / "images.json"
-        images.write_text(json.dumps({"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"}))
-        chart_env = {}
-        if chart is not None:
-            (Path(directory.name) / "chart.tgz").write_bytes(chart)
-            chart_env = {"CHART": str(Path(directory.name) / "chart.tgz")}
-        calls = Path(directory.name) / "calls"
-        # Stub only the GitHub CLI; the script's own --jq filter runs against
-        # the fixture run list.
-        stub = r"""
-gh() {
-  if [ "$1 $2 $3" = "api -X POST" ]; then
-    printf 'dispatch %s ' "$4" >> "$CALLS"; jq -c . >> "$CALLS"; return
-  fi
-  if [ "$1 $2" = "run watch" ]; then echo "watch $3" >> "$CALLS"; return "$WATCH_STATUS"; fi
-  local query=
-  while [ "$#" -gt 0 ]; do
-    if [ "$1" = --jq ]; then query=$2; shift; fi
-    shift
-  done
-  printf '%s\n' "$RUNS" | jq -r "$query"
-}
-sleep() { :; }
-"""
+        images_file = Path(directory.name) / "images.json"
+        images_file.write_text(json.dumps(
+            {"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"} if images is None else images, indent=2))
+        output = Path(directory.name) / "output"
         result = subprocess.run(
-            ["bash", "-c", stub + f'source "{SCRIPTS / "release-dispatch.sh"}" "{images}"'],
-            env=os.environ | chart_env | {
-                "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
-                "PLATFORM_LATEST": platform_latest,
-                "PUBLISHER_REPO": "archestra-ai/release-publisher", "GITHUB_RUN_ID": "77",
-                "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
-                "WATCH_STATUS": "0",
-            },
+            ["bash", str(SCRIPTS / "release-request.sh"), str(images_file)],
+            env=os.environ | {"VERSION": version, "PRESERVE_LATEST": preserve_latest,
+                              "PLATFORM_LATEST": platform_latest, "GITHUB_OUTPUT": str(output)},
             capture_output=True, text=True, timeout=10,
         )
-        lines = calls.read_text().splitlines() if calls.exists() else []
-        payload = json.loads(lines[0].split(" ", 2)[2]) if lines else None
-        return result, payload, lines[1:]
+        lines = output.read_text().splitlines() if output.exists() else []
+        return result, dict(line.split("=", 1) for line in lines)
 
-    def test_dispatch_moves_latest_only_for_the_newest_stable_line(self):
-        runs = [{"id": 5, "display_title": "Publish 1.4.0 [77-2]"}]
-        for version, preserve, latest in (
-            ("1.4.0", "false", True), ("1.3.80", "true", False), ("1.5.0-rc.3", "false", False),
+    def test_request_moves_latest_only_for_the_newest_stable_line(self):
+        for version, preserve, platform_latest, latest in (
+            ("1.4.0", "false", "false", "stable"),
+            ("1.4.0", "false", "true", "stable newest"),
+            ("1.3.80", "true", "false", ""),
+            ("1.5.0-rc.3", "false", "false", ""),
+            # Quickstart's platform :latest follows release candidates too.
+            ("1.5.0-rc.3", "false", "true", "newest"),
         ):
-            with self.subTest(version=version):
-                result, payload, rest = self.dispatch(version=version, preserve_latest=preserve, runs=runs)
+            with self.subTest(version=version, preserve=preserve, platform_latest=platform_latest):
+                result, outputs = self.request(version=version, preserve_latest=preserve,
+                                               platform_latest=platform_latest)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(payload, {
-                    "event_type": "publish-release-images",
-                    "client_payload": {"request_id": "77-2", "version": version, "latest": latest,
-                                       "platform_latest": False,
-                                       "images": {"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"}},
-                })
-                self.assertEqual(rest, ["watch 5"])
+                self.assertEqual(outputs["latest"], latest)
 
-    def test_dispatch_names_the_chart_of_this_run_and_the_platform_latest_decision(self):
-        runs = [{"id": 5, "display_title": "Publish 1.5.0-rc.3 [77-2]"}]
-        result, payload, _ = self.dispatch(version="1.5.0-rc.3", preserve_latest="false", runs=runs,
-                                           platform_latest="true", chart=b"chart")
+    def test_request_passes_the_attested_digests_on_one_line(self):
+        result, outputs = self.request(version="1.4.0", preserve_latest="false")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(payload["client_payload"]["platform_latest"], True)
-        self.assertEqual(payload["client_payload"]["chart"],
-                         {"run_id": 77, "sha256": hashlib.sha256(b"chart").hexdigest()})
-
-    def test_dispatch_waits_only_for_its_own_run(self):
-        runs = [{"id": 4, "display_title": "Publish 1.4.0 [77-1]"},
-                {"id": 3, "display_title": "Publish 1.4.0 [177-2]"}]
-        result, _, rest = self.dispatch(version="1.4.0", preserve_latest="false", runs=runs)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("did not start", result.stdout)
-        self.assertEqual(rest, [])
-
+        self.assertEqual(json.loads(outputs["images"]),
+                         {"ghcr.io/archestra-ai/mcp-server-base": f"sha256:{DIGEST_A}"})
+        for images in ({}, [], "sha256:" + DIGEST_A):
+            with self.subTest(images=images):
+                result, outputs = self.request(version="1.4.0", preserve_latest="false", images=images)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(outputs, {})
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -90,6 +91,12 @@ const agentRunsTable = pgTable(
     ),
     /** Set after the provider accepts the terminal reply. */
     completionNotifiedAt: timestamp("completion_notified_at", { mode: "date" }),
+    /**
+     * The LLM session that handed this run its work (the caller's session when
+     * a client started it through start_agent_run). It links a local client's
+     * session trace to the run's own session, keyed by its workload name.
+     */
+    originLlmSessionId: text("origin_llm_session_id"),
     /** Bounded tail of runtime output retained after the run is removed. */
     logs: text("logs"),
     startedAt: timestamp("started_at", { mode: "date" }).notNull().defaultNow(),
@@ -103,6 +110,9 @@ const agentRunsTable = pgTable(
     index("agent_runs_actor_user_id_idx").on(table.actorUserId),
     index("agent_runs_actor_idx").on(table.actorKind, table.actorId),
     index("agent_runs_project_id_idx").on(table.projectId),
+    index("agent_runs_org_origin_llm_session_idx")
+      .on(table.organizationId, table.originLlmSessionId)
+      .where(sql`${table.originLlmSessionId} IS NOT NULL`),
   ],
 );
 

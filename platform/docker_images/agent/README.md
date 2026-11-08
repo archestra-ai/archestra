@@ -317,15 +317,18 @@ external network access in both native architecture image builds. Authenticated
 provider and Kubernetes end-to-end validation are separate deployment checks.
 
 The eight public catalog targets are built for development deployments and
-releases. Keep native CLI versions exact and review their published package
+releases. The merge queue validates the targets a change can affect, for both
+native architectures (`.github/scripts/agent-image-inputs.py` decides which).
+A pull request builds them only while it carries the `build-agent-images`
+label: add it to try an image change before queueing. Keep native CLI versions exact and review their published package
 scripts before updating them.
 
 The daily `agent-runtime` job in `.github/workflows/update-client-versions.yml`
 proposes those updates as one pull request on `automation/agent-runtime-clis`.
 It runs `pnpm --dir backend update:agent-runtime-clis`, which picks each CLI's
 newest stable release that has been public for 7 days, and refreshes the
-OpenClaw lockfile. The pull request does not merge itself: merge it once the
-`Validate agent-*` builds pass. A new catalog target fails that script until it
+OpenClaw lockfile, and labels the pull request `build-agent-images`. It does
+not merge itself: merge it once the `Validate agent-*` builds pass. A new catalog target fails that script until it
 is registered there. Every CLI's own update check is off in the image, so an
 older session never stops on an update prompt.
 

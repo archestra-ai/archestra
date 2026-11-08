@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-06
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -108,7 +108,7 @@ Claude Code needs nothing for a pool named after a Claude model. For any other p
 
 ## See Which Member Answered
 
-Every attempt is a request in [Logs](/docs/admin/logs) under **Logs → LLM Proxy**, so a request that failed over shows each member it tried. Open a request to see its **Model pool**, the member's **Provider key**, the **Outcome** (**Answered**, **Failed over**, or **Failed**), and the **Reason**.
+Every attempt is a request in [Logs](/docs/admin/logs) under **Logs → LLM Proxy**, named by the member key it went to. An attempt that failed over shows its status and reason, such as **429 · rate limited**, and the attempt after it is marked **Retry**. Open a request to see, under **Model pool**, each member it tried in order with its outcome and time, and the members it did not need.
 
 Each attempt is priced as the member that made it, with that member's provider and model ID:
 

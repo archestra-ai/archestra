@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isClaudeCodeRuntimeCommand } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
 import {
@@ -248,7 +249,7 @@ class ClaudeCodeAccountManager {
   }
 
   private async placement(params: AccountOwner) {
-    if (params.runtime.command?.[0] !== "archestra-claude-code")
+    if (!isClaudeCodeRuntimeCommand(params.runtime.command?.[0]))
       throw new ApiError(
         400,
         "Claude subscriptions are only available in the Claude Code runtime.",

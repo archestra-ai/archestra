@@ -3,6 +3,11 @@ import type { ServerResponse } from "node:http";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { ServerDrainingError } from "@/types/server-draining-error";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { takeDrainScope, withDrainScope } from "@/utils/drain-scope";
@@ -74,7 +79,8 @@ class RequestDrain {
         (path === "/ready" ||
           (!isProbe(path) &&
             (!continuation || performance.now() >= this.deadline) &&
-            !isMcpRoute(path)))
+            !isMcpRoute(path) &&
+            !this.admitsGuardrailLoopback(path)))
       ) {
         reply.header("Connection", "close").header("Retry-After", "1");
         reply.serializer(JSON.stringify);
@@ -182,6 +188,17 @@ class RequestDrain {
     fastify.addHook("preClose", () => this.drain());
   }
 
+  // The native runtime's annotator and helper consults cannot carry a drain
+  // scope; they only run on behalf of a call this process already admitted.
+  private admitsGuardrailLoopback(path: string | undefined): boolean {
+    return (
+      isGuardrailLoopbackRoute(path) &&
+      this.deadline !== undefined &&
+      performance.now() < this.deadline &&
+      this.active.size > 0
+    );
+  }
+
   createContinuation(): string {
     const token = randomUUID();
     this.continuations.add(token);
@@ -282,6 +299,13 @@ function isMcpRoute(path: string | undefined): boolean {
     path?.startsWith("/v1/mcp/") === true ||
     path?.startsWith("/api/mcp/") === true ||
     path?.startsWith("/mcp_proxy/") === true
+  );
+}
+function isGuardrailLoopbackRoute(path: string | undefined): boolean {
+  return (
+    path === OPENAPPA_ARCHESTRA_ANNOTATOR_PATH ||
+    path === GUARDRAILS_NOOP_ANNOTATOR_PATH ||
+    path?.startsWith(`${OPENAPPA_HELPERS_PREFIX}/`) === true
   );
 }
 const drains = new WeakMap<FastifyInstance, RequestDrain>();

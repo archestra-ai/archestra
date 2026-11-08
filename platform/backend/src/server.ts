@@ -99,7 +99,6 @@ import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
-import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { activeUsersMetricCollector } from "@/observability/metrics/active-users";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
@@ -121,7 +120,6 @@ import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
 } from "@/services/apps/app-sdk-injection";
-import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -190,9 +188,13 @@ import {
 import { drainBackgroundWork } from "./utils/background-work";
 
 async function flushShutdownTelemetry(): Promise<void> {
-  if (isMainModule)
-    await (await import("./observability/tracing/sdk")).shutdownTelemetry();
+  if (!isMainModule) return;
+  // Deliver queued error reports before exit; resolves at once without Sentry.
+  await Sentry.flush(SENTRY_SHUTDOWN_FLUSH_TIMEOUT_MS);
+  await (await import("./observability/tracing/sdk")).shutdownTelemetry();
 }
+
+const SENTRY_SHUTDOWN_FLUSH_TIMEOUT_MS = 3_000;
 
 function shutdownTimeoutMs(): number {
   return (
@@ -1028,13 +1030,6 @@ const startWebServer = async () => {
 
     rumExporter.initialize();
 
-    posthogErrorTrackingService.init().catch((error) => {
-      logger.warn(
-        { err: error },
-        "Failed to initialize PostHog error tracking",
-      );
-    });
-
     startMcpServerRuntime(fastify);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1434,9 +1429,6 @@ function registerWebServerShutdown(
         clearInterval(intervalIds.processedEmailCleanupIntervalId);
       }
 
-      // Flush any buffered exceptions before exit (internally time-bounded).
-      await posthogErrorTrackingService.shutdown();
-
       // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
@@ -1599,13 +1591,6 @@ const startWorker = async () => {
     void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
-    posthogErrorTrackingService.init().catch((error) => {
-      logger.warn(
-        { err: error },
-        "Failed to initialize PostHog error tracking",
-      );
-    });
-
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
@@ -1683,7 +1668,6 @@ const startWorker = async () => {
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         mcpActiveUseTracker.stop();
         // SPDX-SnippetEnd
-        await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await drainBackgroundWork();
         await mcpClient.disconnectAll();
@@ -1710,25 +1694,10 @@ const startWorker = async () => {
 // Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
 // .catch() callback, creating an unhandled rejection that is never awaited.
 // This handler logs those leaks and keeps the server alive.
+// Sentry reports the rejection itself, through the same filter as request
+// errors.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
-  // Apply the shared tracking policy on this non-request capture path too, so a
-  // rejected transient-DB query groups by root cause and expected client/
-  // upstream errors are skipped, matching the request-error handler.
-  const decision = classifyErrorForTracking(reason);
-  if (!decision.report) {
-    return;
-  }
-  posthogErrorTrackingService.captureException({
-    error: reason,
-    properties: {
-      ...(decision.fingerprint && {
-        $exception_fingerprint: decision.fingerprint.join("/"),
-      }),
-      ...decision.tags,
-      error_type: "unhandled_rejection",
-    },
-  });
 });
 
 /**

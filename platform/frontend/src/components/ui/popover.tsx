@@ -1,8 +1,9 @@
 "use client";
 
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import type * as React from "react";
+import * as React from "react";
 
+import { DialogContentContext } from "@/components/ui/dialog-content-context";
 import { cn } from "@/lib/utils/tailwind";
 
 function Popover({
@@ -32,8 +33,11 @@ function PopoverContent({
   sideOffset = 4,
   portal = true,
   portalContainer,
+  onWheel,
+  onTouchMove,
   ...props
 }: PopoverContentProps) {
+  const withinDialog = React.useContext(DialogContentContext);
   const content = (
     <PopoverPrimitive.Content
       data-slot="popover-content"
@@ -44,6 +48,18 @@ function PopoverContent({
         className,
       )}
       {...props}
+      // The popover portals to <body>, outside the dialog's subtree. A modal
+      // dialog locks scrolling by preventDefaulting, at the document, every
+      // wheel and touch move that starts outside its subtree; stopping them
+      // here keeps the popover's own lists scrollable.
+      onWheel={(event) => {
+        onWheel?.(event);
+        if (withinDialog) event.stopPropagation();
+      }}
+      onTouchMove={(event) => {
+        onTouchMove?.(event);
+        if (withinDialog) event.stopPropagation();
+      }}
     />
   );
 

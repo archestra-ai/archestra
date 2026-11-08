@@ -24,7 +24,6 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
-  getAgentCatalogImageTag,
   gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
@@ -36,10 +35,16 @@ import {
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  pinReleaseImage,
   providerSupportsChat,
+  type ReleaseImageDigests,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import {
+  isAnalyticsEnabled,
+  resolveErrorReporting,
+} from "@archestra/shared/error-reporting";
 import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
@@ -86,7 +91,6 @@ dotenv.config({
   quiet: true,
 });
 
-const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
@@ -162,6 +166,13 @@ const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
 /**
+ * Archestra's Sentry project for backend errors. A DSN only allows sending
+ * events to the project, so it is public by design.
+ */
+const DEFAULT_SENTRY_BACKEND_DSN =
+  "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232";
+
+/**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
  * @public — exported for testability
@@ -176,6 +187,24 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
  */
 export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
   buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
+
+/**
+ * The audit log's own OTLP log exporter, or null when
+ * ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT is unset and audit records share the
+ * backend's log pipeline. A dedicated collector gets only its own credentials:
+ * the shared OTLP credentials belong to a different destination.
+ * @public — exported for testability
+ */
+export const getAuditLogOtelExporter = (
+  envValue: string | undefined = process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT,
+): Pick<OTLPExporterNodeConfigBase, "url" | "headers"> | null => {
+  const endpoint = envValue?.trim();
+  if (!endpoint) return null;
+  return {
+    url: getOtelExporterOtlpLogEndpoint(endpoint),
+    headers: buildOtlpAuthHeaders("ARCHESTRA_AUDIT_LOG_OTEL_AUTH"),
+  };
+};
 
 const buildOtlpAuthHeaders = (
   envPrefix: string,
@@ -1591,19 +1620,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 
 /** @public — exported for testability */
 export const getAnalyticsConfig = () => {
-  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
-  // Evaluated at call time (not the module-level `isProduction`) so tests can
-  // exercise both environments.
-  const isProductionEnv = ["production", "prod"].includes(
-    process.env.NODE_ENV?.toLowerCase() ?? "",
-  );
   return {
-    // Analytics (PostHog product analytics, instance heartbeats, and backend
-    // error tracking) defaults to on only in production builds. Local dev and
-    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
-    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
-    // wins in both directions ("disabled" → off, any other value → on).
-    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    // Analytics (PostHog product analytics, instance heartbeats, and error
+    // reports to Archestra's Sentry) defaults to on only in production builds.
+    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
+    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // which always wins in both directions ("disabled" → off, any other value
+    // → on). Evaluated at call time so tests can exercise both environments.
+    enabled: isAnalyticsEnabled({
+      analytics: process.env.ARCHESTRA_ANALYTICS,
+      nodeEnv: process.env.NODE_ENV,
+    }),
     posthog: {
       key:
         process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
@@ -1615,9 +1642,62 @@ export const getAnalyticsConfig = () => {
   };
 };
 
+/**
+ * Backend error reporting. Without ARCHESTRA_SENTRY_BACKEND_DSN, errors (and
+ * only errors) go to Archestra's Sentry project while analytics is on. An
+ * explicit DSN reports to that project with full diagnostics, independent of
+ * ARCHESTRA_ANALYTICS.
+ * @public — exported for testability
+ */
+export const getSentryConfig = () =>
+  resolveErrorReporting({
+    dsnOverride: process.env.ARCHESTRA_SENTRY_BACKEND_DSN,
+    defaultDsn: DEFAULT_SENTRY_BACKEND_DSN,
+    environmentOverride: process.env.ARCHESTRA_SENTRY_ENVIRONMENT,
+    nodeEnv: process.env.NODE_ENV,
+    analyticsEnabled: getAnalyticsConfig().enabled,
+  });
+
+/**
+ * Parse `ARCHESTRA_RELEASE_IMAGE_DIGESTS`, the digests the release pipeline
+ * writes into the Helm chart: `{"version": "<platform version>", "images":
+ * {"<image name>": "sha256:<hex>"}}`. Digests recorded for another version
+ * (a chart run with a different platform image) are ignored, so the default
+ * images fall back to their version tags. Unset, as in development builds,
+ * there is nothing to pin. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseReleaseImageDigests(params: {
+  rawValue: string | undefined;
+  appVersion: string;
+}): ReleaseImageDigests | null {
+  const raw = params.rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_RELEASE_IMAGE_DIGESTS must be JSON");
+  }
+  if (!isReleaseImageDigests(parsed)) {
+    throw new Error(
+      'ARCHESTRA_RELEASE_IMAGE_DIGESTS must look like {"version": "1.2.3", "images": {"mcp-server-base": "sha256:<64 hex>"}}',
+    );
+  }
+  return parsed.version === params.appVersion ? parsed : null;
+}
+
+const releaseImageDigests = parseReleaseImageDigests({
+  rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
+  appVersion,
+});
+
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
+  pinReleaseImage({
+    image: `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`,
+    digests: releaseImageDigests,
+  });
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -2577,17 +2657,23 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
     /**
      * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
-     * them can move the registry and pin the tag; the tag otherwise follows
-     * the platform version.
+     * them can move the registry and pin the tag; the tag otherwise is the
+     * platform version, pinned to the digest its release shipped with.
      */
-    catalogImages: getAgentCatalogImages({
-      registry:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
-        AGENT_CATALOG_IMAGE_REGISTRY,
-      tag:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
-        getAgentCatalogImageTag(appVersion),
-    }),
+    catalogImages: Object.fromEntries(
+      Object.entries(
+        getAgentCatalogImages({
+          registry:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+            AGENT_CATALOG_IMAGE_REGISTRY,
+          tag:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() || appVersion,
+        }),
+      ).map(([id, image]) => [
+        id,
+        pinReleaseImage({ image, digests: releaseImageDigests }),
+      ]),
+    ) as ReturnType<typeof getAgentCatalogImages>,
     /**
      * Pre-pull the whole catalog onto every runtime node at startup and on
      * each platform version, so a cold-started Agent does not wait on a
@@ -2656,6 +2742,16 @@ const config = {
       {},
       "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
     ),
+    /**
+     * RuntimeClass for unprivileged Agent Runtime pods, such as `gvisor` on a
+     * GKE Sandbox node pool, so a run's processes do not share the node's
+     * kernel. Privileged runtimes never receive it: gVisor cannot host a
+     * privileged container, and their nested Docker needs one. Unset runs
+     * with the cluster's default runtime.
+     */
+    runtimeClassName:
+      process.env.ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME?.trim() ||
+      undefined,
     /**
      * How long a launched run may stay Pending before it is declared failed.
      * Covers node scale-up of a dedicated (scale-to-zero) Agent Runtime pool plus a
@@ -2785,6 +2881,8 @@ const config = {
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
+    iamAuthEnabled: process.env.ARCHESTRA_DATABASE_IAM_AUTH_ENABLED === "true",
+    awsRegion: process.env.ARCHESTRA_DATABASE_AWS_REGION?.trim() || "",
   },
   // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
   // is a per-provider config map iterated as provider descriptors).
@@ -3629,10 +3727,7 @@ const config = {
       ),
     },
     sentry: {
-      enabled: sentryDsn !== "",
-      dsn: sentryDsn,
-      environment:
-        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+      ...getSentryConfig(),
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
         0.1,
@@ -3720,7 +3815,10 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+        pinReleaseImage({
+          image: `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+          digests: releaseImageDigests,
+        }),
       p4Binary: {
         x64: {
           url:
@@ -4163,6 +4261,7 @@ const config = {
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    otelExporter: getAuditLogOtelExporter(),
     // Retention is enterprise-licensed; the boot-time assertion in
     // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(
@@ -4199,6 +4298,25 @@ export const shouldRunWorker =
 export default config;
 
 // ===== Internal helpers =====
+
+function isReleaseImageDigests(value: unknown): value is ReleaseImageDigests {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const { version, images, ...rest } = value as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || typeof version !== "string" || !version) {
+    return false;
+  }
+  if (typeof images !== "object" || images === null || Array.isArray(images)) {
+    return false;
+  }
+  return Object.entries(images).every(
+    ([name, digest]) =>
+      /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
+      typeof digest === "string" &&
+      /^sha256:[0-9a-f]{64}$/.test(digest),
+  );
+}
 
 /**
  * Get the environment variable API key for a provider.

@@ -14,6 +14,10 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 30,
     payload: {},
   },
+  // Keeps the hourly LLM usage rollup current and walks its history backfill.
+  // Cost statistics read raw rows for hours not rolled yet, so a late tick
+  // costs speed, never correctness.
+  { taskType: "llm_usage_rollup", intervalSeconds: 60, payload: {} },
   // Runs every 30s (not 60): besides enqueuing due syncs, this task drives
   // connector-run recovery — reaping expired leases, reconciling statuses, and
   // sweeping stalled embeddings — so its cadence is the quantization on how fast

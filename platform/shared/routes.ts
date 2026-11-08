@@ -278,6 +278,7 @@ export const RouteId = {
   GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
   GetLlmProxyLogSessions: "getLlmProxyLogSessions",
   GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
   GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
   GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
@@ -597,6 +598,15 @@ export const RouteId = {
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
+  GetServiceAccountFederatedCredentials:
+    "getServiceAccountFederatedCredentials",
+  CreateServiceAccountFederatedCredential:
+    "createServiceAccountFederatedCredential",
+  UpdateServiceAccountFederatedCredential:
+    "updateServiceAccountFederatedCredential",
+  DeleteServiceAccountFederatedCredential:
+    "deleteServiceAccountFederatedCredential",
+  ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
@@ -747,6 +757,7 @@ export const RouteId = {
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
+  GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",

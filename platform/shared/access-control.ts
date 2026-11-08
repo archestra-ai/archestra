@@ -789,6 +789,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmProxyLogUserIds]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessions]: { log: ["read"] },
   [RouteId.GetLlmProxyLogSessionLineage]: { log: ["read"] },
+  [RouteId.GetLlmProxyLogSessionHandoffs]: { log: ["read"] },
   [RouteId.GetInternalMcpCatalog]: {},
   // Like the full list: the handlers read only what the caller may list.
   [RouteId.SearchMcpRegistry]: {},
@@ -1167,6 +1168,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateServiceAccountToken]: {},
   [RouteId.UpdateServiceAccountToken]: {},
   [RouteId.DeleteServiceAccountToken]: {},
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // A federated credential lets an outside workload act as the account, so
+  // it is gated like a key: read on the account to list, update to change.
+  // The handlers check the grant on the account itself.
+  [RouteId.GetServiceAccountFederatedCredentials]: {},
+  [RouteId.CreateServiceAccountFederatedCredential]: {},
+  [RouteId.UpdateServiceAccountFederatedCredential]: {},
+  [RouteId.DeleteServiceAccountFederatedCredential]: {},
+  // Public: the OIDC token in the body is the proof, checked in the handler
+  // against the account's federated credentials. The authnz layer exempts it.
+  [RouteId.ExchangeWorkloadIdentityToken]: {},
+  // SPDX-SnippetEnd
   [RouteId.GetAllVirtualApiKeys]: {},
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },
   [RouteId.GetVirtualApiKeyLabelValues]: { llmVirtualKey: ["read"] },
@@ -1270,6 +1285,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateAgentSettings]: {
     organizationSettings: ["update"],
+  },
+  [RouteId.GetDefaultModelRuntimeDependents]: {
+    organizationSettings: ["read"],
   },
   [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],

@@ -1,9 +1,20 @@
 # Separate, small VPN-only installation for recording product demos.
-# The bundled PostgreSQL release has its own persistent volume in archestra-demo.
+# Its database is its own Cloud SQL instance (infra gcp/gke/cloudsql.tf).
 fullnameOverride: archestra-demo
 
 archestra:
   replicaCount: 1
+  database:
+    # The pods log in as the archestra-demo-platform service account through
+    # the proxy sidecar; no password exists.
+    cloudSqlProxy:
+      enabled: true
+      instanceConnectionName: friendly-path-465518-r6:us-central1:archestra-demo-pg
+  orchestrator:
+    kubernetes:
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-demo-platform@friendly-path-465518-r6.iam.gserviceaccount.com
   worker:
     enabled: false
   resources:
@@ -26,6 +37,45 @@ archestra:
     # re-enable what values-staging-demo-shared.yaml turns off for staging.
     ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "false"
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "false"
+    # TODO(before merge): replace with the value currently held in the
+    # ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL repository secret.
+    ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
+    # Export audit events as OTLP logs, on their own endpoint, to the audit
+    # collector that writes them to the organization's security log archive
+    # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
+    # Demo's other telemetry stays off.
+    ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
+    ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=demo"
+
+  # Every credential, including the session, encryption and offer-signing
+  # keys the chart would otherwise generate, comes from the archestra-demo-runtime Secret
+  # that archestra-ai/infra syncs from GCP Secret Manager (gcp/gke/apps/
+  # runtime-secrets, one key per env var). These entries replace the chart's
+  # generated values. Never also set these names under env: an env entry,
+  # even "", would replace the synced value.
+  envFromSecrets:
+    - name: ARCHESTRA_AUTH_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SECRET
+    - name: ARCHESTRA_AUTH_SESSION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+    - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD
+    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+      secretName: archestra-demo-runtime
+      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   gkeBackendConfig:
     enabled: true
@@ -59,4 +109,5 @@ archestra:
         secretName: archestra-demo-sandbox-wildcard-tls
 
 postgresql:
-  enabled: true
+  enabled: false
+  external_database_url: "postgresql://archestra-demo-platform%40friendly-path-465518-r6.iam@127.0.0.1:5432/archestra_dev?sslmode=disable"

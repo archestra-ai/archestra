@@ -46,8 +46,7 @@ const STAMP = ".napi-prebuilt";
 const LOCK = ".napi-prebuilt.lock";
 // CI builds on Debian bookworm; older glibc cannot load the binaries.
 const MIN_GLIBC = "2.36";
-const DEFAULT_REPOSITORY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/napi-dev-cache";
+const DEFAULT_REPOSITORY = "ghcr.io/archestra-ai/ci/napi-dev-cache";
 const MANIFEST_TYPES = [
   "application/vnd.oci.image.index.v1+json",
   "application/vnd.oci.image.manifest.v1+json",

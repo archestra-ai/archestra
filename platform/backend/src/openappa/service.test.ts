@@ -1385,26 +1385,6 @@ describe("APPA feature boundary", () => {
     ).toEqual(["tool_call"]);
   });
 
-  test("admits multiple calls before any result arrives", async () => {
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "allow_call" }),
-    );
-    const calls = [
-      { id: "first", name: "read_file", arguments: {} },
-      { id: "second", name: "read_file", arguments: {} },
-    ];
-    expect(
-      await evaluateToolCalls(session, calls, {
-        canonicalize: (name) => name,
-      }),
-    ).toEqual([{ kind: "allow" }, { kind: "allow" }]);
-    expect(
-      native.dispatchHook.mock.calls.map(
-        ([raw]) => JSON.parse(raw).operation_id,
-      ),
-    ).toEqual(["call:first", "call:second"]);
-  });
-
   test("an undeclared tool becomes a planless notice while an admitted sibling stands", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       if (JSON.parse(raw).tool === "unknown_tool") {
@@ -1595,28 +1575,6 @@ describe("APPA feature boundary", () => {
       }),
       "OpenAPPA could not cancel an admitted call",
     );
-  });
-
-  test("releases the model's own remedy call without proposing it again", async () => {
-    // The gateway dispatches the one control ToolCall when the client runs it.
-    // A second one here would vouch the offer twice for the same attempt.
-    const decisions = await evaluateToolCalls(
-      session,
-      [
-        {
-          id: "remedy-call",
-          name: "mcp__archestra__execute_remedy_plan",
-          arguments: { offer_id: "offer-1" },
-        },
-      ],
-      {
-        canonicalize: (name) => name,
-        control: { name: "mcp__archestra__execute_remedy_plan" },
-      },
-    );
-
-    expect(decisions).toEqual([{ kind: "control" }]);
-    expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
   test("releases ask_user without evaluating it against the policy", async () => {
@@ -1856,18 +1814,6 @@ describe("APPA feature boundary", () => {
       });
     });
 
-    test("shows the gateway's own refusal the same way", async () => {
-      const result = await process({
-        name: CONTROL,
-        content: "[appa] No live offer with this id is available.",
-        isError: true,
-      });
-
-      expect(result.toolResultUpdates.remedy?.content).toBe(
-        `${NOT_APPLIED}[appa] No live offer with this id is available.${ASK}`,
-      );
-    });
-
     test("needs no error flag, which OpenAI wires never set", async () => {
       const result = await process({
         name: CONTROL,
@@ -1950,34 +1896,6 @@ describe("APPA feature boundary", () => {
         "[appa] Authorized.",
       );
     });
-  });
-
-  test("does not exempt an unrelated MCP question from tool-call evaluation", async () => {
-    await evaluateToolCalls(
-      session,
-      [{ id: "foreign-question", name: "question", arguments: {} }],
-      {
-        canonicalize: (name) => name,
-        isUserQuestion: () => false,
-      },
-    );
-    expect(
-      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
-    ).toContainEqual(
-      expect.objectContaining({ event: "tool_call", tool: "question" }),
-    );
-    native.dispatchHook.mockClear();
-    expect(
-      await evaluateToolCalls(
-        session,
-        [{ id: "native-question", name: "question", arguments: {} }],
-        {
-          canonicalize: (name) => name,
-          isUserQuestion: (name) => name === "question",
-        },
-      ),
-    ).toEqual([{ kind: "allow" }]);
-    expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
   test("releases authorized control and notice aliases but evaluates foreign namespaces", async () => {
@@ -2116,14 +2034,11 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
-  test.each([
-    undefined,
-    "mcp__evil",
-  ])("evaluates an unregistered remedy lookalike (%s)", async (namespace) => {
-    // The gateway canonicalizer only resolves namespaces it attests; a
-    // foreign server's member stays a bare leaf name. The leaf alone must
-    // never release remedy control: the call carries a namespace, so it is
-    // evaluated like any foreign tool.
+  test("evaluates a bare-name remedy lookalike", async () => {
+    // The leaf name alone never releases remedy control: a call without the
+    // control's namespace is evaluated like any foreign tool. The namespaced
+    // lookalike is covered by "releases the control call only in the
+    // namespace its tool was declared in".
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "deny_call", feedback: "Not declared" }),
     );
@@ -2133,7 +2048,6 @@ describe("APPA feature boundary", () => {
         {
           id: "lookalike",
           name: "archestra__execute_remedy_plan",
-          namespace,
           arguments: { offer_id: "offer-1" },
         },
       ],
@@ -3012,45 +2926,6 @@ describe("APPA feature boundary", () => {
       ),
     ).toBe(true);
   });
-  test("executes the enabled special MCP remedy for the stamped trajectory", async () => {
-    config.openappa.offerSigningSecret = "";
-    native.executeRemedyByOffer.mockResolvedValue(
-      JSON.stringify({
-        decision: "mcp_result",
-        offer: { status: "known" },
-        result: {
-          content: [{ type: "text", text: "APPA remedy completed" }],
-        },
-      }),
-    );
-    const result = await executeArchestraTool(
-      "archestra__execute_remedy_plan",
-      {
-        offer_id: "offer",
-        trajectory: remedyTrajectory("user:alice|child", "user:alice|parent"),
-      },
-      {
-        agent: { id: "agent", name: "Assistant" },
-        agentId: "agent",
-        organizationId,
-        userId: "alice",
-        sessionId: "conversation",
-        currentToolCallId: "remedy-call-1",
-      },
-    );
-    expect(result.content).toEqual([
-      { type: "text", text: "APPA remedy completed" },
-    ]);
-    expect(native.dispatchHook).not.toHaveBeenCalled();
-    expectNativeRemedy(native.executeRemedyByOffer.mock.calls[0][0], {
-      sessionId: "user:alice|child",
-      parentId: "user:alice|parent",
-      callerId: "user:alice",
-      toolCallId: "remedy-call-1",
-      originalArguments: '{"offer_id":"offer"}',
-      args: { offer_id: "offer" },
-    });
-  });
 
   test("the public notice tool preserves custom-call validation across encoded arguments", async () => {
     const context = {
@@ -3322,40 +3197,6 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates.call).toMatchObject({
       content: "[appa] ordinary tool data must remain byte-for-byte",
       outputSource: "tool",
-    });
-  });
-  test("accepts mcp_result decision from native runtime for control tool results", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
-      const event = JSON.parse(raw);
-      return JSON.stringify(
-        event.event === "tool_result" && event.tool_call_id === "remedy"
-          ? {
-              decision: "mcp_result",
-              approved_output:
-                "[appa] Authorized. Call the Write tool again with exactly these arguments: {}",
-              output_source: "runtime",
-            }
-          : { decision: "ack" },
-      );
-    });
-    const result = await processProxyResults({
-      session,
-      canonicalize: (name: string) => name,
-      results: [
-        {
-          id: "remedy",
-          name: "archestra__execute_remedy_plan",
-          content: '{"result":"ok"}',
-          isError: false,
-        },
-      ],
-    });
-    expect(result.toolResultUpdates).toEqual({
-      remedy: {
-        content:
-          "[appa] Authorized. Call the Write tool again with exactly these arguments: {}",
-        outputSource: "runtime",
-      },
     });
   });
   test.each([

@@ -69,11 +69,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
-    # transitively pull older x/net and grpc versions and would otherwise override these requirements.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
+    # Keep all three security floors in the LAST `go get` before `go mod vendor`:
+    # earlier OTel/x/sys and go-archive updates can pull older x/net, grpc, and compress versions.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -129,9 +130,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
-    # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
+    # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
+    # dependency updates can otherwise downgrade the explicit requirements.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -375,9 +377,6 @@ FROM builder-base AS builder
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
-# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-#
 # SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 # SENTRY_URL points to the EU region where the archestra org is hosted
 #
@@ -388,8 +387,6 @@ FROM builder-base AS builder
 # backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
-    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
-    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
     pnpm exec turbo build --filter=@backend --filter=@frontend \
@@ -495,6 +492,9 @@ RUN apk --no-cache upgrade && \
     # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
     # so the explicit floors both guarantee the fixed version and bust the cache.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
+    # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
+    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.

@@ -4,6 +4,7 @@ import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";
 
@@ -41,6 +42,8 @@ export const CacheKey = {
   GitHubActionsTokenJti: "github-actions-token-jti",
   /** GitHub Actions token exchange requests, before verifying the OIDC token. */
   GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
+  /** Workload identity token exchange requests, before verifying the OIDC token. */
+  WorkloadIdentityTokenRateLimit: "workload-identity-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
@@ -142,6 +145,8 @@ export const CacheKey = {
   TeamsFileSignIn: "teams-file-sign-in",
   /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
   TeamsFileSignInState: "teams-file-sign-in-state",
+  /** Page URL of an MS Teams channel's files folder, learned from a sender's sign-in */
+  TeamsChannelFilesFolder: "teams-channel-files-folder",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",
@@ -720,8 +725,17 @@ export const cacheManager = new CacheManager();
 // === Internal helpers
 
 function createPostgresStore(): KeyvStoreAdapter {
+  const pgPoolOptions = buildPgConnectionConfig(
+    config.database.url,
+    { max: 10 },
+    {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    },
+  );
   return new KeyvPostgres({
-    uri: config.database.url,
+    ...pgPoolOptions,
+    uri: config.database.iamAuthEnabled ? undefined : config.database.url,
     table: "keyv_cache",
     max: 10,
     /**

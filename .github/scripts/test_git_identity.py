@@ -33,8 +33,8 @@ class GitIdentityTests(unittest.TestCase):
             git("commit", "--allow-empty", "-qm", "automated change", cwd=linked)
             self.assertEqual(
                 git("show", "-s", "--format=%an <%ae>|%cn <%ce>", cwd=linked),
-                "archestra-ci[bot] <222894074+archestra-ci[bot]@users.noreply.github.com>|"
-                "archestra-ci[bot] <222894074+archestra-ci[bot]@users.noreply.github.com>",
+                "archestra-automation-prs[bot] <222894074+archestra-automation-prs[bot]@users.noreply.github.com>|"
+                "archestra-automation-prs[bot] <222894074+archestra-automation-prs[bot]@users.noreply.github.com>",
             )
             self.assertEqual(git("config", "user.name", cwd=unrelated), "Developer fixture")
             self.assertEqual(git("config", "--global", "user.email"), "developer@example.invalid")

@@ -285,8 +285,9 @@ export async function stageHitlReview(params: {
   if (!samePayload && params.prepareSummary !== false) {
     try {
       summary = await summarizeHitlReview(params);
-    } catch {
+    } catch (err) {
       logger.warn(
+        { err },
         "OpenAPPA approval summary unavailable; retaining the complete review",
       );
     }

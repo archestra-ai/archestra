@@ -30,6 +30,7 @@ export function geminiUsageTokens(usage: {
   candidatesTokenCount?: number;
   cachedContentTokenCount?: number;
   thoughtsTokenCount?: number;
+  toolUsePromptTokenCount?: number;
 }) {
   // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
   // so subtract it to get the uncached input and avoid double-counting.
@@ -38,8 +39,12 @@ export function geminiUsageTokens(usage: {
   // and are billed as output. Fold them in so output includes reasoning, as
   // it does for every other provider.
   const reasoning = usage.thoughtsTokenCount ?? 0;
+  // Tokens fed back from built-in tools (Google Search, URL context, code
+  // execution) are billed as input but reported beside promptTokenCount.
+  const toolUsePrompt = usage.toolUsePromptTokenCount ?? 0;
   return {
-    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
+    input:
+      Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead) + toolUsePrompt,
     output: (usage.candidatesTokenCount ?? 0) + reasoning,
     cacheRead,
     cacheWrite: 0,

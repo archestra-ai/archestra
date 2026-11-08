@@ -4754,7 +4754,7 @@ describe("AgentForm save payload and failure handling", () => {
           modelId: "claude-model",
           runtime: {
             image: "example.com/claude-code:latest",
-            command: ["archestra-claude-code-runtime"],
+            command: ["custom-claude-entrypoint"],
             claudeCode: {
               authentication: "subscription",
               model: "opus",
@@ -4786,14 +4786,14 @@ describe("AgentForm save payload and failure handling", () => {
     expect(providerRadio).toBeChecked();
     expect(
       screen.getByText(
-        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current archestra-claude-code-runtime entrypoint will be lost.",
+        "To use personal Claude subscriptions, change Dedicated runtime → Container → Command to archestra-claude-code. Any custom logic in the current custom-claude-entrypoint entrypoint will be lost.",
       ),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /update/i }));
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().runtime).toMatchObject({
-      command: ["archestra-claude-code-runtime"],
+      command: ["custom-claude-entrypoint"],
       claudeCode: {
         authentication: "provider",
         model: "opus",
@@ -4821,7 +4821,7 @@ describe("AgentForm save payload and failure handling", () => {
           modelId: "claude-model",
           runtime: {
             image: "example.com/claude-code:latest",
-            command: ["archestra-claude-code-runtime"],
+            command: ["custom-claude-entrypoint"],
             claudeCode: {
               authentication: "subscription",
               model: "opus",

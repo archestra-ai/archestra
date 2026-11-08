@@ -8,10 +8,14 @@ import config from "@/lib/config/config";
 import { errorReporting } from "@/lib/error-reporting";
 
 const {
-  sentry: { dsn, environment },
+  sentry: { dsnOverride, environmentOverride },
 } = config;
 
-errorReporting.start({ dsn, environment });
+errorReporting.start({
+  dsnOverride,
+  environmentOverride,
+  nodeEnv: process.env.NODE_ENV,
+});
 
 export const onRouterTransitionStart: typeof import("@sentry/nextjs").captureRouterTransitionStart =
   (...args) => {

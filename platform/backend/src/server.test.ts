@@ -183,13 +183,6 @@ describe("createFastifyInstance", () => {
     });
 
     test("returns a useful service-unavailable response when a provider connection times out", async () => {
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
       const app = createFastifyInstance();
       app.get("/v1/ollama/test-provider-timeout", async () => {
         throw Object.assign(new Error("Connect Timeout Error"), {
@@ -211,8 +204,6 @@ describe("createFastifyInstance", () => {
           type: "api_service_unavailable_error",
         },
       });
-      expect(captureSpy).not.toHaveBeenCalled();
-      captureSpy.mockRestore();
     });
 
     test.each([
@@ -221,13 +212,6 @@ describe("createFastifyInstance", () => {
     ])("returns 503 when the real passthrough proxy at %s cannot connect", async (prefix) => {
       const fastifyHttpProxy = (await import("@fastify/http-proxy")).default;
       const { errors } = await import("undici");
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
       const app = createFastifyInstance();
       try {
         await app.register(fastifyHttpProxy, {
@@ -253,10 +237,8 @@ describe("createFastifyInstance", () => {
             type: "api_service_unavailable_error",
           },
         });
-        expect(captureSpy).not.toHaveBeenCalled();
       } finally {
         await app.close();
-        captureSpy.mockRestore();
       }
     });
 
@@ -285,87 +267,7 @@ describe("createFastifyInstance", () => {
       }
     });
 
-    test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
-
-      const app = createFastifyInstance();
-      app.get("/test-upstream-502", async () => {
-        throw new ApiError(502, "Upstream provider failed");
-      });
-      app.get("/test-upstream-504", async () => {
-        throw new ApiError(504, "Upstream provider timed out");
-      });
-      app.get("/test-internal-500", async () => {
-        throw new ApiError(500, "We crashed");
-      });
-
-      const res502 = await app.inject({
-        method: "GET",
-        url: "/test-upstream-502",
-      });
-      const res504 = await app.inject({
-        method: "GET",
-        url: "/test-upstream-504",
-      });
-      expect(res502.statusCode).toBe(502);
-      expect(res504.statusCode).toBe(504);
-      expect(captureSpy).not.toHaveBeenCalled();
-
-      const res500 = await app.inject({
-        method: "GET",
-        url: "/test-internal-500",
-      });
-      expect(res500.statusCode).toBe(500);
-      expect(captureSpy).toHaveBeenCalledTimes(1);
-
-      captureSpy.mockRestore();
-    });
-
-    test("skips MCP-server-unreachable errors on the PostHog sink too", async () => {
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
-
-      const app = createFastifyInstance();
-      // A user's MCP server being unreachable is an operational/config
-      // condition, not a bug: the shared tracking policy drops it, so the
-      // PostHog capture funnel skips it just as the Sentry filter does.
-      app.get("/test-mcp-unreachable", async () => {
-        throw Object.assign(new Error("MCP server is not running yet"), {
-          name: "McpServerNotReadyError",
-        });
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-mcp-unreachable",
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(captureSpy).not.toHaveBeenCalled();
-
-      captureSpy.mockRestore();
-    });
-
-    test("maps transient database connectivity errors to a retryable 503 with root-cause grouping", async () => {
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
-
+    test("maps transient database connectivity errors to a retryable 503", async () => {
       const app = createFastifyInstance();
       const databaseHost = new URL(config.database.url).hostname;
       // Mimic the ORM's per-query wrapper around an underlying DNS failure
@@ -388,17 +290,6 @@ describe("createFastifyInstance", () => {
           type: "api_service_unavailable_error",
         },
       });
-
-      // Captured once, grouped by root cause rather than by query text
-      expect(captureSpy).toHaveBeenCalledTimes(1);
-      expect(captureSpy.mock.calls[0][0].properties).toMatchObject({
-        error_type: "db_unavailable",
-        db_error_code: "EAI_AGAIN",
-        status_code: 503,
-        $exception_fingerprint: "db-transient/EAI_AGAIN",
-      });
-
-      captureSpy.mockRestore();
     });
 
     test.each([
@@ -425,13 +316,6 @@ describe("createFastifyInstance", () => {
         "203.0.113.10:443",
       ],
     ])("names the unreachable host instead of blaming the database for %s", async (_kind, thrown, host) => {
-      const { posthogErrorTrackingService } = await import(
-        "@/services/error-tracking"
-      );
-      const captureSpy = vi.spyOn(
-        posthogErrorTrackingService,
-        "captureException",
-      );
       const app = createFastifyInstance();
       app.get("/test-outbound-unreachable", async () => {
         throw thrown;
@@ -449,9 +333,6 @@ describe("createFastifyInstance", () => {
           type: "api_service_unavailable_error",
         },
       });
-      expect(captureSpy).not.toHaveBeenCalled();
-
-      captureSpy.mockRestore();
       await app.close();
     });
 

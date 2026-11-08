@@ -14,7 +14,7 @@ export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
 /**
  * Where a Teams user starts and finishes signing in to the bot so it can read
- * their group-chat files. Public: the pending sign-in key and OAuth state are
+ * the files they share in channels and group chats. Public: the pending sign-in key and OAuth state are
  * the proof, and the ChatOps webhook prefix is already allowlisted.
  */
 export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
@@ -25,6 +25,12 @@ export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback
  * GitHub Actions setting.
  */
 export const GITHUB_ACTIONS_TOKEN_PATH = "/api/github-actions/token";
+/**
+ * Public RFC 8693 token exchange: an OIDC token from a workload's own issuer
+ * for a short-lived service account token. The handler checks the token
+ * against the account's federated credentials.
+ */
+export const WORKLOAD_IDENTITY_TOKEN_PATH = "/api/workload-identity/token";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";

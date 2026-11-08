@@ -36,10 +36,11 @@ import {
   OverviewSection,
   paneHeight,
 } from "./overview-parts";
-import { PoolAttempt } from "./pool-attempt";
 import { RequestContent } from "./request-content";
 import { KindChip } from "./request-waterfall";
+import { hasRoutingDetails, RoutingDetails } from "./routing-details";
 import {
+  type InteractionSummary,
   type RequestSpan,
   requestLabel,
   requestPrompt,
@@ -75,7 +76,13 @@ export function RequestDetails({
   onJumpToLatest,
   excerpt,
   toolCallChecks,
+  requests = [],
 }: {
+  /**
+   * The trace's loaded requests, oldest first: a pool attempt's siblings, to
+   * show the request's whole attempt chain.
+   */
+  requests?: InteractionSummary[];
   /** The pane height, applied from `lg`. */
   height: number;
   loading: boolean;
@@ -173,6 +180,7 @@ export function RequestDetails({
         providerLabel={providerLabel}
         onStep={onStep}
         excerpt={Boolean(excerpt)}
+        requests={requests}
       />
 
       <RequestContent
@@ -200,6 +208,7 @@ function RequestOverview({
   providerLabel,
   onStep,
   excerpt,
+  requests,
 }: {
   span: RequestSpan;
   /** Epoch ms the session's axis starts at. */
@@ -211,6 +220,7 @@ function RequestOverview({
   providerLabel: (provider: SupportedProvider) => string;
   onStep: (delta: number) => void;
   excerpt: boolean;
+  requests: InteractionSummary[];
 }) {
   const { row, kind } = span;
   const modelOrigin = row.model
@@ -483,7 +493,7 @@ function RequestOverview({
           )}
         </OverviewSection>
 
-        <PoolAttempt row={row} />
+        <RoutingDetails row={row} requests={requests} />
 
         <OverviewSection
           title="Cost"
@@ -517,22 +527,25 @@ function RequestOverview({
                 <span>Not recorded</span>
               )}
             </OverviewCell>
-            <OverviewCell label="Routing">
-              {rerouted && row.baselineModel ? (
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <span className="truncate text-muted-foreground">
-                    {shortModelName(row.baselineModel)}
+            {/* Auto routing and pools explain themselves above. */}
+            {hasRoutingDetails(row) ? null : (
+              <OverviewCell label="Routing">
+                {rerouted && row.baselineModel ? (
+                  <span className="inline-flex min-w-0 items-center gap-1">
+                    <span className="truncate text-muted-foreground">
+                      {shortModelName(row.baselineModel)}
+                    </span>
+                    <ArrowRight
+                      className="size-3 shrink-0 text-muted-foreground/60"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{modelName}</span>
                   </span>
-                  <ArrowRight
-                    className="size-3 shrink-0 text-muted-foreground/60"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{modelName}</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground">As requested</span>
-              )}
-            </OverviewCell>
+                ) : (
+                  <span className="text-muted-foreground">As requested</span>
+                )}
+              </OverviewCell>
+            )}
             {saved > 0 ? (
               <OverviewCell label="Saved">
                 <span

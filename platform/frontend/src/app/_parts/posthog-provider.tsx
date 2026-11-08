@@ -1,11 +1,11 @@
 "use client";
 
-import type { PostHogConfig } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth/auth.query";
-import config, { getTracingHeaderHosts } from "@/lib/config/config";
+import config from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { posthogClient } from "@/lib/posthog-client";
 
 export function PostHogProviderWrapper({
@@ -37,27 +37,23 @@ export function PostHogProviderWrapper({
   useEffect(() => {
     const analytics = publicConfig?.analytics;
 
+    // The same switch decides whether errors go to Archestra's Sentry.
+    if (!isPublicConfigLoading && publicConfig) {
+      errorReporting.setAnalyticsEnabled(Boolean(analytics?.enabled));
+    }
+
     if (
       !isPublicConfigLoading &&
       analytics?.enabled &&
       analytics.posthog.key &&
       !isPostHogInitializedRef.current
     ) {
-      // `__add_tracing_headers` is the config key posthog-js reads to decorate
-      // requests to our own hosts with `X-POSTHOG-SESSION-ID` /
-      // `X-POSTHOG-DISTINCT-ID` headers, so backend-captured errors and logs
-      // cross-reference this session replay. It isn't in posthog-js's exported
-      // config type, hence the local intersection type.
-      const initConfig: Partial<PostHogConfig> & {
-        __add_tracing_headers?: string[];
-      } = {
-        ...config.posthog.config,
-        api_host: analytics.posthog.host,
-        __add_tracing_headers: getTracingHeaderHosts(),
-      };
       // Loads and initializes PostHog once the app is interactive; calls
       // made until then are queued (see posthogClient).
-      posthogClient.init(analytics.posthog.key, initConfig);
+      posthogClient.init(analytics.posthog.key, {
+        ...config.posthog.config,
+        api_host: analytics.posthog.host,
+      });
       isPostHogInitializedRef.current = true;
     } else if (!isPublicConfigLoading && publicConfig && !analytics?.enabled) {
       posthogClient.disable();

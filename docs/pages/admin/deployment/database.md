@@ -2,7 +2,7 @@
 title: PostgreSQL
 description: Choose, size, and connect the PostgreSQL database that holds Archestra's state
 order: 4
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-06
 ---
 
 <span id="large-log-histories"></span><span id="docker-persistence"></span>
@@ -109,6 +109,111 @@ archestra:
 ```
 
 The chart applies these mounts to web pods, worker pods, and the migration Job. Use a Secret or ConfigMap for the CA; the migration Job skips persistent-volume claims.
+
+## Amazon RDS IAM Authentication
+
+On Amazon RDS or Aurora PostgreSQL, enable IAM database authentication so each new connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job signs a fresh 15-minute IAM token instead of using a static password.
+
+### 1. Prepare the PostgreSQL Database and IAM Role
+
+Enable IAM database authentication on your RDS or Aurora PostgreSQL instance, then connect as the master user to configure the `archestra` application database, required extensions, and IAM database role.
+
+- **New database**: Switch to the `archestra` database first so `vector` and `pg_trgm` are installed in the application database, then create the IAM-enabled role and grant database and schema privileges:
+
+  ```sql
+  \c archestra
+  CREATE EXTENSION IF NOT EXISTS vector;
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  CREATE USER archestra_iam WITH LOGIN;
+  GRANT rds_iam TO archestra_iam;
+  GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
+  GRANT ALL ON SCHEMA public TO archestra_iam;
+  ```
+
+- **Existing Archestra database**: Grant `rds_iam` directly to the existing database role that owns Archestra's tables and sequences (for example, `archestra`) and keep that username in [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL) and the `rds-db:connect` policy so table ownership and migration DDL (`ALTER TABLE`) privileges remain intact:
+
+  ```sql
+  \c archestra
+  CREATE EXTENSION IF NOT EXISTS vector;
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  GRANT rds_iam TO archestra;
+  ```
+
+  If you must switch an existing database from its original owner role (`archestra`) to a separate `archestra_iam` role, also transfer object ownership and privileges in the `archestra` database so both application DML and migration DDL succeed:
+
+  ```sql
+  \c archestra
+  CREATE USER archestra_iam WITH LOGIN;
+  GRANT rds_iam TO archestra_iam;
+  GRANT ALL PRIVILEGES ON DATABASE archestra TO archestra_iam;
+  GRANT ALL ON SCHEMA public TO archestra_iam;
+  GRANT archestra TO archestra_iam;
+  REASSIGN OWNED BY archestra TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO archestra_iam;
+  GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO archestra_iam;
+  ```
+
+Attach an IAM policy to the pod's IAM role allowing `rds-db:connect` for the RDS resource ID (`DbiResourceId`) and database username:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "rds-db:connect",
+      "Resource": "arn:aws:rds-db:eu-west-1:123456789012:dbuser:db-ABCDEFGHIJKLMNOPQRSTUVWX/archestra_iam"
+    }
+  ]
+}
+```
+
+### 2. Configure the Helm Chart on Amazon EKS
+
+On Amazon EKS, set `archestra.database.iamAuth.enabled: true` and `archestra.database.iamAuth.roleArn` (for IRSA) or bind the role with EKS Pod Identity:
+
+```yaml
+postgresql:
+  enabled: false
+archestra:
+  database:
+    iamAuth:
+      enabled: true
+      # Annotates the platform ServiceAccount with eks.amazonaws.com/role-arn (omit when using EKS Pod Identity):
+      roleArn: arn:aws:iam::123456789012:role/archestra-rds-iam-role
+      # Optional override when the endpoint hostname does not embed the AWS region
+      # (TLS hostname verification checks the URL hostname against the server certificate,
+      # so the URL must use an endpoint name covered by the certificate):
+      # awsRegion: eu-west-1
+  env:
+    ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+```
+
+The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and URL hostname on every connection (`sslmode=no-verify` is rejected under IAM auth); use an endpoint hostname covered by the server certificate (such as the RDS instance, cluster, or RDS Proxy endpoint, or a custom certificate covering your alias).
+
+When you change the pod's cloud identity, such as `roleArn` or an `iam.gke.io/gcp-service-account` annotation, the migration Job runs before Helm updates the platform ServiceAccount. As a result, the Job still uses the old identity on that upgrade. To avoid this, set `archestra.migrationJob.serviceAccount.create: true`, and the Job uses its own ServiceAccount with the current annotations. It has the platform ServiceAccount's name plus `-migrate`. Before you set it, allow that account name in the role's trust policy, or in the Workload Identity binding on GKE.
+
+### 3. Non-AWS Kubernetes Clusters (GKE, AKS, OpenShift, on-prem)
+
+When running outside AWS with network connectivity to RDS on port `5432`, you can authenticate using either OIDC federation or Kubernetes Secrets:
+
+- **OIDC federation (recommended)**: Register your cluster's OIDC issuer in AWS IAM and enable `injectWebIdentityTokenVolume` so the chart mounts a projected `sts.amazonaws.com` ServiceAccount token volume and sets `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE` on web, worker, and migration Job pods:
+
+  ```yaml
+  postgresql:
+    enabled: false
+  archestra:
+    database:
+      iamAuth:
+        enabled: true
+        roleArn: arn:aws:iam::123456789012:role/archestra-rds-iam-role
+        injectWebIdentityTokenVolume: true
+    env:
+      ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+  ```
+
+- **Secret-backed AWS credentials**: Supply `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN` through `archestra.envFromSecrets` (or `archestra.env`, where the chart automatically stores `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` in a Kubernetes Secret).
 
 ## Connection Capacity
 

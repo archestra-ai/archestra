@@ -73,6 +73,25 @@ describe("openaiToCohere — multimodal user content", () => {
   });
 });
 
+describe("openaiToCohere — output cap", () => {
+  test.each([
+    [undefined, 32, 32],
+    [64, 32, 32],
+    [64, null, 64],
+    [64, undefined, 64],
+  ])("maps max_tokens %s and max_completion_tokens %s to %s", (max_tokens, max_completion_tokens, expected) => {
+    const { cohereBody } = openaiToCohere(
+      req({ max_tokens, max_completion_tokens }),
+    );
+    expect(cohereBody.max_tokens).toBe(expected);
+  });
+
+  test("omits max_tokens when neither cap is set", () => {
+    const { cohereBody } = openaiToCohere(req());
+    expect(cohereBody.max_tokens).toBeUndefined();
+  });
+});
+
 describe("mapCohereFinishReason", () => {
   test.each([
     ["COMPLETE", "stop"],

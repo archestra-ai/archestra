@@ -8,8 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const REPOSITORY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/backend-types-cache";
+const REPOSITORY = "ghcr.io/archestra-ai/ci/backend-types-cache";
 const GROUPS = ["backend", "shared", "tools/drizzle-migration-linter"];
 const INPUTS = ["platform", ".github/workflows/on-commits-to-main.yml"];
 const MAX_BYTES = 256 * 1024 ** 2;

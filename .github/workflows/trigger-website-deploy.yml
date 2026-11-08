@@ -4,6 +4,9 @@ name: Publish Docs to archestra.ai
 
 on:
   workflow_call:
+    # The values live in the website-deploy environment (main only). A called
+    # workflow sees an environment secret only when its caller passes it by
+    # name; otherwise it resolves to an empty string.
     secrets:
       ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
@@ -24,6 +27,9 @@ jobs:
     name: Refresh archestra.ai Docs
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment:
+      name: website-deploy
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read
     steps:
@@ -35,7 +41,7 @@ jobs:
 
       - name: Generate website deployment token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}

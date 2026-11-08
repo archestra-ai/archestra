@@ -4,6 +4,7 @@ import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
 import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
+import { buildPgConnectionConfig } from "./rds-iam";
 import {
   installDbErrorSafetyNet,
   withTransactionRetry,
@@ -216,6 +217,8 @@ async function doInitializeDatabase(): Promise<void> {
  * - statement_timeout: ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS (default 30s);
  *   kills runaway queries so a single slow query can't hang a connection forever.
  *
+ * - jit: off for every connection (see the "connect" handler).
+ *
  * Connection keepalive configuration:
  * - keepAlive: true (enable TCP keepalive probes)
  * - keepAliveInitialDelayMillis: 10s (start probes after 10s of idle)
@@ -225,19 +228,27 @@ async function doInitializeDatabase(): Promise<void> {
  * "Connection terminated unexpectedly" error in cloud environments.
  */
 function createPool(connectionString: string): pg.Pool {
-  const newPool = new pg.Pool({
-    connectionString,
-    // Pool configuration
-    max: config.database.poolMax,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    // Per-connection statement timeout: kills runaway queries instead of
-    // letting them hang a connection indefinitely. 0 disables it.
-    statement_timeout: config.database.statementTimeoutMillis,
-    // Keepalive configuration to prevent "Connection terminated unexpectedly"
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10000,
-  });
+  const newPool = new pg.Pool(
+    buildPgConnectionConfig(
+      connectionString,
+      {
+        // Pool configuration
+        max: config.database.poolMax,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        // Per-connection statement timeout: kills runaway queries instead of
+        // letting them hang a connection indefinitely. 0 disables it.
+        statement_timeout: config.database.statementTimeoutMillis,
+        // Keepalive configuration to prevent "Connection terminated unexpectedly"
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+      },
+      {
+        iamAuthEnabled: config.database.iamAuthEnabled,
+        awsRegion: config.database.awsRegion || undefined,
+      },
+    ),
+  );
 
   /**
    * Handle errors on idle clients in the pool.
@@ -247,6 +258,16 @@ function createPool(connectionString: string): pg.Pool {
    */
   newPool.on("error", (err) => {
     logger.error({ err }, "Unexpected error on idle database client");
+  });
+
+  // No JIT compilation: it adds hundreds of milliseconds to every query whose
+  // estimated cost passes jit_above_cost (cost statistics over usage rows,
+  // most of all), and the queries here are short-lived. Queued before the
+  // client's first query.
+  newPool.on("connect", (client) => {
+    client.query("SET jit = off").catch((err) => {
+      logger.warn({ err }, "Could not turn off JIT for a database connection");
+    });
   });
 
   /**

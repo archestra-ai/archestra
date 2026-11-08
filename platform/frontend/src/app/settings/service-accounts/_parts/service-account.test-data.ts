@@ -7,6 +7,7 @@ export const account = {
   id: "account-1",
   organizationId: "org-1",
   name: "Automation worker",
+  description: null as string | null,
   icon: null,
   role: "member",
   teamId: null,

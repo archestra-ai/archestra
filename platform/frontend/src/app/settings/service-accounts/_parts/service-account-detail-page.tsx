@@ -22,6 +22,7 @@ import { OverviewSummary } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -46,6 +47,7 @@ import {
   useServiceAccount,
   useUpdateServiceAccount,
 } from "@/lib/service-account.query";
+import { getAccountHealth } from "@/lib/service-account-status";
 import { useTeam } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
@@ -368,10 +370,16 @@ function Overview({ account }: { account: ServiceAccountDetail }) {
 
   return (
     <SettingsSectionGroup>
-      {/* Only what the account has: an empty team, no labels or "never used"
-          say nothing a reader needs, so those facts fall out. */}
+      {/* What the account is for leads; then only what the account has: an
+          empty team, no labels or "never used" say nothing a reader needs, so
+          those facts fall out. */}
       <OverviewSummary
+        description={account.description}
         facts={[
+          {
+            label: "Status",
+            value: <AccountHealthBadge health={getAccountHealth(account)} />,
+          },
           {
             label: roles.length === 1 ? "Role" : "Roles",
             value: (

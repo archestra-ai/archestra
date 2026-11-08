@@ -40,6 +40,13 @@ archestra:
     # TODO(before merge): replace with the value currently held in the
     # ARCHESTRA_DEMO_AUTH_ADMIN_EMAIL repository secret.
     ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
+    # Export audit events as OTLP logs, on their own endpoint, to the audit
+    # collector that writes them to the organization's security log archive
+    # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
+    # Demo's other telemetry stays off.
+    ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
+    ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=demo"
 
   # Every credential, including the session, encryption and offer-signing
   # keys the chart would otherwise generate, comes from the archestra-demo-runtime Secret

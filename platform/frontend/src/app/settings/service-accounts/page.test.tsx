@@ -98,6 +98,34 @@ test("opens an account's page from its row and its editor from the pencil", asyn
   );
 });
 
+test("marks an account that has a description and reveals it on hover", async () => {
+  server.use(
+    http.get(`${origin}/api/service-accounts`, () =>
+      HttpResponse.json([
+        { ...account, description: "Posts release notes to the team channel" },
+        { ...account, id: "account-2", name: "Plain account" },
+      ]),
+    ),
+  );
+  const user = userEvent.setup();
+  renderPage();
+
+  const note = await screen.findByRole("button", {
+    name: "Description: Posts release notes to the team channel",
+  });
+  // Only the account that has one is marked.
+  expect(screen.getAllByRole("button", { name: /^Description:/ })).toHaveLength(
+    1,
+  );
+  await user.hover(note);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Posts release notes to the team channel",
+  );
+  // Hovering or clicking the note does not open the account.
+  await user.click(note);
+  expect(push).not.toHaveBeenCalled();
+});
+
 test("summarizes multiple roles and reveals the full assignment in a tooltip", async () => {
   server.use(
     http.get(`${origin}/api/service-accounts`, () =>

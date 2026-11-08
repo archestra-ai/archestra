@@ -15,12 +15,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type PolicyDeclarations,
   useEffectivePolicy,
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { batteryDisplayName } from "./_parts/battery-display-name";
 import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
 import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";

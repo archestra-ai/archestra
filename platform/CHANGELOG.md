@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.5.0-rc.27](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.26...platform-v1.5.0-rc.27) (2026-11-08)
+
+
+### Features
+
+* **audit-log:** send the audit log export to its own OTLP endpoint ([#10436](https://github.com/archestra-ai/archestra/issues/10436)) ([588734f](https://github.com/archestra-ai/archestra/commit/588734f10ffdaba2fc5971bed85512a69ff856b7))
+* **logs:** add built-in LLM log queries ([#10302](https://github.com/archestra-ai/archestra/issues/10302)) ([c2d64e5](https://github.com/archestra-ai/archestra/commit/c2d64e599bb61d5375bcea8e38539a924dad45af))
+* **ms-teams:** read channel files with the sender's sign-in ([#10343](https://github.com/archestra-ai/archestra/issues/10343)) ([755bb55](https://github.com/archestra-ai/archestra/commit/755bb5598e5cf58f0afea83b1870d0d02064fc3d))
+
+
+### Bug Fixes
+
+* **audit:** record the real client IP behind the web UI and optionally export actor identity ([#10465](https://github.com/archestra-ai/archestra/issues/10465)) ([0e816a5](https://github.com/archestra-ai/archestra/commit/0e816a56aefa3de46ca638ed580c6ae447ba6664))
+* **guardrails:** clarify policy source change paths ([#10300](https://github.com/archestra-ai/archestra/issues/10300)) ([0538d02](https://github.com/archestra-ai/archestra/commit/0538d022a5e286f606128a3e0a69f472d708c9ea))
+* **llm-observability:** count Gemini toolUsePromptTokenCount as input tokens ([#10446](https://github.com/archestra-ai/archestra/issues/10446)) ([7822287](https://github.com/archestra-ai/archestra/commit/78222872913678ab2ff7b8a925a03a068f82116b))
+* **mcp-runtime:** move default-base-image MCP servers to the current base image ([#10427](https://github.com/archestra-ai/archestra/issues/10427)) ([a8cc5e7](https://github.com/archestra-ai/archestra/commit/a8cc5e7212493cd06e1d9ad50ca416b025f6641c))
+* **security:** require patched zlib in the sandbox base image ([#10467](https://github.com/archestra-ai/archestra/issues/10467)) ([7202967](https://github.com/archestra-ai/archestra/commit/72029670b0bee29660545174b9340d0cbcc32bb2))
+
+
+### Performance Improvements
+
+* **environments:** avoid waiting for shared pod readiness on save ([#10298](https://github.com/archestra-ai/archestra/issues/10298)) ([df89158](https://github.com/archestra-ai/archestra/commit/df89158d7c5a567ca7cc7ae65d3b1d25b45e3f8c))
+
+
+### Documentation
+
+* **release:** RCs wait for the release-publisher approval too ([#10452](https://github.com/archestra-ai/archestra/issues/10452)) ([5954b67](https://github.com/archestra-ai/archestra/commit/5954b67b0aa02b89e5887954befb2a2587e1fd85))
+
+
+### Miscellaneous Chores
+
+* update the bundled OpenAPPA template ([#10454](https://github.com/archestra-ai/archestra/issues/10454)) ([291ccb6](https://github.com/archestra-ai/archestra/commit/291ccb6a9bf31df6e7c50abe6e17089ca4839628))
+
 ## [1.5.0-rc.26](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.25...platform-v1.5.0-rc.26) (2026-11-07)
 
 

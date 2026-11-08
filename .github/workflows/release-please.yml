@@ -151,8 +151,8 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # All releases start as drafts. Both channels publish automatically after
-      # all artifacts are ready.
+      # All releases start as drafts. Both channels publish after all artifacts
+      # are ready and release-publisher's approval (every release, RCs included).
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -666,7 +666,7 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
-  # Waits for the publisher, a stable release's approval included, up to 360
+  # Waits for the publisher, the release's approval included (RCs too), up to 360
   # minutes (archestra-ai/.github release-publish.yml).
   publish-release-images:
     name: Publish release images and chart
@@ -692,7 +692,8 @@ jobs:
 
   publish-github-release:
     name: Publish release
-    # No failed or skipped build is acceptable. Publish automatically after all builds.
+    # No failed or skipped build is acceptable. Publish after all builds and the
+    # approved image publication.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     concurrency:

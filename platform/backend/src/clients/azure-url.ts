@@ -1,5 +1,4 @@
 export function buildAzureDeploymentsUrl(params: {
-  apiVersion: string;
   baseUrl: string;
 }): string | null {
   try {
@@ -14,7 +13,7 @@ export function buildAzureDeploymentsUrl(params: {
       return null;
     }
 
-    return `${url.origin}${pathname}?api-version=${params.apiVersion}`;
+    return `${url.origin}${pathname}?api-version=${AZURE_DEPLOYMENTS_API_VERSION}`;
   } catch {
     return null;
   }

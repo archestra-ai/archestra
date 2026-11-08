@@ -111,6 +111,11 @@ it("adds initial access without submitting the resource, excludes duplicates, an
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Editor" }),
   );
+  expect(
+    screen.getByRole("option", { name: "Can use" }),
+  ).toHaveAccessibleDescription(
+    expect.stringMatching(/run the agent.*delegate tasks/i),
+  );
   await user.click(screen.getByRole("option", { name: "Can update" }));
   await user.click(screen.getByRole("button", { name: "Create agent" }));
   expect(submit).toHaveBeenLastCalledWith([

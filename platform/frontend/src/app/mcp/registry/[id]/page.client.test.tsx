@@ -1250,6 +1250,12 @@ function sharedWith(
         : { type: "organization", id: "org" };
   useResourcePermissions.mockReturnValue({
     data: {
+      resource: "mcpRegistry",
+      scope: "cat-1",
+      name: "Example server",
+      ownerId: "u1",
+      revision: 1,
+      canShareOrganizationWide: true,
       grants: [{ subject, actions: ["read", "use"] }],
       inheritedGrants: [],
       actorSubjects: [],

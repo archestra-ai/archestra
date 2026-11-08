@@ -17,7 +17,7 @@ on:
         type: string
         default: ""
       image_registry:
-        description: "Registry to push to: archestra-public, or ghcr.io/archestra-ai/ci to stage a release for the release-images publisher"
+        description: "Registry to push to: archestra-public, or ghcr.io/archestra-ai/ci to stage a release for the release publisher"
         required: false
         type: string
         default: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public

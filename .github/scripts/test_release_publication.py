@@ -141,7 +141,7 @@ gh() {
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
 
     def test_release_jobs_write_no_public_registry_names(self):
-        # Only the release-images publisher writes public names; this
+        # Only the release publisher writes public names; this
         # repository stages in ghcr.io/archestra-ai/ci and attests.
         for workflow in (WORKFLOW, WORKFLOW.with_name("publish-platform-helm-chart.yml"),
                          WORKFLOW.with_name("build-platform-release-image.yml")):

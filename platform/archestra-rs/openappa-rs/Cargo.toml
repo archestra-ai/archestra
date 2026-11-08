@@ -45,10 +45,10 @@ crate-type = ["cdylib"]
 # then the planner-cap lint's redispatch index (#792), the battery scripts'
 # run lines (#793), kagent demo fixes (#794, #796), and a credential link
 # declaration that requires an internal audience (#798).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c4462b8e554faff03b4c030e40e4fdf2d33f96c3" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

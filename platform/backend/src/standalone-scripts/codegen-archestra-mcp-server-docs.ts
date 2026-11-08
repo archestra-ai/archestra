@@ -51,8 +51,9 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   tool_assignment: 13,
   openappa: 14,
   limits: 15,
-  teams: 16,
-  plugins: 17,
+  logs: 16,
+  teams: 17,
+  plugins: 18,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",

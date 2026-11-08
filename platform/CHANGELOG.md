@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.4.25](https://github.com/archestra-ai/archestra/compare/platform-v1.4.24...platform-v1.4.25) (2026-11-08)
+
+
+### Features
+
+* **logs:** add built-in LLM log queries (backport release/1.4) ([#10464](https://github.com/archestra-ai/archestra/issues/10464)) ([a3e9498](https://github.com/archestra-ai/archestra/commit/a3e94985e9612d2b8bc4fb947e145b9e96b7637b))
+
+
+### Bug Fixes
+
+* **audit:** record the real client IP behind the web UI (backport release/1.4) ([#10466](https://github.com/archestra-ai/archestra/issues/10466)) ([c5a508b](https://github.com/archestra-ai/archestra/commit/c5a508b3cfaf78acc1f53ef8c53ebbfa06f4a939))
+* **azure:** scope API-key model discovery to its endpoint (backport release/1.4) ([#9838](https://github.com/archestra-ai/archestra/issues/9838)) ([af4ed8e](https://github.com/archestra-ai/archestra/commit/af4ed8ed6997944c72badb5740128d0be651045e))
+* **guardrails:** clarify policy source change paths (backport release/1.4) ([#10463](https://github.com/archestra-ai/archestra/issues/10463)) ([dc82124](https://github.com/archestra-ai/archestra/commit/dc82124585367e3c3f1997cabbe26f4327712b62))
+* **llm-observability:** count Gemini toolUsePromptTokenCount as input tokens (backport release/1.4) ([#10461](https://github.com/archestra-ai/archestra/issues/10461)) ([f5e1ae4](https://github.com/archestra-ai/archestra/commit/f5e1ae4fc32c0100c229ea17accb200c9219f644))
+* **permissions:** explain access levels for each resource (backport release/1.4) ([#9826](https://github.com/archestra-ai/archestra/issues/9826)) ([5e00f6f](https://github.com/archestra-ai/archestra/commit/5e00f6ffe9ca9b079ced4638608f81780e3d68a5))
+* **security:** require patched zlib in the sandbox base image (backport release/1.4) ([#10470](https://github.com/archestra-ai/archestra/issues/10470)) ([061d9d7](https://github.com/archestra-ai/archestra/commit/061d9d73dbd02f4b692c49731611ba12b8184765))
+
+
+### Performance Improvements
+
+* **environments:** avoid waiting for shared pod readiness on save (backport release/1.4) ([#10462](https://github.com/archestra-ai/archestra/issues/10462)) ([35d740e](https://github.com/archestra-ai/archestra/commit/35d740ed17823199b64360461d3df46bcd2ffd87))
+
 ## [1.4.24](https://github.com/archestra-ai/archestra/compare/platform-v1.4.23...platform-v1.4.24) (2026-11-07)
 
 

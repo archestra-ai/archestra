@@ -141427,6 +141427,7 @@ export type GetServiceAccountsResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141452,6 +141453,7 @@ export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetSe
 export type CreateServiceAccountData = {
     body: {
         name: string;
+        description?: string | null;
         icon?: string | null;
         role: string;
         teamId?: string | null;
@@ -141571,6 +141573,7 @@ export type CreateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141781,6 +141784,7 @@ export type GetServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;
@@ -141815,6 +141819,7 @@ export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServ
 export type UpdateServiceAccountData = {
     body: {
         name?: string;
+        description?: string | null;
         icon?: string | null;
         role?: string;
         teamId?: string | null;
@@ -141915,6 +141920,7 @@ export type UpdateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        description: string | null;
         icon: string | null;
         role: string;
         teamId: string | null;

@@ -17,6 +17,11 @@ import {
   permissionDescriptions,
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { fixedRoleGroups } from "@archestra/shared/fixed-roles";
+// SPDX-SnippetEnd
 import logger from "@/logging";
 import { assertPortsBound } from "@/models/ports";
 
@@ -76,6 +81,26 @@ function generatePredefinedRolesSections(): string {
 
   return sections.join("\n");
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function generateFixedRolesTable(): string {
+  let table = "| Group | Role | Identifier | Permissions |\n";
+  table += "|-------|------|------------|-------------|\n";
+  for (const group of fixedRoleGroups) {
+    for (const role of group.roles) {
+      const permissions = Object.entries(role.permission)
+        .flatMap(([resource, actions]) =>
+          (actions ?? []).map((action) => `\`${resource}:${action}\``),
+        )
+        .join(", ");
+      table += `| ${group.name} | ${role.name} | \`${role.role}\` | ${permissions} |\n`;
+    }
+  }
+  return table;
+}
+// SPDX-SnippetEnd
 
 /**
  * Validates that every resource:action combination in allAvailableActions
@@ -165,6 +190,11 @@ Every organization has these four roles. You cannot edit or delete them.
 
 ${generatePredefinedRolesSections()}
 
+## Fixed Roles
+
+Each fixed role grants one slice of the permissions below, so you can give a user, team, or service account exactly the access it needs without writing a custom role. Assign as many as you like; their permissions add up. You cannot edit or delete them.
+
+${generateFixedRolesTable()}
 <span id="llm-api-permissions"></span>
 
 ## Available Permissions

@@ -102,6 +102,19 @@ beforeEach(() => {
     http.get(`${origin}/api/user/permissions`, () =>
       HttpResponse.json(makeUserPermissions()),
     ),
+    http.get(`${origin}/api/agents/chat-roster`, () =>
+      HttpResponse.json([
+        {
+          id: "appa-agent",
+          name: "Configuration Agent",
+          scope: "org",
+          builtIn: true,
+          builtInAgentConfig: { name: "openappa-configuration-agent" },
+          authorId: null,
+          labels: [],
+        },
+      ]),
+    ),
     http.get(url, () => HttpResponse.json(policy)),
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({ enabled: true, source: null, hasPolicy: false }),
@@ -129,6 +142,88 @@ function mount(sourceEntry?: string) {
   );
   return client;
 }
+
+test("the policy source explains how an editor can change it", async () => {
+  mount();
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
+  ).toHaveAttribute("readonly");
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Change this policy with the configuration agent in chat.",
+  );
+  expect(
+    await screen.findByRole("link", { name: "Change in chat" }),
+  ).toHaveAttribute("href", "/chat?agentId=appa-agent");
+});
+
+test("a reader sees the policy without a change action", async () => {
+  server.use(
+    http.get(`${origin}/api/user/permissions`, () =>
+      HttpResponse.json(makeUserPermissions({ guardrailsPolicy: ["read"] })),
+    ),
+  );
+  mount();
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
+  ).toHaveAttribute("readonly");
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Ask an administrator to change this policy.",
+  );
+  expect(
+    screen.queryByRole("link", { name: "Change in chat" }),
+  ).not.toBeInTheDocument();
+});
+
+test("a repository-owned policy points editors to its repository", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({ ...declarations, managedInGithub: true }),
+    ),
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          lastSyncError: null,
+        },
+      }),
+    ),
+  );
+  mount();
+
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
+  ).toHaveAttribute("readonly");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Change this policy in its connected repository.",
+  );
+  expect(
+    screen.getByRole("link", { name: "Edit in repository" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/edit/main/appa.toml",
+  );
+  expect(
+    screen.getByRole("link", { name: /Managed in GitHub/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/blob/main/appa.toml",
+  );
+  expect(
+    screen.queryByRole("link", { name: "Change in chat" }),
+  ).not.toBeInTheDocument();
+});
 
 test("the Policy page selects an included battery source and searches its status", async () => {
   const githubEntry = "batteries/github/appa.toml";
@@ -402,12 +497,16 @@ test("the composed view lists no stub while every battery is active", async () =
   ).not.toBeInTheDocument();
 });
 
-test("the source picker and revision show only in the Source view", async () => {
+test("the source picker shows only in the Source view", async () => {
   mount();
-  expect(await screen.findByText("Revision 1")).toBeVisible();
   expect(
-    screen.getByRole("textbox", { name: "Organization guardrails policy" }),
+    await screen.findByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
   ).toHaveAttribute("readonly");
+  // A revision label beside a read-only source reads as unsaved edits.
+  expect(screen.queryByText(/^Revision \d+$/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Not yet saved")).not.toBeInTheDocument();
   expect(screen.getAllByRole("tablist")).toHaveLength(1);
   expect(
     screen.getByRole("combobox", { name: "Policy source file" }),
@@ -417,7 +516,6 @@ test("the source picker and revision show only in the Source view", async () => 
   expect(
     screen.queryByRole("combobox", { name: "Policy source file" }),
   ).not.toBeInTheDocument();
-  expect(screen.queryByText("Revision 1")).not.toBeInTheDocument();
   expect(
     screen.getByText("What the runtime enforces, batteries included."),
   ).toBeVisible();

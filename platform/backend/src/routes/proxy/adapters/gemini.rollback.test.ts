@@ -41,6 +41,9 @@ function createMockResponse(
       ...(usage?.thoughtsTokenCount !== undefined
         ? { thoughtsTokenCount: usage.thoughtsTokenCount }
         : {}),
+      ...(usage?.toolUsePromptTokenCount !== undefined
+        ? { toolUsePromptTokenCount: usage.toolUsePromptTokenCount }
+        : {}),
     },
     modelVersion: "gemini-2.5-pro",
     responseId: "gemini-test-response",
@@ -372,6 +375,18 @@ describe("GeminiResponseAdapter", () => {
       const adapter = geminiAdapterFactory.createResponseAdapter(response);
 
       expect(adapter.getUsage().reasoningTokens).toBe(60);
+    });
+
+    test("counts toolUsePromptTokenCount as input", () => {
+      const response = createMockResponse([{ text: "Test" }], {
+        promptTokenCount: 150,
+        candidatesTokenCount: 75,
+        toolUsePromptTokenCount: 40,
+      });
+
+      const adapter = geminiAdapterFactory.createResponseAdapter(response);
+
+      expect(adapter.getUsage().inputTokens).toBe(190);
     });
   });
 

@@ -369,11 +369,17 @@ export function geminiUsageViewToOpenai(
  * would make a streamed turn report a smaller prompt — and a smaller total,
  * since `totalTokenCount` also counts thinking tokens — than the non-streaming
  * reply for the identical request on the same route.
+ *
+ * Built-in tool tokens (`toolUsePromptTokenCount`) are billed input reported
+ * beside `promptTokenCount`, so they count toward `prompt_tokens`, as they do
+ * in the stream accumulator (see `geminiUsageTokens`).
  */
 export function geminiUsageToOpenai(
   response: GeminiResponse,
 ): OpenAiStreamUsage {
-  const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
+  const promptTokens =
+    (response.usageMetadata?.promptTokenCount ?? 0) +
+    (response.usageMetadata?.toolUsePromptTokenCount ?? 0);
   const reasoningTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
   const completionTokens =
     (response.usageMetadata?.candidatesTokenCount ?? 0) + reasoningTokens;

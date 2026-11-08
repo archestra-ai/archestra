@@ -2573,6 +2573,8 @@ describe("MSTeamsProvider channel files read with the sender's sign-in", () => {
   const MESSAGE_ID = "1792632504796";
   const SITE = "https://contoso.sharepoint.com/sites/Engineering";
   const CHANNEL_FILE = `${SITE}/Shared%20Documents/General/Design%20spec.pdf`;
+  const OTHER_SITE_FILE =
+    "https://contoso.sharepoint.com/sites/Finance/Shared%20Documents/Budget/Design%20spec.pdf";
   const APP_PDF = Buffer.from("%PDF-1.7 read with the app's site grant");
   const USER_PDF = Buffer.from("%PDF-1.7 read with the sender's sign-in");
   const server = useMswServer(...graphAuthHandlers());
@@ -2757,13 +2759,7 @@ describe("MSTeamsProvider channel files read with the sender's sign-in", () => {
   });
 
   test("the sender's token never reads a file outside the channel's folder", async () => {
-    server.use(
-      ...channelFile({
-        fileUrl:
-          "https://contoso.sharepoint.com/sites/Finance/Shared%20Documents/Budget/Design%20spec.pdf",
-        appGranted: false,
-      }),
-    );
+    server.use(...channelFile({ fileUrl: OTHER_SITE_FILE, appGranted: false }));
     await signInSender("openid Files.Read.All");
     const provider = makeProvider();
     await provider.initialize();
@@ -2775,6 +2771,33 @@ describe("MSTeamsProvider channel files read with the sender's sign-in", () => {
         status: "skipped",
         skipped: { name: "Design spec.pdf", reason: "download_failed" },
       },
+    ]);
+  });
+
+  test.each([
+    ["another team's site", OTHER_SITE_FILE, "download_failed"],
+    ["the channel's folder", CHANNEL_FILE, "sign_in_required"],
+    [
+      "a OneDrive",
+      "https://contoso-my.sharepoint.com/personal/bob_contoso_com/Documents/Design%20spec.pdf",
+      "sign_in_required",
+    ],
+  ])("once the channel's folder is known, a denied file in %s gets %s", async (_where, fileUrl, reason) => {
+    // A signed-in sender's message shows the bot where the channel's folder is.
+    server.use(...channelFile({ fileUrl: CHANNEL_FILE, appGranted: false }));
+    await signInSender("openid https://graph.microsoft.com/Files.Read.All");
+    const provider = makeProvider();
+    await provider.initialize();
+    await provider.downloadMessageFiles(channelMessage());
+
+    server.use(...channelFile({ fileUrl, appGranted: false }));
+    const outcomes = await provider.downloadMessageFiles({
+      ...channelMessage(),
+      senderId: "55555555-5555-4555-8555-555555555555",
+    });
+
+    expect(outcomes).toEqual([
+      { status: "skipped", skipped: { name: "Design spec.pdf", reason } },
     ]);
   });
 

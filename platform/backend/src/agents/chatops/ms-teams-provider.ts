@@ -36,7 +36,12 @@ import {
   msTeamsUserSignIn,
 } from "@/agents/chatops/ms-teams-user-sign-in";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
 import { mimeFromExtension } from "@/skills-sandbox/mime-sniff";
@@ -53,7 +58,6 @@ import type {
   IncomingChatMessage,
   MsTeamsDbConfig,
   SkippedAttachment,
-  SkippedAttachmentReason,
   ThreadFileOutcome,
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
@@ -1707,10 +1711,10 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * A channel message's files, with file sign-in on. Until the sender has
-   * signed in for channel files, the app's site grant is tried and a file it
-   * is denied comes back as `sign_in_required`. Once they have, files in the
-   * channel's own folder are read with their token, and any other file still
-   * with the app's grant.
+   * signed in for channel files, the app's site grant is tried, and a file it
+   * is denied comes back as `sign_in_required` only when a sign-in could read
+   * it. Once they have, files in the channel's own folder are read with their
+   * token, and any other file still with the app's grant.
    */
   private async downloadChannelFilesAsSender(params: {
     message: IncomingChatMessage;
@@ -1725,18 +1729,65 @@ class MSTeamsProvider implements ChatOpsProvider {
       access: "all",
     });
     if (!userAccessToken) {
+      const folderWebUrl = await this.knownChannelFolderWebUrl(message);
       return this.downloadTeamsFiles(files, undefined, {
-        deniedReason: "sign_in_required",
+        signInCanRead: (fileUrl) =>
+          isOneDriveUrl(fileUrl) ||
+          !folderWebUrl ||
+          itemPathWithin(fileUrl, folderWebUrl) !== null,
       });
     }
     const channelFolder = await this.getChannelFilesFolder({
       message,
       accessToken: userAccessToken,
     });
+    if (channelFolder) {
+      await this.rememberChannelFolderWebUrl({
+        message,
+        webUrl: channelFolder.webUrl,
+      });
+    }
     return this.downloadTeamsFiles(files, undefined, {
       userAccessToken,
       channelFolder: channelFolder ?? undefined,
     });
+  }
+
+  /**
+   * The page URL of the channel's files folder, as last seen through a
+   * sender's sign-in. The app's own `Sites.Selected` grant cannot look it
+   * up, so before anyone in the channel has signed in it is unknown.
+   */
+  private async knownChannelFolderWebUrl(
+    message: IncomingChatMessage,
+  ): Promise<string | null> {
+    const teamId = await this.channelTeamId(message);
+    if (!teamId) return null;
+    return (
+      (await cacheManager.get<string>(
+        channelFolderCacheKey(teamId, message.channelId),
+      )) ?? null
+    );
+  }
+
+  private async rememberChannelFolderWebUrl(params: {
+    message: IncomingChatMessage;
+    webUrl: string;
+  }): Promise<void> {
+    const teamId = await this.channelTeamId(params.message);
+    if (!teamId) return;
+    try {
+      await cacheManager.set(
+        channelFolderCacheKey(teamId, params.message.channelId),
+        params.webUrl,
+        CHANNEL_FOLDER_CACHE_TTL_MS,
+      );
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not remember the channel's files folder",
+      );
+    }
   }
 
   /**
@@ -1994,8 +2045,11 @@ class MSTeamsProvider implements ChatOpsProvider {
        */
       userAccessToken?: string;
       channelFolder?: ChannelFilesFolder;
-      /** Report a file Graph denies with this reason, not `download_failed`. */
-      deniedReason?: Extract<SkippedAttachmentReason, "sign_in_required">;
+      /**
+       * Whether the sender's sign-in could read a shared file. One Graph
+       * denies comes back as `sign_in_required` then, not `download_failed`.
+       */
+      signInCanRead?: (fileUrl: string) => boolean;
     },
   ): Promise<ThreadFileOutcome[]> {
     if (files.length === 0) return [];
@@ -2117,8 +2171,10 @@ class MSTeamsProvider implements ChatOpsProvider {
             name: attachment.name,
             sizeBytes: attachment.size,
             reason:
-              isSharePointReference && denied && options?.deniedReason
-                ? options.deniedReason
+              isSharePointReference &&
+              denied &&
+              options?.signInCanRead?.(attachment.contentUrl)
+                ? "sign_in_required"
                 : "download_failed",
           });
           continue;
@@ -2824,6 +2880,16 @@ interface ChannelFilesFolder {
   driveId: string;
   folderId: string;
   webUrl: string;
+}
+
+/** A renamed channel moves its folder; a sender's next sign-in relearns it. */
+const CHANNEL_FOLDER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function channelFolderCacheKey(
+  teamId: string,
+  channelId: string,
+): AllowedCacheKey {
+  return `${CacheKey.TeamsChannelFilesFolder}-${teamId}:${channelId}`;
 }
 
 /** A document page needs Graph; signed download URLs must stay untouched. */

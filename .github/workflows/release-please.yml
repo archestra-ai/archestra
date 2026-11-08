@@ -547,7 +547,10 @@ jobs:
     environment:
       name: releaser
       deployment: false # A secrets and branch gate; nothing is deployed.
-    timeout-minutes: 45
+    # A stable release waits in release-images for an Engineering member who
+    # did not merge it to approve it; this job waits with it, up to the
+    # longest a GitHub-hosted job may run.
+    timeout-minutes: 360
     concurrency:
       group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
       cancel-in-progress: false

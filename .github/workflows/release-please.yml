@@ -355,25 +355,19 @@ jobs:
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
 
-  publish-release-images:
-    name: Publish release images and chart
+  attest-release-images:
+    name: Attest release images and chart
     # This repository cannot write release names (only ci/ staging). Attest
-    # the staged digests under their public names and the chart by file name,
-    # then ask the release publisher to publish exactly those; it
-    # verifies the attestations first.
+    # the staged digests under their public names and the chart by file name;
+    # publish-release-images then asks the release publisher to publish
+    # exactly those, and it verifies the attestations first.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     # Holds the archestra-releaser App's key; main and release/* only.
     environment:
       name: releaser
       deployment: false # A secrets and branch gate; nothing is deployed.
-    # A stable release waits in release-publisher for an Engineering member who
-    # did not merge it to approve it; this job waits with it, up to the
-    # longest a GitHub-hosted job may run.
-    timeout-minutes: 360
-    concurrency:
-      group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
-      cancel-in-progress: false
+    timeout-minutes: 30
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -386,11 +380,13 @@ jobs:
       contents: read # Check out the publication scripts.
       id-token: write # Sign the build provenance attestation.
       attestations: write # Store the build provenance attestation.
+    outputs:
+      images: ${{ steps.request.outputs.images }}
+      latest: ${{ steps.request.outputs.latest }}
     env:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
       TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-      PUBLISHER_REPO: archestra-ai/release-publisher
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -492,26 +488,37 @@ jobs:
           done <<< "$RELEASE_TAGS"
           echo "move=true" >> "$GITHUB_OUTPUT"
 
-      - name: Generate a publisher token
-        id: publisher-token
-        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
-        with:
-          owner: archestra-ai
-          repositories: release-publisher
-          # Send the repository_dispatch and watch the run it starts.
-          permission-contents: write
-          permission-actions: read
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Publish through release-publisher
+      - name: Collect the publisher request
+        id: request
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
           PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
-          CHART: archestra-platform-${{ needs.release-please.outputs.platform_version }}.tgz
-        run: bash .github/scripts/release-dispatch.sh release-images.json
+        run: bash .github/scripts/release-request.sh release-images.json
+
+  # Waits for the publisher, a stable release's approval included, up to 360
+  # minutes (archestra-ai/.github release-publish.yml).
+  publish-release-images:
+    name: Publish release images and chart
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    concurrency:
+      group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
+      cancel-in-progress: false
+    needs: [release-please, attest-release-images]
+    permissions:
+      actions: read # Download the saved chart.
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@99f2e3eb74603dbe4b785982467aed3ab28fc082 # v1.20.0
+    with:
+      # Holds the archestra-releaser App's key; main and release/* only.
+      environment: releaser
+      project: archestra
+      version: ${{ needs.release-please.outputs.platform_version }}
+      images: ${{ needs.attest-release-images.outputs.images }}
+      latest: ${{ needs.attest-release-images.outputs.latest }}
+      chart-artifact: release-helm-chart
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   publish-github-release:
     name: Publish release
@@ -635,6 +642,7 @@ jobs:
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image
       - publish-platform-helm-chart
+      - attest-release-images
       - publish-release-images
       - publish-github-release
       - refresh-release-website
@@ -670,6 +678,7 @@ jobs:
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image.result }}
           HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
+          ATTEST_RESULT: ${{ needs.attest-release-images.result }}
           IMAGES_RESULT: ${{ needs.publish-release-images.result }}
           PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
           WEBSITE_RESULT: ${{ needs.refresh-release-website.result }}
@@ -687,6 +696,7 @@ jobs:
           • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
+          • attest images and chart: \`${ATTEST_RESULT}\`
           • publish images and chart (release-publisher): \`${IMAGES_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`
           • release website refresh: \`${WEBSITE_RESULT}\`

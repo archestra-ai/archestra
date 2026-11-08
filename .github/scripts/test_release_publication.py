@@ -222,7 +222,7 @@ gh() {
                     self.assertFalse(output.exists())
 
     def test_release_jobs_write_no_public_registry_names(self):
-        # Only the release-images publisher writes public names; this
+        # Only the release publisher writes public names; this
         # repository stages in ghcr.io/archestra-ai/ci and attests.
         for workflow in (WORKFLOW, WORKFLOW.with_name("publish-platform-helm-chart.yml"),
                          WORKFLOW.with_name("build-platform-release-image.yml")):
@@ -476,7 +476,7 @@ sleep() { :; }
             env=os.environ | chart_env | {
                 "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
                 "PLATFORM_LATEST": platform_latest, "SMOKE": smoke,
-                "PUBLISHER_REPO": "archestra-ai/release-images", "GITHUB_RUN_ID": "77",
+                "PUBLISHER_REPO": "archestra-ai/release-publisher", "GITHUB_RUN_ID": "77",
                 "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
                 "WATCH_STATUS": "0",
             },

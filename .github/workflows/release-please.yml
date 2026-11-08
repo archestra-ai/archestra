@@ -367,7 +367,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       environment: release-publish
-      # Stage in ci/; only the release-images publisher writes release names.
+      # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -388,7 +388,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       environment: release-publish
-      # Stage in ci/; only the release-images publisher writes release names.
+      # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -411,7 +411,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       environment: release-publish
-      # Stage in ci/; only the release-images publisher writes release names.
+      # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -434,7 +434,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       environment: release-publish
-      # Stage in ci/; only the release-images publisher writes release names.
+      # Stage in ci/; only the release publisher writes release names.
       image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -491,7 +491,7 @@ jobs:
     name: Publish release images and chart
     # This repository cannot write release names (only ci/ staging). Attest
     # the staged digests under their public names and the chart by file name,
-    # then ask the release-images publisher to publish exactly those; it
+    # then ask the release publisher to publish exactly those; it
     # verifies the attestations first.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
@@ -519,7 +519,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
       TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-      PUBLISHER_REPO: archestra-ai/release-images
+      PUBLISHER_REPO: archestra-ai/release-publisher
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -616,14 +616,14 @@ jobs:
         uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           owner: archestra-ai
-          repositories: release-images
+          repositories: release-publisher
           # Send the repository_dispatch and watch the run it starts.
           permission-contents: write
           permission-actions: read
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Publish through release-images
+      - name: Publish through release-publisher
         shell: bash
         env:
           GH_TOKEN: ${{ steps.publisher-token.outputs.token }}
@@ -671,7 +671,7 @@ jobs:
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: bash .github/scripts/release-publication-policy.sh
 
-      # Every registry write, :latest included, belongs to the release-images
+      # Every registry write, :latest included, belongs to the release-publisher
       # publisher (publish-release-images).
       - name: Download saved chart
         uses: ./.github/actions/github-download-artifact
@@ -766,7 +766,7 @@ jobs:
           • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
-          • publish images and chart (release-images): \`${IMAGES_RESULT}\`
+          • publish images and chart (release-publisher): \`${IMAGES_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`
           <${RUN_URL}|View failed CI run>"
           jq -n --arg text "$TEXT" '{text: $text}' \

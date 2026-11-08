@@ -359,9 +359,12 @@ describe("RoleMappingForm", () => {
       E2eTestId.IdpRoleMappingDefaultRole,
     ]) {
       await user.click(screen.getByTestId(testId));
-      expect(screen.getByRole("option", { name: /^Member/ })).toBeDisabled();
-      await user.click(screen.getByRole("option", { name: /^Admin/ }));
-      await user.keyboard("{Escape}");
+      // Emptying the selection leaves nothing to apply.
+      await user.click(screen.getByRole("checkbox", { name: /^Member/ }));
+      expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+      await user.click(screen.getByRole("checkbox", { name: /^Member/ }));
+      await user.click(screen.getByRole("checkbox", { name: /^Admin/ }));
+      await user.click(screen.getByRole("button", { name: "Update" }));
     }
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>

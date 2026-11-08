@@ -30,13 +30,12 @@ export interface FixedRole {
   permission: Permissions;
 }
 
-export interface FixedRoleGroup {
+interface FixedRoleGroup {
   id: string;
   name: string;
   roles: FixedRole[];
 }
 
-export const FIXED_ROLE_PREFIX = "fixed:";
 
 export const fixedRoleGroups: FixedRoleGroup[] = [
   group("agents", "Agents", [
@@ -400,10 +399,6 @@ export const fixedRoles: FixedRole[] = fixedRoleGroups.flatMap(
   (entry) => entry.roles,
 );
 
-export function isFixedRoleIdentifier(identifier: string): boolean {
-  return identifier.startsWith(FIXED_ROLE_PREFIX);
-}
-
 export function getFixedRole(identifier: string): FixedRole | undefined {
   return FIXED_ROLES_BY_IDENTIFIER.get(identifier);
 }
@@ -429,7 +424,7 @@ function role(
   permission: Permissions,
 ): Omit<FixedRole, "group"> {
   return {
-    role: `${FIXED_ROLE_PREFIX}${slug}`,
+    role: `fixed:${slug}`,
     name,
     description,
     permission,

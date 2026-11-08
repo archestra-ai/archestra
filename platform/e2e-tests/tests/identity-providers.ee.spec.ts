@@ -381,24 +381,16 @@ async function selectRoleOption(
     "role picker trigger should point at its popover via aria-controls",
   ).toBeTruthy();
   const popover = page.locator(`[id="${popoverId}"]`);
-  // Descriptions contribute to the accessible name. Match the role label at
-  // the beginning, retaining the boundary between Admin and Platform Admin.
-  const role = popover.getByRole("option", {
-    name: new RegExp(`^${roleName}\\b`),
-  });
-  if ((await role.getAttribute("aria-selected")) !== "true") {
-    await role.click();
-  }
-  // Add the target before removing other selections to preserve minSelected=1.
-  const otherRoles = popover
-    .getByRole("option", { selected: true })
-    .filter({ hasNot: page.getByText(roleName, { exact: true }) });
-  while (await otherRoles.count()) {
-    await otherRoles.first().click();
-  }
+  // The picker stages choices until Update: start from nothing, find the
+  // role by name, and apply.
+  await popover.getByRole("button", { name: "Clear all" }).click();
+  await popover.getByRole("textbox", { name: "Search roles" }).fill(roleName);
+  // The label is the role name followed by its group, so anchor at the start
+  // to keep Admin apart from Platform Admin.
   await popover
-    .getByRole("combobox", { name: "Search roles..." })
-    .press("Escape");
+    .getByRole("checkbox", { name: new RegExp(`^${roleName}\\b`) })
+    .check();
+  await popover.getByRole("button", { name: "Update" }).click();
   await expect(popover).not.toBeVisible();
 }
 

@@ -90,3 +90,52 @@ test("native member updates honor inherited roles without storing them as direct
     }),
   ).rejects.toThrow();
 });
+
+test("a member holding only fixed roles changes roles and invites with fixed roles", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeSession,
+}) => {
+  // Better Auth authorizes its own endpoints and validates the target role
+  // from its role map, which fixed roles reach only through registration.
+  const org = await makeOrganization();
+  const caller = await makeUser();
+  const target = await makeUser();
+  await makeMember(caller.id, org.id, {
+    role: "fixed:users:writer,fixed:logs:reader",
+  });
+  const targetMember = await makeMember(target.id, org.id, { role: "member" });
+  const session = await makeSession(caller.id, {
+    activeOrganizationId: org.id,
+  });
+  const context = await auth.$context;
+  const signature = createHmac("sha256", context.secret)
+    .update(session.token)
+    .digest("base64");
+  const headers = new Headers({
+    cookie: `${context.authCookies.sessionToken.name}=${encodeURIComponent(`${session.token}.${signature}`)}`,
+  });
+
+  await auth.api.updateMemberRole({
+    headers,
+    body: {
+      organizationId: org.id,
+      memberId: targetMember.id,
+      role: "fixed:logs:reader",
+    },
+  });
+  expect((await MemberModel.getByUserId(target.id, org.id))?.role).toBe(
+    "fixed:logs:reader",
+  );
+
+  const invitation = await auth.api.createInvitation({
+    headers,
+    body: {
+      organizationId: org.id,
+      email: "fixed-invitee@example.com",
+      role: ["fixed:logs:reader"],
+    },
+  });
+  expect(invitation.role).toBe("fixed:logs:reader");
+});

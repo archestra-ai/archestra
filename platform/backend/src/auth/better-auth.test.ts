@@ -1184,6 +1184,29 @@ describe("handleBeforeHook", () => {
       expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
     });
 
+    test("measures a fixed role by its permissions, for a caller composed of fixed roles", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const caller = await makeUser();
+      await makeMember(caller.id, org.id, {
+        role: "fixed:users:writer,fixed:logs:reader",
+      });
+
+      const allowed = updateMemberCtx(caller, "fixed:logs:reader");
+      expect(await handleBeforeHook(allowed)).toBe(allowed);
+      // Log Admin carries log:admin, which neither of the caller's roles has.
+      const escalate = updateMemberCtx(
+        caller,
+        "fixed:logs:reader,fixed:logs:admin",
+      );
+      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin") },
+      });
+    });
+
     test("a platform_admin cannot grant the full admin role", async ({
       makeOrganization,
       makeUser,

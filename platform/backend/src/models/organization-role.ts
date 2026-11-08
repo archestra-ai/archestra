@@ -20,6 +20,7 @@ import {
   predefinedPermissionsMap,
   withDerivedPermissions,
 } from "@archestra/shared/access-control";
+import { type FixedRole, getFixedRole } from "@archestra/shared/fixed-roles";
 import { and, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
@@ -49,6 +50,25 @@ const generatePredefinedRole = (
   updatedAt: new Date(),
 });
 
+/**
+ * A fixed role as an organization role: code-defined like the predefined
+ * roles, so it reads as `predefined` (immutable) everywhere a role is shown.
+ */
+const generateFixedRole = (
+  fixed: FixedRole,
+  organizationId: string,
+): OrganizationRole => ({
+  id: fixed.role,
+  role: fixed.role,
+  name: fixed.name,
+  description: fixed.description,
+  organizationId,
+  permission: withDerivedPermissions(fixed.permission),
+  predefined: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
 class OrganizationRoleModel {
   static async getPermissionsBatch(params: {
     identifiers: string[];
@@ -63,6 +83,9 @@ class OrganizationRoleModel {
       } else if (OrganizationRoleModel.isPredefinedRole(identifier)) {
         permissions[identifier] =
           OrganizationRoleModel.getPredefinedRolePermissions(identifier);
+      } else if (getFixedRole(identifier)) {
+        permissions[identifier] =
+          OrganizationRoleModel.getFixedRolePermissions(identifier);
       } else {
         const cached = rolePermissionsCache.get(
           OrganizationRoleModel.getPermissionsCacheKey(
@@ -157,6 +180,23 @@ class OrganizationRoleModel {
   }
 
   /**
+   * Whether a role is defined in code — predefined or fixed — and therefore
+   * cannot be edited, deleted, or claimed by a custom role.
+   */
+  static isBuiltInRole(roleName: string): boolean {
+    return (
+      OrganizationRoleModel.isPredefinedRole(roleName) ||
+      getFixedRole(roleName) !== undefined
+    );
+  }
+
+  /** Permissions of a fixed role, or none for an unknown identifier. */
+  static getFixedRolePermissions(identifier: string): Permissions {
+    const fixed = getFixedRole(identifier);
+    return fixed ? withDerivedPermissions(fixed.permission) : {};
+  }
+
+  /**
    * Get permissions for a predefined role
    */
   static getPredefinedRolePermissions(
@@ -226,8 +266,8 @@ class OrganizationRoleModel {
       return { canDelete: false, reason: "Role not found" };
     }
 
-    // Check if it's a predefined role
-    if (OrganizationRoleModel.isPredefinedRole(role.role)) {
+    // Check if it's a built-in (predefined or fixed) role
+    if (OrganizationRoleModel.isBuiltInRole(role.role)) {
       logger.debug(
         { roleId },
         "OrganizationRoleModel.canDelete: cannot delete predefined role",
@@ -331,6 +371,8 @@ class OrganizationRoleModel {
       );
       return generatePredefinedRole(identifier, organizationId);
     }
+    const fixed = getFixedRole(identifier);
+    if (fixed) return generateFixedRole(fixed, organizationId);
 
     const [result] = await db
       .select({
@@ -383,6 +425,9 @@ class OrganizationRoleModel {
       );
       return generatePredefinedRole(roleId, organizationId);
     }
+    // A fixed role's id is its identifier.
+    const fixed = getFixedRole(roleId);
+    if (fixed) return generateFixedRole(fixed, organizationId);
 
     // Query custom role from database by ID
     const [result] = await db
@@ -441,6 +486,9 @@ class OrganizationRoleModel {
     // SPDX-SnippetEnd
     if (OrganizationRoleModel.isPredefinedRole(identifier)) {
       return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
+    }
+    if (getFixedRole(identifier)) {
+      return OrganizationRoleModel.getFixedRolePermissions(identifier);
     }
 
     const cacheKey = OrganizationRoleModel.getPermissionsCacheKey(

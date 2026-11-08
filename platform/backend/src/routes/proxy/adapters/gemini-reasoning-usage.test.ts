@@ -127,6 +127,42 @@ describe("Gemini reasoning usage reaches OpenAI clients", () => {
     expect(completions[0].response.usage).toMatchObject(responsesUsage);
   });
 
+  test("built-in tool tokens count as prompt tokens, streamed or not", () => {
+    // Gemini reports tokens fed back from Google Search, URL context and code
+    // execution beside promptTokenCount; its total includes them.
+    const withToolUse: Gemini.Types.GenerateContentResponse = {
+      ...response,
+      usageMetadata: {
+        ...response.usageMetadata,
+        toolUsePromptTokenCount: 300,
+        totalTokenCount: 2900,
+      },
+    };
+    const expected = {
+      prompt_tokens: 2300,
+      completion_tokens: 600,
+      total_tokens: 2900,
+    };
+
+    const factory = makeFactory("chat");
+    expect(
+      factory.createResponseAdapter(withToolUse).getOriginalResponse(),
+    ).toMatchObject({ usage: expected });
+
+    const stream = factory.createStreamAdapter();
+    stream.processChunk(
+      withToolUse as unknown as Parameters<typeof stream.processChunk>[0],
+    );
+    const end = stream.formatEndSSE();
+    const wire = typeof end === "string" ? end : new TextDecoder().decode(end);
+    const streamed = wire
+      .split("\n\n")
+      .filter((part) => part.startsWith("data: {"))
+      .map((part) => JSON.parse(part.slice(6)))
+      .find((event) => event.usage)?.usage;
+    expect(streamed).toMatchObject(expected);
+  });
+
   test("missing provider total still counts reasoning once", () => {
     expect(
       geminiUsageToOpenai({

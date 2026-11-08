@@ -978,7 +978,9 @@ class GeminiStreamAdapter
       // above, which subtracts `cachedContentTokenCount`), so this recombines
       // it into a gross `promptTokenCount` and republishes the cache read via
       // `cachedContentTokenCount` — otherwise a heavily cached turn reports
-      // only the uncached remainder as its entire prompt.
+      // only the uncached remainder as its entire prompt. Built-in tool
+      // tokens (`toolUsePromptTokenCount`) are folded into the input too, so
+      // they land in `promptTokenCount` here and `totalTokenCount` stays whole.
       usageMetadata: this.state.usage
         ? {
             ...(this.trafficType ? { trafficType: this.trafficType } : {}),
@@ -1021,6 +1023,7 @@ export function getUsageTokens(usage: {
   candidatesTokenCount?: number;
   cachedContentTokenCount?: number;
   thoughtsTokenCount?: number;
+  toolUsePromptTokenCount?: number;
 }) {
   // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
   // so subtract it to get the uncached input and avoid double-counting.
@@ -1029,8 +1032,12 @@ export function getUsageTokens(usage: {
   // and are billed as output. Fold them in so output includes reasoning, as
   // it does for every other provider.
   const reasoning = usage.thoughtsTokenCount ?? 0;
+  // Tokens fed back from built-in tools (Google Search, URL context, code
+  // execution) are billed as input but reported beside promptTokenCount.
+  const toolUsePrompt = usage.toolUsePromptTokenCount ?? 0;
   return {
-    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
+    input:
+      Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead) + toolUsePrompt,
     output: (usage.candidatesTokenCount ?? 0) + reasoning,
     cacheRead,
     cacheWrite: 0,

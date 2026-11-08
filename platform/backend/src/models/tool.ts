@@ -2683,6 +2683,31 @@ class ToolModel {
     };
   }
 
+  /** Stored description and input schema of the named tools within the given catalogs. */
+  static async findDescribedByNames(params: {
+    catalogIds: string[];
+    names: string[];
+  }): Promise<
+    Array<{ name: string; description: string | null; parameters: unknown }>
+  > {
+    if (params.catalogIds.length === 0 || params.names.length === 0) return [];
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, params.catalogIds),
+          inArray(schema.toolsTable.name, params.names),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+          notDeleted(schema.toolsTable),
+        ),
+      );
+  }
+
   /**
    * Get basic tool info (name and catalogId) for multiple catalogs in a single query.
    * Used for batch loading tools across multiple catalogs.

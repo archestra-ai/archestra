@@ -11,7 +11,7 @@ Do not assume `release/1.3` is always the active branch. Check current branches,
 ## Publication Paths
 
 - **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It does not move the Docker `latest` tag.
-- **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. Publication pauses for manual `stable-release` environment approval. Once approved, the workflow publishes the release and updates `latest`.
+- **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. Publication pauses in archestra-ai/release-images until an Engineering member who did not merge or start the release approves it. Once approved, the publisher writes the images and chart and the workflow publishes the release and updates `latest`.
 
 Starting a new stable branch adds configuration steps. It uses the same stable publication pipeline.
 
@@ -36,10 +36,10 @@ For initial setup from stable `1.3.x`, start `1.4.0-beta.1`, not `1.5.0-beta.1`.
 
 ## Safety And Recovery Rules
 
-- **Testing gate:** Verify the exact saved build artifacts (`release-helm-chart` and `release-image-*`) before approving `stable-release`.
+- **Testing gate:** Verify the exact saved build artifacts (`release-helm-chart` and `release-image-*`) before approving the release-images stable approval.
 - **Workflow owns publication:** The GitHub Actions workflow handles container image pushes, chart publication, and git tags. Never push release images, publish Helm charts, or update `latest` tags manually.
 - **Failed build:** Re-run failed jobs in the same workflow run.
-- **Failed qualification:** If testing fails before approval, cancel the run and delete the GitHub draft release. Keep the git tag. Never reuse a failed version number.
+- **Failed qualification:** If testing fails before approval, reject or cancel the publisher run, cancel the release run, and delete the GitHub draft release. Keep the git tag. Never reuse a failed version number.
 - **Partial publication:** Keep the draft release and tag. Re-run failed jobs in the original run using the saved artifacts. Never rebuild already published versions or move `latest` backward.
-- **Fresh approval:** A rerun or new candidate needs fresh artifact verification and explicit authorization before any new `stable-release` approval.
+- **Fresh approval:** A rerun or new candidate needs fresh artifact verification and explicit authorization before any new release-images stable approval.
 - **Explicit authorization:** Merging release PRs, approving release environments, deleting draft releases, and modifying repository settings are consequential. Always obtain explicit user authorization before performing these actions.

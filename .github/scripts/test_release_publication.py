@@ -11,15 +11,13 @@ import unittest
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / "workflows/release-please.yml"
+POLICY = Path(__file__).resolve().parent / "release-publication-policy.sh"
 
 
 class ReleasePublicationTests(unittest.TestCase):
     def run_guard(self, releases=(), *, api_status=0, version="1.3.51", freeze="false", ref="release/1.3"):
-        section = WORKFLOW.read_text().split(
-            "      - name: Check publication is still allowed\n", 1
-        )[1].split("      - name:", 1)[0].split("\n\n  ", 1)[0]
-        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
-        # Use the workflow's actual --jq expression, not a duplicate of its filter.
+        script = POLICY.read_text()
+        # Use the script's actual --jq expression, not a duplicate of its filter.
         stub = """
 gh() {
   local query=

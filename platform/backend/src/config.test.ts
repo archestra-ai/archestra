@@ -3184,31 +3184,39 @@ describe("parseTrustProxy", () => {
   });
 
   test("should return string for a single IP", () => {
-    expect(parseTrustProxy("127.0.0.1")).toBe("127.0.0.1");
+    expect(parseTrustProxy("127.0.0.1")).toBe("loopback,127.0.0.1");
   });
 
   test("should return string for a single CIDR", () => {
-    expect(parseTrustProxy("192.168.1.0/24")).toBe("192.168.1.0/24");
+    expect(parseTrustProxy("192.168.1.0/24")).toBe("loopback,192.168.1.0/24");
   });
 
   test("should return normalised string for comma-separated IPs", () => {
-    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
   });
 
   test("should return normalised string for comma-separated CIDRs", () => {
     expect(parseTrustProxy("10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")).toBe(
-      "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+      "loopback,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
     );
   });
 
   test("should trim whitespace around each IP in a comma-separated list", () => {
     expect(parseTrustProxy("  127.0.0.1 , 10.0.0.1  ")).toBe(
-      "127.0.0.1,10.0.0.1",
+      "loopback,127.0.0.1,10.0.0.1",
     );
   });
 
   test("should filter empty entries from extra commas", () => {
-    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
+  });
+
+  test("keeps an explicit loopback entry once", () => {
+    expect(parseTrustProxy("10.0.0.0/8,loopback")).toBe("10.0.0.0/8,loopback");
   });
 });
 

@@ -57,6 +57,7 @@ Receiving OTLP does not configure security detections. Verify that a test event 
 Audit records identify the action and its outcome; the attribute table below lists the exported fields. All records have INFO severity, including denied and failed actions: write security rules against `archestra.audit.outcome`.
 
 - Snapshots, names, emails, raw request URLs, user agents, prompts and responses are excluded. Actor and resource IDs and IP addresses can still identify people; restrict destination access and retention. Some events, including service-account events, have no actor ID.
+- To name who acted, set [`ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY). Records then carry the actor's email and display name, never the resource's name or other free text.
 - Export runs independently of application log levels and trace sampling. Active trace context may accompany a record; it is optional, and the associated trace may not have been retained. Audit export does not add LLM request or MCP tool-call payloads.
 - Delivery uses an in-memory batch and is best-effort. Outages, full queues or abrupt shutdown can lose exports. Enabling export does not replay earlier events or guarantee that every action produced an audit row.
 
@@ -67,7 +68,7 @@ Collector transforms can use these attribute keys:
 | Event identity | `log.record.uid`, `archestra.audit.event_sequence` |
 | Schema and organization | `archestra.audit.schema_version`, `archestra.organization.id` |
 | Action and outcome | `archestra.audit.action`, `archestra.audit.outcome` |
-| Actor | `archestra.audit.actor_type`, `archestra.audit.actor_id`, `archestra.audit.impersonated_by` |
+| Actor | `archestra.audit.actor_type`, `archestra.audit.actor_id`, `archestra.audit.impersonated_by`, and with actor identity on, `archestra.audit.actor_email`, `archestra.audit.actor_name` |
 | Resource | `archestra.audit.resource_type`, `archestra.audit.resource_id` |
 | Request | `archestra.audit.request_id`, `http.request.method`, `http.route`, `http.response.status_code`, `client.address` |
 

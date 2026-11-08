@@ -16,6 +16,7 @@ import { auditLogExporter } from "@/observability/audit-log-export";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const originalEnabled = config.auditLog.otelEnabled;
+const originalIncludeActorIdentity = config.auditLog.otelIncludeActorIdentity;
 let exporter: InMemoryLogRecordExporter;
 let provider: LoggerProvider;
 let sdk: NodeSDK;
@@ -37,6 +38,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.restoreAllMocks();
   config.auditLog.otelEnabled = originalEnabled;
+  config.auditLog.otelIncludeActorIdentity = originalIncludeActorIdentity;
   await provider.shutdown();
   logs.disable();
   await sdk.shutdown();
@@ -107,6 +109,42 @@ describe("persisted audit OTLP export", () => {
       expect(serialized).not.toContain(secret);
     }
     expect(row.after).toEqual(payload.after);
+  });
+
+  test("adds only the actor's email and name when actor identity is enabled", async ({
+    makeOrganization,
+  }) => {
+    config.auditLog.otelIncludeActorIdentity = true;
+    const org = await makeOrganization();
+    await AuditLogModel.create({ ...payload, organizationId: org.id });
+    await AuditLogModel.create({
+      ...payload,
+      actorEmail: null,
+      actorName: null,
+      organizationId: org.id,
+    });
+    await provider.forceFlush();
+    const [withActor, withoutActor] = exporter.getFinishedLogRecords();
+    expect(withActor.attributes).toMatchObject({
+      "archestra.audit.actor_email": "private@example.com",
+      "archestra.audit.actor_name": "Private name",
+    });
+    expect(withoutActor.attributes).not.toHaveProperty(
+      "archestra.audit.actor_email",
+    );
+    expect(withoutActor.attributes).not.toHaveProperty(
+      "archestra.audit.actor_name",
+    );
+    const serialized = JSON.stringify(withActor);
+    for (const secret of [
+      "Sensitive resource",
+      "token=private",
+      "private-agent",
+      "old-secret",
+      "private prompt",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
   });
 
   test("disabled export still persists audit rows", async ({

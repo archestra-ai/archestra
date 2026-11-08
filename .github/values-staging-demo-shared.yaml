@@ -61,5 +61,8 @@ archestra:
     # values-demo.yaml re-enables basic auth and invitations for demo only.
     ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
-    # Trust only the GKE load balancer proxy ranges for client IP resolution.
-    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
+    # Trust only the internal load balancers for client IP resolution
+    # (archestra-ai/infra gcp/staging-private-access): the proxy-only subnet
+    # (the peer for requests routed straight to the backend) and the VIP subnet
+    # (each load balancer adds its own VIP to X-Forwarded-For).
+    ARCHESTRA_TRUST_PROXY: "10.94.0.0/23,10.94.2.0/28"

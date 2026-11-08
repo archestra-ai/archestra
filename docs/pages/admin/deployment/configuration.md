@@ -76,8 +76,9 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 - **`ARCHESTRA_TRUST_PROXY`** - Trusts the `X-Forwarded-*` headers of a reverse proxy or load balancer. Rate limits and audit logs then see each client's IP.
   - Default: `false`
-  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `35.191.0.0/16,130.211.0.0/22`
+  - Values: `true`, `false`, or a comma-separated list of proxy IPs or CIDRs, for example `10.0.0.0/23,10.0.2.2`
   - Prefer the IP list. With `true`, any caller can set `X-Forwarded-For` and pick the IP it is rate-limited and audited under.
+  - List every proxy between the client and Archestra, including a load balancer's own IP when it adds one to `X-Forwarded-For`, as Google Cloud Application Load Balancers do. A list always trusts loopback, which is how the web UI reaches the API.
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long the API and web servers keep an idle keep-alive connection open, in milliseconds.
   - Default: `620000`
@@ -1508,6 +1509,10 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT`** - OTLP/HTTP endpoint that receives the audit export instead of [`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT). Set it to keep audit records apart from backend logs and traces, such as in a collector only your security team reads.
   - Default: unset (audit records use the shared endpoint)
   - Records go to `/v1/logs`. The shared endpoint's credentials are never sent here.
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY`** - Set to `true` to add the actor's email and display name to each exported audit record, so security alerts can name who acted without looking up the actor ID.
+  - Default: `false`
+  - The collector then receives personal data; restrict who can read it.
 
 - **`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME`** - Username for basic authentication to the audit endpoint.
   - Default: unset. Used only together with [`ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD).

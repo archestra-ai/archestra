@@ -46,6 +46,8 @@ archestra:
     # Demo's other telemetry stays off.
     ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
     ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    # The security archive's alerts name who acted.
+    ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY: "true"
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=demo"
 
   # Every credential, including the session, encryption and offer-signing

@@ -194,8 +194,8 @@ test("managed Azure deployments and Copilot models use the model router without 
   expect(payload.unsupported).toEqual([]);
   expect(payload.catalog).toMatchObject({
     routes: {
-      "archestra-azure": "https://proxy.example/v1/model-router",
-      "archestra-github-copilot": "https://proxy.example/v1/model-router",
+      "archestra-azure": "https://proxy.example/v1/unified-model",
+      "archestra-github-copilot": "https://proxy.example/v1/unified-model",
     },
     managed: {
       "archestra-azure": ["custom/deployment"],
@@ -225,9 +225,9 @@ test("managed Azure deployments and Copilot models use the model router without 
   ).toMatchObject({
     ...payload.catalog,
     routes: {
-      "archestra-azure": "https://deployment.example/v1/model-router/agent-1",
+      "archestra-azure": "https://deployment.example/v1/unified-model/agent-1",
       "archestra-github-copilot":
-        "https://deployment.example/v1/model-router/agent-1",
+        "https://deployment.example/v1/unified-model/agent-1",
     },
   });
 });

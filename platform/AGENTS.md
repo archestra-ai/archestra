@@ -24,7 +24,15 @@
      `scripts/dev-lite.sh reload backend` (about 15 s) or
      `scripts/dev-lite.sh reload frontend` (a production build, about 45 to
      80 s). `ARCHESTRA_DEV_LITE_FRONTEND=dev` gives the Next dev server back
-     (about 3.5 GB once pages are open). MCP server installs, nested Agent
+     (about 3.5 GB once pages are open). A pod's bootstrap only runs
+     `scripts/dev-lite.sh prepare` (dependencies, PostgreSQL, migrations):
+     run `up` when you need the servers; it builds the backend and the
+     frontend one after the other, then starts them. On a clean checkout of
+     a main commit it installs the frontend CI built for that commit
+     instead, and a rebuild after edits starts from CI's build cache
+     (`scripts/frontend-prebuilt.mjs`). `pause` and `resume`
+     stop and restart the two servers, keeping PostgreSQL and the builds, to
+     give one memory-heavy command their memory. MCP server installs, nested Agent
      Runtime, the code runtime, Vault, Keycloak specs and the `api-k8s`,
      `hibernation` and `vault-k8s` Playwright projects need the Tilt stack.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.
@@ -99,8 +107,10 @@ pnpm run prepare                        # Install the husky pre-commit hook. `ti
 pnpm lint                               # Check lint
 pnpm lint:fix                           # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types. Run it (or `pnpm --dir <pkg> type-check`), not bare
-                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. Bare tsc in
-                                        # backend/ holds about 9 GB, past a small Agent Runtime tier's limit.
+                                        # `tsc --noEmit`: it sizes the compiler to the memory it has. backend/tsconfig.json
+                                        # is a solution of projects (one per layer or test shard), so bare tsc there
+                                        # checks nothing; type-check builds the projects one at a time, each in its own
+                                        # compiler, and keeps their declarations in .tsbuild/ for the next run.
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
@@ -134,11 +144,9 @@ A new worktree has no dependencies or native bindings. Before tests or type-chec
 
 ```bash
 pnpm install --frozen-lockfile                  # from platform/
-node scripts/napi-prebuilt.mjs <crate>...       # prebuilt addons for main's archestra-rs tree
-pnpm --dir archestra-rs/<crate> build:dev       # otherwise, each NAPI crate the tests load
 ```
 
-A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
+The backend tests install the NAPI addons CI published for the checkout's `archestra-rs` tree when any is missing or was installed for another tree (`scripts/napi-prebuilt.mjs`: a download of about 20 MB, a few seconds; `ARCHESTRA_DEV_NAPI_PREBUILT=false` skips it). They never compile. A changed `archestra-rs` tree has no published addons: build each crate the tests load with `pnpm --dir archestra-rs/<crate> build:dev`. A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
 
 ## Environment Variables
 
@@ -334,7 +342,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
     createInsertSchema,
     createUpdateSchema,
   } from "drizzle-zod";
-  import { schema } from "@/database";
+  // The table definitions only: "@/database" also opens the connection.
+  import { schema } from "@/database/schema";
 
   export const SelectEntitySchema = createSelectSchema(schema.entityTable);
   export const InsertEntitySchema = createInsertSchema(schema.entityTable).omit(
@@ -410,6 +419,11 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`) purely from the credential format via the provider adapter's `isSubscriptionCredential`: Anthropic OAuth access tokens (Claude Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API keys are `sk-ant-api…`; ChatGPT-subscription (Codex) credentials are the `chatgpt-oauth:…` marker-encoded strings on the OpenAI chat + Responses adapters. Applies uniformly to passthrough, virtual-key, and DB-managed keys — there is deliberately NO per-key billing configuration or UI. Gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). Bearer transport alone is NOT a signal (Workload Identity etc. stay metered).
 - Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. Cost limits are billing-aware too: `InteractionModel.updateUsageAfterInteraction` skips limit accumulation entirely for `billing_mode = 'subscription'` interactions, and default user limits (`getDefaultUserLimitUsage` in `models/limit.ts`, which sums interactions directly) filter to `billing_mode = 'metered'` — so subscription traffic never burns down token-cost limits.
 
+**Cost Statistics Rollup**:
+
+- Cost statistics (`models/statistics.ts`, `UsageStatisticsModel.getLlmUsage`) read `LlmUsageRollupModel.facts(window)`, not `interactions`: hourly totals from `llm_usage_hourly` for rolled, unmarked hours (daily sums from `llm_usage_daily` for whole unmarked days when the window buckets by days or longer) plus the same rows computed from `interactions` for the rest. Aggregate facts with `SUM(requests)`, never `COUNT(*)`; model-split rows carry `requests = 0`.
+- Triggers on `interactions` and `interaction_billing` mark changed hours in `llm_usage_rollup_dirty`; the `llm_usage_rollup` periodic task rolls new hours and recomputes marked ones. A statistic that needs a new `interactions` column must add it to `llm_usage_hourly`, to `usageFactsQuery`, and to the update trigger's column list in a migration.
+
 **Chat Feature**:
 
 - Agent-based conversations: Each conversation is tied to a specific agent
@@ -423,7 +437,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Archestra MCP Server**:
 
 - Tools must be explicitly assigned to Agents (not auto-injected)
-- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, and the delegated-run gate; policy writes stay assignment-only
+- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, the delegated-run gate, and the Agent Runtime OAuth token gate (single-agent runtime tokens with `accessAllTools: false` require explicit assignment); policy writes stay assignment-only
 - Tools prefixed with `archestra__` to avoid conflicts
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`

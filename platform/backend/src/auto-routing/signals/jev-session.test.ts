@@ -2,6 +2,7 @@ import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { scoringContext } from "../scoring-context";
 import { JevSessionSource } from "./jev-session";
 import { JEV_SESSION_SPEC } from "./spec";
 import { SignalSourceError } from "./types";
@@ -69,7 +70,12 @@ describe("JevSessionSource", () => {
     expect(result.tierNeeded[0]).toBeCloseTo(0.2, 12);
     expect(result.tierNeeded[1]).toBeCloseTo(0.5, 12);
     expect(result.tierNeeded[2]).toBeCloseTo(0.3, 12);
-    expect(result).toMatchObject({ pLong: 0.35, costUsd: null });
+    expect(result).toMatchObject({
+      pLong: 0.35,
+      inputTokens: 420,
+      outputTokens: 6,
+    });
+    expect(result.costUsd).toBeCloseTo(0.00001764, 12);
     expect(requests).toEqual([
       {
         authorization: "Bearer sk-typesafe",
@@ -122,6 +128,31 @@ describe("JevSessionSource", () => {
     const result = await source.read(INPUT, { organizationId: org.id });
 
     expect(result.pLong).toBe(0.35);
+    expect(result.costUsd).toBeNull();
+    expect(result.inputTokens).toBe(420);
+  });
+
+  test("preserves a reported zero cost and unknown usage", async () => {
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage: { cost: 0 } }),
+      ),
+    );
+    expect(await source.read(INPUT, ctx())).toMatchObject({
+      costUsd: 0,
+      inputTokens: null,
+      outputTokens: null,
+    });
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage: undefined }),
+      ),
+    );
+    expect(await source.read(INPUT, ctx())).toMatchObject({
+      costUsd: null,
+      inputTokens: null,
+      outputTokens: null,
+    });
   });
 
   test("times out after the configured budget", async () => {
@@ -134,6 +165,19 @@ describe("JevSessionSource", () => {
     );
 
     await expectSourceError(source.read(INPUT, ctx()), "timeout");
+  });
+
+  test.each([
+    { input_tokens: -1 },
+    { output_tokens: 1.5 },
+    { cost: -0.01 },
+  ])("rejects invalid usage metadata: %j", async (usage) => {
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () =>
+        HttpResponse.json({ ...ANSWERS, usage }),
+      ),
+    );
+    await expectSourceError(source.read(INPUT, ctx()), "invalid_response");
   });
 
   test("reports an HTTP error with its status", async () => {
@@ -222,11 +266,13 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        systemPrompt: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
-        tools: Array.from({ length: 100 }, (_, index) => ({
-          name: `tool_${index}`,
-          description: `Use ${secret}. ${"description ".repeat(1000)}`,
-        })),
+        ...scoringContext({
+          system: `Use ${secret}. ${"instruction ".repeat(1000)} End of instructions.`,
+          tools: Array.from({ length: 100 }, (_, index) => ({
+            name: `tool_${index}`,
+            description: `Use ${secret}. ${"description ".repeat(1000)}`,
+          })),
+        }),
       },
       ctx(),
     );
@@ -236,16 +282,19 @@ describe("JevSessionSource", () => {
     expect(state.system_prompt).toContain("chars omitted");
     expect(state.system_prompt).toMatch(/End of instructions\.$/);
     expect(state.system_prompt.length).toBeLessThan(2100);
-    expect(state.tools).toContain(
-      "Available tools: 100\ntool_0: Use <redacted>.",
+    expect(state.tools).toBe(
+      `Available tools: 100\n${Array.from(
+        { length: 100 },
+        (_, index) => `tool_${index}`,
+      )
+        .sort()
+        .join("\n")}`,
     );
-    expect(state.tools).toContain("omitted");
-    expect(state.tools).not.toContain("tool_20:");
-    expect(state.tools.length).toBeLessThan(2150);
+    expect(state.tools).not.toContain("description");
     expect(JSON.stringify(state)).not.toContain(secret);
   });
 
-  test("does not duplicate a long tool summary when truncating without a tail", async () => {
+  test("sends all tool names in a stable order without descriptions", async () => {
     let state: Record<string, string> = {};
     server.use(
       http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
@@ -257,12 +306,67 @@ describe("JevSessionSource", () => {
     await source.read(
       {
         ...INPUT,
-        tools: [{ name: "lookup", description: `${"word ".repeat(100)}END` }],
+        ...scoringContext({
+          tools: [
+            { name: "z_lookup", description: `${"word ".repeat(100)}END` },
+            { name: "a_search" },
+          ],
+        }),
       },
       ctx(),
     );
-    expect(state.tools).toContain("lookup: word");
-    expect(state.tools).not.toContain("END");
-    expect(state.tools.length).toBeLessThan(250);
+    expect(state.tools).toBe("Available tools: 2\na_search\nz_lookup");
+  });
+
+  test("preserves MCP tool identifiers while redacting prefixed and opaque credentials", async () => {
+    let state: Record<string, string> = {};
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
+        state = ((await request.json()) as { state: Record<string, string> })
+          .state;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const name =
+      "mcp__example__inspect_database_migration_execution_permissions";
+    await source.read(
+      {
+        ...INPUT,
+        tools: [
+          { name },
+          { name: `sk-${"b".repeat(30)}` },
+          { name: "a1b2".repeat(16) },
+          { name: "c2Vuc2l0aXZl".repeat(6) },
+          { name: `mcp__example__sk-${"b".repeat(30)}` },
+        ],
+      },
+      ctx(),
+    );
+    expect(state.tools).toBe(
+      `Available tools: 5\n<redacted>\n<redacted>\n<redacted>\nmcp__example__<redacted>\n${name}`,
+    );
+  });
+
+  test("rejects oversized name lists before the scorer call instead of silently taking a prefix", async () => {
+    let calls = 0;
+    server.use(
+      http.post(TYPESAFE_ENDPOINT, () => {
+        calls += 1;
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    await expectSourceError(
+      source.read(
+        {
+          ...INPUT,
+          tools: Array.from({ length: 10_000 }, (_, index) => ({
+            name: `tool_${index}`,
+          })),
+        },
+        ctx(),
+      ),
+      "input_too_large",
+    );
+    expect(calls).toBe(0);
   });
 });

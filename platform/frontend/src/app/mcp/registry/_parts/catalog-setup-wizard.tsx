@@ -2,16 +2,18 @@
 
 import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  type McpDeploymentStatusEntry,
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   CheckCircle2,
   ChevronRight,
+  CircleAlert,
   Loader2,
   PlugZap,
   RefreshCw,
+  RotateCcw,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +38,12 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
+import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardStepper } from "@/components/wizard-stepper";
@@ -67,12 +75,12 @@ import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
-import { mcpServerLogsHref } from "./mcp-server-actions-model";
 import type { CatalogItem } from "./mcp-server-card";
 import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
 } from "./remote-server-install-dialog";
+import { TestConnectionLogs } from "./test-connection-logs";
 
 export type SetupStepId = "configuration" | "test" | "tools";
 
@@ -225,8 +233,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     catalogItem: CatalogItem,
     result: RemoteServerInstallResult,
   ) => {
-    setOpenDialog(null);
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...buildRemoteInstallCredentialPayload(result),
@@ -235,6 +242,8 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
       dontShowToast: true,
     });
+    if (installResult.errorMessage) return installResult.errorMessage;
+    setOpenDialog(null);
   };
 
   const handleOAuthConfirm = async (result: OAuthInstallResult) => {
@@ -260,9 +269,10 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     }
   };
 
-  // The failed connection's own pod logs. A remote server has no logs view;
-  // its failure reason is the inline error above, so it gets Retry only.
-  const failureLogsHref = mcpServerLogsHref({ item, serverId: target?.id });
+  // The failed connection's own pod logs, shown inline. Only a local server
+  // runs in a pod; a remote server's failure reason is the error itself.
+  const showFailureLogs = item.serverType === "local" && !!target;
+  const targetStatus = target ? deploymentStatuses[target.id] : undefined;
 
   const isInstalling =
     installMutation.isPending ||
@@ -310,26 +320,39 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           </div>
         </div>
       ) : status === "error" ? (
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-            <div className="min-w-0 text-sm">
-              <p className="font-medium">Connection failed</p>
-              <p className="break-words">
-                {target?.localInstallationError ?? "Installation failed"}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={startInstall}>
+        <div className="flex flex-col gap-3">
+          <InlineNotice variant="error">
+            <CircleAlert />
+            <InlineNoticeBody>
+              <span className="font-medium">Connection failed</span>
+              <InlineNoticeText>
+                {failureSummary({
+                  hasLogs: showFailureLogs,
+                  status: targetStatus,
+                })}
+              </InlineNoticeText>
+            </InlineNoticeBody>
+            <InlineNoticeDetails label="error">
+              {target?.localInstallationError ?? "Installation failed"}
+            </InlineNoticeDetails>
+            <Button
+              data-slot="inline-notice-action"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={startInstall}
+            >
+              <RotateCcw />
               Retry
             </Button>
-            {failureLogsHref && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={failureLogsHref}>View logs</Link>
-              </Button>
-            )}
-          </div>
+          </InlineNotice>
+          {showFailureLogs && target && (
+            <TestConnectionLogs
+              serverId={target.id}
+              serverName={target.name}
+              status={targetStatus}
+            />
+          )}
         </div>
       ) : (
         <div className="rounded-lg border p-4">
@@ -621,4 +644,25 @@ function ToolReviewSection({
       <CollapsibleContent className="px-4 pb-4">{children}</CollapsibleContent>
     </Collapsible>
   );
+}
+
+/**
+ * One line under "Connection failed": what the pod is doing, when known, and
+ * where to look next. The raw error stays behind the notice's details toggle.
+ */
+function failureSummary({
+  hasLogs,
+  status,
+}: {
+  hasLogs: boolean;
+  status: McpDeploymentStatusEntry | undefined;
+}) {
+  if (!hasLogs) return "Check the server URL and credentials, then retry.";
+  if (status?.state === "failed" && status.message) {
+    const restarts = status.restartCount
+      ? ` after ${status.restartCount} ${status.restartCount === 1 ? "restart" : "restarts"}`
+      : "";
+    return `Pod is in ${status.message}${restarts}. Its logs are below.`;
+  }
+  return "The server's logs are below.";
 }

@@ -2,9 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { resolveAgentRuntimeTiers } from "@archestra/shared";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
 import { AGENT_RUNTIME_DIR } from "@/services/agent-runtime/runtime-contract";
+import { resolveRunResources } from "@/services/agent-runtime/runtime-tiers";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -43,6 +45,31 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it("renders independent memory requests and limits for a fractional-CPU tier", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          {
+            name: "Memory",
+            cpuRequest: 0.5,
+            cpuLimit: null,
+            memoryRequestMiB: 8192,
+            memoryLimitMiB: 8192,
+          },
+        ],
+        defaultTier: "Memory",
+      },
+      { defaultWarmSpares: 0 },
+    );
+    const sandbox = buildAgentRuntimeSandbox({
+      ...SPEC,
+      resources: resolveRunResources("Memory", tiers),
+    });
+    expect(sandbox.spec.podTemplate.spec?.containers[0].resources).toEqual({
+      requests: { cpu: "500m", memory: "8Gi" },
+      limits: { memory: "8Gi" },
+    });
+  });
   it("pulls a floating image for each new workspace while leaving fixed tags cacheable", () => {
     const floating = buildAgentRuntimeSandbox({
       ...SPEC,
@@ -273,6 +300,25 @@ describe("buildAgentRuntimeSandbox", () => {
       buildAgentRuntimeSandbox({ ...SPEC, privileged: true }).spec?.podTemplate
         .spec?.containers[0]?.securityContext?.privileged,
     ).toBe(true);
+  });
+
+  it("sandboxes only unprivileged runs with the configured RuntimeClass", () => {
+    expect(
+      buildAgentRuntimeSandbox(SPEC).spec.podTemplate.spec?.runtimeClassName,
+    ).toBeUndefined();
+
+    const sandboxed = { ...SPEC, runtimeClassName: "gvisor" };
+    expect(
+      buildAgentRuntimeSandbox(sandboxed).spec.podTemplate.spec
+        ?.runtimeClassName,
+    ).toBe("gvisor");
+    // gVisor cannot run a privileged container; such a pod would never start.
+    const privileged = buildAgentRuntimeSandbox({
+      ...sandboxed,
+      privileged: true,
+    }).spec.podTemplate.spec;
+    expect(privileged?.runtimeClassName).toBeUndefined();
+    expect(privileged?.containers[0]?.securityContext?.privileged).toBe(true);
   });
 
   it("requests durable storage for the workspace", () => {

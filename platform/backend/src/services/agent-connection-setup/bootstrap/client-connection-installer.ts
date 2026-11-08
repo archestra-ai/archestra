@@ -174,7 +174,8 @@ async function openApprovalBrowser(url) {
   failed();
 }
 async function acquireConnectionLock({ origin, clientId, platform }) {
-  const digest = createHash('sha256').update(origin + '\n' + clientId + '\n' + platform).digest('hex').slice(0, 24);
+  const configClient = clientId === 'chatgpt' ? 'codex' : clientId;
+  const digest = createHash('sha256').update(origin + '\n' + configClient + '\n' + platform).digest('hex').slice(0, 24);
   const lockPath = join(tmpdir(), 'archestra-connect-' + digest + '.lock');
   const staleAfterMs = 15 * 60 * 1000;
   let handle;

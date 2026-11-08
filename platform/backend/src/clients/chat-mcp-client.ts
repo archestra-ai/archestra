@@ -53,6 +53,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { onAgentToolSurfaceChange } from "@/models/agent-tool-surface";
 import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
@@ -63,6 +64,7 @@ import {
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { drainScopeHeaders } from "@/utils/drain-scope";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
 /**
@@ -119,7 +121,12 @@ const loopbackGatewayFetch: FetchLike = (url, init) => {
       new Response(null, { status: 405, statusText: "Method Not Allowed" }),
     );
   }
-  return fetch(url, init);
+  const headers = new Headers(init?.headers);
+  // The transport can outlive the turn that created it.
+  headers.delete("x-archestra-drain-scope");
+  for (const [name, value] of Object.entries(drainScopeHeaders()))
+    headers.set(name, value);
+  return fetch(url, { ...init, headers });
 };
 
 /**
@@ -503,6 +510,9 @@ export function clearChatMcpClient(agentId: string): void {
     "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
+
+// The agent model reports tool surface changes without importing this module.
+onAgentToolSurfaceChange(clearChatMcpClient);
 
 /**
  * Close and remove cached MCP client for a specific agent/user/scope.
@@ -1063,6 +1073,7 @@ export async function getChatMcpTools({
           agentId,
           organizationId,
           serviceAccountId: mcpGwToken.serviceAccountId,
+          oauthClientId: mcpGwToken.oauthClientId,
         });
 
     // Filter out agent skills and app-only tools.
@@ -1465,6 +1476,7 @@ async function listToolsInProcess(params: {
   agentId: string;
   organizationId: string;
   serviceAccountId: string | undefined;
+  oauthClientId?: string;
 }) {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
@@ -1473,6 +1485,7 @@ async function listToolsInProcess(params: {
     tokenAuth: {
       organizationId: params.organizationId,
       serviceAccountId: params.serviceAccountId,
+      oauthClientId: params.oauthClientId,
     },
   });
   return tools;

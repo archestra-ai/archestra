@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-31
+lastUpdated: 2026-11-07
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -52,6 +52,8 @@ The controller does not install a container isolation runtime. Check image archi
 
 Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
 
+To run each unprivileged run in its own kernel, set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME) to a sandboxing RuntimeClass such as `gvisor`.
+
 ## EKS With Fargate
 
 Fargate-only clusters cannot host Agent Runtime's storage. [AWS Fargate](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html) does not support EBS mounts or dynamic persistent-volume provisioning.
@@ -70,9 +72,13 @@ Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so e
 
 ![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
-Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit is twice the memory request, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+Set **Memory request (GiB)** and **Memory limit (GiB)** independently of CPU for memory-heavy workloads. For example, set the CPU request to `0.5` and both memory fields to `8` for an 8 GiB request and limit.
 
-**Workspace** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
+![A runtime tier with 0.5 CPU and an 8 GiB memory request and limit](/docs/automated_screenshots/agents-runtime-setup_tier-memory.webp)
+
+Blank memory fields use defaults in GiB: the request is `2 × CPU request`, and the limit is `max(2 × memory request, 2 × CPU request, 2 × CPU limit)`. The limit uses the effective memory request, including an explicit request override. An explicit memory limit overrides that formula. A blank CPU limit leaves CPU uncapped; the memory-limit formula uses the CPU request in its place. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+
+**Disk** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
 
 Agents do not configure CPU, memory, or storage directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Disable autoscaling** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
 
@@ -117,7 +123,7 @@ Upgrading Archestra moves every agent made from a catalog template onto the new 
 - **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
 - **A turn already running** keeps its image until it ends.
 
-A custom image, or a maintained image pinned by digest, runs exactly as saved.
+A custom image, or a maintained image you pinned by digest alone (`…/agent-codex@sha256:…`, no tag), runs exactly as saved.
 
 ## Troubleshooting
 

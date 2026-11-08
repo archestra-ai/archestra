@@ -9,7 +9,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";

@@ -19,7 +19,6 @@ import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
-  dynamicAccessContext,
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
 } from "./dynamic-tools";
@@ -82,8 +81,8 @@ export const tools = registry.tools;
  * block `{"type":"text","text": …}` (exactly two keys) leaked from message content.
  * A top-level tool_args entry is unwrapped only when ALL hold:
  *  - the tool's schema literally declares the param's `type` as
- *    string/number/integer/boolean/array (no type arrays, no
- *    $ref/anyOf/oneOf/allOf composition);
+ *    string/number/integer/boolean/array, or is a union that provably rejects
+ *    objects (see unwrapFromUnion); $ref/allOf are never touched;
  *  - the supplied value is a plain object of a recognized wrapper shape (see
  *    envelopeInnerValue);
  *  - the inner value already matches the declared type (see
@@ -266,6 +265,7 @@ async function visibleCandidates(params: {
   const accessParams = {
     agentId,
     userId: context.userId,
+    oauthClientId: context.tokenAuth?.oauthClientId,
     organizationId: context.organizationId,
   };
   // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
@@ -278,14 +278,12 @@ async function visibleCandidates(params: {
     accessParams,
   );
   const names = assigned.map((tool) => tool.name);
-  if (await dynamicAccessContext(accessParams)) {
-    const discoverable = await getUnassignedDiscoverableTools({
-      ...accessParams,
-      assignedToolNames: new Set(names),
-      exclusionSets,
-    });
-    names.push(...discoverable.map((tool) => tool.name));
-  }
+  const discoverable = await getUnassignedDiscoverableTools({
+    ...accessParams,
+    assignedToolNames: new Set(names),
+    exclusionSets,
+  });
+  names.push(...discoverable.map((tool) => tool.name));
 
   // `agent__<short>` proxy-discovered delegation artifacts are hidden from
   // search_tools, so a bare short name must not surface them here either.
@@ -750,6 +748,12 @@ type RepairableDeclaredType =
   | "boolean"
   | "array";
 
+/** A union member that provably rejects any object value. */
+type ObjectRejectingBranch =
+  | { kind: "null" }
+  | { kind: "type"; type: RepairableDeclaredType }
+  | { kind: "literals"; values: readonly unknown[] };
+
 /** The unwrapped inner value, or null when the entry does not qualify. */
 function unwrapEnvelope(params: {
   value: unknown;
@@ -767,14 +771,16 @@ function unwrapEnvelope(params: {
   if (!isRecord(propertySchema)) {
     return null;
   }
-  // A composed/referenced schema may accept the object as sent — never touch it.
+  // A referenced/intersected schema may accept the object as sent — never touch it.
+  if ("$ref" in propertySchema || "allOf" in propertySchema) {
+    return null;
+  }
   if (
-    "$ref" in propertySchema ||
     "anyOf" in propertySchema ||
     "oneOf" in propertySchema ||
-    "allOf" in propertySchema
+    Array.isArray(propertySchema.type)
   ) {
-    return null;
+    return unwrapFromUnion(propertySchema, candidate.inner);
   }
   const declaredType = asRepairableDeclaredType(propertySchema.type);
   if (!declaredType) {
@@ -809,6 +815,98 @@ function envelopeInnerValue(
     return { inner: value.text };
   }
   return null;
+}
+
+/**
+ * Unwraps against a union such as an optional param's `anyOf: [enum, null]` or
+ * `type: ["string", "null"]`. Every member must provably reject objects, so the
+ * as-sent wrapper is invalid and the repair cannot rewrite an accepted call. A
+ * member it cannot classify disqualifies the union. The inner value must match
+ * a non-null member: enum/const exactly, `oneOf` exactly once. An inner `null`
+ * stays wrapped.
+ */
+function unwrapFromUnion(
+  schema: Record<string, unknown>,
+  inner: unknown,
+): { inner: unknown } | null {
+  const members = unionMembers(schema);
+  if (!members || inner === null) {
+    return null;
+  }
+  const branches: ObjectRejectingBranch[] = [];
+  for (const member of members) {
+    const branch = asObjectRejectingBranch(member);
+    if (!branch) {
+      return null;
+    }
+    branches.push(branch);
+  }
+  const matches = branches.filter((branch) =>
+    branchMatches(branch, inner),
+  ).length;
+  const accepted = "oneOf" in schema ? matches === 1 : matches > 0;
+  return accepted ? { inner } : null;
+}
+
+function unionMembers(schema: Record<string, unknown>): unknown[] | null {
+  if ("anyOf" in schema || "oneOf" in schema) {
+    if ("anyOf" in schema && "oneOf" in schema) {
+      return null;
+    }
+    const members = schema.anyOf ?? schema.oneOf;
+    return Array.isArray(members) ? members : null;
+  }
+  if (!Array.isArray(schema.type)) {
+    return null;
+  }
+  return "enum" in schema || "const" in schema
+    ? [schema]
+    : schema.type.map((type) => ({ type }));
+}
+
+function asObjectRejectingBranch(
+  member: unknown,
+): ObjectRejectingBranch | null {
+  if (
+    !isRecord(member) ||
+    "$ref" in member ||
+    "anyOf" in member ||
+    "oneOf" in member ||
+    "allOf" in member
+  ) {
+    return null;
+  }
+  if ("enum" in member || "const" in member) {
+    const values = "enum" in member ? member.enum : [member.const];
+    return Array.isArray(values) && values.every(isScalarLiteral)
+      ? { kind: "literals", values }
+      : null;
+  }
+  if (member.type === "null") {
+    return { kind: "null" };
+  }
+  const type = asRepairableDeclaredType(member.type);
+  return type ? { kind: "type", type } : null;
+}
+
+function branchMatches(branch: ObjectRejectingBranch, inner: unknown): boolean {
+  switch (branch.kind) {
+    case "null":
+      return false;
+    case "literals":
+      return branch.values.includes(inner);
+    case "type":
+      return innerMatchesDeclaredType(inner, branch.type) !== null;
+  }
+}
+
+function isScalarLiteral(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
 }
 
 function asRepairableDeclaredType(

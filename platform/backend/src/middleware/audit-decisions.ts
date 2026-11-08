@@ -38,6 +38,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -981,6 +982,10 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ServiceAccountModel,
   },
+  serviceAccountFederatedCredentialsTable: {
+    audited: true,
+    model: ServiceAccountFederatedCredentialModel,
+  },
   serviceAccountTokensTable: {
     audited: false,
     reason: "credential material; audited through service account token count",
@@ -1161,6 +1166,22 @@ export const AUDIT_DECISIONS = {
   interactionSessionHeadsBackfillTable: {
     audited: false,
     reason: "internal backfill progress marker",
+  },
+  llmUsageHourlyTable: {
+    audited: false,
+    reason: "derived hourly totals of interactions for cost statistics",
+  },
+  llmUsageDailyTable: {
+    audited: false,
+    reason: "derived daily totals of interactions for cost statistics",
+  },
+  llmUsageRollupStateTable: {
+    audited: false,
+    reason: "internal rollup progress marker",
+  },
+  llmUsageRollupDirtyTable: {
+    audited: false,
+    reason: "internal queue of rollup hours to recompute",
   },
   interactionBillingTable: {
     audited: false,

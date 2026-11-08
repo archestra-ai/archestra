@@ -6,12 +6,11 @@ import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRestoreAgentVersion } from "@/lib/agent-version.query";
 
-vi.mock("@archestra/shared", () => ({
-  archestraApiSdk: {
-    getAgentVersion: vi.fn(),
-    getAgentVersions: vi.fn(),
-    restoreAgentVersion: vi.fn(),
-  },
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  getAgentVersion: vi.fn(),
+  getAgentVersions: vi.fn(),
+  restoreAgentVersion: vi.fn(),
 }));
 
 vi.mock("sonner");

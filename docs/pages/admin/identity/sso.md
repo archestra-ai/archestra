@@ -85,7 +85,7 @@ If SSO fails while password authentication is disabled, recover via the command 
 
 ## Change an Email Claim
 
-Keep **User ID Claim** unchanged when changing **Email Claim**. With OIDC profile updates enabled, the next sign-in updates the existing account's email. Saving the mapping does not change active sessions. An email already used by another account may require resolving that conflict first.
+Keep **User ID Claim** unchanged when changing **Email Claim**. Archestra ties each account to the user ID your identity provider sends, so a changed **User ID Claim** blocks every existing user's next sign-in. With OIDC profile updates enabled, the next sign-in updates the existing account's email. Saving the mapping does not change active sessions. An email already used by another account may require resolving that conflict first.
 
 ## Troubleshooting
 
@@ -93,6 +93,7 @@ Keep **User ID Claim** unchanged when changing **Email Claim**. With OIDC profil
 | --- | --- | --- |
 | `state_mismatch` | Cookies blocked or mismatched callback URL | Enable browser third-party cookies and verify the IdP redirect URI matches the case-sensitive `{ProviderId}`. |
 | `account not linked` | Mismatched or unverified email | Confirm the user signs in with the email address registered on Archestra, and verify the email in the IdP. |
+| "Account Belongs to Someone Else" | The identity provider gave this email to a different person, such as a new hire who inherited a former employee's address | Someone with [`member:delete`](/docs/reference/permissions#member:delete) removes the previous account in **Settings → Users** with **Remove**. The person then signs in again and gets a new, empty account. |
 | `account_not_found` (SAML) | Missing user attributes | Configure your SAML IdP to include `NameID` in `emailAddress` format, plus `email`, `firstName`, and `lastName`. |
 | `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. |
 | User missing team membership | Group claim omitted or identifier typo | Confirm the IdP sends the group claim in the ID token and that the group name in **Settings → Teams** matches verbatim. |

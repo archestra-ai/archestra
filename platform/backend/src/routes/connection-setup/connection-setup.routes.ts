@@ -126,9 +126,10 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
+  chatgpt: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
-  // Cursor routes every model through the Model Router with one key that maps
+  // Cursor routes every model through the Unified Model API with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
   "copilot-cli": [
@@ -542,7 +543,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (clientId === "cursor" && provider && !allPrimary) {
         throw new ApiError(
           400,
-          "Cursor routes its models through the Model Router. Use primary-providers.",
+          "Cursor routes its models through the Unified Model API. Use primary-providers.",
         );
       }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -729,7 +730,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           attributePassthrough &&
           (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            ((clientId === "codex" || clientId === "pi") &&
+            ((clientId === "codex" ||
+              clientId === "chatgpt" ||
+              clientId === "pi") &&
               provider === "openai") ||
             (clientId === "kimi-code" &&
               (provider === "kimi-code" || provider === "kimi")) ||
@@ -869,6 +872,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isOpenCodeFamilyClient(clientId) &&
         clientId !== "pi" &&
         clientId !== "kimi-code" &&
+        clientId !== "chatgpt" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1190,6 +1194,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           marketplaceRender &&
           marketplaceRender.pluginIds.length === 0 &&
           setup.clientId !== "claude-desktop" &&
+          setup.clientId !== "chatgpt" &&
           setup.clientId !== "pi" &&
           setup.clientId !== "kimi-code"
             ? await SkillMarketplaceRepoModel.ensureForViewer({
@@ -1234,6 +1239,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await SkillShareLinkModel.create({
                 organizationId: setup.organizationId,
                 createdByUserId: setup.userId,
+                ...(setup.clientId === "chatgpt"
+                  ? { connectionSetupId: setup.id }
+                  : {}),
                 skillIds: marketplaceRender.skillIds,
                 pluginIds: marketplaceRender.pluginIds,
                 pluginClientType: marketplaceRender.pluginClientType,
@@ -1259,6 +1267,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               marketplaceName: marketplaceRender.marketplaceName,
               hasSkills: marketplaceRender.skillIds.length > 0,
               pluginNames: marketplaceRender.pluginNames,
+              ...(setup.clientId === "chatgpt"
+                ? { connectionPlugin: true }
+                : {}),
             };
           }
 
@@ -1312,7 +1323,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi" | "kimi-code"
+    OpenCodeFamilyClientId | "pi" | "kimi-code" | "chatgpt"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1478,12 +1489,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           }
         : {}),
       // Cursor's requests come from Cursor's own servers, never a running
-      // conversation, so its Model Router URL carries no setup context.
+      // conversation, so its Unified Model API URL carries no setup context.
       url:
         setup.clientId === "cursor"
-          ? `${proxyApiPrefix}/model-router`
+          ? `${proxyApiPrefix}/unified-model`
           : setup.clientId === "pi" && setup.proxyAuth !== "provider-key"
-            ? `${proxyBaseUrl}/model-router`
+            ? `${proxyBaseUrl}/unified-model`
             : `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
@@ -1566,25 +1577,33 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   }
 
   let marketplaceRender: MarketplaceRenderContext | null = null;
-  if (skillIds.length > 0 || pluginIds.length > 0) {
+  if (
+    skillIds.length > 0 ||
+    pluginIds.length > 0 ||
+    setup.clientId === "chatgpt"
+  ) {
     const marketplaceName = await deriveMarketplaceName(
       setup.organizationId,
-      skillIds.length === 0
-        ? "plugins"
-        : pluginIds.length === 0
-          ? "skills"
-          : "extensions",
+      setup.clientId === "chatgpt"
+        ? "extensions"
+        : skillIds.length === 0
+          ? "plugins"
+          : pluginIds.length === 0
+            ? "skills"
+            : "extensions",
     );
     if (isReservedMarketplaceName(marketplaceName)) throw GONE();
     marketplaceRender = {
       skillIds,
       pluginIds,
-      pluginNames,
+      pluginNames:
+        setup.clientId === "chatgpt" ? [marketplaceName] : pluginNames,
       pluginClientType:
         pluginIds.length > 0 &&
         !isOpenCodeFamilyClient(setup.clientId) &&
         setup.clientId !== "pi" &&
-        setup.clientId !== "kimi-code"
+        setup.clientId !== "kimi-code" &&
+        setup.clientId !== "chatgpt"
           ? setup.clientId
           : null,
       pluginPlatform:
@@ -1946,7 +1965,7 @@ function assertConnectPluginsEnabledOrGone(organization: Organization): void {
 }
 
 /**
- * The chat models Cursor's picker should list: what the Model Router's
+ * The chat models Cursor's picker should list: what the Unified Model API's
  * GET /models returns for this virtual key, plus the organization's default
  * model when the key can route it.
  */

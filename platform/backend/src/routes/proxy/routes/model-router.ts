@@ -37,6 +37,7 @@ import {
   scrubTranslatedClientWire,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
+import { UNIFIED_MODEL_PREFIX } from "@/routes/route-paths";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
@@ -74,7 +75,7 @@ import {
   openrouterAdapterFactory,
   perplexityAdapterFactory,
   vllmAdapterFactory,
-  xaiAdapterFactory,
+  xaiOpenAiUsageAdapterFactory,
   zhipuaiAdapterFactory,
 } from "../adapters";
 import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai";
@@ -242,7 +243,9 @@ const openAiWireProviders = {
   openrouter: openrouterAdapterFactory,
   perplexity: perplexityAdapterFactory,
   vllm: vllmAdapterFactory,
-  xai: xaiAdapterFactory,
+  // The router answers in OpenAI's usage dialect: reasoning inside
+  // completion_tokens, not beside it as xAI reports it.
+  xai: xaiOpenAiUsageAdapterFactory,
   zhipuai: zhipuaiAdapterFactory,
 } satisfies Partial<Record<SupportedProvider, unknown>> as Partial<
   Record<SupportedProvider, OpenAiWireProvider>
@@ -302,13 +305,16 @@ const ModelListResponseSchema = z.object({
   ),
 });
 
-const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  logger.debug("[ModelRouterProxy] Registering model router routes");
+const registerRoutes = async (
+  fastify: Parameters<FastifyPluginAsyncZod>[0],
+  prefix: string,
+) => {
+  logger.debug("[ModelRouterProxy] Registering Unified Model API routes");
 
   await registerMediaMultipartParser(fastify);
   for (const withAgent of [false, true]) {
     fastify.post(
-      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      `${prefix}${withAgent ? "/:agentId" : ""}/images/edits`,
       {
         bodyLimit: PROXY_BODY_LIMIT,
         onRequest: async (request) => {
@@ -334,7 +340,10 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const parsed = await parseImageEditRequest(request);
         const auth = mediaAuth.get(request);
         if (!auth)
-          throw new ApiError(401, "Model Router authentication is required.");
+          throw new ApiError(
+            401,
+            "Unified Model API authentication is required.",
+          );
         const resolution = await resolveModelRoute({
           requestedModel: parsed.body.model,
           capability: "media",
@@ -349,7 +358,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
           throw new ApiError(
             400,
-            `Provider "${provider}" does not support the Model Router image edits endpoint.`,
+            `Provider "${provider}" does not support the Unified Model API image edits endpoint.`,
           );
         await applyModelRouterAuthOverride({ request, auth, resolution });
         parsed.body.model = resolution.modelId;
@@ -364,7 +373,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ] as const) {
     for (const withAgent of [false, true]) {
       fastify.post(
-        `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/audio/${operation}`,
+        `${prefix}${withAgent ? "/:agentId" : ""}/audio/${operation}`,
         {
           bodyLimit: PROXY_BODY_LIMIT,
           // Authenticate before buffering multipart bytes, including agent access.
@@ -395,7 +404,10 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : await parseAudioUploadRequest(request, operation);
           const auth = mediaAuth.get(request);
           if (!auth)
-            throw new ApiError(401, "Model Router authentication is required.");
+            throw new ApiError(
+              401,
+              "Unified Model API authentication is required.",
+            );
           const resolution = await resolveModelRoute({
             requestedModel: body.model,
             capability: "media",
@@ -408,7 +420,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ) {
             throw new ApiError(
               400,
-              `Provider "${resolution.provider}" does not support the Model Router audio endpoint.`,
+              `Provider "${resolution.provider}" does not support the Unified Model API audio endpoint.`,
             );
           }
           await applyModelRouterAuthOverride({ request, auth, resolution });
@@ -426,7 +438,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   for (const withAgent of [false, true]) {
     fastify.post(
-      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/generations`,
+      `${prefix}${withAgent ? "/:agentId" : ""}/images/generations`,
       {
         bodyLimit: PROXY_BODY_LIMIT,
         schema: {
@@ -434,7 +446,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? RouteId.ModelRouterImagesWithAgent
             : RouteId.ModelRouterImagesWithDefaultAgent,
           description:
-            "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.",
+            "Generate images through the OpenAI-compatible Unified Model API. Unsupported provider parameters and streaming are rejected.",
           tags: ["LLM Proxy"],
           ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
           body: Azure.API.ImageGenerationRequestSchema,
@@ -449,12 +461,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }
 
   fastify.get(
-    `${MODEL_ROUTER_PREFIX}/models`,
+    `${prefix}/models`,
     {
       schema: {
         operationId: RouteId.ModelRouterListModelsWithDefaultAgent,
         description:
-          "List OpenAI-compatible model ids available through the model router (default LLM proxy)",
+          "List OpenAI-compatible model ids available through the Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         response: constructResponseSchema(ModelListResponseSchema),
       },
@@ -468,12 +480,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    `${MODEL_ROUTER_PREFIX}/:agentId/models`,
+    `${prefix}/:agentId/models`,
     {
       schema: {
         operationId: RouteId.ModelRouterListModelsWithAgent,
         description:
-          "List OpenAI-compatible model ids available through the model router (specific attribution Agent)",
+          "List OpenAI-compatible model ids available through the Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -490,13 +502,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}${RESPONSES_SUFFIX}`,
+    `${prefix}${RESPONSES_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterResponsesWithDefaultAgent,
         description:
-          "Create a response through the OpenAI-compatible model router (default LLM proxy)",
+          "Create a response through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.ResponsesRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -514,13 +526,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}/:agentId${RESPONSES_SUFFIX}`,
+    `${prefix}/:agentId${RESPONSES_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterResponsesWithAgent,
         description:
-          "Create a response through the OpenAI-compatible model router (specific attribution Agent)",
+          "Create a response through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -541,13 +553,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    `${prefix}${EMBEDDINGS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterEmbeddingsWithDefaultAgent,
         description:
-          "Create embeddings through the OpenAI-compatible model router (default LLM proxy)",
+          "Create embeddings through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -565,13 +577,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    `${prefix}/:agentId${EMBEDDINGS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterEmbeddingsWithAgent,
         description:
-          "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)",
+          "Create embeddings through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -592,13 +604,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
+    `${prefix}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)",
+          "Create a chat completion through the OpenAI-compatible Unified Model API (default LLM proxy)",
         tags: ["LLM Proxy"],
         body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -618,13 +630,13 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    `${MODEL_ROUTER_PREFIX}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
+    `${prefix}/:agentId${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.ModelRouterChatCompletionsWithAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)",
+          "Create a chat completion through the OpenAI-compatible Unified Model API (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -645,6 +657,18 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
     },
   );
+};
+
+const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(async (canonical) => {
+    await registerRoutes(canonical, UNIFIED_MODEL_PREFIX);
+  });
+  await fastify.register(async (legacy) => {
+    legacy.addHook("onRoute", (route) => {
+      if (route.schema) (route.schema as { hide?: boolean }).hide = true;
+    });
+    await registerRoutes(legacy, MODEL_ROUTER_PREFIX);
+  });
 };
 
 export default modelRouterProxyRoutes;
@@ -725,7 +749,7 @@ async function routeImageGeneration(
     default:
       throw new ApiError(
         400,
-        `Provider "${resolution.provider}" does not support the Model Router images endpoint.`,
+        `Provider "${resolution.provider}" does not support the Unified Model API images endpoint.`,
       );
   }
 }
@@ -881,7 +905,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
     throw new ApiError(
       501,
-      `${providerDisplayNames[resolution.provider]} models are available through the model router's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
+      `${providerDisplayNames[resolution.provider]} models are available through the Unified Model API's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
     );
   }
 
@@ -979,7 +1003,7 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
  *   OpenAI-compatible embeddings adapter (only the provider name and default
  *   base URL differ; the effective base URL still comes from the mapped key).
  *
- * Providers reach this dispatch only when the model router resolved a
+ * Providers reach this dispatch only when the Unified Model API resolved a
  * provider-qualified embedding model registered for them, so unsupported
  * providers surface a clear 501 rather than a misrouted request.
  */
@@ -1007,7 +1031,7 @@ function getModelRouterEmbeddingsProvider(
   }
   throw new ApiError(
     501,
-    `Provider "${provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
+    `Provider "${provider}" is not yet available through the OpenAI-compatible Unified Model API embeddings endpoint.`,
   );
 }
 
@@ -1070,7 +1094,7 @@ function assertModelServesChatCompletions(
   throw new ApiError(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
-      `Send this request to the model router's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
+      `Send this request to the Unified Model API's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
   );
 }
 
@@ -1092,7 +1116,7 @@ function getOpenAiChatProviderForResolution(params: {
 
   throw new ApiError(
     501,
-    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible Unified Model API.`,
   );
 }
 
@@ -1293,7 +1317,10 @@ async function listModels(params: { auth: ModelRouterAuth }) {
 export async function getModelRouterAgent(agentId: string | undefined) {
   const agent = await resolveAgent(agentId);
   if (agent.agentType !== "llm_proxy" && agent.agentType !== "agent") {
-    throw new ApiError(400, "Model router requires an Agent or LLM Proxy ID.");
+    throw new ApiError(
+      400,
+      "Unified Model API requires an Agent or LLM Proxy ID.",
+    );
   }
   return agent;
 }
@@ -1309,7 +1336,7 @@ export async function ensureModelRouterAgentAccess(params: {
   if (params.agent.organizationId !== params.auth.organizationId) {
     throw new ApiError(
       403,
-      "Model Router virtual key cannot access this Agent.",
+      "Unified Model API virtual key cannot access this Agent.",
     );
   }
   // SPDX-SnippetBegin
@@ -1359,7 +1386,7 @@ async function getModelRouterAuth(
 }
 
 /**
- * The Model Router's credential check on its own, for a request that is not
+ * The Unified Model API's credential check on its own, for a request that is not
  * a Fastify request: a WebSocket upgrade carries the same bearer token.
  */
 export async function authenticateModelRouterBearer(params: {
@@ -1372,7 +1399,7 @@ export async function authenticateModelRouterBearer(params: {
   if (!bearerToken) {
     throw new ApiError(
       401,
-      "Model router requests require a mapped virtual API key or LLM OAuth client access token.",
+      "Unified Model API requests require a mapped virtual API key or LLM OAuth client access token.",
     );
   }
 
@@ -1394,7 +1421,15 @@ export async function authenticateModelRouterBearer(params: {
     const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
-    if (mappings.length === 0) {
+    // A pool added to the key answers with its own member keys, so the key
+    // can still call that pool when it resolves to no provider key.
+    if (
+      mappings.length === 0 &&
+      !(
+        config.llmProxy.modelPoolsEnabled &&
+        (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
+      )
+    ) {
       throw new ApiError(
         401,
         "Virtual API key has no provider API keys configured.",
@@ -1458,7 +1493,7 @@ function isTranslatedModelRouterProvider(
 }
 
 function assertNever(value: never): never {
-  throw new ApiError(500, `Unhandled model router provider "${value}".`);
+  throw new ApiError(500, `Unhandled Unified Model API provider "${value}".`);
 }
 
 /** The pool named `model` when the caller may use it and it has members. */
@@ -1567,7 +1602,7 @@ async function getModelRouterOAuthClientAuth(
     throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
-    throw new ApiError(403, "Access token is missing Model Router scope.");
+    throw new ApiError(403, "Access token is missing Unified Model API scope.");
   }
   const managedClient = await LlmOauthClientModel.findByClientId(
     accessToken.clientId,
@@ -1660,7 +1695,7 @@ async function getModelRouterUserOAuthAuth(params: {
   if (providerApiKeys.length === 0) {
     throw new ApiError(
       401,
-      "OAuth user has no provider API keys available for Model Router usage.",
+      "OAuth user has no provider API keys available for Unified Model API usage.",
     );
   }
   const oauthClient = await OAuthClientModel.findByClientId(

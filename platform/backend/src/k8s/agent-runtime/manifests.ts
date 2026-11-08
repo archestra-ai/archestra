@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends/types";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
   AGENT_RUNTIME_ATTACHMENTS_DIR,
@@ -277,6 +277,12 @@ export function buildAgentRuntimeSandbox(
                   name,
                 })),
               }
+            : {}),
+          // A sandboxing runtime (gVisor) gives the run its own kernel. It
+          // cannot host a privileged container, so a privileged run, which
+          // needs one for nested Docker, keeps the node's default runtime.
+          ...(spec.runtimeClassName && !spec.privileged
+            ? { runtimeClassName: spec.runtimeClassName }
             : {}),
           // The agent authenticates to the platform with credentials mounted
           // from a Secret; it has no business reading the cluster's API.

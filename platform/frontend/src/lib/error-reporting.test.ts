@@ -22,7 +22,21 @@ vi.mock("./app-interactive", () => ({
 }));
 
 let errorReporting: typeof import("./error-reporting").errorReporting;
-const ON = { dsn: "https://key@errors.example.com/1", environment: "staging" };
+const OWN_DSN = {
+  dsnOverride: "https://key@errors.example.com/1",
+  environmentOverride: "staging",
+  nodeEnv: "production",
+};
+const DEFAULT_DSN = {
+  dsnOverride: undefined,
+  environmentOverride: undefined,
+  nodeEnv: "production",
+};
+
+async function settle() {
+  interactive.release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe("errorReporting", () => {
   beforeEach(async () => {
@@ -34,7 +48,7 @@ describe("errorReporting", () => {
   afterEach(() => interactive.release());
 
   it("does not load the SDK before the app is interactive, then replays what it buffered", async () => {
-    errorReporting.start(ON);
+    errorReporting.start(OWN_DSN);
     errorReporting.setUser({ id: "first" });
     errorReporting.setUser({ id: "viewer" });
     errorReporting.captureException(new Error("early"));
@@ -65,14 +79,67 @@ describe("errorReporting", () => {
     expect(sentry.captureException).toHaveBeenCalledTimes(3);
   });
 
-  it("never loads the SDK when telemetry is off and drops what was buffered", async () => {
+  it("reports to a deployment's own DSN with tracing, whatever the analytics setting", async () => {
+    errorReporting.start(OWN_DSN);
+    errorReporting.setAnalyticsEnabled(false);
+    await settle();
+
+    expect(sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dsn: OWN_DSN.dsnOverride,
+        environment: "staging",
+        tracesSampleRate: expect.any(Number),
+        replaysSessionSampleRate: 0,
+        replaysOnErrorSampleRate: 0,
+      }),
+    );
+  });
+
+  it("waits for analytics, then reports errors only to Archestra's project", async () => {
+    errorReporting.start(DEFAULT_DSN);
+    errorReporting.captureException(new Error("early"));
+    await settle();
+    expect(sentry.init).not.toHaveBeenCalled();
+
+    errorReporting.setAnalyticsEnabled(true);
+    await vi.waitFor(() => expect(sentry.init).toHaveBeenCalledTimes(1));
+
+    const options = sentry.init.mock.calls[0][0];
+    expect(options).toMatchObject({
+      dsn: expect.stringMatching(/\.sentry\.io\//),
+      environment: "self-hosted",
+      dataCollection: expect.objectContaining({
+        userInfo: false,
+        httpHeaders: false,
+        httpBodies: [],
+      }),
+      tracePropagationTargets: [],
+    });
+    expect(options.tracesSampleRate).toBeUndefined();
+    expect(options.enableLogs).toBeUndefined();
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "early" }),
+      undefined,
+    );
+  });
+
+  it("never loads the SDK when the deployment opts out of analytics, and drops what was buffered", async () => {
     errorReporting.captureException(new Error("before start"));
-    errorReporting.start({ dsn: "", environment: "staging" });
+    errorReporting.start(DEFAULT_DSN);
     errorReporting.captureException(new Error("after start"));
-    interactive.release();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    errorReporting.setAnalyticsEnabled(false);
+    errorReporting.setAnalyticsEnabled(true);
+    await settle();
 
     expect(sentry.init).not.toHaveBeenCalled();
     expect(sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it("never reports from a local development build", async () => {
+    errorReporting.start({ ...DEFAULT_DSN, nodeEnv: "development" });
+    errorReporting.setAnalyticsEnabled(true);
+    await settle();
+
+    expect(sentry.init).not.toHaveBeenCalled();
   });
 });

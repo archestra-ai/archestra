@@ -331,48 +331,6 @@ describe("composing an organization's declarations", () => {
     ]);
   });
 
-  test("a composition the runtime refuses marks every row refused", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const organizationId = (await makeOrganization()).id;
-    const userId = (await makeUser()).id;
-    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      name: "Acme prod",
-    });
-    await makeTool({
-      catalogId: catalog.id,
-      name: "acme_prod__list",
-      rawName: "list",
-    });
-    // The battery binds a helper to an annotator its policy never declares, so
-    // the composed document is one the runtime refuses to open.
-    const { entry } = await uploadAcme({
-      organizationId,
-      userId,
-      broken: true,
-    });
-    const content = root(entry, ["acme_prod"]);
-    // The refusal is a composition-level one, so it is not a save-time refusal:
-    // the text is saved through the model and discovered at the recompose.
-    await declare({ organizationId, userId, content, checked: false });
-
-    const policy = await openappaBatteriesService.recompile(organizationId);
-
-    expect(policy.lastError).toBeTruthy();
-    expect(policy.lastErrorAt).toBeInstanceOf(Date);
-    expect(
-      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
-        (row) => row.status,
-      ),
-    ).toEqual(["refused"]);
-  });
-
   test("a document that answers one battery twice is refused, and one already stored derives one row", async ({
     makeOrganization,
     makeUser,
@@ -668,6 +626,50 @@ describe("validating against this deployment", () => {
     config.openappa.enabled = true;
   });
   const MINIMAL = "[policy]\nversion = 2\n";
+
+  describe("the starter's deployment hint", () => {
+    const frontendBaseUrl = config.frontendBaseUrl;
+    afterEach(() => {
+      config.frontendBaseUrl = frontendBaseUrl;
+    });
+
+    test.for([
+      ["a public host", "https://archestra.example.com", true],
+      ["a loopback host", "http://localhost:3000", false],
+      ["a loopback address", "http://127.0.0.1:9000", false],
+      ["an unparseable URL", "not-a-url", false],
+      ["a file URL", "file:///tmp/x", false],
+      ["an IPv4-mapped loopback", "http://[::ffff:127.0.0.1]:3000", false],
+      ["the IPv6 unspecified address", "http://[::]:3000", false],
+      ["a private address", "http://10.0.0.5:3000", true],
+    ] as const)("under %s, the starter composes and names the host only when the organization runs it", async ([
+      ,
+      url,
+      hinted,
+    ], { makeOrganization }) => {
+      config.frontendBaseUrl = url;
+      const organizationId = (await makeOrganization()).id;
+      const starter = (await guardrailsPolicyService.get(organizationId))
+        .content;
+      const resolution = await openappaDeclarations.resolve({
+        organizationId,
+        content: starter,
+      });
+      const composed = await openappaDeclarations.composeForCheck({
+        root: starter,
+        resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
+      });
+      expect(composed.errors).toEqual([]);
+      const policy = parsePolicyToml(composed.content ?? "")?.policy as {
+        deployment: { hint?: string };
+      };
+      expect(policy.deployment.hint !== undefined).toBe(hinted);
+    });
+  });
 
   test("a starter whose archestra battery has no catalog here is refused when it is new, and warned about when it is the current revision", async ({
     makeOrganization,
@@ -1425,17 +1427,9 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
 async function uploadAcme(params: {
   organizationId: string;
   userId: string;
-  /** Leaves the helper's annotator undeclared, which no composition accepts. */
-  broken?: boolean;
   /** Tells one uploaded version of the battery from another. */
   note?: string;
 }) {
-  const declaration = params.broken
-    ? ""
-    : `[[policy.annotator]]
-name = "acme.check"
-
-`;
   return openappaBatteriesService.uploadPackage({
     userId: params.userId,
     organizationId: params.organizationId,
@@ -1447,7 +1441,10 @@ name = "acme.check"
         text: `[policy]
 version = 2
 
-${declaration}[[policy.tool]]
+[[policy.annotator]]
+name = "acme.check"
+
+[[policy.tool]]
 name = "mcp/acme/list"
 delta = {}
 

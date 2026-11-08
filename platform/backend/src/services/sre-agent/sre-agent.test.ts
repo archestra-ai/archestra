@@ -28,6 +28,7 @@ import {
   SreRuntimeModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
@@ -54,6 +55,27 @@ import {
   SRE_SOURCE_CLONE,
 } from "./definition";
 import { sreAgentService } from "./index";
+
+async function restrictSreToAdmins(organizationId: string): Promise<void> {
+  for (const target of [
+    { resource: "agent" as const, scope: SRE_AGENT_ID },
+    { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+  ]) {
+    const key = { organizationId, ...target };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("SRE object policy missing");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [
+        {
+          subject: { type: "role", id: ADMIN_ROLE_NAME },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+  }
+}
 
 describe("sreAgentService", () => {
   beforeEach(() => enableSre(["10.0.0.1/32"]));
@@ -223,7 +245,7 @@ describe("sreAgentService", () => {
     expect(agent).toMatchObject({
       organizationId,
       agentType: "agent",
-      builtIn: false,
+      builtIn: true,
       environmentId: SRE_ENVIRONMENT_ID,
     });
     const required = new Set<string>(SRE_AGENT_TOOL_NAMES);
@@ -236,7 +258,7 @@ describe("sreAgentService", () => {
     ).toEqual(expectedToolIds);
   });
 
-  test("only admins can reach the agent, its catalog item, and its environment", async ({
+  test("the agent and catalog start Admin and Platform Admin only", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -248,8 +270,35 @@ describe("sreAgentService", () => {
     });
     const otherAdmin = await makeUser();
     await makeMember(otherAdmin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const platformAdmin = await makeUser();
+    await makeMember(platformAdmin.id, organizationId, {
+      role: PLATFORM_ADMIN_ROLE_NAME,
+    });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+
+    for (const target of [
+      { resource: "agent" as const, scope: SRE_AGENT_ID },
+      { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+    ]) {
+      expect(
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            ...target,
+          })
+        )?.grants,
+      ).toEqual([
+        {
+          subject: { type: "role", id: ADMIN_ROLE_NAME },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+        {
+          subject: { type: "role", id: PLATFORM_ADMIN_ROLE_NAME },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ]);
+    }
 
     const canUse = async (userId: string) => ({
       agent: await AgentTeamModel.userHasAgentAccess({
@@ -279,11 +328,116 @@ describe("sreAgentService", () => {
       catalog: true,
       environment: true,
     });
+    expect(await canUse(platformAdmin.id)).toEqual({
+      agent: true,
+      catalog: true,
+      environment: true,
+    });
     expect(await canUse(member.id)).toEqual({
       agent: false,
       catalog: false,
       environment: false,
     });
+  });
+
+  test("the built-in SRE agent remains available to chat integrations and project defaults", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId } = await seedSreAgent({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+
+    // An admin can still opt a member in through the per-object grants.
+    for (const target of [
+      { resource: "agent" as const, scope: SRE_AGENT_ID },
+      { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+    ]) {
+      const key = { organizationId, ...target };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      if (!policy) throw new Error("SRE object policy missing");
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy.revision,
+        grants: [
+          ...policy.grants,
+          {
+            subject: { type: "role", id: MEMBER_ROLE_NAME },
+            actions: ["read", "use"],
+          },
+        ],
+      });
+    }
+
+    expect(
+      (await AgentModel.findAllInternalAgents()).map((agent) => agent.id),
+    ).toContain(SRE_AGENT_ID);
+    expect(
+      (await AgentModel.findAllInternalAgentsIncludingPersonal(member.id)).map(
+        (agent) => agent.id,
+      ),
+    ).toContain(SRE_AGENT_ID);
+    for (const scope of [undefined, "org" as const]) {
+      expect(
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 50, offset: 0 },
+            undefined,
+            { organizationId, agentType: "agent", scope },
+            member.id,
+            false,
+          )
+        ).data.map((agent) => agent.id),
+      ).toContain(SRE_AGENT_ID);
+    }
+
+    expect(
+      (
+        await AgentModel.findUsableChatopsAgents({
+          organizationId,
+          userId: member.id,
+          includePersonal: false,
+        })
+      ).map((agent) => agent.id),
+    ).toContain(SRE_AGENT_ID);
+    expect(
+      await AgentModel.findPinnableProjectDefault({
+        id: SRE_AGENT_ID,
+        organizationId,
+      }),
+    ).toMatchObject({ id: SRE_AGENT_ID });
+    expect(
+      (await AgentModel.findSpawnTargets(organizationId)).map(
+        (agent) => agent.id,
+      ),
+    ).toContain(SRE_AGENT_ID);
+    const delegationTargets = async () =>
+      (
+        await AgentModel.findAccessibleDelegationTargets({
+          userId: member.id,
+          isAdmin: false,
+          organizationId,
+          excludeAgentId: crypto.randomUUID(),
+          environmentId: SRE_ENVIRONMENT_ID,
+        })
+      ).map((agent) => agent.id);
+    expect(await delegationTargets()).toContain(SRE_AGENT_ID);
+    await restrictSreToAdmins(organizationId);
+    expect(
+      (
+        await AgentModel.findUsableChatopsAgents({
+          organizationId,
+          userId: member.id,
+          includePersonal: false,
+        })
+      ).map((agent) => agent.id),
+    ).not.toContain(SRE_AGENT_ID);
+    expect(await delegationTargets()).not.toContain(SRE_AGENT_ID);
   });
 
   test("a member who assigns a Kubernetes tool to their own agent can neither list nor call it", async ({
@@ -292,16 +446,17 @@ describe("sreAgentService", () => {
     makeMember,
     makeAgent,
   }) => {
-    const { organizationId, admin, server } = await seedSreInstall({
+    const { organizationId, admin, server } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
     });
+    await restrictSreToAdmins(organizationId);
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
     const [podsLog] = await discoverTools(["pods_log"]);
     // Outside the SRE environment, environment isolation already hides the
-    // tool; inside it, the catalog item's admin-only grants still do.
+    // tool; inside it, the narrowed object grants still do.
     const ownAgent = await makeAgent({ organizationId, authorId: member.id });
     const sreEnvAgent = await makeAgent({
       organizationId,
@@ -351,9 +506,9 @@ describe("sreAgentService", () => {
   test.for([
     { caller: "platform admin", canUseSre: false },
     { caller: "service account", canUseSre: false },
-    { caller: "custom role with sre:read", canUseSre: true },
+    { caller: "custom role with both grants", canUseSre: true },
     { caller: "admin", canUseSre: true },
-  ] as const)("the Kubernetes tools take sre:read: $caller", async ({
+  ] as const)("the Kubernetes tools follow catalog grants: $caller", async ({
     caller,
     canUseSre,
   }, {
@@ -364,11 +519,12 @@ describe("sreAgentService", () => {
     makeCustomRole,
     makeServiceAccount,
   }) => {
-    const { organizationId, admin, server } = await seedSreInstall({
+    const { organizationId, admin, server } = await seedSreAgent({
       makeOrganization,
       makeUser,
       makeMember,
     });
+    await restrictSreToAdmins(organizationId);
     const [podsLog] = await discoverTools(["pods_log"]);
     const agent = await makeAgent({
       organizationId,
@@ -403,17 +559,35 @@ describe("sreAgentService", () => {
           };
         }
         case "platform admin":
-        case "custom role with sre:read": {
+        case "custom role with both grants": {
           const user = await makeUser();
-          const role =
+          const custom =
             caller === "platform admin"
-              ? PLATFORM_ADMIN_ROLE_NAME
-              : (
-                  await makeCustomRole(organizationId, {
-                    permission: { sre: ["read"] },
-                  })
-                ).role;
+              ? null
+              : await makeCustomRole(organizationId, { permission: {} });
+          const role = custom?.role ?? PLATFORM_ADMIN_ROLE_NAME;
           await makeMember(user.id, organizationId, { role });
+          if (custom) {
+            for (const target of [
+              { resource: "agent" as const, scope: SRE_AGENT_ID },
+              { resource: "mcpRegistry" as const, scope: SRE_CATALOG_ID },
+            ]) {
+              const key = { organizationId, ...target };
+              const policy = await ResourcePermissionPolicyModel.find(key);
+              if (!policy) throw new Error("SRE object policy missing");
+              await ResourcePermissionPolicyModel.replace({
+                ...key,
+                revision: policy.revision,
+                grants: [
+                  ...policy.grants,
+                  {
+                    subject: { type: "role", id: custom.id },
+                    actions: ["read", "use"],
+                  },
+                ],
+              });
+            }
+          }
           return { userId: user.id, tokenAuth: { ...base, userId: user.id } };
         }
       }
@@ -430,7 +604,7 @@ describe("sreAgentService", () => {
       agentOwner(agent.id),
       tokenAuth,
     );
-    // With sre:read the call is dispatched and fails only because the test
+    // With the catalog grant the call is dispatched and fails only because the test
     // runs no server; without it the catalog gate refuses it after validation
     // resolved the tool, which logs the call under the server's name.
     expect(result._meta?.archestraError).toMatchObject(
@@ -691,10 +865,26 @@ describe("sreAgentService", () => {
       admin.id,
       { skipCreationDefaultTools: true, deferInitialVersionFork: true },
     );
+    const policyBefore = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "agent",
+      scope: SRE_AGENT_ID,
+    });
 
     await sreAgentService.seed();
     await ensure();
 
+    expect(await AgentModel.findById(SRE_AGENT_ID)).toMatchObject({
+      id: SRE_AGENT_ID,
+      builtIn: true,
+    });
+    expect(
+      await ResourcePermissionPolicyModel.find({
+        organizationId,
+        resource: "agent",
+        scope: SRE_AGENT_ID,
+      }),
+    ).toEqual(policyBefore);
     expect((await SreRuntimeModel.findAgent(SRE_AGENT_ID))?.systemPrompt).toBe(
       SRE_SOURCE_CLONE,
     );

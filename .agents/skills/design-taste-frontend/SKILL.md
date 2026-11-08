@@ -1,6 +1,6 @@
 ---
 name: design-taste-frontend
-description: Use for visual design direction on greenfield, user-facing surfaces — marketing and landing pages, generated apps, portfolio-style or standalone pages. NOT for routine Archestra platform UI work (dashboards, data tables, settings, forms, existing components) — use archestra-dev-frontend for that. Upstream intent: anti-slop frontend skill for landing pages, portfolios, and redesigns; the agent reads the brief, infers the right design direction, and ships interfaces that do not look templated.
+description: "Use for visual design direction on greenfield, user-facing surfaces — marketing and landing pages, generated apps, portfolio-style or standalone pages. NOT for routine Archestra platform UI work (dashboards, data tables, settings, forms, existing components) — use archestra-dev-frontend for that. Upstream intent: anti-slop frontend skill for landing pages, portfolios, and redesigns; the agent reads the brief, infers the right design direction, and ships interfaces that do not look templated."
 ---
 
 # tasteskill: Anti-Slop Frontend Skill

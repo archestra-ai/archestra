@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -37,20 +38,32 @@ import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   buildEntries,
-  ChangeNote,
   ConsultRow,
   type Entry,
   GuardrailsBar,
   type GutterProps,
   gutterWords,
   type LabelChange,
-  LabelGutter,
   pageChanges,
   pageConsults,
   SELECTED_EDGE,
   SELECTED_PAST_GUTTER,
 } from "./guardrail-rows";
 import type { GuardrailsData, TraceYell } from "./guardrails";
+import { LabelChangeNote, LabelRail } from "./label-rail";
+import {
+  poolFailureLabel,
+  poolFailureText,
+  retriesRowAbove,
+} from "./pool-attempts";
+import type { RanOnKnob, RanOnView } from "./ran-on";
+import {
+  RanOnHeader,
+  RanOnLane,
+  RanOnMoveLines,
+  type RanOnParties,
+  RuntimeGlyph,
+} from "./ran-on-strip";
 import {
   type InteractionSummary,
   type RequestSpan,
@@ -109,7 +122,17 @@ export function RequestWaterfall({
   guardrails = null,
   selectedConsultKey = null,
   onSelectConsult,
+  onOpenRequest,
+  ranOn = null,
+  poolKeyNames,
 }: {
+  /**
+   * Where the session's work ran, when it was handed to Agent Runtime: its
+   * header above the list, and each row's place in it.
+   */
+  ranOn?: { view: RanOnView; parties: RanOnParties } | null;
+  /** Pool members' key names by provider key id, to name a pooled row's key. */
+  poolKeyNames?: Map<string, string>;
   /** The session's guardrail checks and label history, when OpenAPPA is on. */
   guardrails?: GuardrailsData | null;
   /** The consult open in the details pane below, if any. */
@@ -119,6 +142,8 @@ export function RequestWaterfall({
    * Null closes it.
    */
   onSelectConsult?: (key: string | null) => void;
+  /** Opens a request of this session that is on another page. */
+  onOpenRequest?: (requestId: string) => void;
   timeline: Timeline | null;
   loading: boolean;
   profileName: string | null;
@@ -166,6 +191,11 @@ export function RequestWaterfall({
     [spans, guardrails],
   );
   const steppable = entries;
+  // Pool retries are matched against every request on the page.
+  const requestRows = useMemo(
+    () => spans.flatMap((span) => (span.type === "request" ? [span.row] : [])),
+    [spans],
+  );
   const changes = useMemo(
     () => (guardrails ? pageChanges({ entries, guardrails }) : []),
     [entries, guardrails],
@@ -219,7 +249,11 @@ export function RequestWaterfall({
   // label changed), else the check, else the first row under the new label.
   const activateChange = (change: LabelChange) => {
     if (change.target.type === "consult") onSelectConsult?.(change.target.key);
-    else onSelect(change.target.key);
+    else if (change.target.type === "request") {
+      // The details pane follows the request, not a check left open.
+      onSelectConsult?.(null);
+      onOpenRequest?.(change.target.key);
+    } else onSelect(change.target.key);
   };
   const yellByKey = new Map(
     (guardrails?.yells ?? []).flatMap((yell) =>
@@ -233,12 +267,13 @@ export function RequestWaterfall({
   const isChangeActive = (change: LabelChange) =>
     change.target.type === "consult"
       ? change.target.key === selectedConsultKey
-      : !selectedConsultKey && change.target.key === selectedKey;
-  const gutterFor = (entry: Entry, index: number): GutterProps | null =>
+      : change.target.type === "span" &&
+        !selectedConsultKey &&
+        change.target.key === selectedKey;
+  const gutterFor = (entry: Entry): GutterProps | null =>
     entry.gutter
       ? {
           label: entry.gutter,
-          odd: index % 2 === 1,
           nodes: nodesByKey.get(entry.key) ?? null,
           isChangeActive,
           onActivateChange: activateChange,
@@ -333,13 +368,9 @@ export function RequestWaterfall({
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
   };
 
-  // Keep tick labels clear of the idle-break pills in the axis.
-  const ticks = (timeline?.ticks ?? []).filter(
-    (tick) =>
-      !(timeline?.breaks ?? []).some(
-        (b) => Math.abs(tick.x - (b.x + b.w / 2)) < 0.075,
-      ),
-  );
+  const ticks = timeline?.ticks ?? [];
+  const axisRef = useRef<HTMLDivElement>(null);
+  useAxisLabelsClear(axisRef, ticks, timeline?.breaks ?? []);
 
   return (
     <div>
@@ -417,6 +448,13 @@ export function RequestWaterfall({
         />
       ) : null}
       {notice}
+      {ranOn ? (
+        <RanOnHeader
+          view={ranOn.view}
+          parties={ranOn.parties}
+          layout={layout}
+        />
+      ) : null}
 
       {/* Only sideways scrolling is contained: containing vertical overscroll
           swallowed the wheel even when the list had nothing to scroll, so the
@@ -440,7 +478,7 @@ export function RequestWaterfall({
                 {layout === "tools" ? "server, time" : "model, time"}
               </span>
             </div>
-            <div className="relative mx-2 lg:mx-3">
+            <div ref={axisRef} className="relative mx-2 lg:mx-3">
               {/* A phone's track is too narrow for tick labels. */}
               <span className="flex h-full items-center lg:hidden">
                 Timeline
@@ -455,6 +493,7 @@ export function RequestWaterfall({
               {ticks.map((tick) => (
                 <span
                   key={`tick-${tick.x}`}
+                  data-axis-tick=""
                   className={cn(
                     "absolute top-1/2 hidden -translate-y-1/2 whitespace-nowrap tabular-nums lg:block",
                     tick.x === 0
@@ -471,6 +510,7 @@ export function RequestWaterfall({
               {timeline?.breaks.map((b) => (
                 <span
                   key={`axis-idle-${b.x}`}
+                  data-axis-idle=""
                   className="absolute top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-sm border bg-card px-1 text-[10px] leading-4 font-medium whitespace-nowrap text-foreground/80 tabular-nums lg:block"
                   style={{ left: `${(b.x + b.w / 2) * 100}%` }}
                 >
@@ -518,9 +558,13 @@ export function RequestWaterfall({
                     <span
                       key={`fold-${b.x}`}
                       className="absolute inset-y-0 border-x border-dashed border-border bg-[repeating-linear-gradient(135deg,transparent_0_4px,var(--color-border)_4px_5px)] opacity-60"
-                      style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
+                      style={{
+                        left: `${b.x * 100}%`,
+                        width: `${b.w * 100}%`,
+                      }}
                     />
                   ))}
+                  {ranOn ? <RanOnMoveLines view={ranOn.view} /> : null}
                   {edges ? (
                     <>
                       <span
@@ -547,7 +591,7 @@ export function RequestWaterfall({
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {entries.map((entry, index) => {
+                {entries.map((entry, entryIndex) => {
                   if (entry.type === "consult") {
                     const { consult } = entry;
                     const isSelected =
@@ -558,7 +602,7 @@ export function RequestWaterfall({
                         layout={layout}
                         consult={consult}
                         toolSpan={entry.toolSpan}
-                        gutter={gutterFor(entry, index)}
+                        gutter={gutterFor(entry)}
                         note={notesByKey.get(entry.key) ?? null}
                         selected={isSelected}
                         buttonRef={(el) => {
@@ -574,11 +618,21 @@ export function RequestWaterfall({
                     layout,
                     selected: span.key === selectedKey && !consultRowSelected,
                     ancestor: span.key === selectedKey && consultRowSelected,
-                    gutter: gutterFor(entry, index),
+                    gutter: gutterFor(entry),
                     note: notesByKey.get(entry.key) ?? null,
                     yell: yellByKey.get(span.key) ?? null,
                     guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
                     highlighted: span.key === highlightedKey,
+                    ranOn: ranOn
+                      ? {
+                          runtime: ranOn.view.runtimeKeys.has(span.key),
+                          knob: ranOn.view.knobs.get(span.key),
+                          // The run's own session is all runtime: no glyph.
+                          glyph:
+                            ranOn.view.side === "client" &&
+                            ranOn.view.runtimeKeys.has(span.key),
+                        }
+                      : null,
                     buttonRef: (el: HTMLButtonElement | null) => {
                       if (el) rowRefs.current.set(span.key, el);
                       else rowRefs.current.delete(span.key);
@@ -591,6 +645,16 @@ export function RequestWaterfall({
                       span={span}
                       profileName={profileName}
                       isConversation={span.row.id === conversationRowId}
+                      joinsRowAbove={retriesRowAbove(
+                        span.row,
+                        requestAbove(entries, entryIndex),
+                        requestRows,
+                      )}
+                      poolKeyName={
+                        span.row.providerApiKeyId
+                          ? poolKeyNames?.get(span.row.providerApiKeyId)
+                          : undefined
+                      }
                       {...rowProps}
                     />
                   ) : (
@@ -822,6 +886,12 @@ type RowProps = {
   /** When a superyell turned guardrails off, epoch ms. */
   guardrailsOffAt?: number | null;
   highlighted: boolean;
+  /** Where this row ran, when the session was handed to Agent Runtime. */
+  ranOn?: {
+    runtime: boolean;
+    knob: RanOnKnob | undefined;
+    glyph: boolean;
+  } | null;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
 };
@@ -838,6 +908,7 @@ function RowShell({
   yell = null,
   guardrailsOffAt = null,
   highlighted,
+  ranOn = null,
   buttonRef,
   onSelect,
   name,
@@ -846,6 +917,8 @@ function RowShell({
   latency,
   tokens,
   cost,
+  edge = null,
+  barClassName,
 }: RowProps & {
   span: TimelineSpan;
   /** The row's accessible name. */
@@ -857,6 +930,9 @@ function RowShell({
   latency: { text: string; label: string } | null;
   tokens: ReactNode;
   cost: ReactNode;
+  /** Drawn at the row's left edge, over the gutter. */
+  edge?: ReactNode;
+  barClassName?: string;
 }) {
   const style = SPAN_KINDS[span.kind];
   const grid = GRIDS[layout];
@@ -867,6 +943,8 @@ function RowShell({
     (guardrailsOffAt !== null && span.start >= guardrailsOffAt);
   return (
     <li className="relative">
+      {ranOn ? <RanOnLane runtime={ranOn.runtime} knob={ranOn.knob} /> : null}
+      {edge}
       {yell || off ? (
         <YellRowMarks
           yell={yell}
@@ -877,7 +955,7 @@ function RowShell({
           onSelectRow={onSelect}
         />
       ) : null}
-      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
+      {gutter ? <LabelRail {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
@@ -927,6 +1005,7 @@ function RowShell({
                 selected ? "text-foreground/70" : "text-muted-foreground",
               )}
             >
+              {ranOn?.glyph ? <RuntimeGlyph /> : null}
               {detail}
               <span
                 aria-hidden="true"
@@ -941,7 +1020,9 @@ function RowShell({
               <span className="shrink-0 lg:hidden">
                 {tools ? time : (latency?.text ?? "—")}
               </span>
-              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
+              {note && note.length > 0 ? (
+                <LabelChangeNote changes={note} />
+              ) : null}
             </span>
           </span>
         </span>
@@ -955,6 +1036,7 @@ function RowShell({
               style.bar,
               selected && "ring-2 ring-offset-1 ring-offset-card",
               selected && style.ring,
+              barClassName,
             )}
             style={{
               left: `${span.x * 100}%`,
@@ -1018,11 +1100,17 @@ function RequestRow({
   span,
   profileName,
   isConversation,
+  joinsRowAbove,
+  poolKeyName,
   ...rowProps
 }: RowProps & {
   span: RequestSpan;
   profileName: string | null;
   isConversation: boolean;
+  /** A pool retry of the failed attempt in the row right above it. */
+  joinsRowAbove: boolean;
+  /** The pool member key this attempt went to, when known. */
+  poolKeyName?: string;
 }) {
   const { row, kind } = span;
   const label = requestLabel(row, profileName);
@@ -1037,14 +1125,18 @@ function RequestRow({
   const onPlan = row.billingMode === "subscription";
   const latency = formatLatency(row.durationMs);
   // A model pool writes one row per attempt; a failed one was retried on the
-  // next member, in the row after it.
+  // next member, in the row after it, which reads as its retry.
   const failedOver = row.attemptOutcome === "failed_over";
+  const failure = failedOver ? poolFailureLabel(row.failureReason) : null;
+  const retry = Boolean(row.modelPoolId) && (row.attempt ?? 0) > 1;
 
   return (
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${failedOver ? ", failed over" : ""}${isConversation ? ", latest conversation" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${failedOver ? `, failed over${failure ? ` (${poolFailureText(failure)})` : ""}` : ""}${retry ? ", retry" : ""}${isConversation ? ", latest conversation" : ""}`}
+      barClassName={failedOver ? FAILED_ATTEMPT_BAR : undefined}
+      edge={joinsRowAbove ? <RetryBracket /> : null}
       name={
         <>
           <span
@@ -1058,10 +1150,18 @@ function RequestRow({
           {kind !== "main" ? <KindChip kind={kind} /> : null}
           {failedOver ? (
             <span
-              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 dark:text-red-400"
-              title={row.failureReason ?? undefined}
+              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 tabular-nums dark:text-red-400"
+              title={`Failed over to the next pool member${row.failureReason ? `: ${row.failureReason}` : ""}`}
             >
-              Failed over
+              {failure ? poolFailureText(failure) : "Failed over"}
+            </span>
+          ) : null}
+          {retry ? (
+            <span
+              className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground"
+              title={`Attempt ${row.attempt}: the next pool member after a failover`}
+            >
+              Retry
             </span>
           ) : null}
           {isConversation ? (
@@ -1090,12 +1190,31 @@ function RequestRow({
               ring={false}
             />
           </span>
+          {row.autoRouted ? (
+            <span
+              className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground"
+              title="Auto routing chose this model"
+            >
+              auto→
+            </span>
+          ) : null}
           <span
-            className="min-w-0 truncate lg:ml-0.5"
+            className={cn(
+              "min-w-0 truncate lg:ml-0.5",
+              poolKeyName && "max-w-[60%] shrink-0",
+            )}
             title={row.model ?? undefined}
           >
             {modelName}
           </span>
+          {poolKeyName ? (
+            <span
+              className="min-w-0 shrink-[4] truncate text-muted-foreground/70 max-sm:hidden"
+              title={`Sent with the pool member key ${poolKeyName}`}
+            >
+              via <span className="text-muted-foreground">{poolKeyName}</span>
+            </span>
+          ) : null}
         </>
       }
       time={formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" })}
@@ -1131,6 +1250,29 @@ function RequestRow({
           )}
         </span>
       }
+    />
+  );
+}
+
+/** The request in the list entry right above, if that entry is one. */
+function requestAbove(
+  entries: { type: string; span?: TimelineSpan }[],
+  index: number,
+): InteractionSummary | null {
+  const above = entries[index - 1];
+  return above?.span?.type === "request" ? above.span.row : null;
+}
+
+/** A failed pool attempt's bar: hatched, so its retry below reads as the answer. */
+const FAILED_ATTEMPT_BAR =
+  "bg-red-500/20 bg-[repeating-linear-gradient(135deg,rgb(239_68_68/0.7)_0_2px,transparent_2px_4px)] dark:bg-red-400/20 dark:bg-[repeating-linear-gradient(135deg,rgb(248_113_113/0.7)_0_2px,transparent_2px_4px)]";
+
+/** Joins a pool retry to the failed attempt in the row above it. */
+function RetryBracket() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute top-[-22px] left-[10px] z-[1] h-11 w-[5px] rounded-l-[4px] border-y border-l border-muted-foreground/40 lg:top-[-20px] lg:h-10"
     />
   );
 }
@@ -1247,6 +1389,7 @@ function WaterfallSkeleton({ layout }: { layout: Layout }) {
  * counts and the cache split are on hover.
  */
 function TokensStack({ row }: { row: InteractionSummary }) {
+  const usageUnknown = row.inputTokens === null && row.outputTokens === null;
   const lines = [
     { label: "Output", value: row.outputTokens },
     { label: "Input", value: row.inputTokens },
@@ -1257,13 +1400,23 @@ function TokensStack({ row }: { row: InteractionSummary }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="flex flex-col items-end leading-tight tabular-nums">
-          <span className="text-[13px] text-foreground/90">
-            {formatCompactNumber(row.outputTokens ?? 0)}
-          </span>
-          <span className="flex items-baseline gap-1 text-[10px] text-muted-foreground/70">
-            <span className="text-[9px] tracking-wide uppercase">in</span>
-            {formatCompactNumber(row.inputTokens ?? 0)}
-          </span>
+          {usageUnknown ? (
+            <span className="text-[13px] text-muted-foreground">Unknown</span>
+          ) : (
+            <>
+              <span className="text-[13px] text-foreground/90">
+                {row.outputTokens === null
+                  ? "Unknown"
+                  : formatCompactNumber(row.outputTokens)}
+              </span>
+              <span className="flex items-baseline gap-1 text-[10px] text-muted-foreground/70">
+                <span className="text-[9px] tracking-wide uppercase">in</span>
+                {row.inputTokens === null
+                  ? "Unknown"
+                  : formatCompactNumber(row.inputTokens)}
+              </span>
+            </>
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent side="left" className="tabular-nums">
@@ -1275,7 +1428,7 @@ function TokensStack({ row }: { row: InteractionSummary }) {
             >
               <dt>{line.label}</dt>
               <dd className="text-right">
-                {(line.value ?? 0).toLocaleString()}
+                {line.value === null ? "Unknown" : line.value.toLocaleString()}
               </dd>
             </div>
           ))}
@@ -1284,3 +1437,46 @@ function TokensStack({ row }: { row: InteractionSummary }) {
     </Tooltip>
   );
 }
+
+/**
+ * Hides any axis tick label whose drawn box would touch an idle pill or the
+ * tick before it, measured after layout and again whenever the axis resizes:
+ * how wide a label or pill is depends on its text and the track's width.
+ */
+function useAxisLabelsClear(
+  axisRef: { current: HTMLDivElement | null },
+  ticks: Timeline["ticks"],
+  breaks: Timeline["breaks"],
+) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the labels and pills are read from the DOM, so a change to them must re-measure too.
+  useLayoutEffect(() => {
+    const axis = axisRef.current;
+    if (!axis) return;
+    const place = () => {
+      const pills = [
+        ...axis.querySelectorAll<HTMLElement>("[data-axis-idle]"),
+      ].map((pill) => pill.getBoundingClientRect());
+      let previous: DOMRect | null = null;
+      for (const tick of axis.querySelectorAll<HTMLElement>(
+        "[data-axis-tick]",
+      )) {
+        tick.style.visibility = "";
+        const box = tick.getBoundingClientRect();
+        const clash = [...pills, ...(previous ? [previous] : [])].some(
+          (other) =>
+            box.left < other.right + AXIS_LABEL_GAP_PX &&
+            other.left < box.right + AXIS_LABEL_GAP_PX,
+        );
+        if (clash) tick.style.visibility = "hidden";
+        else previous = box;
+      }
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(axis);
+    return () => observer.disconnect();
+  }, [axisRef, ticks, breaks]);
+}
+
+/** The least room kept between an axis label and its neighbours. */
+const AXIS_LABEL_GAP_PX = 6;

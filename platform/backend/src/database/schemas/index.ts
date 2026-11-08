@@ -191,6 +191,12 @@ export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyLabelsTable } from "./llm-provider-api-key-label";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
+export {
+  llmUsageDailyTable,
+  llmUsageHourlyTable,
+  llmUsageRollupDirtyTable,
+  llmUsageRollupStateTable,
+} from "./llm-usage-hourly";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogSkillsTable } from "./mcp-catalog-skill";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
@@ -263,6 +269,7 @@ export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
 export { default as serviceAccountsTable } from "./service-account";
+export { default as serviceAccountFederatedCredentialsTable } from "./service-account-federated-credential";
 export { default as serviceAccountLabelsTable } from "./service-account-label";
 export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";

@@ -1085,6 +1085,9 @@ describe("GitHub Copilot organization subscription setup", () => {
     makeMember,
     makeUser,
   }) => {
+    // The check looks the organization up on GitHub; answer it here, not on
+    // the real api.github.com.
+    vi.stubGlobal("fetch", githubFake({ appId }));
     // Someone who may only reuse a connected App still passes the first step.
     const keysOnly = await makeCustomRole(organizationId, {
       permission: { llmProviderApiKey: ["create"], credential: ["read"] },

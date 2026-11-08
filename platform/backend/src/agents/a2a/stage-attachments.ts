@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import logger from "@/logging";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
@@ -8,6 +7,7 @@ import {
   skillSandboxRuntimeService,
 } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { asSandboxId, type SkillSandbox } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 
 /** A staged attachment's in-sandbox path, or an error marker for that slot. */
 export type StageResult = { path: string } | { error: true };

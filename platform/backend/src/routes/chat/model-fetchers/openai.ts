@@ -21,7 +21,7 @@ import {
 
 // Codex uses client_version to gate models that require a newer client.
 // An hourly workflow proposes updates from stable Codex CLI releases.
-const CODEX_MODELS_CLIENT_VERSION = "0.166.0";
+const CODEX_MODELS_CLIENT_VERSION = "0.167.0";
 
 const CodexModelsResponseSchema = z.object({
   models: z.array(
@@ -181,7 +181,7 @@ export async function fetchOpenAiModels(
 
 /**
  * Media models the governed image and audio endpoints serve. Sync keeps them
- * with their real modalities so the Model Router can resolve them, while a
+ * with their real modalities so the Unified Model API can resolve them, while a
  * non-text output (or audio-only input) keeps them out of chat pickers
  * (`ModelModel.supportsTextChat`).
  */
@@ -197,7 +197,7 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
   if (/^(whisper-|gpt-(?:[\w.-]+-)?transcribe(?:-|$))/.test(lower)) {
     return mediaCapabilities(["audio"], ["text"]);
   }
-  // Realtime models speak only the Realtime API, which the Model Router
+  // Realtime models speak only the Realtime API, which the Unified Model API
   // serves over WebSocket; their audio output keeps them out of chat.
   if (/^gpt-realtime(?:-|$)/.test(lower)) {
     return mediaCapabilities(["text", "audio"], ["audio"]);
@@ -209,7 +209,7 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
  * Audio chat models (`gpt-audio`, `gpt-audio-mini` and the `*-audio-preview`
  * snapshots) answer `/chat/completions` with text, or with speech when the
  * request asks for the audio modality, and call tools like any chat model.
- * Both modalities are recorded so chat pickers and the Model Router keep them.
+ * Both modalities are recorded so chat pickers and the Unified Model API keep them.
  */
 function openAiAudioChatCapabilities(
   id: string,

@@ -67,6 +67,7 @@ import {
   type AfterConnectRun,
 } from "./after-connect";
 import { BrowseDialog } from "./browse-dialog";
+import { ChatgptGatewaySetup } from "./chatgpt-gateway-setup";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -94,9 +95,11 @@ import {
   approxTokens,
   fmt,
   nameOf,
+  OneOf,
   PromptRow,
   plural,
   ScriptBlock,
+  SetupNextSteps,
   sentenceNameOf,
   TextButton,
   useCopy,
@@ -209,7 +212,7 @@ export function ConnectPage() {
   };
 
   const setup = setupModeFor(client);
-  const step = currentStep(client, setup);
+  const step = currentStep(client, setup, routed);
 
   const pick = (id: string) => {
     setPickedId(id);
@@ -659,12 +662,19 @@ function ConnectArea({
   useEffect(() => setOrigin(window.location.origin), []);
   // The page's OS, so the plugins it shows are the ones this command installs.
   const { windows, setWindows } = data;
-  const manual = setup === "manual";
-  const script = setup === "script";
+  const [chatgptWeb, setChatgptWeb] = useState(false);
+  const webPlugin = client.id === "chatgpt" && chatgptWeb;
+  const manual = setup === "manual" || webPlugin;
+  const script = setup === "script" && !webPlugin;
   const download = setup === "download";
   const command = script
     ? data.installerCommand(client, choices, windows, picks)
     : null;
+  // Both modes keep the terminal's footprint, just like Claude Desktop.
+  const chatgptCommand =
+    client.id === "chatgpt"
+      ? data.installerCommand(client, choices, windows, picks)
+      : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
   const keptPlugins = data.keptPlugins(client, picks.pluginIds);
@@ -758,8 +768,24 @@ function ConnectArea({
             <StepHeading step={step} />
             <StepHeading step="Run the command in your terminal" />
           </OneOf>
+        ) : client.id === "chatgpt" ? (
+          <OneOf shown={webPlugin ? 1 : 0}>
+            <StepHeading step={step} />
+            <StepHeading step="Download the plugin for ChatGPT" />
+          </OneOf>
         ) : (
           <StepHeading step={step} />
+        )}
+        {client.id === "chatgpt" && (
+          <TextButton
+            onClick={() => setChatgptWeb(!chatgptWeb)}
+            className="text-xs text-muted-foreground"
+          >
+            <OneOf inline shown={webPlugin ? 1 : 0}>
+              <span>Using ChatGPT on the web? Download the plugin</span>
+              <span>Using the desktop app? Use terminal setup</span>
+            </OneOf>
+          </TextButton>
         )}
         {download && (
           // The other way to set up Desktop belongs to the step it replaces,
@@ -825,38 +851,114 @@ function ConnectArea({
           />
           {/* The OS switch's column stays reserved without it, so the steps
               keep one width in both modes. */}
-          <div className="mt-4 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
-            <div>
-              <p className="font-semibold text-foreground">When it finishes</p>
-              <OneOf shown={!desktopTerminal ? 0 : windows ? 1 : 2}>
-                {[
-                  { terminal: false, windows },
-                  { terminal: true, windows: true },
-                  { terminal: true, windows: false },
-                ].map((variant) => (
-                  <ol
-                    key={`${variant.terminal}-${variant.windows}`}
-                    className="mt-1 list-decimal space-y-0.5 pl-4"
+          <SetupNextSteps
+            platformControl={
+              <TextButton
+                onClick={() => setWindows(!windows)}
+                aria-hidden={!desktopTerminal}
+                tabIndex={desktopTerminal ? undefined : -1}
+                className={cn("self-start", !desktopTerminal && "invisible")}
+              >
+                <OneOf inline shown={windows ? 0 : 1}>
+                  <span>Use the macOS / Linux command</span>
+                  <span>Use the Windows command</span>
+                </OneOf>
+              </TextButton>
+            }
+          >
+            <OneOf shown={!desktopTerminal ? 0 : windows ? 1 : 2}>
+              {[
+                { terminal: false, windows },
+                { terminal: true, windows: true },
+                { terminal: true, windows: false },
+              ].map((variant) => (
+                <ol
+                  key={`${variant.terminal}-${variant.windows}`}
+                  className="mt-1 list-decimal space-y-0.5 pl-4"
+                >
+                  {desktopNextSteps({ ...variant, connector }).map((line) => (
+                    <li key={line.key}>{line.content}</li>
+                  ))}
+                </ol>
+              ))}
+            </OneOf>
+          </SetupNextSteps>
+        </>
+      ) : client.id === "chatgpt" ? (
+        <>
+          <OneOf
+            shown={webPlugin ? 1 : 0}
+            className="mt-2 px-1 text-xs text-muted-foreground"
+          >
+            <p>
+              Run it on the computer where you use ChatGPT. Setup needs Node.js
+              18 or newer. Approve in your browser to install the {data.appName}{" "}
+              plugin
+              {choices.proxy && data.partsFor(client).proxy
+                ? " and configure local model routing."
+                : "."}
+            </p>
+            <p>
+              Upload the downloaded .ZIP file in ChatGPT Plugins and connect
+              your account. The plugin connects your tools for web chats and
+              dots. Local model routing requires terminal setup.
+            </p>
+          </OneOf>
+          <ChatgptGatewaySetup
+            gateway={choices.tools ? data.gateway : null}
+            baseUrl={data.baseUrl}
+            includeSkills={data.skillsEnabled && choices.skills}
+            sizingCommand={chatgptCommand ?? ""}
+            disabled={data.revalidating}
+            showTerminal={!webPlugin}
+            terminalAction={
+              <ScriptBlock
+                command={chatgptCommand ?? ""}
+                copied={copied}
+                disabled={!origin || data.revalidating || !chatgptCommand}
+                onCopy={copy}
+                onSelectionCopy={startWaiting}
+                className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+              />
+            }
+            terminalNextSteps={
+              <SetupNextSteps
+                platformControl={
+                  <TextButton
+                    onClick={() => setWindows(!windows)}
+                    className="self-start"
                   >
-                    {desktopNextSteps({ ...variant, connector }).map((line) => (
-                      <li key={line.key}>{line.content}</li>
-                    ))}
-                  </ol>
-                ))}
-              </OneOf>
-            </div>
-            <TextButton
-              onClick={() => setWindows(!windows)}
-              aria-hidden={!desktopTerminal}
-              tabIndex={desktopTerminal ? undefined : -1}
-              className={cn("self-start", !desktopTerminal && "invisible")}
-            >
-              <OneOf inline shown={windows ? 0 : 1}>
-                <span>Use the macOS / Linux command</span>
-                <span>Use the Windows command</span>
-              </OneOf>
-            </TextButton>
-          </div>
+                    <OneOf inline shown={windows ? 0 : 1}>
+                      <span>Use the macOS / Linux command</span>
+                      <span>Use the Windows command</span>
+                    </OneOf>
+                  </TextButton>
+                }
+              >
+                <OneOf shown={windows ? 0 : 1}>
+                  {[true, false].map((forWindows) => (
+                    <ol
+                      key={String(forWindows)}
+                      className="mt-1 list-decimal space-y-0.5 pl-4"
+                    >
+                      {choices.tools && data.partsFor(client).tools && (
+                        <li>Finish the gateway sign-in in your browser.</li>
+                      )}
+                      <li>
+                        {forWindows
+                          ? "Quit ChatGPT, including its system tray icon, and open it again."
+                          : "Quit ChatGPT and open it again."}
+                      </li>
+                      <li>
+                        Start a local Work or Codex conversation and select the{" "}
+                        {data.appName} plugin.
+                      </li>
+                    </ol>
+                  ))}
+                </OneOf>
+              </SetupNextSteps>
+            }
+          />
         </>
       ) : manual ? (
         // The steps start right here, in the band.
@@ -865,11 +967,7 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>
-              {client.id === "chatgpt"
-                ? "Add the gateway as a plugin in ChatGPT."
-                : `Copy each block into ${nameOf(client)}, top to bottom.`}
-            </span>
+            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
           </div>
           <ManualSteps
             client={client}
@@ -976,6 +1074,7 @@ function ConnectArea({
         welcome={
           origin
             ? welcomePrompt({
+                clientId: run.client.id,
                 origin,
                 appName: data.appName,
                 serverName: run.serverName,
@@ -1108,13 +1207,19 @@ function scriptNextSteps(client: ConnectClient): string[] {
 
 // === Connect band heading: the one instruction ===
 
-function currentStep(client: ConnectClient, setup: SetupMode): string {
+function currentStep(
+  client: ConnectClient,
+  setup: SetupMode,
+  routed: boolean,
+): string {
   const name = nameOf(client);
   switch (setup) {
     case "manual":
-      return client.id === "chatgpt"
-        ? "Install the ChatGPT plugin"
-        : `Follow the steps for ${name}`;
+      return client.id !== "chatgpt"
+        ? `Follow the steps for ${name}`
+        : routed
+          ? "Set up ChatGPT"
+          : "Install the ChatGPT plugin";
     case "script":
       return "Run the command in your terminal";
     case "download":
@@ -1122,43 +1227,6 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
     case "prompt":
       return `Paste the prompt into ${name}`;
   }
-}
-
-/**
- * Several versions of one spot, stacked in the same place with only one
- * shown: the largest sets the size, so switching between them moves nothing
- * around it.
- */
-function OneOf({
-  shown,
-  inline,
-  className,
-  children,
-}: {
-  shown: number;
-  /** Inside a button or text: spans instead of divs. */
-  inline?: boolean;
-  className?: string;
-  children: ReactNode[];
-}) {
-  const Tag = inline ? "span" : "div";
-  return (
-    <Tag className={cn("grid grid-cols-[minmax(0,1fr)]", className)}>
-      {children.map((child, index) => (
-        <Tag
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed set of versions
-          key={index}
-          aria-hidden={index !== shown}
-          className={cn(
-            "min-w-0 [grid-area:1/1]",
-            index !== shown && "invisible",
-          )}
-        >
-          {child}
-        </Tag>
-      ))}
-    </Tag>
-  );
 }
 
 function Band({
@@ -1217,12 +1285,6 @@ function ManualSteps({
   includeSkills: boolean;
 }) {
   const steps = useManualSteps(client, data, includeSkills);
-  if (client.id === "chatgpt")
-    return (
-      <div className="mt-4 rounded-2xl border bg-background p-6">
-        {steps[0]?.content}
-      </div>
-    );
   if (steps.length === 0)
     return (
       <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -1296,11 +1358,16 @@ function guardrailsStatus(
       tone: "warn",
       label: "Not enforced",
       detail:
-        client.id === "chatgpt"
-          ? "This plugin does not configure model routing, so it cannot establish LLM proxy guardrail enforcement. Local Work needs separate provider configuration."
-          : client.proxy.kind === "unsupported"
-            ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
-            : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+        client.proxy.kind === "unsupported"
+          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+    };
+  if (client.id === "chatgpt")
+    return {
+      tone: "ok",
+      label: "Enforced",
+      detail:
+        "Each tool call in the desktop app's Work and Codex tabs is checked against your organization's policy. Chats and dots run on OpenAI's servers, so they aren't checked.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1408,16 +1475,15 @@ function ProfileCard({
   const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyReason =
-    client.id === "chatgpt" && client.proxy.kind === "unsupported"
-      ? client.proxy.reason
-      : !data.llmProxyEnabled
-        ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
-        : client.proxy.kind === "unsupported"
-          ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-          : !routed
-            ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-            : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+  const proxyReason = !data.llmProxyEnabled
+    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
+    : client.proxy.kind === "unsupported"
+      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
+      : !routed
+        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+        : client.id === "chatgpt"
+          ? `The desktop app's Work and Codex tabs send their model requests through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking. Chats and dots keep using OpenAI's servers.`
+          : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
     icon: (
@@ -1432,9 +1498,7 @@ function ProfileCard({
     state: !data.llmProxyEnabled
       ? "Not active"
       : !proxyOn
-        ? client.id === "chatgpt"
-          ? "Separate setup"
-          : "Not supported"
+        ? "Not supported"
         : choices.proxy
           ? "On"
           : "Off",

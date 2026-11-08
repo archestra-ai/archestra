@@ -16,7 +16,10 @@ try {
   }
   assertRevision(head);
 
-  run("pnpm", ["exec", "turbo", "check:commit"]);
+  run(process.execPath, [
+    fileURLToPath(new URL("./check-workspace.mjs", import.meta.url)),
+    "all-commit",
+  ]);
   run("pnpm", ["check:white-label"]);
   // Catch frontend/shared unit failures without the native backend or browser suites.
   run("pnpm", [
@@ -24,8 +27,8 @@ try {
     "@frontend",
     "--filter",
     "@archestra/shared",
-    "exec",
-    "vitest",
+    "--workspace-concurrency=1",
+    "test",
     "run",
   ]);
 

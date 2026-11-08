@@ -9,17 +9,11 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      assignToolToAgent: vi.fn(),
-      unassignToolFromAgent: vi.fn(),
-    },
-  };
-});
+vi.mock("@archestra/shared/api-sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared/api-sdk")>()),
+  assignToolToAgent: vi.fn(),
+  unassignToolFromAgent: vi.fn(),
+}));
 
 vi.mock("@/lib/agent-tools.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent-tools.query")>()),

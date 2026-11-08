@@ -123,7 +123,9 @@ export interface SetupScriptSkillsSection {
   marketplaceName: string;
   /** Existing skills plugin is present. Defaults true for older callers/tests. */
   hasSkills?: boolean;
-  /** Opaque hook-bearing plugin entries advertised by the same marketplace. */
+  /** The marketplace carries the complete ChatGPT connection plugin. */
+  connectionPlugin?: boolean;
+  /** Plugin entries installed and tracked for refresh and disconnect. */
   pluginNames?: string[];
 }
 

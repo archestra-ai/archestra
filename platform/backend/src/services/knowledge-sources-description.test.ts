@@ -374,11 +374,15 @@ for (const auto of [true, false]) {
       description: "Operational guides",
       access: "org",
     });
+    const hiddenKb = await makeKnowledgeBase(org.id, {
+      name: "Restricted Handbook",
+      access: { teams: [ownersTeam.id] },
+    });
     const visible = await makeKnowledgeBaseConnector(kb.id, org.id, {
       name: "Visible Jira",
       description: "Release decisions",
     });
-    const hidden = await makeKnowledgeBaseConnector(kb.id, org.id, {
+    const hidden = await makeKnowledgeBaseConnector(hiddenKb.id, org.id, {
       name: "Hidden Jira",
       description: "Restricted details",
       access: { teams: [ownersTeam.id] },

@@ -1,6 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
-import { TaskModel } from "@/models";
+import { port } from "@/models/ports";
+import TaskModel from "@/models/task";
 import * as metrics from "@/observability/metrics";
 import type { InsertTask, Task, TaskHandler, TaskLane } from "@/types";
 import { TASK_LANES } from "@/types";
@@ -392,7 +393,9 @@ export class TaskQueueService {
         const connectorRunId = payload.connectorRunId as string | undefined;
         if (connectorRunId) {
           try {
-            const { ConnectorRunModel } = await import("@/models");
+            const { default: ConnectorRunModel } = await import(
+              "@/models/connector-run"
+            );
             const documentIds =
               (payload.documentIds as string[] | undefined) ?? [];
             const updatedRun = await ConnectorRunModel.completeBatch(
@@ -405,8 +408,8 @@ export class TaskQueueService {
               },
               task.id,
             );
-            const { finalizeConnectorAfterEmbeddingDrain } = await import(
-              "@/task-queue/handlers/batch-embedding-finalizer"
+            const { finalizeConnectorAfterEmbeddingDrain } = await port(
+              "embeddingFinalization",
             );
             await finalizeConnectorAfterEmbeddingDrain(updatedRun);
           } catch (batchError) {

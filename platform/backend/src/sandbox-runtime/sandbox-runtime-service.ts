@@ -81,6 +81,12 @@ interface RunCommandParams extends SandboxLimits {
   secretEnv?: SecretEnvVar[];
   /** Bytes written to the live command's standard input. */
   stdin?: string;
+  /**
+   * The id the command will be persisted under. Replaying it later with the
+   * same id reuses this run's cached result. Omit for a run that is never
+   * replayed: the native layer mints a fresh id, so the command always runs.
+   */
+  commandId?: string;
 }
 
 interface RunCommandResult {
@@ -200,6 +206,7 @@ class SandboxRuntimeService {
           environment: params.environment,
           secretEnv: params.secretEnv,
           stdin: params.stdin,
+          commandId: params.commandId,
         }),
       );
     } catch (error) {

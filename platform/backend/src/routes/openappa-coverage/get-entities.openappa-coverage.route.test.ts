@@ -126,7 +126,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and the model catch-all covers the other built-in tools", async ({
+  test("the default policy covers run_command at the root and the other agent-facing built-in tools through the archestra battery, leaving app-only tools to the model catch-all", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -141,6 +141,7 @@ describe("GET /api/openappa/coverage/entities", () => {
       "search_files",
       "load_skill",
       "list_skills",
+      "llm_complete",
     ]) {
       await makeTool({
         catalogId: builtInCatalog.id,
@@ -167,7 +168,8 @@ describe("GET /api/openappa/coverage/entities", () => {
       archestra__search_tools: "battery",
       archestra__search_files: "battery",
       archestra__load_skill: "battery",
-      archestra__list_skills: "catchall",
+      archestra__list_skills: "battery",
+      archestra__llm_complete: "catchall",
     });
   });
 

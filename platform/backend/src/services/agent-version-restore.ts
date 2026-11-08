@@ -20,6 +20,10 @@ import {
 import type { AgentActivationSkillPolicyRule } from "@/models/agent-activation-skill-rule";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
+import {
+  assertCanWriteAgentNetworkPolicy,
+  sameNetworkPolicy,
+} from "@/services/agent-network-policy";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import {
   assignToolToAgent,
@@ -483,6 +487,27 @@ async function planScalars(params: {
       userId,
     });
     scalars.environmentId = snapshot.environmentId;
+  }
+
+  const snapshotNetworkPolicy = snapshot.networkPolicy ?? null;
+  if (
+    !sameNetworkPolicy(snapshotNetworkPolicy, current.networkPolicy ?? null)
+  ) {
+    await assertCanWriteAgentNetworkPolicy({
+      userId,
+      organizationId,
+      before: current.networkPolicy ?? null,
+      after: snapshotNetworkPolicy,
+    });
+    scalars.networkPolicy = snapshotNetworkPolicy;
+  }
+
+  const snapshotSubagentLoadBalancing = snapshot.subagentLoadBalancing ?? null;
+  if (
+    JSON.stringify(snapshotSubagentLoadBalancing) !==
+    JSON.stringify(current.subagentLoadBalancing ?? null)
+  ) {
+    scalars.subagentLoadBalancing = snapshotSubagentLoadBalancing;
   }
 
   // A model and its API key are a pair: written whole or not at all, the

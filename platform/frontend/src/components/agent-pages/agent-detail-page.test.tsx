@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -473,6 +474,32 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
+  it("keeps SRE permissions and schedules off the built-in detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.SRE },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
+  });
+
+  it("keeps APPA Keeper permissions and schedules off the built-in detail page", () => {
+    access = { ...access, isBuiltIn: true };
+    mockAgent({
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByTestId("resource-permissions")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Scheduled runs" })).toBeNull();
+  });
+
   it("reveals audience and owner on keyboard focus without crowding the header", async () => {
     mockAgent({
       ...baseAgent,
@@ -556,6 +583,26 @@ describe("AgentDetailPage", () => {
           (link) => link.getAttribute("href") === "/agents/a1?section=runs",
         ),
     ).toBe(true);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("keeps a Runs deep link while runtime configuration loads (enabled: %s)", (enabled) => {
+    vi.mocked(useFeature).mockReturnValue(undefined);
+    mockAgent({ ...baseAgent, runtime: {} });
+    mockSection("runs");
+    const { rerender } = render(<AgentDetailPage kind="agent" id="a1" />);
+    expect(replace).not.toHaveBeenCalled();
+
+    vi.mocked(useFeature).mockReturnValue(enabled);
+    rerender(<AgentDetailPage kind="agent" id="a1" />);
+    if (enabled) {
+      expect(screen.getByText("run history")).toBeVisible();
+      expect(replace).not.toHaveBeenCalled();
+    } else {
+      expect(replace).toHaveBeenCalledWith("/agents/a1", { scroll: false });
+    }
   });
 
   it("keeps run UI invisible when its feature flag is disabled", () => {

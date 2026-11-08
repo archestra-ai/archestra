@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it, test } from "vitest";
+import ModelModel from "@/models/model";
 import { useMswServer } from "@/test/msw";
 import { callNativeRerank, isNativeRerankModel } from "./native-rerank";
 
@@ -41,6 +42,44 @@ describe("isNativeRerankModel", () => {
 
 describe("callNativeRerank", () => {
   server = useMswServer();
+
+  test("hidden native rerank models stop before HTTP and Show restores them", async () => {
+    const row = await ModelModel.create({
+      provider: "cohere",
+      modelId: "rerank-v3.5",
+      externalId: "cohere/rerank-v3.5",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    let calls = 0;
+    server.use(
+      http.post("https://rerank.example.test/v2/rerank", () => {
+        calls++;
+        return HttpResponse.json({
+          results: [{ index: 0, relevance_score: 0.9 }],
+        });
+      }),
+    );
+    const call = (model = row.modelId) =>
+      callNativeRerank({
+        provider: "cohere",
+        model,
+        apiKey: "synthetic",
+        baseUrl: "https://rerank.example.test",
+        query: "fixture",
+        documents: ["fixture"],
+      });
+    await call();
+    await ModelModel.update(row.id, { ignored: true });
+    await expect(call()).rejects.toMatchObject({
+      internalCode: "model_hidden",
+    });
+    expect(calls).toBe(1);
+    await ModelModel.update(row.id, { ignored: false });
+    await call();
+    await call("uncatalogued-reranker");
+    expect(calls).toBe(3);
+  });
 
   it("calls the Azure rerank route derived from the key's base URL origin", async () => {
     let requestBody: Record<string, unknown> | undefined;

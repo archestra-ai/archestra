@@ -4,7 +4,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 export type TaskHandlerContext = { taskId: string };
 export type TaskHandler = (
@@ -41,6 +41,7 @@ export const TaskTypeSchema = z.enum([
   "plugin_github_sync",
   "skill_publication_backfill",
   "interaction_session_preview_backfill",
+  "llm_usage_rollup",
   "mcp_tool_description_backfill",
   "interaction_user_activity_rebuild",
   "p4_shim_reconcile",
@@ -108,6 +109,7 @@ export const TASK_LANES = {
     "plugin_github_sync",
     "skill_publication_backfill",
     "interaction_session_preview_backfill",
+    "llm_usage_rollup",
     "mcp_tool_description_backfill",
     "interaction_user_activity_rebuild",
     "p4_shim_reconcile",

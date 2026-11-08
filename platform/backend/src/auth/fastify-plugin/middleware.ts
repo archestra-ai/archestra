@@ -5,7 +5,8 @@ import {
 } from "@archestra/shared/access-control";
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -43,6 +44,7 @@ import {
   SKILL_MARKETPLACE_STATIC_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
+  WORKLOAD_IDENTITY_TOKEN_PATH,
 } from "@/routes/route-paths";
 import {
   appIdFromConnectorPath,
@@ -103,7 +105,7 @@ export class Authnz {
     }
 
     // Set Sentry user context after successful authentication
-    this.setSentryUserContext(request.user, request);
+    this.setSentryUserContext(request.user);
 
     logger.trace(
       {
@@ -241,6 +243,9 @@ export class Authnz {
       // GitHub Actions token exchange: the OIDC token in the body is the
       // proof, verified in-route against the gateway's GitHub Actions setting.
       (method === "POST" && url === GITHUB_ACTIONS_TOKEN_PATH) ||
+      // Workload identity token exchange: the OIDC token in the body is the
+      // proof, verified in-route against the account's federated credentials.
+      (method === "POST" && url === WORKLOAD_IDENTITY_TOKEN_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&
@@ -530,7 +535,11 @@ export class Authnz {
       return request.serviceAccountAuthResult;
     }
     try {
-      const result = await ServiceAccountModel.verifyToken(authHeader);
+      // RFC 6750 clients send `Bearer <token>`; the API has always taken the
+      // bare token. Both name the same service-account token.
+      const result = await ServiceAccountModel.verifyToken(
+        authHeader.replace(/^Bearer\s+/i, ""),
+      );
       if (result) {
         request.serviceAccountAuthResult = result;
       }
@@ -685,25 +694,12 @@ export class Authnz {
   };
 
   /**
-   * Sets the Sentry user context for better error tracking and attribution
+   * Attribute error reports to the signed-in user by opaque id only. Error
+   * reports can leave the deployment, so no email, name or IP goes with them.
    */
-  public setSentryUserContext = (
-    user: { id: string; email?: string; name?: string },
-    request: FastifyRequest,
-  ): void => {
+  public setSentryUserContext = (user: { id: string }): void => {
     try {
-      // Extract IP address from request headers
-      const ipAddress =
-        (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-        (request.headers["x-real-ip"] as string) ||
-        request.ip;
-
-      Sentry.setUser({
-        id: user.id,
-        email: user.email,
-        username: user.name || user.email,
-        ip_address: ipAddress,
-      });
+      Sentry.setUser({ id: user.id });
     } catch (_error) {
       // Silently fail if Sentry is not configured or there's an error
       // We don't want authentication to fail due to Sentry issues

@@ -502,6 +502,19 @@ describe("openaiToConverse — inference config", () => {
     const { converseBody } = openaiToConverse(req());
     expect(converseBody.inferenceConfig).toBeUndefined();
   });
+
+  test.each([
+    [undefined, 32, 32],
+    [64, 32, 32],
+    [64, null, 64],
+    [64, undefined, 64],
+  ])("maps max_tokens %s and max_completion_tokens %s to maxTokens %s", (max_tokens, max_completion_tokens, expected) => {
+    const { converseBody } = openaiToConverse(
+      // biome-ignore lint/suspicious/noExplicitAny: extension params, same as the cases above
+      req({ max_tokens, max_completion_tokens } as any),
+    );
+    expect(converseBody.inferenceConfig?.maxTokens).toBe(expected);
+  });
 });
 
 describe("openaiToConverse — images", () => {
@@ -679,6 +692,7 @@ describe("converseResponseToOpenai — finish_reason mapping", () => {
     ["stop_sequence", "stop"],
     ["tool_use", "tool_calls"],
     ["max_tokens", "length"],
+    ["model_context_window_exceeded", "length"],
     ["guardrail_intervened", "content_filter"],
     ["content_filtered", "content_filter"],
   ] as const)("%s → %s", (stopReason, expected) => {

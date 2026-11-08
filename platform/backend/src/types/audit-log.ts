@@ -1,6 +1,6 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 
 /**
  * Closed vocabulary of audit event names. Dotted form: `<resourceType>.<verb>`
@@ -37,7 +37,15 @@ export const AuditEventNameSchema = z.enum([
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
+  "agentRun.bulk_canceled",
+  "agentRun.bulk_deleted",
+  "agentRun.bulk_files_deleted",
   "agentRun.reviewDecided",
+  // Written by the live-terminal websocket handler, not by a route
+  // (services/agent-runtime/terminal-audit.ts).
+  "agentRun.terminal_attached",
+  "agentRun.terminal_detached",
+  "agentRun.terminal_interrupted",
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
@@ -138,6 +146,7 @@ export const AuditEventNameSchema = z.enum([
   "limit.deleted",
   "limit.bulk_deleted",
   "llmModel.updated",
+  "llmModel.deleted",
   "llmModel.synced",
   "llmModel.bulk_updated",
   "llmModel.cost_backfill_started",
@@ -209,6 +218,13 @@ export const AuditEventNameSchema = z.enum([
   "serviceAccount.deleted",
   "serviceAccount.bulk_deleted",
   "serviceAccount.bulk_updated",
+  // An OIDC token exchanged for a short-lived token of the account, or a
+  // refused attempt (outcome says which). Written by the public token
+  // endpoint, not a route hook.
+  "serviceAccount.token_exchanged",
+  "serviceAccountFederatedCredential.created",
+  "serviceAccountFederatedCredential.updated",
+  "serviceAccountFederatedCredential.deleted",
   "skill.created",
   "skill.updated",
   // Soft-deleted across a batch of skills in one request. Distinct from the

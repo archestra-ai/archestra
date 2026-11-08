@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { vi } from "vitest";
-import { betterAuth } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";

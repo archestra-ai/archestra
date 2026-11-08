@@ -5,9 +5,9 @@ import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
-  type A2AAttachment,
   buildUserContent,
   createLiveSubagentToolCallEmitter,
   emitSubagentToolCalls,
@@ -445,6 +445,60 @@ describe("buildUserContent", () => {
       },
     };
   }
+
+  describe("readable audio over the inline byte limit", () => {
+    const AUDIO = new Set(["audio/mp4"]);
+    const voiceClip = (bytes: number): A2AAttachment => ({
+      contentType: "audio/mp4",
+      contentBase64: Buffer.alloc(bytes, 1).toString("base64"),
+      name: "audio_message.m4a",
+    });
+
+    test("inlines a voice clip within the limit", async () => {
+      const { content, note } = await buildUserContent(
+        "Listen",
+        [voiceClip(6)],
+        { ...geminiOpts(AUDIO), inlineByteLimit: 6 },
+      );
+
+      expect(fileMediaTypes(content)).toEqual(["audio/mp4"]);
+      expect(note).toBe("");
+    });
+
+    test("stages a larger voice clip into the sandbox instead of inlining it", async () => {
+      const stager = recordingStager([
+        { path: "/home/sandbox/attachments/audio_message.m4a" },
+      ]);
+
+      const { content, note } = await buildUserContent(
+        "Listen",
+        [voiceClip(9)],
+        {
+          ...geminiOpts(AUDIO),
+          inlineByteLimit: 6,
+          stageAttachments: stager.fn,
+        },
+      );
+
+      expect(stager.calls).toHaveLength(1);
+      expect(content).toBeNull();
+      expect(note).toContain("/home/sandbox/attachments/audio_message.m4a");
+    });
+
+    test("names a larger voice clip as too large when no sandbox is available", async () => {
+      const { content, note, rejected } = await buildUserContent(
+        "Listen",
+        [voiceClip(9)],
+        { ...geminiOpts(AUDIO), inlineByteLimit: 6 },
+      );
+
+      expect(content).toBeNull();
+      expect(rejected).toEqual([
+        { name: "audio_message.m4a", reason: "too_large_to_inline" },
+      ]);
+      expect(note).toContain("too large to send to the model");
+    });
+  });
 
   test("inlines a small inlineable text type the model does not list as readable", async () => {
     // yaml is not in the readable mime set, but it is inlineable text ≤ 256KB.

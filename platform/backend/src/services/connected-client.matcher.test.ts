@@ -69,6 +69,7 @@ describe("isOAuthClientForConnectClient", () => {
       redirectUris: ["http://127.0.0.1:54321/callback"],
     };
     expect(isOAuthClientForConnectClient("codex", codex)).toBe(true);
+    expect(isOAuthClientForConnectClient("chatgpt", codex)).toBe(true);
     expect(
       isOAuthClientForConnectClient("codex", {
         ...codex,
@@ -91,6 +92,7 @@ describe("isOAuthClientForConnectClient", () => {
       redirectUris: ["http://127.0.0.1:61234/callback"],
     };
     expect(isOAuthClientForConnectClient("codex", codex)).toBe(true);
+    expect(isOAuthClientForConnectClient("chatgpt", codex)).toBe(true);
     expect(
       isOAuthClientForConnectClient("codex", { ...codex, name: "Codex Pro" }),
     ).toBe(false);

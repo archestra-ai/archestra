@@ -364,8 +364,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         testAgent.id,
       );
       expect(rows).toHaveLength(1);
-      // A streaming response keeps accruing time after its first chunk.
-      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 550) : 250);
+      // Four streamed chunks each add 100 ms after yielding; normal EOF
+      // includes the final interval while a failure stops after the first.
+      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 650) : 250);
     });
 
     test("streaming request increments token and cost metrics", async () => {
@@ -661,8 +662,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("maximum context length"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("streaming failure after SSE headers and content persists an error interaction", async () => {
@@ -701,8 +702,8 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].response).toMatchObject({
         error: expect.stringContaining("Simulated OpenAI stream failure"),
       });
-      expect(rows[0].inputTokens).toBe(0);
-      expect(rows[0].outputTokens).toBe(0);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
     });
 
     test("stream ending early without usage persists a partial interaction", async () => {
@@ -735,6 +736,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, testAgent.id));
       expect(rows).toHaveLength(1);
+      expect(rows[0].inputTokens).toBeNull();
+      expect(rows[0].outputTokens).toBeNull();
+      expect(JSON.stringify(rows[0].response)).toContain("How can");
     });
 
     test("a Slack ChatOps stream without usage keeps its source and shows up in the sessions listing", async () => {

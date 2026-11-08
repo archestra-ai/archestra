@@ -16,6 +16,8 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import { isWorker } from "node:cluster";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -46,8 +48,8 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
+import { authPlugin as fastifyAuthPlugin } from "@/auth/fastify-plugin";
 import { applyPendingNormalTiers } from "@/auto-routing/pending-normal-tier";
 import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin
@@ -76,7 +78,6 @@ import {
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
-import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -97,8 +98,8 @@ import { PlaywrightRuntimeModel } from "@/models";
 import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { initializeObservabilityMetrics, metrics } from "@/observability";
-import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { initializeObservabilityMetrics } from "@/observability";
+import { activeUsersMetricCollector } from "@/observability/metrics/active-users";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { rumExporter } from "@/observability/rum/exporter.ee";
@@ -119,7 +120,6 @@ import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
 } from "@/services/apps/app-sdk-injection";
-import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -132,6 +132,7 @@ import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { seedRequiredStartingData } from "@/services/seed";
 import { sreAgentService } from "@/services/sre-agent";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -187,9 +188,13 @@ import {
 import { drainBackgroundWork } from "./utils/background-work";
 
 async function flushShutdownTelemetry(): Promise<void> {
-  if (isMainModule)
-    await (await import("./observability/tracing/sdk")).shutdownTelemetry();
+  if (!isMainModule) return;
+  // Deliver queued error reports before exit; resolves at once without Sentry.
+  await Sentry.flush(SENTRY_SHUTDOWN_FLUSH_TIMEOUT_MS);
+  await (await import("./observability/tracing/sdk")).shutdownTelemetry();
 }
+
+const SENTRY_SHUTDOWN_FLUSH_TIMEOUT_MS = 3_000;
 
 function shutdownTimeoutMs(): number {
   return (
@@ -219,11 +224,16 @@ export {
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
+import { assertPortsBound } from "@/models/ports";
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
 // the small-team threshold even when no enterprise license env var is set.
 // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
 import * as eeRoutes from "./routes/index.ee";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const {
   api: {
@@ -1004,7 +1014,7 @@ const startWebServer = async () => {
     // Only the API process collects it: the value is derived from the shared
     // database, so extra replicas would repeat the same query for the same
     // answer.
-    metrics.activeUsers.activeUsersMetricCollector.start();
+    activeUsersMetricCollector.start();
 
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
@@ -1019,13 +1029,6 @@ const startWebServer = async () => {
     });
 
     rumExporter.initialize();
-
-    posthogErrorTrackingService.init().catch((error) => {
-      logger.warn(
-        { err: error },
-        "Failed to initialize PostHog error tracking",
-      );
-    });
 
     startMcpServerRuntime(fastify);
     // SPDX-SnippetBegin
@@ -1341,6 +1344,9 @@ function registerWebServerShutdown(
     if (shuttingDown) return;
     shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    // Socket and polling events do not pass through Fastify's admission hook.
+    // Stop their intake synchronously before the loopback gateway starts draining.
+    const stoppedChatOps = chatOpsManager.beginShutdown();
     beginLlmProxyDrain(fastify);
     if (publicEndpointsServerInstance)
       beginLlmProxyDrain(publicEndpointsServerInstance);
@@ -1395,6 +1401,7 @@ function registerWebServerShutdown(
           ? drainLlmProxyRequests(publicEndpointsServerInstance)
           : Promise.resolve(),
         stoppedWorker,
+        stoppedChatOps,
       ]);
       if (intervalIds.activeChatRunReaperIntervalId) {
         clearInterval(intervalIds.activeChatRunReaperIntervalId);
@@ -1422,9 +1429,6 @@ function registerWebServerShutdown(
         clearInterval(intervalIds.processedEmailCleanupIntervalId);
       }
 
-      // Flush any buffered exceptions before exit (internally time-bounded).
-      await posthogErrorTrackingService.shutdown();
-
       // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
@@ -1439,7 +1443,7 @@ function registerWebServerShutdown(
       // Flush any buffered RUM events before the process exits.
       await rumExporter.shutdown();
 
-      metrics.activeUsers.activeUsersMetricCollector.stop();
+      activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"
@@ -1587,13 +1591,6 @@ const startWorker = async () => {
     void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
-    posthogErrorTrackingService.init().catch((error) => {
-      logger.warn(
-        { err: error },
-        "Failed to initialize PostHog error tracking",
-      );
-    });
-
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
@@ -1671,7 +1668,6 @@ const startWorker = async () => {
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         mcpActiveUseTracker.stop();
         // SPDX-SnippetEnd
-        await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await drainBackgroundWork();
         await mcpClient.disconnectAll();
@@ -1698,25 +1694,10 @@ const startWorker = async () => {
 // Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
 // .catch() callback, creating an unhandled rejection that is never awaited.
 // This handler logs those leaks and keeps the server alive.
+// Sentry reports the rejection itself, through the same filter as request
+// errors.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
-  // Apply the shared tracking policy on this non-request capture path too, so a
-  // rejected transient-DB query groups by root cause and expected client/
-  // upstream errors are skipped, matching the request-error handler.
-  const decision = classifyErrorForTracking(reason);
-  if (!decision.report) {
-    return;
-  }
-  posthogErrorTrackingService.captureException({
-    error: reason,
-    properties: {
-      ...(decision.fingerprint && {
-        $exception_fingerprint: decision.fingerprint.join("/"),
-      }),
-      ...decision.tags,
-      error_type: "unhandled_rejection",
-    },
-  });
 });
 
 /**

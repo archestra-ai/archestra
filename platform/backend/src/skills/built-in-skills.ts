@@ -13,7 +13,7 @@ import { RUNTIME_HANDOFF_SKILL } from "./runtime-handoff";
  * Default Agent Skills shipped with Archestra.
  *
  * These are reconciled into every organization on startup (see
- * `syncBuiltInSkills` in `database/seed.ts`). Unlike imported skills they have
+ * `syncBuiltInSkills` in `services/seed.ts`). Unlike imported skills they have
  * no author and live at `org` scope so everyone can activate them. They are
  * editable — administrators may tailor the copy — but each carries a content
  * version so an untouched copy auto-upgrades when we ship a new revision, while

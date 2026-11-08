@@ -23,7 +23,7 @@ All targets inherit the same tools from `agent-base`:
 | Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
 | Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
 | Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
-| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
+| Project tooling | Node.js 24, pnpm through corepack 0.36 (a repository's pinned `packageManager` version, else 11.28.7, which a pin elsewhere never replaces), Python 3, uv/uvx, Rust 1.93 with Cargo, C/C++ build tools, OpenSSL headers, pkg-config, tmux |
 | Local database | PostgreSQL 18 with pgvector, from the PostgreSQL project's Debian repository |
 
 These are enough to run the Archestra platform itself from a checkout, without
@@ -81,6 +81,64 @@ Tilt pulls the public GAR images by default. Set
 use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
+
+## Memory limits
+
+The agent's shell commands take the highest OOM score, 1000. The client, its
+launcher, tmux and PID 1 keep the container's own score. On a node that kills
+one process at a container's memory limit (the kubelet's
+`singleProcessOOMKill`), the kernel then kills the command, and the agent sees
+it fail instead of losing its session. A process with score 1000 is one of the
+agent's commands.
+
+How each client gets it:
+
+- **Claude Code, Codex, OpenCode, Hermes, Grok Build, Kimi Code**: these run
+  commands with `bash -c`. Each launcher exports
+  `BASH_ENV=archestra-command-oom-score.sh` just before it starts the client,
+  and that file raises the shell's score. Claude Code and Kimi Code give the
+  shell a socket for its input, sometimes with `SHLVL=0`. Bash then reads
+  `/etc/bash.bashrc` instead of `BASH_ENV`, and the image's `/etc/bash.bashrc`
+  runs the same file. A hook script the launcher wrote to the runtime
+  directory keeps its score when the client runs it as `bash -c <hook>`, as
+  Codex does.
+- **OpenClaw** raises the score of every process it starts on its own and
+  drops `BASH_ENV`, so its launcher sets nothing.
+- **GitHub Copilot CLI** drops `BASH_ENV` and starts
+  `bash --norc --noprofile`. Its launcher raises every shell the client starts,
+  and every process below one, ten times a second, so a command can run for up
+  to 0.1 s with the container's score. The launcher is a child subreaper: a
+  process a command leaves behind stays below it and is raised too.
+
+A `BASH_ENV` that the client's environment already had, such as a derived
+image's own, still runs after the hook in the client's non-interactive shells.
+`tests/command-oom-score.py` checks each client during the image build: its
+shell tool's command, a process the command starts and a process it leaves
+behind all get 1000, and the client and launcher keep their score.
+
+### Memory warden
+
+With the kubelet's default on cgroup v2 (`memory.oom.group`), a container that
+reaches its memory limit loses every process, the client's session included,
+whatever the scores. `archestra-agent-init` starts `archestra-memory-warden`
+(once per container) for that case. It polls the memory the kernel cannot
+reclaim (anonymous and shared memory, kernel stacks, page tables, sockets,
+unreclaimable slab) every 200 ms, and when that comes within a reserve of the
+limit (7.5% of it, at least 0.3 GiB and at most 1 GiB), or memory pressure
+stalls the container while close to it, it SIGKILLs the agent command with the
+most anonymous memory: a process with score 1000 under the agent's terminal
+(the tmux server on the default socket), with its whole process group when
+every member is one, and only when that frees at least the overshoot (and
+64 MiB), except within the last quarter of the reserve, where any command over
+64 MiB goes: memory held by what it never stops is noted once a minute in
+`memory-warden.notes.log` instead of costing every small command. The client, its launcher, tmux, PID 1 and anything
+detached from the agent's terminal (a dev stack's servers on their own tmux
+socket, PostgreSQL) are never stopped. The command's stderr gets a line saying
+why (appended, without blocking); each stop is a JSON line in `/var/run/archestra/memory-warden.log`, which
+the platform's memory-kill report and the repository's type-check and test
+reports count next to the kernel's `oom_kill`. On a node with
+`singleProcessOOMKill` the kernel's own choice backs it up.
+`tests/memory-warden.py` checks the trigger, the victim choice and one stop.
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
@@ -259,15 +317,18 @@ external network access in both native architecture image builds. Authenticated
 provider and Kubernetes end-to-end validation are separate deployment checks.
 
 The eight public catalog targets are built for development deployments and
-releases. Keep native CLI versions exact and review their published package
+releases. The merge queue validates the targets a change can affect, for both
+native architectures (`.github/scripts/agent-image-inputs.py` decides which).
+A pull request builds them only while it carries the `build-agent-images`
+label: add it to try an image change before queueing. Keep native CLI versions exact and review their published package
 scripts before updating them.
 
 The daily `agent-runtime` job in `.github/workflows/update-client-versions.yml`
 proposes those updates as one pull request on `automation/agent-runtime-clis`.
 It runs `pnpm --dir backend update:agent-runtime-clis`, which picks each CLI's
 newest stable release that has been public for 7 days, and refreshes the
-OpenClaw lockfile. The pull request does not merge itself: merge it once the
-`Validate agent-*` builds pass. A new catalog target fails that script until it
+OpenClaw lockfile, and labels the pull request `build-agent-images`. It does
+not merge itself: merge it once the `Validate agent-*` builds pass. A new catalog target fails that script until it
 is registered there. Every CLI's own update check is off in the image, so an
 older session never stops on an update prompt.
 

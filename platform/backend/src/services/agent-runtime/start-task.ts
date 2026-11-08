@@ -6,9 +6,9 @@ import {
   A2AProtocolRole,
   type A2AProtocolTask,
 } from "@/agents/a2a/a2a-protocol";
-import type { A2AAttachment } from "@/agents/a2a-executor";
 import { A2ATaskModel } from "@/models";
 import type { A2ATask } from "@/types";
+import type { A2AAttachment } from "@/types/a2a-attachment";
 import { persistAgentRunInputs } from "./input-files";
 
 /**

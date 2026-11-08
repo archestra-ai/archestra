@@ -34,7 +34,11 @@ function enqueue() {
   requireMergeQueue({ target, base: pr.baseRefName });
 
   console.log(`Checking ${pr.url} at ${head} before queue entry.`);
-  run({ command: "pnpm", args: ["preflight", head], inherit: true });
+  run({
+    command: process.execPath,
+    args: [fileURLToPath(new URL("./preflight.mjs", import.meta.url)), head],
+    inherit: true,
+  });
 
   const refreshed = readPullRequest(target);
   assertPullRequest({ pr: refreshed, head });

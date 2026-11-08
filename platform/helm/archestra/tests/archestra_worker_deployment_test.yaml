@@ -461,3 +461,21 @@ tests:
                 name: external-auth-secret
                 key: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
                 optional: true
+
+  - it: worker receives RDS IAM database authentication env vars when archestra.database.iamAuth is enabled
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1

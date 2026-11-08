@@ -52,21 +52,50 @@ export async function readWorkspaceSandbox(params: {
   api: CustomObjectsApi;
   namespace: string;
   name: string;
+  includeDeletingClaim?: boolean;
+  bypassCache?: boolean;
 }): Promise<AgentSandbox> {
-  const { api, namespace, name } = params;
+  const {
+    api,
+    namespace,
+    name,
+    includeDeletingClaim = false,
+    bypassCache = false,
+  } = params;
+  const getCustomObject = (
+    request: Parameters<CustomObjectsApi["getNamespacedCustomObject"]>[0],
+  ) =>
+    bypassCache
+      ? api.getNamespacedCustomObject(
+          request,
+          setHeaderOptions("Cache-Control", "no-cache"),
+        )
+      : api.getNamespacedCustomObject(request);
   try {
-    return (await api.getNamespacedCustomObject({
+    return (await getCustomObject({
       ...AGENT_SANDBOX_API,
       namespace,
       name,
     })) as AgentSandbox;
   } catch (error) {
     if (!isK8sNotFoundError(error)) throw error;
-    const claim = (await api.getNamespacedCustomObject({
+    const claim = (await getCustomObject({
       ...SANDBOX_CLAIM_API,
       namespace,
       name,
     })) as Claim;
+    if (claim.metadata.deletionTimestamp && includeDeletingClaim) {
+      return {
+        apiVersion: "agents.x-k8s.io/v1beta1",
+        kind: "Sandbox",
+        metadata: {
+          name,
+          namespace,
+          deletionTimestamp: claim.metadata.deletionTimestamp,
+        },
+        spec: {} as AgentSandbox["spec"],
+      };
+    }
     const failure = claim.status?.conditions?.find(
       (condition) =>
         condition.status === "False" &&
@@ -78,7 +107,7 @@ export async function readWorkspaceSandbox(params: {
       throw new Error(`Agent allocation rejected: ${failure.reason}`);
     const assigned = claim.status?.sandbox?.name;
     if (!assigned) throw error;
-    const sandbox = (await api.getNamespacedCustomObject({
+    const sandbox = (await getCustomObject({
       ...AGENT_SANDBOX_API,
       namespace,
       name: assigned,
@@ -91,6 +120,12 @@ export async function readWorkspaceSandbox(params: {
       )
     )
       throw new Error("Sandbox does not belong to this Agent allocation");
+    if (
+      claim.metadata.deletionTimestamp &&
+      !sandbox.metadata.deletionTimestamp
+    ) {
+      sandbox.metadata.deletionTimestamp = claim.metadata.deletionTimestamp;
+    }
     return sandbox;
   }
 }
@@ -183,6 +218,7 @@ class AgentWarmPoolManager {
           continue;
         const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
           organizationId: agent.organizationId,
+          agentNetworkPolicy: agent.agentPolicy,
           environmentId: agent.environmentId,
           environmentNetworkPolicy: agent.environmentPolicy,
           defaultNetworkPolicy: agent.defaultPolicy,
@@ -198,6 +234,7 @@ class AgentWarmPoolManager {
           workspaceStorageSize: resolveRunWorkspaceStorageSize(tier, tiers),
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,
+          runtimeClassName: config.agentRuntime.runtimeClassName,
           imagePullSecrets: [],
           effectiveNetworkPolicy,
           taskId: "",
@@ -549,7 +586,7 @@ const API_VERSION = "extensions.agents.x-k8s.io/v1beta1";
 const POOL_API = { ...SANDBOX_CLAIM_API, plural: "sandboxwarmpools" };
 const TEMPLATE_API = { ...SANDBOX_CLAIM_API, plural: "sandboxtemplates" };
 type Claim = {
-  metadata: { uid?: string };
+  metadata: { uid?: string; deletionTimestamp?: Date };
   status?: {
     sandbox?: { name?: string };
     conditions?: Array<{ status: string; reason?: string }>;

@@ -319,6 +319,11 @@ describe.each([
             voice: "alloy",
           }),
         ).rejects.toThrow();
+        // The SDK can reject before the upstream observes cancellation.
+        // Drain that request before counting the next provider's calls.
+        await vi.waitFor(() =>
+          expect(cancelled.has(model.split(":")[0])).toBe(true),
+        );
       }
       await vi.waitFor(() =>
         expect([...cancelled].sort()).toEqual(["azure", "openai"]),

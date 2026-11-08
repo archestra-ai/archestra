@@ -1,12 +1,23 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
-import { detectResourceEnvelope } from "../vitest.resources";
+import {
+  detectResourceEnvelope,
+  reportMemoryKillsAtExit,
+} from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
+import { ensureNativeAddons } from "./src/test/native-addons";
+import { ProjectGroupedSequencer } from "./src/test/project-grouped-sequencer";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
+
+// On macOS the temp directory is under /var, a symlink to /private/var, and
+// child processes report the resolved path. Workers inherit the resolved one,
+// so a test's temp paths compare equal to what the code under test reports.
+process.env.TMPDIR = realpathSync(tmpdir());
 
 /**
  * Fork workers each load the backend graph and a PGlite database. CI keeps the
@@ -23,6 +34,15 @@ const { maxWorkers: MAX_WORKERS, maxOldSpaceMb: MAX_OLD_SPACE_MB } =
     availableParallelism,
     totalMemoryBytes,
   });
+// A worker the kernel killed for memory shows up only as a worker that exited
+// unexpectedly; a failed run says so when the container's counters moved.
+reportMemoryKillsAtExit({
+  tool: "vitest",
+  subject: "the tests",
+  steps: [
+    `Run fewer test workers: add --maxWorkers=1 (this run allowed ${MAX_WORKERS}), or run one test file or project at a time.`,
+  ],
+});
 
 /**
  * Node compile data is safe to reuse across local runs: Node validates entries
@@ -101,6 +121,17 @@ function partitionTestFiles(): {
 
 const testFiles = partitionTestFiles();
 
+// The backend loads the NAPI addons (@archestra/*-rs), which a fresh checkout
+// lacks: they are gitignored and pnpm install never builds them. Install the
+// ones CI published for this archestra-rs tree when any is missing or was
+// installed for another tree; never a cargo build. A checkout Tilt, the lite
+// stack or CI prepared already has them, so this reads a few files and stops.
+ensureNativeAddons({
+  backendDir: __dirname,
+  rustDir: path.resolve(__dirname, "../archestra-rs"),
+  installer: path.resolve(__dirname, "../scripts/napi-prebuilt.mjs"),
+});
+
 export default defineConfig({
   plugins: [rawPythonPlugin()],
   resolve: {
@@ -150,7 +181,8 @@ export default defineConfig({
     unstubGlobals: true,
     unstubEnvs: true,
 
-    maxWorkers: MAX_WORKERS,
+    // Projects copy this value and would ignore `--maxWorkers` on the CLI.
+    ...(cliSetsMaxWorkers() ? {} : { maxWorkers: MAX_WORKERS }),
 
     // Pin each fork's V8 old-space ceiling. CI divides most runner memory over
     // its workers; local runs cap each heap at 3 GB and their aggregate budget
@@ -170,10 +202,12 @@ export default defineConfig({
     // workflow caches, and avoids the experimental cache path entirely.
     experimental: { fsModuleCache: !isCI },
 
-    // Sequence settings
     sequence: {
-      // Shuffle test files to balance load across workers
+      // Shuffle files and tests, to balance load and surface order
+      // dependence, but keep each project's files together so shared
+      // workers survive from one file to the next.
       shuffle: true,
+      sequencer: ProjectGroupedSequencer,
     },
 
     // Increase test timeout for database operations
@@ -191,6 +225,7 @@ export default defineConfig({
           name: "unit",
           include: testFiles.unit,
           isolate: false,
+          setupFiles: ["./src/test/worker-globals.ts"],
           // An accidental runtime config/database import must fail even on CI,
           // where a database URL is available to the database-backed projects.
           env: { ARCHESTRA_DATABASE_URL: "", DATABASE_URL: "" },
@@ -215,7 +250,7 @@ export default defineConfig({
           // Vitest's current test-file context. Both variants share workers.
           // All database-backed projects share one migrated snapshot.
           globalSetup: ["./src/test/global-setup.ts"],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/worker-globals.ts", "./src/test/setup.ts"],
           // Workers are shared in this project, so the test setup restores
           // shared mutable state (the config object) between tests. The
           // isolated project skips that — its per-file registries can't leak,
@@ -236,6 +271,10 @@ export default defineConfig({
     ],
   },
 });
+
+function cliSetsMaxWorkers(): boolean {
+  return process.argv.some((arg) => /^--max-?workers(=|$)/i.test(arg));
+}
 
 function rawPythonPlugin() {
   return {

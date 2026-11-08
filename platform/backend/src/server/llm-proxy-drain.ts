@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
+import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
-import { ApiError } from "@archestra/shared/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
+import { ServerDrainingError } from "@/types/server-draining-error";
 import { drainBackgroundWork } from "@/utils/background-work";
+import { takeDrainScope, withDrainScope } from "@/utils/drain-scope";
 
 /** Tracks admitted handlers, responses and their background persistence. */
 export function registerLlmProxyDrain(
@@ -66,13 +73,18 @@ class RequestDrain {
   ) {
     fastify.addHook("onRequest", (request, reply, done) => {
       const path = request.routeOptions.url;
+      const continuation = takeDrainScope(request);
       if (
         this.deadline !== undefined &&
-        (path === "/ready" || (!isProbe(path) && !isMcpRoute(path)))
+        (path === "/ready" ||
+          (!isProbe(path) &&
+            (!continuation || performance.now() >= this.deadline) &&
+            !isMcpRoute(path) &&
+            !this.admitsGuardrailLoopback(path)))
       ) {
         reply.header("Connection", "close").header("Retry-After", "1");
         reply.serializer(JSON.stringify);
-        done(new ApiError(503, "Server is shutting down"));
+        done(new ServerDrainingError());
         return;
       }
       if (isProbe(path) || request.headers.upgrade) return done();
@@ -80,6 +92,7 @@ class RequestDrain {
         handlerDone: true,
         responseDone: false,
         longLived: false,
+        continuation,
       };
       this.requests.set(request, state);
       requestDrains.set(request, this);
@@ -124,10 +137,17 @@ class RequestDrain {
           !Array.isArray(body) &&
           ((!("method" in body) && ("result" in body || "error" in body)) ||
             body.method === "notifications/cancelled");
-        if (!admittedReplay && (!continuation || this.active.size <= 1)) {
+        const admittedScope =
+          this.requests.get(request)?.continuation &&
+          performance.now() < this.deadline;
+        if (
+          !admittedScope &&
+          !admittedReplay &&
+          (!continuation || this.active.size <= 1)
+        ) {
           reply.header("Connection", "close").header("Retry-After", "1");
           reply.serializer(JSON.stringify);
-          done(new ApiError(503, "Server is shutting down"));
+          done(new ServerDrainingError());
           return;
         }
       }
@@ -148,7 +168,10 @@ class RequestDrain {
           state.release?.();
         };
         try {
-          const result = handler.call(this, request, reply);
+          const result = withDrainScope(
+            () => handler.call(this, request, reply),
+            state.continuation,
+          );
           if (
             result &&
             typeof (result as PromiseLike<unknown>).then === "function"
@@ -163,6 +186,17 @@ class RequestDrain {
       };
     });
     fastify.addHook("preClose", () => this.drain());
+  }
+
+  // The native runtime's annotator and helper consults cannot carry a drain
+  // scope; they only run on behalf of a call this process already admitted.
+  private admitsGuardrailLoopback(path: string | undefined): boolean {
+    return (
+      isGuardrailLoopbackRoute(path) &&
+      this.deadline !== undefined &&
+      performance.now() < this.deadline &&
+      this.active.size > 0
+    );
   }
 
   createContinuation(): string {
@@ -188,7 +222,8 @@ class RequestDrain {
   }
 
   beginShutdown(): void {
-    this.deadline ??= Date.now() + this.graceMs;
+    // Clock synchronization must not shorten or extend the shutdown grace.
+    this.deadline ??= performance.now() + this.graceMs;
   }
 
   drain(): Promise<void> {
@@ -202,10 +237,16 @@ class RequestDrain {
     try {
       const completed = await Promise.race([
         (async () => {
-          if (this.active.size > 0)
-            await new Promise<void>((resolve) => {
-              this.drained = resolve;
-            });
+          do {
+            if (this.active.size > 0)
+              await new Promise<void>((resolve) => {
+                this.drained = resolve;
+              });
+            await setImmediate(); // finish/onResponse hooks may launch audit writes
+            await drainBackgroundWork();
+            // Socket work can start a loopback handler after the previous
+            // active-request check, then finish before that handler persists.
+          } while (this.active.size > 0);
           // End notification streams only after their outstanding calls finish.
           for (const close of this.streams.values()) close();
           await setImmediate(); // finish/onResponse hooks may launch audit writes
@@ -215,7 +256,10 @@ class RequestDrain {
         new Promise<false>((resolve) => {
           timeout = setTimeout(
             () => resolve(false),
-            Math.max(0, (this.deadline ?? Date.now()) - Date.now()),
+            Math.max(
+              0,
+              (this.deadline ?? performance.now()) - performance.now(),
+            ),
           );
         }),
       ]);
@@ -238,6 +282,7 @@ type RequestState = {
   handlerDone: boolean;
   responseDone: boolean;
   longLived: boolean;
+  continuation?: string;
   release?: () => void;
 };
 function isProbe(path: string | undefined): boolean {
@@ -254,6 +299,13 @@ function isMcpRoute(path: string | undefined): boolean {
     path?.startsWith("/v1/mcp/") === true ||
     path?.startsWith("/api/mcp/") === true ||
     path?.startsWith("/mcp_proxy/") === true
+  );
+}
+function isGuardrailLoopbackRoute(path: string | undefined): boolean {
+  return (
+    path === OPENAPPA_ARCHESTRA_ANNOTATOR_PATH ||
+    path === GUARDRAILS_NOOP_ANNOTATOR_PATH ||
+    path?.startsWith(`${OPENAPPA_HELPERS_PREFIX}/`) === true
   );
 }
 const drains = new WeakMap<FastifyInstance, RequestDrain>();

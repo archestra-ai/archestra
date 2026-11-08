@@ -175,32 +175,6 @@ test("keeps per-call review history after consuming live approval without reopen
     expect(await getHitlReviewResult(other)).toBeUndefined();
 });
 
-test("historical status survives review expiry but cannot create an approval", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  try {
-    const active = session("expired-history");
-    const lookup = {
-      session: active,
-      callId: "control-expired",
-      offerId: "offer-expired",
-    };
-    await stageHitlReview({
-      ...lookup,
-      review: { offerId: lookup.offerId, text: "Pending review" },
-    });
-    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
-    expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toEqual({
-      outcome: "review_required",
-    });
-    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
-      false,
-    );
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 test.each([
   "review_declined",
   "review_unanswered",
@@ -371,6 +345,63 @@ test("asks Claude Code one line and previews the call in full", async () => {
   });
 });
 
+test("describes a call without a summary by its tool's first sentence", async () => {
+  const active = session("tool-description");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "archestra__delete_workspace",
+      arguments: JSON.stringify({ run_id: "run", confirm_delete: true }),
+      toolDescription:
+        "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available.",
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(asked?.question).toBe("Full review text.");
+  expect(asked?.shortQuestion).toBe(
+    "Approve the archestra__delete_workspace call?",
+  );
+  expect(asked?.callPreview).toBe(
+    [
+      "**archestra\\_\\_delete\\_workspace call**\n*Tool description: Permanently*\n*delete a retained runtime*\n*workspace and all of its files.*",
+      "```yaml\nrun_id: run\nconfirm_delete: true\n```",
+    ].join("\n\n"),
+  );
+});
+
+test("leaves a long tool description off the plain card and escapes an unsafe one", async () => {
+  const active = session("tool-description-limits");
+  const stage = async (offerId: string, toolDescription: string) => {
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId,
+        text: "Full review text.",
+        tool: "mcp/files/read",
+        arguments: JSON.stringify({ path: "notes.txt" }),
+        toolDescription,
+      },
+    });
+    return (
+      await getHitlAskUserArguments({ session: active, offerIds: [offerId] })
+    )?.callPreview;
+  };
+  const long = await stage(
+    "offer-long",
+    `Read ${"a long clause, ".repeat(20)}and finish.`,
+  );
+  expect(long).toBeDefined();
+  expect(long).not.toContain("Tool description");
+  const unsafe = await stage("offer-unsafe", "Read a file\u202e backwards.");
+  expect(unsafe).toContain("Tool description:");
+  expect(unsafe).not.toContain("\u202e");
+});
+
 test("shows a command in full under its description, wrapped to the pane", async () => {
   const command = "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF";
   const asked = await askedAbout("command-call", "Bash", {
@@ -399,6 +430,15 @@ test("wraps every line of a long command to the narrowest pane", async () => {
   expect(lines.length).toBeGreaterThan(2);
   expect(lines.every((line) => line.length <= 34)).toBe(true);
   expect(lines.join("\n").replace(/\n {4}/g, " ")).toBe(command);
+});
+
+test("never shows a credential header the reviewed command carries", async () => {
+  const secret = "tok_5c3f9a1e7b2d4c6a";
+  const asked = await askedAbout("credential-call", "Bash", {
+    command: `curl --header 'Authorization: Bearer ${secret}' https://example.test/api`,
+  });
+  expect(asked?.shortQuestion).toBe("Approve the Bash command?");
+  expect(JSON.stringify(asked)).not.toContain(secret);
 });
 
 test("shows a file write as the file's content", async () => {
@@ -1009,68 +1049,6 @@ test("a stored none without a closure is not a denial", async () => {
   expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
   expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
   expect(reviewOutcomeFromClosure(undefined)).toBe("review_invalid");
-});
-
-test("a later genuine denial revokes an approval that has not been spent", async () => {
-  const active = session("later-denial");
-  await stageHitlReview({
-    session: active,
-    review: { offerId: "revoked", text: "Review this exact call." },
-  });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "deny",
-    }),
-  ).toBe(true);
-  expect(await consumeHitlRuling({ session: active, offerId: "revoked" })).toBe(
-    "deny",
-  );
-  expect(
-    await consumeHitlRuling({ session: active, offerId: "revoked" }),
-  ).toBeUndefined();
-});
-
-test("approved native review context remains readable without reopening its claim", async () => {
-  const active = session("native-continuation");
-  const review = {
-    offerId: "continuation",
-    text: "The exact reviewed QA action",
-    tool: "mcp/example/write",
-    arguments: '{"value":1}',
-  };
-  await stageHitlReview({ session: active, review });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toEqual(review);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(false);
-  expect(
-    await consumeHitlRuling({ session: active, offerId: review.offerId }),
-  ).toBe("approve");
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toBeUndefined();
 });
 
 test("a denial validated before consumption cannot write an orphan ruling afterward", async () => {

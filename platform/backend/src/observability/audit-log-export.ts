@@ -1,25 +1,88 @@
-import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { type Logger, logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import {
+  defaultResource,
+  detectResources,
+  envDetector,
+  hostDetector,
+  resourceFromAttributes,
+} from "@opentelemetry/resources";
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from "@opentelemetry/sdk-logs";
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
 import config from "@/config";
 import type { AuditLog } from "@/types";
 
-/** Export only persisted audit metadata. SDK batching is best-effort, not an outbox. */
-export function exportAuditLog(row: AuditLog): void {
-  if (!config.auditLog.otelEnabled) return;
-  try {
+/**
+ * Exports persisted audit metadata as OTLP logs. SDK batching is best-effort,
+ * not an outbox.
+ *
+ * Records go through the backend's shared log pipeline, or, when
+ * ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT is set, through a pipeline of their own,
+ * so a security collector can receive them apart from general telemetry.
+ */
+class AuditLogExporter {
+  private dedicatedProvider: LoggerProvider | null = null;
+
+  export(row: AuditLog): void {
+    if (!config.auditLog.otelEnabled) return;
+    try {
+      this.getLogger().emit({
+        eventName: `archestra.audit.${row.action}`,
+        body: row.action,
+        timestamp: row.occurredAt,
+        observedTimestamp: row.createdAt,
+        severityNumber: SeverityNumber.INFO,
+        severityText: "INFO",
+        attributes: auditLogAttributes(row),
+      });
+    } catch {
+      // Export cannot turn a successful database insert into a failed audit write.
+    }
+  }
+
+  /** Flushes and closes the dedicated pipeline; the next export reopens it. */
+  async shutdown(): Promise<void> {
+    const provider = this.dedicatedProvider;
+    this.dedicatedProvider = null;
+    await provider?.shutdown();
+  }
+
+  private getLogger(): Logger {
+    const exporter = config.auditLog.otelExporter;
     // Resolve lazily: the global provider must have been registered by SDK startup.
-    logs.getLogger("archestra-audit").emit({
-      eventName: `archestra.audit.${row.action}`,
-      body: row.action,
-      timestamp: row.occurredAt,
-      observedTimestamp: row.createdAt,
-      severityNumber: SeverityNumber.INFO,
-      severityText: "INFO",
-      attributes: auditLogAttributes(row),
+    if (!exporter) return logs.getLogger(AUDIT_SCOPE);
+    this.dedicatedProvider ??= new LoggerProvider({
+      // Service identity plus the host (the pod) and OTEL_RESOURCE_ATTRIBUTES,
+      // so the collector can tell replicas apart.
+      resource: defaultResource()
+        .merge(detectResources({ detectors: [envDetector, hostDetector] }))
+        .merge(
+          resourceFromAttributes({
+            [ATTR_SERVICE_NAME]: config.api.name,
+            [ATTR_SERVICE_VERSION]: config.api.version,
+          }),
+        ),
+      processors: [
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter(exporter),
+        }),
+      ],
     });
-  } catch {
-    // Export cannot turn a successful database insert into a failed audit write.
+    return this.dedicatedProvider.getLogger(AUDIT_SCOPE);
   }
 }
+
+export const auditLogExporter = new AuditLogExporter();
+
+// === Internal helpers ===
+
+const AUDIT_SCOPE = "archestra-audit";
 
 /** An explicit allowlist: snapshots and free text must never leak into export. */
 function auditLogAttributes(row: AuditLog): Record<string, string | number> {

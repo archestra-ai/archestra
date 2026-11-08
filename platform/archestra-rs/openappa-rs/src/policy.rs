@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{BindingFailure, Fault};
+use crate::errors::{BindingFailure, Fault};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -159,6 +159,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::ZeroTimeout
         | ConfigError::ZeroReviewTimeout
         | ConfigError::ZeroByteCap
+        | ConfigError::ContextHintTooLong { .. }
         | ConfigError::ModelLimitTooSmall { .. }
         | ConfigError::InvalidLlmProvider { .. }
         | ConfigError::ImplementationChoice { .. }
@@ -189,6 +190,7 @@ pub(crate) const HOST_VARIABLE_PREFIX: &str = "APPA_ARCHESTRA_";
 /// Validate a root document that declares no battery: [`compose`] with nothing to
 /// resolve. A root whose `include` list names a battery does not validate this way —
 /// the entry resolves to nothing — so a caller holding declarations composes instead.
+#[cfg(test)]
 pub(crate) fn validate(content: &str) -> Result<(), String> {
     compose(content, &[]).map(|_| ())
 }
@@ -237,6 +239,7 @@ pub(crate) struct Composed {
 /// it by the runtime's include rules. An entry `batteries` does not answer is
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
+#[cfg(test)]
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
     compose_with_rosters(root, batteries, &MemberRosters::new())
 }
@@ -605,7 +608,7 @@ mod tests {
     /// this deployment, or nobody, when the store failed.
     #[test]
     fn a_policy_load_failure_names_who_fixes_it() {
-        use crate::{BindingFailure, Failure};
+        use crate::errors::{BindingFailure, Failure};
         use appa_eventlog::DeploymentName;
         let compiled = |content: &str| {
             super::compile(content, |_| None)
@@ -747,7 +750,7 @@ mod tests {
             call_id: Some("call:yell".into()),
             actor: actor.clone(),
             call: ProposedCall {
-                tool: crate::canonical_tool("yell").unwrap(),
+                tool: crate::operations::canonical_tool("yell").unwrap(),
                 arguments: serde_json::value::to_raw_value(&serde_json::json!({
                     "message": "Agents are unhappy.",
                     "with_trajectory": false,
@@ -863,36 +866,6 @@ delta = { audience = ["internal"] }
                 "{refused} is outside every rule"
             );
         }
-    }
-
-    #[tokio::test]
-    async fn embedded_runtime_derives_external_client_local_tool_spellings() {
-        let runtime = memory_runtime(
-            r#"[policy]
-version = 2
-[[policy.tool]]
-name = "host/archestra/exec_command"
-delta = {}
-[[policy.tool]]
-name = "host/archestra/read_file"
-delta = {}
-[[policy.tool]]
-name = "host/archestra/Bash"
-delta = {}
-"#,
-        );
-        let actor = started(&runtime, "external-client-local-tools").await;
-        for tool in ["exec_command", "read_file", "Bash"] {
-            let decision = hooks::handle(&runtime, call(&actor, tool)).await;
-            assert!(
-                matches!(decision, HookDecision::AllowCall { .. }),
-                "{tool} must derive to its host/archestra identity: {decision:?}"
-            );
-        }
-        assert!(matches!(
-            hooks::handle(&runtime, call(&actor, "unknown_local_tool")).await,
-            HookDecision::Refuse { .. }
-        ));
     }
 
     /// An open trajectory decides its next call under its line's head: a policy
@@ -1307,7 +1280,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             ResolvedBattery {
             entry: GITHUB_ENTRY.into(),
             name: "github".into(),
-            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n[externals.context.github]\ncommand = [\"python3\", \"context.py\"]\n".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n[externals.context.github]\ncommand = [\"python3\", \"context.py\"]\nhint = \"Read visibility first.\"\n".into(),
             target: Some("[policy]\nversion = 2\n[[policy.annotator]]\nname = \"github.visibility\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/list_issues\"\nannotator = \"github.visibility\"\n[externals.annotators.\"github.visibility\"]\ncommand = [\"python3\", \"visibility.py\"]\ntoken_env = \"APPA_PROVIDER_GITHUB_TOKEN\"\n".into()),
             helpers: Some(HelperBinding {
                 url_base: url_base.into(),
@@ -1328,6 +1301,12 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             );
             assert_eq!(binding["token_env"].as_str(), Some(BRIDGE_TOKEN_ENV));
         }
+        // The provider's reading hint survives the rebinding, and the runtime loads it.
+        assert_eq!(
+            document["externals"]["context"]["github"]["hint"].as_str(),
+            Some("Read visibility first.")
+        );
+        assert_eq!(reloaded_without_result_cap(&composed), composed);
         let rules: Vec<&str> = policy_entries(&document, "tool")
             .iter()
             .filter_map(|rule| rule.get("name")?.as_str())

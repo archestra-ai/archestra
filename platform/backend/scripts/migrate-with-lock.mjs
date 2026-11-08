@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
 import { dropInvalidConcurrentIndexes } from "./concurrent-index-leftovers.mjs";
+import { buildPgConnectionConfig } from "./rds-iam.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(scriptDir, "../src/database/migrations");
@@ -29,10 +30,11 @@ const LEASE_TTL_MS = 60_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const ACQUIRE_RETRY_MS = 1_000;
 const holder = randomUUID();
-const client = new pg.Client({
-  connectionString: databaseUrl,
-  connectionTimeoutMillis: 10_000,
-});
+const client = new pg.Client(
+  buildPgConnectionConfig(databaseUrl, {
+    connectionTimeoutMillis: 10_000,
+  }),
+);
 let leaseAcquired = false;
 
 await client.connect();
@@ -74,10 +76,11 @@ try {
     // but blocks no one, so it gets the same lock_timeout as the build. It
     // runs on its own connection: the wait can outlast the lease, which this
     // connection must keep renewing meanwhile.
-    const maintenance = new pg.Client({
-      connectionString: databaseUrl,
-      connectionTimeoutMillis: 10_000,
-    });
+    const maintenance = new pg.Client(
+      buildPgConnectionConfig(databaseUrl, {
+        connectionTimeoutMillis: 10_000,
+      }),
+    );
     await maintenance.connect();
     try {
       await maintenance.query("SET lock_timeout = '5min'");

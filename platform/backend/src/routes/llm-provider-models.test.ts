@@ -2,7 +2,7 @@ import { MAX_CUSTOM_MODEL_TOKEN_LIMIT } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -24,7 +24,7 @@ import type { Model, User } from "@/types";
 
 vi.mock("@/auth");
 
-vi.mock("@/clients/gemini-client", () => ({
+vi.mock("@/clients/gemini-vertex-ai", () => ({
   isVertexAiEnabled: vi.fn(() => false),
 }));
 

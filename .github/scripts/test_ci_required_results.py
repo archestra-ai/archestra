@@ -54,10 +54,36 @@ class RequiredResultTests(unittest.TestCase):
                 ).returncode, 0)
         self.assertNotEqual(self.backend(RUN_SHARDS="").returncode, 0)
 
+    def frontend(self, **overrides):
+        return subprocess.run(
+            ["bash", "-e", "-c", gate_script("on-pull-requests.yml", "frontend-integration-tests-gate")],
+            env=os.environ | {
+                "INPUTS_RESULT": "success", "RUN_FRONTEND": "true", "TESTS_RESULT": "success",
+            } | overrides,
+            capture_output=True, text=True,
+        )
+
+    def test_frontend_requires_passing_tests_when_inputs_changed(self):
+        self.assertEqual(self.frontend().returncode, 0)
+        for result in ("failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assertNotEqual(self.frontend(TESTS_RESULT=result).returncode, 0)
+
+    def test_frontend_skip_requires_explicit_input_decision(self):
+        self.assertEqual(self.frontend(RUN_FRONTEND="false", TESTS_RESULT="skipped").returncode, 0)
+        for result in ("failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assertNotEqual(self.frontend(
+                    INPUTS_RESULT=result, RUN_FRONTEND="false", TESTS_RESULT="skipped",
+                ).returncode, 0)
+        self.assertNotEqual(self.frontend(RUN_FRONTEND="", TESTS_RESULT="skipped").returncode, 0)
+        self.assertNotEqual(self.frontend(RUN_FRONTEND="false", TESTS_RESULT="failure").returncode, 0)
+
     def e2e(self, **overrides):
         return subprocess.run(
             ["bash", "-e", "-c", gate_script("platform-e2e-tests.yml", "platform-e2e-merge-reports")],
             env=os.environ | {
+                "INPUT_RESULT": "success", "RUN_E2E": "true", "BUILD_RESULT": "success",
                 "K8S_RESULT": "success", "LITE_RESULT": "success",
                 "QUICKSTART_RESULT": "success", "HIBERNATION_RESULT": "skipped",
                 "RUN_HIBERNATION": "false",
@@ -70,10 +96,20 @@ class RequiredResultTests(unittest.TestCase):
         self.assertNotEqual(self.e2e(
             K8S_RESULT="skipped", LITE_RESULT="skipped", QUICKSTART_RESULT="skipped",
         ).returncode, 0)
-        for variable in ("K8S_RESULT", "LITE_RESULT", "QUICKSTART_RESULT"):
+        for variable in ("INPUT_RESULT", "BUILD_RESULT", "K8S_RESULT", "LITE_RESULT", "QUICKSTART_RESULT"):
             for result in ("failure", "cancelled", "skipped", ""):
                 with self.subTest(variable=variable, result=result):
                     self.assertNotEqual(self.e2e(**{variable: result}).returncode, 0)
+
+    def test_e2e_skip_requires_successful_classification_and_skipped_dependencies(self):
+        skip = dict(RUN_E2E="false", BUILD_RESULT="skipped", K8S_RESULT="skipped",
+                    LITE_RESULT="skipped", QUICKSTART_RESULT="skipped", HIBERNATION_RESULT="skipped")
+        self.assertEqual(self.e2e(**skip).returncode, 0)
+        for variable in ("INPUT_RESULT", "BUILD_RESULT", "K8S_RESULT", "LITE_RESULT", "QUICKSTART_RESULT", "HIBERNATION_RESULT"):
+            for result in ("failure", "cancelled", ""):
+                with self.subTest(variable=variable, result=result):
+                    self.assertNotEqual(self.e2e(**(skip | {variable: result})).returncode, 0)
+        self.assertNotEqual(self.e2e(RUN_E2E="").returncode, 0)
 
     def test_full_e2e_lane_still_requires_hibernation(self):
         self.assertEqual(self.e2e(

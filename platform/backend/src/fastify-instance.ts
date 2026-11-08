@@ -23,6 +23,7 @@ import {
 import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
+import { registerLlmProxyDenialLog } from "./observability/llm-proxy-denial";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
 import { llmProxyTiming } from "./server/llm-proxy-timing";
@@ -133,6 +134,7 @@ export const createFastifyInstance = () => {
     .setErrorHandler<ApiError | Error>(handleServerError);
 
   llmProxyTiming.register(fastify);
+  registerLlmProxyDenialLog(fastify);
   registerLlmProxyDrain(fastify, config.shutdown.drainSeconds * 1000);
   return fastify;
 };

@@ -10,7 +10,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
-import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config from "@/config";
 import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -192,7 +192,7 @@ export const ConfigResponseSchema = z.strictObject({
     mcpGatewaySkillsEnabled: z.boolean(),
     /** Internal UI feedback overlay; on only where its Slack channel is set. */
     devFeedbackEnabled: z.boolean(),
-    /** ALPHA: the Model Router's "auto" model and its settings. */
+    /** ALPHA: the Unified Model API's "auto" model and its settings. */
     autoRoutingEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),

@@ -3,7 +3,7 @@ title: Managing the Policy
 description: Change the Guardrails policy with the APPA Keeper, include batteries, and validate it
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -76,7 +76,8 @@ Open a report and click **Investigate in chat**. The agent compares the report w
 
 What to know:
 
-- With **Break the glass** on in **Settings → Guardrails** (the default), a yell also turns Guardrails off for that session, so the agent is no longer stuck. The list marks these yells.
+- The Break the glass settings in **Settings → Guardrails** can let a blocked call through and record the yell for you. **Human approval** keeps the review by default. Set to **Waive in unattended sessions** (Agent Runtimes, Scheduled tasks, or any client sending `X-Archestra-Unattended: 1`; a remedy plan a workload runs counts too), a call that waits for a person runs, and a remedy plan that needs a person is approved for the agent. It can also be waived everywhere. **Other blocked calls**, set to **Waive the block**, releases soft refusals across calls, results, subagent returns, runtime exports, peer messages, and session admission. The first waiver turns Guardrails off for the session. Disabled or failed yell reporting does not prevent the waiver. An explicit `blocked` refusal cannot trigger a waiver. Once a soft refusal turns Guardrails off, subsequent operations bypass all policy checks, including explicit `blocked` marks. [`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE) and [`ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE), while set, override these two settings, and the settings page shows them locked. OpenAPPA does not see a waived call: its result is not checked, and its labels and effects are skipped.
+- **Yell tool**, set to **Record only**, keeps enforcement on after agent reports and human-approval waivers. **Other blocked calls**, set to **Waive the block**, always turns enforcement off for the session, regardless of the yell setting.
 - Reports stay in your deployment unless you [enable external diagnostic forwarding](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED) to the shared OpenAPPA reporting service. To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
 
 Required permissions:

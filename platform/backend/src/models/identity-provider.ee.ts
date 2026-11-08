@@ -11,7 +11,6 @@ import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
-import type { BetterAuth } from "@/auth/better-auth";
 import {
   cacheIdpGroups,
   extractGroupsFromClaims,
@@ -604,53 +603,14 @@ class IdentityProviderModel {
     data: Omit<InsertIdentityProvider, "id">,
     organizationId: string,
     headers: HeadersInit,
-    auth: BetterAuth,
+    auth: SsoProviderRegistrar,
   ): Promise<IdentityProvider> {
-    // Parse JSON configs if they exist
-    const parsedData = {
-      providerId: data.providerId,
-      issuer: data.issuer,
-      domain: data.domain || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
-      ssoLoginEnabled: data.ssoLoginEnabled ?? true,
-      organizationId,
-      ...(data.oidcConfig && {
-        oidcConfig:
-          typeof data.oidcConfig === "string"
-            ? JSON.parse(data.oidcConfig)
-            : data.oidcConfig,
-      }),
-      ...(data.samlConfig && {
-        samlConfig:
-          typeof data.samlConfig === "string"
-            ? JSON.parse(data.samlConfig)
-            : data.samlConfig,
-      }),
-    };
-
-    // Ensure required mapping fields for OIDC
-    if (parsedData.oidcConfig?.mapping) {
-      parsedData.oidcConfig.mapping = {
-        id: parsedData.oidcConfig.mapping.id || "sub",
-        email: parsedData.oidcConfig.mapping.email || "email",
-        name: parsedData.oidcConfig.mapping.name || "name",
-        ...parsedData.oidcConfig.mapping,
-      };
-    }
-
-    const registrationData = await hydrateOidcConfigForRegistration(parsedData);
-    const { ssoLoginEnabled: _ssoLoginEnabled, ...betterAuthRegistrationData } =
-      registrationData;
+    const { betterAuthRegistrationData, body } =
+      await buildSsoProviderRegistration(data, organizationId);
 
     // Register with Better Auth
     await auth.api.registerSSOProvider({
-      body: {
-        ...betterAuthRegistrationData,
-        ...(betterAuthRegistrationData.oidcConfig && {
-          oidcConfig: withoutBlankDiscoveryEndpoint(
-            betterAuthRegistrationData.oidcConfig,
-          ),
-        }),
-      },
+      body,
       headers: new Headers(headers),
     });
 
@@ -980,6 +940,63 @@ function serializeConfigValue(
   return JSON.stringify(value);
 }
 
+/**
+ * The registration Better Auth gets for a new SSO provider, and the data it is
+ * built from: JSON configs parsed, OIDC mapping defaults filled in, discovery
+ * hydrated, and a blank discovery endpoint dropped.
+ */
+async function buildSsoProviderRegistration(
+  data: Omit<InsertIdentityProvider, "id">,
+  organizationId: string,
+) {
+  // Parse JSON configs if they exist
+  const parsedData = {
+    providerId: data.providerId,
+    issuer: data.issuer,
+    domain: data.domain || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
+    ssoLoginEnabled: data.ssoLoginEnabled ?? true,
+    organizationId,
+    ...(data.oidcConfig && {
+      oidcConfig:
+        typeof data.oidcConfig === "string"
+          ? JSON.parse(data.oidcConfig)
+          : data.oidcConfig,
+    }),
+    ...(data.samlConfig && {
+      samlConfig:
+        typeof data.samlConfig === "string"
+          ? JSON.parse(data.samlConfig)
+          : data.samlConfig,
+    }),
+  };
+
+  // Ensure required mapping fields for OIDC
+  if (parsedData.oidcConfig?.mapping) {
+    parsedData.oidcConfig.mapping = {
+      id: parsedData.oidcConfig.mapping.id || "sub",
+      email: parsedData.oidcConfig.mapping.email || "email",
+      name: parsedData.oidcConfig.mapping.name || "name",
+      ...parsedData.oidcConfig.mapping,
+    };
+  }
+
+  const registrationData = await hydrateOidcConfigForRegistration(parsedData);
+  const { ssoLoginEnabled: _ssoLoginEnabled, ...betterAuthRegistrationData } =
+    registrationData;
+
+  return {
+    betterAuthRegistrationData,
+    body: {
+      ...betterAuthRegistrationData,
+      ...(betterAuthRegistrationData.oidcConfig && {
+        oidcConfig: withoutBlankDiscoveryEndpoint(
+          betterAuthRegistrationData.oidcConfig,
+        ),
+      }),
+    },
+  };
+}
+
 async function hydrateOidcConfigForRegistration<
   T extends {
     providerId: string;
@@ -1205,3 +1222,22 @@ interface OidcDiscovery {
 /** Column types for the two JSON-as-text config blobs on the providers table. */
 type StoredIdentityProviderConfigs =
   typeof schema.identityProvidersTable.$inferInsert;
+
+/**
+ * The Better Auth call the identity provider model makes. The identity provider
+ * route, which composes Better Auth into the server, passes the instance in.
+ * The compiler checks there that the call accepts this body's typed fields; the
+ * OIDC and SAML configs are parsed JSON, so they are not checked, as before.
+ */
+interface SsoProviderRegistrar {
+  api: {
+    registerSSOProvider: (params: {
+      body: SsoProviderRegistrationBody;
+      headers: Headers;
+    }) => Promise<unknown>;
+  };
+}
+
+type SsoProviderRegistrationBody = Awaited<
+  ReturnType<typeof buildSsoProviderRegistration>
+>["body"];

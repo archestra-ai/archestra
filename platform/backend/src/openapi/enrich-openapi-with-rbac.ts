@@ -46,6 +46,7 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
   }
 
   brandSpecTextInPlace(clonedSpec);
+  linkPermissionReferencesInPlace(clonedSpec);
   return clonedSpec;
 }
 
@@ -70,6 +71,27 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
  * copying transform would only churn allocations on every /openapi.json hit.
  */
 const BRANDABLE_SPEC_KEYS = new Set(["description", "summary"]);
+
+function linkPermissionReferencesInPlace(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) linkPermissionReferencesInPlace(item);
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "description" && typeof child === "string") {
+      (node as Record<string, unknown>)[key] = child.replace(
+        /(?<!\[)`([A-Za-z][A-Za-z0-9]*:[A-Za-z-]+)`(?!\]\()/g,
+        (match, permission: string) =>
+          Object.hasOwn(permissionDescriptions, permission)
+            ? `[${match}](/docs/reference/permissions#${permission})`
+            : match,
+      );
+    } else {
+      linkPermissionReferencesInPlace(child);
+    }
+  }
+}
 
 function brandSpecTextInPlace(node: unknown): void {
   if (Array.isArray(node)) {
@@ -207,6 +229,14 @@ function appendDescriptionSection(
 }
 
 function createAuthenticationSection(operationId: string): string {
+  if (operationId === RouteId.McpAppProxyPost) {
+    return [
+      "Authentication:",
+      "",
+      // white-label-ok: App auth prose is rebranded by brandSpecTextInPlace before serving the spec.
+      "Use a browser session or an Archestra API key. External MCP clients can send a personal token or an app-scoped OAuth access token as a Bearer token. Organization and team tokens cannot access an app because they have no viewer.",
+    ].join("\n");
+  }
   if (
     PUBLIC_UNAUTHENTICATED_ROUTE_IDS.has(
       operationId as typeof PUBLIC_UNAUTHENTICATED_ROUTE_IDS extends Set<
@@ -247,7 +277,7 @@ function createLlmProxyAuthenticationSection(operationId?: string): string {
     return [
       "Authentication:",
       "",
-      "Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Model Router](/docs/llm-proxy/model-router).",
+      "Requires a mapped standard Virtual API Key or LLM OAuth access token, sent as a Bearer token. Provider API keys, passthrough keys, and external identity-provider JWTs are not accepted. See [Unified Model API](/docs/llm-proxy/unified-model).",
     ].join("\n");
   if (operationId && PROVIDER_FILE_ROUTES.has(operationId))
     return [
@@ -296,10 +326,20 @@ const HTTP_METHODS = new Set<HttpMethod>([
 ]);
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.McpProxyPost]:
+    "The caller must have access to the agent. App tools must be visible to apps.",
+  [RouteId.McpAppProxyPost]:
+    "The caller must have `use` access to the app. Calls to assigned tools must be allowed for the app.",
+  [RouteId.McpServerProxyPost]:
+    "The caller must have access to the installed MCP server. App tools must be visible to apps.",
   [RouteId.GetLimits]:
     "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
   [RouteId.GetLimit]:
     "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+  [RouteId.GetTeamStatistics]:
+    "Requires `llmCost:read` for every team in the active organization. A session-authenticated team admin without it receives only the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
+  [RouteId.GetCostStatistics]:
+    "Requires `llmCost:read` for the whole organization. A session-authenticated team admin without it receives only requests charged to the teams they administer and their sub-teams; any other caller gets 403, and so does a team admin filtering by another team.",
   [RouteId.CreateLimit]:
     "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
   [RouteId.UpdateLimit]:
@@ -352,6 +392,18 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
 } satisfies Partial<Record<RouteId, string>>;
 
 const STATIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetLlmProxyLogs]:
+    "`log:read` returns the caller's rows. `log:admin` includes every row in the active organization.",
+  [RouteId.GetLlmProxyLogSummaries]:
+    "`log:read` returns the caller's rows. `log:admin` includes every row in the active organization.",
+  [RouteId.GetLlmProxyLogSessions]:
+    "`log:read` returns the caller's sessions. `log:admin` includes every session in the active organization.",
+  [RouteId.GetLlmProxyLogExternalAgentIds]:
+    "`log:read` returns identifiers from the caller's rows. `log:admin` includes identifiers from every row in the active organization.",
+  [RouteId.GetLlmProxyLogUserIds]:
+    "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+  [RouteId.GetLlmProxyLog]:
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
   [RouteId.GetInteractions]:
     "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetInteractionSummaries]:
@@ -368,8 +420,6 @@ const STATIC_ROUTE_PERMISSION_NOTES = {
     "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetMcpToolCall]:
     "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
-  [RouteId.GetTeamStatistics]:
-    "Returns aggregate team usage for the active organization.",
   [RouteId.GetAgentStatistics]:
     "Returns aggregate usage for every agent in the active organization.",
   [RouteId.GetModelStatistics]:

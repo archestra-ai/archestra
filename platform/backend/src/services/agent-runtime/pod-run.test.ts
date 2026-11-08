@@ -19,7 +19,21 @@ describe("resolveAgentRuntime", () => {
       organizationId: "organization-1",
       environmentId: "environment-1",
       secretId: "secret-1",
+      agentNetworkPolicy: null,
     });
+  });
+
+  test("carries the Agent's own network policy to its launch", () => {
+    const policy = {
+      egressMode: "off" as const,
+      domainPreset: "none" as const,
+      allowedDomains: [],
+      allowedCidrs: [],
+    };
+    expect(
+      resolveAgentRuntime({ ...agentWithRuntime, networkPolicy: policy })
+        ?.agentNetworkPolicy,
+    ).toEqual(policy);
   });
 
   test("launches a maintained image saved on an older release with this deployment's tag", () => {
@@ -30,6 +44,34 @@ describe("resolveAgentRuntime", () => {
       runtime: { ...runtime, image: `${repository}:1.4.0-rc.31` },
     });
     expect(resolved?.image).toBe(current);
+  });
+
+  test("moves an Agent saved with an older release's digest pin to this deployment's image", () => {
+    const current = config.agentRuntime.catalogImages.codex;
+    const name = current.split("@")[0];
+    const repository = name.slice(0, name.lastIndexOf(":"));
+    const resolved = resolveAgentRuntime({
+      ...agentWithRuntime,
+      runtime: {
+        ...runtime,
+        image: `${repository}:1.4.0@sha256:${"e".repeat(64)}`,
+      },
+    });
+    expect(resolved?.image).toBe(current);
+  });
+
+  test("launches the author's own digest pin exactly as saved", () => {
+    for (const image of [
+      `ghcr.io/archestra-ai/agent-codex@sha256:${"e".repeat(64)}`,
+      `registry.example/team/agent-codex:v2@sha256:${"e".repeat(64)}`,
+    ]) {
+      expect(
+        resolveAgentRuntime({
+          ...agentWithRuntime,
+          runtime: { ...runtime, image },
+        })?.image,
+      ).toBe(image);
+    }
   });
 });
 

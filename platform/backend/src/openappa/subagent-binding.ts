@@ -10,7 +10,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import config from "@/config";
 import { childSessionId } from "@/openappa/actor";
-import type { OpenAppaSession } from "@/openappa/service";
+import type { OpenAppaSession } from "@/types/openappa-session";
 
 export const APPA_SUBAGENT_BINDING_HEADER = "X-Archestra-Appa-Subagent";
 

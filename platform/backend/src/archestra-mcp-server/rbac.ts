@@ -107,6 +107,8 @@ export const TOOL_PERMISSIONS: Record<
   list_agents: { resource: "agent", action: "read" },
   list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
+  get_agent_skill_policy: { resource: "agent", action: "read" },
+  patch_agent_skill_policy: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions
   list_hooks: { resource: "agent", action: "read" },
@@ -666,6 +668,8 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
+  get_agent_skill_policy: { resource: "agent", action: "read" },
+  patch_agent_skill_policy: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
   update_runtime_credential: { resource: "credential", action: "update" },

@@ -71,10 +71,21 @@ export type AgentRunLaunchSpec = {
    * means no steering.
    */
   nodeSelector: Record<string, string>;
+  /**
+   * Sandboxing RuntimeClass (for example gVisor). Backends apply it to
+   * unprivileged runs only; a privileged run keeps the default runtime.
+   */
+  runtimeClassName?: string;
   imagePullSecrets: string[];
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** Number of durable input files the backend must stage before entrypoint. */
   inputFileCount: number;
+  /**
+   * True when the supervisor is retrying or failing over after a prior attempt
+   * for the same task, so the backend must wait for the prior Sandbox deletion
+   * rather than adopting it.
+   */
+  replacePriorAttempt?: boolean;
 };
 
 /**

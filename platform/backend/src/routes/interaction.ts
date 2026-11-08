@@ -17,27 +17,41 @@ import {
   OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
+import RoutingDecisionModel from "@/models/routing-decision";
+import { getSessionHandoffs } from "@/services/session-handoffs";
 import {
   ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
   InteractionSummarySchema,
   SelectInteractionSchema,
+  SessionHandoffsSchema,
   SessionLineageSchema,
   SessionSummarySchema,
   UserInfoSchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  AutoRoutingTierNameSchema,
+  InteractionAutoRoutingResponseSchema,
+} from "@/types/auto-routing-api";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const legacyRoutes: Array<Parameters<typeof fastify.route>[0]> = [];
+  fastify.addHook("onRoute", (route) => {
+    if (route.method === "GET" && route.url.startsWith("/api/llm-proxy-logs")) {
+      legacyRoutes.push(route as Parameters<typeof fastify.route>[0]);
+    }
+  });
+
   fastify.get(
-    "/api/interactions",
+    "/api/llm-proxy-logs",
     {
       schema: {
-        operationId: RouteId.GetInteractions,
+        operationId: RouteId.GetLlmProxyLogs,
         description:
-          "Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
-        tags: ["Interaction"],
+          "List LLM Proxy request logs in the active organization with pagination and sorting. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.",
+        tags: ["LLM Proxy Logs"],
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
@@ -58,7 +72,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe(
-                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.",
               ),
             startDate: z
               .string()
@@ -163,13 +177,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/interactions/summaries",
+    "/api/llm-proxy-logs/summaries",
     {
       schema: {
-        operationId: RouteId.GetInteractionSummaries,
+        operationId: RouteId.GetLlmProxyLogSummaries,
         description:
-          "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
-        tags: ["Interaction"],
+          "List LLM Proxy request log metadata without request and response payloads. `log:read` returns the caller's rows; `log:admin` includes every row in the organization.",
+        tags: ["LLM Proxy Logs"],
         querystring: z
           .object({
             profileId: UuidIdSchema.optional(),
@@ -179,10 +193,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe(
-                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.",
               ),
             startDate: z.string().datetime().optional(),
             endDate: z.string().datetime().optional(),
+            beforeId: UuidIdSchema.optional().describe(
+              "Only rows created before this log entry, ordered by creation time then ID at the stored precision. Its total is the entry's zero-based position.",
+            ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -208,6 +225,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
+          beforeId,
           limit,
           offset,
           sortBy,
@@ -236,22 +254,22 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             sessionId,
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
+            beforeId,
           },
         }),
       );
     },
   );
 
-  // Note: This specific route must come before the :interactionId param route
-  // to prevent Fastify from matching "sessions" as an interactionId
+  // This route must come before the :logId route so "sessions" is not parsed as a log ID.
   fastify.get(
-    "/api/interactions/sessions",
+    "/api/llm-proxy-logs/sessions",
     {
       schema: {
-        operationId: RouteId.GetInteractionSessions,
+        operationId: RouteId.GetLlmProxyLogSessions,
         description:
-          "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
-        tags: ["Interaction"],
+          "List LLM Proxy log sessions with aggregated usage and cost. `log:read` returns the caller's sessions; `log:admin` includes every session in the organization.",
+        tags: ["LLM Proxy Logs"],
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
@@ -272,7 +290,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe(
-                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its log ID.",
               ),
             startDate: z
               .string()
@@ -364,13 +382,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/interactions/sessions/:sessionId/lineage",
+    "/api/llm-proxy-logs/sessions/:sessionId/lineage",
     {
       schema: {
-        operationId: RouteId.GetInteractionSessionLineage,
+        operationId: RouteId.GetLlmProxyLogSessionLineage,
         description:
           "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. `log:read` covers the caller's own sessions. `log:admin` covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.",
-        tags: ["Interaction"],
+        tags: ["LLM Proxy Logs"],
         params: z.object({ sessionId: z.string().min(1).max(1024) }),
         response: constructResponseSchema(SessionLineageSchema),
       },
@@ -392,16 +410,44 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Note: This specific route must come before the :interactionId param route
-  // to prevent Fastify from matching "external-agent-ids" as an interactionId
   fastify.get(
-    "/api/interactions/external-agent-ids",
+    "/api/llm-proxy-logs/sessions/:sessionId/handoffs",
     {
       schema: {
-        operationId: RouteId.GetUniqueExternalAgentIds,
+        operationId: RouteId.GetLlmProxyLogSessionHandoffs,
+        description:
+          "Get where a session's work moved between its client and Agent Runtime: the runs it started, or, for a run's own session, the run and the session that started it, with the moves between them. `log:read` covers the caller's own runs; `log:admin` covers every run in the organization.",
+        tags: ["LLM Proxy Logs"],
+        params: z.object({ sessionId: z.string().min(1).max(1024) }),
+        response: constructResponseSchema(SessionHandoffsSchema),
+      },
+    },
+    async ({ params: { sessionId }, user, organizationId }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      return reply.send(
+        await getSessionHandoffs({
+          organizationId,
+          sessionId,
+          ...(canSeeAllLogs ? {} : { ownUserId: user.id }),
+        }),
+      );
+    },
+  );
+
+  // This route must come before the :logId route.
+  fastify.get(
+    "/api/llm-proxy-logs/external-agent-ids",
+    {
+      schema: {
+        operationId: RouteId.GetLlmProxyLogExternalAgentIds,
         description:
           "Get external agent IDs from visible logs in the active organization. `log:read` returns identifiers from the caller's attributed rows; `log:admin` returns identifiers from every row in the organization.",
-        tags: ["Interaction"],
+        tags: ["LLM Proxy Logs"],
         response: constructResponseSchema(
           z.array(
             z.object({
@@ -431,16 +477,15 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Note: This specific route must come before the :interactionId param route
-  // to prevent Fastify from matching "user-ids" as an interactionId
+  // This route must come before the :logId route.
   fastify.get(
-    "/api/interactions/user-ids",
+    "/api/llm-proxy-logs/user-ids",
     {
       schema: {
-        operationId: RouteId.GetUniqueUserIds,
+        operationId: RouteId.GetLlmProxyLogUserIds,
         description:
           "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.",
-        tags: ["Interaction"],
+        tags: ["LLM Proxy Logs"],
         querystring: z.object({
           search: z.string().optional(),
           ids: z
@@ -479,20 +524,70 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/interactions/:interactionId",
+    "/api/llm-proxy-logs/:logId/auto-routing",
     {
       schema: {
-        operationId: RouteId.GetInteraction,
+        operationId: RouteId.GetLlmProxyLogAutoRouting,
         description:
-          "Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.",
-        tags: ["Interaction"],
+          "Get the saved auto-routing decision for an LLM Proxy log. Null means no decision was retained, not that routing was disabled. Does not re-score the request.",
+        tags: ["LLM Proxy Logs"],
+        params: z.object({ logId: UuidIdSchema }),
+        response: constructResponseSchema(InteractionAutoRoutingResponseSchema),
+      },
+    },
+    async (
+      { params: { logId: interactionId }, user, organizationId },
+      reply,
+    ) => {
+      const interaction = await InteractionModel.findAccessMetadata({
+        id: interactionId,
+        organizationId,
+      });
+      if (!interaction) throw new ApiError(404, "Interaction not found");
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs && interaction.userId !== user.id) {
+        throw new ApiError(404, "Interaction not found");
+      }
+      const decision = await RoutingDecisionModel.findForInteraction({
+        organizationId,
+        interactionId,
+      });
+      return reply.send({
+        decision: decision
+          ? {
+              ...decision,
+              tier: AutoRoutingTierNameSchema.parse(
+                AutoRoutingTierNameSchema.options[decision.tierIndex],
+              ),
+            }
+          : null,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/llm-proxy-logs/:logId",
+    {
+      schema: {
+        operationId: RouteId.GetLlmProxyLog,
+        description:
+          "Get an LLM Proxy request log by ID. `log:read` permits a row attributed to the caller; `log:admin` permits any row in the organization.",
+        tags: ["LLM Proxy Logs"],
         params: z.object({
-          interactionId: UuidIdSchema,
+          logId: UuidIdSchema,
         }),
         response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async ({ params: { interactionId }, user, organizationId }, reply) => {
+    async (
+      { params: { logId: interactionId }, user, organizationId },
+      reply,
+    ) => {
       const interaction = await InteractionModel.findById({
         id: interactionId,
         organizationId,
@@ -556,6 +651,31 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
     },
   );
+
+  // Keep the old interaction URLs for existing API clients. Hide these aliases
+  // from OpenAPI so new clients use the LLM Proxy Logs paths and operation IDs.
+  const legacyOperationIds: Record<string, string> = {
+    [RouteId.GetLlmProxyLogs]: RouteId.GetInteractions,
+    [RouteId.GetLlmProxyLogSummaries]: RouteId.GetInteractionSummaries,
+    [RouteId.GetLlmProxyLogSessions]: RouteId.GetInteractionSessions,
+    [RouteId.GetLlmProxyLogSessionLineage]:
+      RouteId.GetInteractionSessionLineage,
+    [RouteId.GetLlmProxyLogExternalAgentIds]: RouteId.GetUniqueExternalAgentIds,
+    [RouteId.GetLlmProxyLogUserIds]: RouteId.GetUniqueUserIds,
+    [RouteId.GetLlmProxyLogAutoRouting]: RouteId.GetInteractionAutoRouting,
+    [RouteId.GetLlmProxyLog]: RouteId.GetInteraction,
+  };
+  for (const route of legacyRoutes) {
+    fastify.route({
+      ...route,
+      url: route.url.replace("/api/llm-proxy-logs", "/api/interactions"),
+      schema: {
+        ...route.schema,
+        operationId: legacyOperationIds[route.schema?.operationId ?? ""],
+        hide: true,
+      },
+    });
+  }
 };
 
 export default interactionRoutes;

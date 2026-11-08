@@ -104,7 +104,7 @@ fi
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         OPENAI_API_KEY: "test-key",
-        OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
+        OPENAI_BASE_URL: "http://localhost:9000/v1/unified-model/test",
       };
       const result = await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
@@ -121,7 +121,7 @@ fi
           archestra: {
             npm: "@ai-sdk/openai",
             options: {
-              baseURL: "http://localhost:9000/v1/model-router/test",
+              baseURL: "http://localhost:9000/v1/unified-model/test",
               apiKey: "{env:OPENAI_API_KEY}",
               headers: {
                 "X-Archestra-Run-Id": "12345678-abcd-4000-8000-123456789abc",

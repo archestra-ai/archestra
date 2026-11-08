@@ -343,6 +343,12 @@ export interface ReportingOptions {
   hostname?: string
 }
 
+/**
+ * Reads an offer's original refusal from authenticated, host-scoped journal
+ * records, including encrypted and escaped decisions. Executes no remedy.
+ */
+export declare function retainedOfferRefusal(input: string, encryption?: ContentEncryption | undefined | null): string | null
+
 export declare function sendPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 export interface ServerAliasDeclaration {
@@ -367,11 +373,3 @@ export interface TokenEnvReader {
  * Validation defers secret lookup and opens no store or network connection.
  */
 export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
-
-/**
- * Validates a root document that declares no battery: [`compose_openappa_policy`]
- * with nothing to resolve. A root whose `include` list names a battery does not
- * validate this way — the entry resolves to nothing — so a caller holding
- * declarations composes instead.
- */
-export declare function validateOpenappaPolicy(content: string): Promise<Array<string>>

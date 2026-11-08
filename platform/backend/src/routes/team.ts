@@ -86,6 +86,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["update"] },
         request.headers,
+        request.serviceAccount,
+        { userId: request.user.id, organizationId: request.organizationId },
       );
 
       // Members (and anyone passing ?mine) only see teams they belong to.
@@ -264,6 +266,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (body.parentId !== undefined) {
+        if (body.parentId !== existingTeam.parentId && !canUpdateTeams) {
+          throw new ApiError(
+            403,
+            "Changing a team's parent requires organization team management permission.",
+          );
+        }
         await assertValidTeamParent({
           teamId: id,
           parentId: body.parentId,

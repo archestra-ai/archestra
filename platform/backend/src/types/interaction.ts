@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { AgentTypeSchema } from "./agent";
 import { AttributionLabelsSchema } from "./attribution-label";
 import { AudioAuditRequestSchema, AudioAuditResponseSchema } from "./audio";
@@ -66,6 +66,14 @@ export const InteractionSessionPreviewSchema = z.object({
    * start of its reply. Rows written before these existed have neither.
    */
   responseToolNames: z.array(z.string()).optional(),
+  /**
+   * The tool calls the response asked for, with the provider's ids: ties a
+   * later tool result (a guardrails label change, say) back to this request.
+   * Rows written before it existed, and wires without ids, have none.
+   */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
 });
 export type InteractionSessionPreview = z.infer<
@@ -316,6 +324,29 @@ const BaseSelectInteractionSchema = createSelectSchema(
   },
 );
 
+const DescribedSelectInteractionSchema = BaseSelectInteractionSchema.extend({
+  inputTokens: BaseSelectInteractionSchema.shape.inputTokens.describe(
+    "Input tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.",
+  ),
+  inputTokensEstimated:
+    BaseSelectInteractionSchema.shape.inputTokensEstimated.describe(
+      "True when the input token count was estimated locally rather than reported by the provider.",
+    ),
+  outputTokens: BaseSelectInteractionSchema.shape.outputTokens.describe(
+    "Output tokens recorded for this request. Null means unavailable; zero is a recorded zero. The count can be partial if a stream ends early.",
+  ),
+  cacheReadTokens: BaseSelectInteractionSchema.shape.cacheReadTokens.describe(
+    "Tokens read from provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+  ),
+  cacheWriteTokens: BaseSelectInteractionSchema.shape.cacheWriteTokens.describe(
+    "Tokens written to provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+  ),
+  cacheWrite1hTokens:
+    BaseSelectInteractionSchema.shape.cacheWrite1hTokens.describe(
+      "Tokens written to a one-hour provider cache. Null means unavailable or not applicable; zero is a recorded zero.",
+    ),
+});
+
 /**
  * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
  * the row the model reads) so the delta manager can walk parent chains, but they
@@ -362,37 +393,39 @@ export type CopilotCredentialSource = z.infer<
   typeof CopilotCredentialSourceSchema
 >;
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
-  ...DELTA_ENCODING_COLUMNS,
-  ...INTERNAL_ENCRYPTION_COLUMNS,
-}).extend({
-  chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
-  /**
-   * Name of `connectorId`'s knowledge base connector, resolved within the
-   * caller's organization. Null once the connector is gone; absent on endpoints
-   * that do not resolve it.
-   */
-  connectorName: z.string().nullable().optional(),
-  /**
-   * For a GitHub Copilot request: the organization subscription or personal
-   * sign-in that served it. Null when unknown; absent on endpoints that do
-   * not resolve it.
-   */
-  copilotCredentialSource: CopilotCredentialSourceSchema.nullable().optional(),
-  /**
-   * `virtualKeyId` resolved to its key and owner, within the caller's
-   * organization. Null when the request used no standard virtual key (or the
-   * key has since been deleted); absent on endpoints that do not resolve it.
-   */
-  virtualKey: InteractionVirtualKeySchema.nullable().optional(),
-  /**
-   * Same for `passthroughVirtualKeyId` — the key that carried the acting
-   * user's identity. Tracked separately because one request can present a
-   * standard key for the provider credential and a passthrough key for the
-   * user.
-   */
-  passthroughVirtualKey: InteractionVirtualKeySchema.nullable().optional(),
-});
+const BaseSelectInteractionResponseSchema =
+  DescribedSelectInteractionSchema.omit({
+    ...DELTA_ENCODING_COLUMNS,
+    ...INTERNAL_ENCRYPTION_COLUMNS,
+  }).extend({
+    chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
+    /**
+     * Name of `connectorId`'s knowledge base connector, resolved within the
+     * caller's organization. Null once the connector is gone; absent on endpoints
+     * that do not resolve it.
+     */
+    connectorName: z.string().nullable().optional(),
+    /**
+     * For a GitHub Copilot request: the organization subscription or personal
+     * sign-in that served it. Null when unknown; absent on endpoints that do
+     * not resolve it.
+     */
+    copilotCredentialSource:
+      CopilotCredentialSourceSchema.nullable().optional(),
+    /**
+     * `virtualKeyId` resolved to its key and owner, within the caller's
+     * organization. Null when the request used no standard virtual key (or the
+     * key has since been deleted); absent on endpoints that do not resolve it.
+     */
+    virtualKey: InteractionVirtualKeySchema.nullable().optional(),
+    /**
+     * Same for `passthroughVirtualKeyId` — the key that carried the acting
+     * user's identity. Tracked separately because one request can present a
+     * standard key for the provider credential and a passthrough key for the
+     * user.
+     */
+    passthroughVirtualKey: InteractionVirtualKeySchema.nullable().optional(),
+  });
 
 /**
  * Schema for computed request type field
@@ -405,7 +438,7 @@ export const RequestTypeSchema = z.enum(["main", "subagent"]);
  * Scalar fields rendered by an interaction-list row. Large request, response,
  * analysis and guardrail payloads stay behind the individual detail endpoint.
  */
-export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
+export const InteractionSummarySchema = DescribedSelectInteractionSchema.pick({
   id: true,
   profileId: true,
   externalAgentId: true,
@@ -445,7 +478,17 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
    * requests in an agent loop, so this is what tells them apart.
    */
   responseToolNames: z.array(z.string()).nullable().optional(),
+  /** The tool calls its response asked for, with the provider's ids. */
+  responseToolCalls: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .nullable()
+    .optional(),
   responseTextPreview: z.string().nullable().optional(),
+  /**
+   * Whether auto routing chose this request's model: a saved routing decision
+   * covers it. Its details are at `/api/llm-proxy-logs/:id/auto-routing`.
+   */
+  autoRouted: z.boolean(),
 });
 
 /**
@@ -990,6 +1033,57 @@ export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
 
 /** Max length of `lastUserMessagePreview` on session summaries. */
 export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
+
+/** One Agent Runtime run an LLM session handed work to. */
+const SessionHandoffRunSchema = z.object({
+  runId: z
+    .string()
+    .uuid()
+    .describe("The run's stable id: its first turn's task id."),
+  llmSessionId: z
+    .string()
+    .describe("The run's own LLM session: its workload name."),
+  originLlmSessionId: z
+    .string()
+    .describe("The LLM session that started the run."),
+  agentName: z.string(),
+  title: z.string(),
+  startedAt: z.date(),
+});
+
+/**
+ * The work changing hands between a session and a run: `push` starts the run,
+ * `pull` takes the work back (the run is stopped or its files are downloaded),
+ * `steer` sends it back to the run after a pull.
+ */
+const SessionHandoffMoveSchema = z.object({
+  kind: z.enum(["push", "pull", "steer"]),
+  runId: z.string().uuid(),
+  mcpToolCallId: z.string().uuid(),
+  at: z.date().describe("When the gateway call that made the move ended."),
+});
+
+/**
+ * Where a session's work moved between a client and Agent Runtime. Read from
+ * the run's recorded origin and the origin session's own gateway calls.
+ */
+export const SessionHandoffsSchema = z.object({
+  handedTo: z
+    .array(SessionHandoffRunSchema)
+    .describe("Runs this session started, oldest first."),
+  handedToTruncated: z
+    .boolean()
+    .describe("This session started more runs than `handedTo` lists."),
+  handedFrom: SessionHandoffRunSchema.nullable().describe(
+    "When this is a run's own session: that run, with the session that started it.",
+  ),
+  moves: z
+    .array(SessionHandoffMoveSchema)
+    .describe(
+      "Moves between the origin session and its runs, oldest first. A move to the side that already holds the work is left out.",
+    ),
+});
+export type SessionHandoffs = z.infer<typeof SessionHandoffsSchema>;
 
 /**
  * Session summary schema for the sessions endpoint

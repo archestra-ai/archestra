@@ -56,14 +56,6 @@ inputs:
     description: "Path to the platform directory containing Dockerfile (only used when build-platform-image is true)"
     required: false
     default: "./platform"
-  turbo-team:
-    description: "Turborepo remote caching team (only required when build-platform-image is true)"
-    required: false
-    default: ""
-  turbo-token:
-    description: "Turborepo remote caching token (only required when build-platform-image is true)"
-    required: false
-    default: ""
   mcp-server-base-image-tag:
     description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
     required: false
@@ -137,38 +129,39 @@ runs:
         context: ${{ inputs.platform-context }}
         load: "true"
         tags: ${{ inputs.platform-image-tag }}
-        turbo-team: ${{ inputs.turbo-team }}
-        turbo-token: ${{ inputs.turbo-token }}
 
-    - name: Cache MCP example OAuth server image
+    # Restore only, like the Kind node image: warm-e2e-image-caches.yml saves
+    # these keys from main, the only scope that later queue and PR runs can
+    # read. Saving them here only evicted main's caches.
+    - name: Restore MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-oauth-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-oauth-server.tar
-        key: mcp-oauth-server-0.0.1-${{ runner.arch }}
+        key: mcp-oauth-server-ghcr-0.0.1-${{ runner.arch }}
 
-    - name: Cache MCP JWKS server image
+    - name: Restore MCP JWKS server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-jwks-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-jwks-server.tar
-        key: mcp-jwks-server-0.0.3-${{ runner.arch }}
+        key: mcp-jwks-server-ghcr-0.0.3-${{ runner.arch }}
 
-    - name: Cache MCP ID-JAG server image
+    - name: Restore MCP ID-JAG server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-id-jag-image
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-id-jag-server.tar
-        key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+        key: mcp-id-jag-server-ghcr-0.0.4-${{ runner.arch }}
 
     # Fetch all three MCP dependency images concurrently. On a cache hit we
-    # `docker load` the tarball; on a miss we pull from the registry and save the
-    # tarball for the actions/cache post-job upload. These pulls previously ran as
-    # three serial steps (~45s wall-clock on a cold cache); doing them in parallel
-    # collapses that to the slowest single image (~25s).
+    # `docker load` the tarball; on a miss we pull from the registry. These
+    # pulls previously ran as three serial steps (~45s wall-clock on a cold
+    # cache); doing them in parallel collapses that to the slowest single
+    # image (~25s).
     - name: Fetch MCP dependency images (parallel)
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       shell: bash
@@ -177,12 +170,12 @@ runs:
         JWKS_CACHE_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
         ID_JAG_CACHE_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
       run: |
-        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+        MCP_OAUTH_IMAGE="ghcr.io/archestra-ai/ci/mcp-example-oauth-server:0.0.1"
+        MCP_JWKS_IMAGE="ghcr.io/archestra-ai/ci/mcp-server-jwks-keycloak:0.0.3"
+        MCP_ID_JAG_IMAGE="ghcr.io/archestra-ai/ci/mcp-server-id-jag:0.0.4"
 
         # fetch_image <cache-hit> <image-ref> <tarball-path>
-        # Loads from the cached tarball on a hit, otherwise pulls and re-saves it.
+        # Loads from the cached tarball on a hit, otherwise pulls it.
         fetch_image() {
           local cache_hit="$1" image="$2" tarball="$3"
           if [ "${cache_hit}" = "true" ]; then
@@ -191,7 +184,6 @@ runs:
           else
             echo "Pulling image ${image}..."
             docker pull "${image}"
-            docker save "${image}" > "${tarball}"
           fi
         }
 
@@ -364,9 +356,9 @@ runs:
         # The fixture pods are already deployed and retry their image pulls
         # until these loads land.
         if [ "${DEPLOY_E2E_DEPS}" == "true" ] && [ "${E2E_DEPS_MINIMAL}" != "true" ]; then
-          MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-          MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+          MCP_OAUTH_IMAGE="ghcr.io/archestra-ai/ci/mcp-example-oauth-server:0.0.1"
+          MCP_JWKS_IMAGE="ghcr.io/archestra-ai/ci/mcp-server-jwks-keycloak:0.0.3"
+          MCP_ID_JAG_IMAGE="ghcr.io/archestra-ai/ci/mcp-server-id-jag:0.0.4"
 
           echo "Loading MCP example OAuth server image into Kind..."
           kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &

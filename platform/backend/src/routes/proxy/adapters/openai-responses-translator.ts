@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@archestra/shared/types";
 import type { Azure, OpenAi } from "@/types";
+import { ChatCompletionRequestSchema } from "@/types/llm-providers/openai/api";
 import { CacheControlSchema } from "@/types/llm-providers/openai/messages";
 import { toResponsesUsage } from "./responses-usage";
 
@@ -46,6 +47,9 @@ export function responsesToOpenaiChat(
     messages,
     stream: req.stream === true ? true : undefined,
   };
+
+  const responseFormat = translateTextFormat(req.text);
+  if (responseFormat !== undefined) chatBody.response_format = responseFormat;
 
   const extensions = req as ResponsesRequest & Record<string, unknown>;
   for (const field of [
@@ -117,6 +121,32 @@ export function responsesToOpenaiChat(
   };
 }
 
+/**
+ * How a Chat Completions turn ends, in Responses terms. Responses has no
+ * finish_reason: a turn cut off by its token budget or by a content filter is
+ * `incomplete` with a reason, and clients read `completed` as a whole answer.
+ */
+export function responsesEndingFromFinishReason(
+  finishReason: string | null | undefined,
+): {
+  status: "completed" | "incomplete";
+  incomplete_details: { reason: "max_output_tokens" | "content_filter" } | null;
+} {
+  if (finishReason === "length") {
+    return {
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+    };
+  }
+  if (finishReason === "content_filter") {
+    return {
+      status: "incomplete",
+      incomplete_details: { reason: "content_filter" },
+    };
+  }
+  return { status: "completed", incomplete_details: null };
+}
+
 export function chatCompletionToResponses(
   response: OpenAiResponse,
   ctx: OpenaiResponsesContext,
@@ -129,6 +159,7 @@ export function chatCompletionToResponses(
     };
   };
   const choice = response.choices[0];
+  const ending = responsesEndingFromFinishReason(choice?.finish_reason);
   const output: ResponsesResponse["output"] = [];
 
   if (choice?.message) {
@@ -150,7 +181,7 @@ export function chatCompletionToResponses(
         id: `msg_${randomUUID()}`,
         type: "message",
         role: "assistant",
-        status: "completed",
+        status: ending.status,
         content: messageContent,
       } as unknown as ResponsesResponse["output"][number]);
     }
@@ -173,7 +204,7 @@ export function chatCompletionToResponses(
     object: "response",
     created_at: ctx.createdUnix,
     model: ctx.requestedModel,
-    status: "completed",
+    ...ending,
     output,
     usage: response.usage
       ? toResponsesUsage({
@@ -342,4 +373,32 @@ function cacheControlFields(value: unknown) {
       "Invalid cache_control: expected ephemeral with optional 5m or 1h ttl",
     );
   return { cache_control: parsed.data };
+}
+
+/** Validate the Responses envelope before translating its output constraint. */
+function translateTextFormat(text: unknown): OpenAiRequest["response_format"] {
+  if (text === undefined || text === null) return undefined;
+  const invalid = () =>
+    new ApiError(
+      400,
+      "Invalid or unsupported text.format for Chat Completions translation.",
+    );
+  if (typeof text !== "object" || Array.isArray(text)) throw invalid();
+  const format = (text as Record<string, unknown>).format;
+  if (format === undefined) return undefined;
+  if (!format || typeof format !== "object" || Array.isArray(format))
+    throw invalid();
+  const { type, ...details } = format as Record<string, unknown>;
+  const allowed =
+    type === "json_schema"
+      ? ["type", "name", "schema", "strict", "description"]
+      : ["type"];
+  if (Object.keys(format).some((key) => !allowed.includes(key)))
+    throw invalid();
+  if (type === "json_schema" && details.schema === undefined) throw invalid();
+  const result = ChatCompletionRequestSchema.shape.response_format.safeParse(
+    type === "json_schema" ? { type, json_schema: details } : { type },
+  );
+  if (!result.success) throw invalid();
+  return result.data;
 }

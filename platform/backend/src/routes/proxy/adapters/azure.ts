@@ -122,8 +122,8 @@ class AzureRequestAdapter
   convertToolResultContent(messages: AzureMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }) {
+    return this.delegate.toProviderRequest(options);
   }
 }
 
@@ -187,7 +187,7 @@ class AzureStreamAdapter
   private audioBytes = 0;
 
   constructor(request?: AzureRequest) {
-    this.delegate = new OpenAIStreamAdapter("openai", request);
+    this.delegate = new OpenAIStreamAdapter({ clientRequest: request });
   }
 
   get state() {

@@ -97,7 +97,7 @@ export interface CreateClientOptions {
   llmProviderApiKeyId?: string;
   /**
    * Aborted when the downstream HTTP client disconnects before its response
-   * finishes. Provider clients may forward it to their upstream requests.
+   * finishes. Provider clients must forward it to their upstream requests.
    */
   abortSignal?: AbortSignal;
   /**
@@ -218,7 +218,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
    * Build the modified provider-specific request
    * Incorporates all modifications (model, tool results)
    */
-  toProviderRequest(): TRequest;
+  toProviderRequest(options?: { preserveToolCallIds?: boolean }): TRequest;
 }
 
 // =============================================================================
@@ -416,6 +416,15 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   readonly clientResponse?: { id: string; model: string };
 
+  /**
+   * The Chat Completions `finish_reason` this turn ends with, for an adapter
+   * that translates another provider's stream into Chat Completions. A wrapper
+   * that serves another wire reads it to tell a cut-off or filtered turn from a
+   * finished one. Adapters whose `state.stopReason` already is a Chat
+   * Completions finish reason leave it unset.
+   */
+  getOpenAiFinishReason?(): string;
+
   // ---------------------------------------------------------------------------
   // Chunk Processing
   // ---------------------------------------------------------------------------
@@ -596,8 +605,6 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * spreads another provider's factory does not inherit its request type.
    */
   toLoggedRequest?(request: unknown): unknown;
-  /** Propagate downstream disconnection to upstream work. */
-  readonly cancelOnDisconnect?: boolean;
   /** End failed binary streams by closing the transport, never injecting SSE bytes. */
   readonly binaryStream?: boolean;
 
@@ -756,7 +763,7 @@ export interface UsageView {
   cacheWriteTokens?: number;
   /** Portion of cacheWriteTokens written at the 1-hour TTL (billed higher than 5m). Anthropic-only; absent elsewhere. */
   cacheWrite1hTokens?: number;
-  /** Output tokens spent on reasoning/extended thinking. Reported by OpenAI (reasoning_tokens) and Gemini (thoughtsTokenCount); absent elsewhere. */
+  /** Output tokens spent on reasoning/extended thinking: a SUBSET of outputTokens, never added on top. Gemini (thoughtsTokenCount) and xAI report it outside their output count, so their usage readers fold it in (see observability/metrics/llm-usage.ts). Absent where the provider does not break it out. */
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;

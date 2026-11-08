@@ -9,6 +9,7 @@ describe("statistics team grant attribution", () => {
     makeOrganization,
     makeUser,
     makeTeam,
+    makeTeamMember,
     makeAgent,
     makeInteraction,
   }) => {
@@ -18,6 +19,8 @@ describe("statistics team grant attribution", () => {
     const alpha = await makeTeam(org.id, owner.id, { name: "Alpha" });
     const beta = await makeTeam(org.id, owner.id, { name: "Beta" });
     const foreignTeam = await makeTeam(otherOrg.id, owner.id);
+    for (const member of [owner, await makeUser()])
+      await makeTeamMember(alpha.id, member.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -107,21 +110,23 @@ describe("statistics team grant attribution", () => {
           requests: row.requests,
           cost: row.cost,
           agents: row.agents,
+          members: row.members,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     ).toEqual([
-      { name: "Alpha", requests: 1, cost: 2, agents: 1 },
-      { name: "Beta", requests: 2, cost: 8, agents: 1 },
+      { name: "Alpha", requests: 1, cost: 2, agents: 1, members: 2 },
+      { name: "Beta", requests: 2, cost: 8, agents: 1, members: 0 },
     ]);
     const agents = await StatisticsModel.getAgentStatistics({
       organizationId: org.id,
       timeframe: "24h",
     });
-    // Agent statistics retain the pre-existing per-recipient attribution,
-    // including a grant whose team belongs to a different organization.
+    // An agent's own total counts each request once, however many teams it
+    // is shared with, and names only this organization's teams.
     expect(agents.find((row) => row.agentId === agent.id)).toMatchObject({
-      requests: 4,
-      cost: 10,
+      requests: 2,
+      cost: 5,
+      teamName: "Alpha",
     });
     expect(agents.find((row) => row.agentId === privateAgent.id)).toMatchObject(
       { requests: 1, cost: 11, teamName: "No Team" },

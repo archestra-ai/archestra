@@ -1,0 +1,123 @@
+{
+  "extends": "./tsconfig.source-project.json",
+  "compilerOptions": {
+    "outDir": "./.tsbuild/server",
+    "tsBuildInfoFile": "./.tsbuild/server.tsbuildinfo"
+  },
+  "files": [
+    "src/auth/fastify-plugin/index.ts",
+    "src/auth/fastify-plugin/middleware.ts",
+    "src/auth/fastify-plugin/plugin.ts",
+    "src/auth/jwks-signing-key-guard.ts",
+    "src/metrics-registration.ts",
+    "src/middleware.ts",
+    "src/middleware/audit-decisions.ts",
+    "src/openapi/cached-openapi-route.ts",
+    "src/openapi/enrich-openapi-with-rbac.ts",
+    "src/routes/api-key.ts",
+    "src/routes/auth.ts",
+    "src/routes/identity-provider.ee.ts",
+    "src/routes/index.ee.ts",
+    "src/routes/index.ts",
+    "src/server.ts",
+    "src/server/composition.ts",
+    "src/standalone-scripts/build-ext-apps-inline.ts",
+    "src/standalone-scripts/check-drizzle-migration-journal.ts",
+    "src/standalone-scripts/check-sandbox-base-sync.ts",
+    "src/standalone-scripts/check-test-fixture-imports.ts",
+    "src/standalone-scripts/clean-db-on-dev.ts",
+    "src/standalone-scripts/codegen-access-control-docs.ts",
+    "src/standalone-scripts/codegen-appa-guide.ts",
+    "src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
+    "src/standalone-scripts/codegen-openapi.ts",
+    "src/standalone-scripts/costs-bench/backfill.ts",
+    "src/standalone-scripts/costs-bench/run-bench.ts",
+    "src/standalone-scripts/count-openappa-legacy.ts",
+    "src/standalone-scripts/hydrate-from.ts",
+    "src/standalone-scripts/hydration-schema.ts",
+    "src/standalone-scripts/lint-drizzle-migrations.ts",
+    "src/standalone-scripts/mocks/agents.ts",
+    "src/standalone-scripts/mocks/index.ts",
+    "src/standalone-scripts/mocks/interactions.ts",
+    "src/standalone-scripts/mocks/tools.ts",
+    "src/standalone-scripts/mocks/utils.ts",
+    "src/standalone-scripts/openappa-declare-installs.ts",
+    "src/standalone-scripts/rebuild-interaction-user-activity-command.ts",
+    "src/standalone-scripts/rebuild-interaction-user-activity.ts",
+    "src/standalone-scripts/reencrypt-content.ee.ts",
+    "src/standalone-scripts/reencrypt-secrets.ts",
+    "src/standalone-scripts/reset-openappa.ts",
+    "src/standalone-scripts/reset-user-password.ts",
+    "src/standalone-scripts/seed-mock-data.ts",
+    "src/standalone-scripts/vault-env-injector.ee.ts",
+    "src/startup-health.ts"
+  ],
+  "include": [
+    "src/ambient/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../tools/drizzle-migration-linter/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.schema.json"
+    },
+    {
+      "path": "./tsconfig.core.json"
+    },
+    {
+      "path": "./tsconfig.models.json"
+    },
+    {
+      "path": "./tsconfig.models-agents.json"
+    },
+    {
+      "path": "./tsconfig.models-upper.json"
+    },
+    {
+      "path": "./tsconfig.llm-clients.json"
+    },
+    {
+      "path": "./tsconfig.runtime.json"
+    },
+    {
+      "path": "./tsconfig.llm-protocol.json"
+    },
+    {
+      "path": "./tsconfig.provider-adapters.json"
+    },
+    {
+      "path": "./tsconfig.kb-core.json"
+    },
+    {
+      "path": "./tsconfig.kb-connectors.json"
+    },
+    {
+      "path": "./tsconfig.kb.json"
+    },
+    {
+      "path": "./tsconfig.connections.json"
+    },
+    {
+      "path": "./tsconfig.policy-config.json"
+    },
+    {
+      "path": "./tsconfig.services-support.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.routes-proxy.json"
+    },
+    {
+      "path": "./tsconfig.routes-chat.json"
+    },
+    {
+      "path": "./tsconfig.routes-rest.json"
+    }
+  ]
+}

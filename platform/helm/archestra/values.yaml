@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.19" # x-release-please-version
+  imageTag: "1.5.0-rc.26" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -51,6 +51,71 @@ archestra:
     # true explicitly uses the bulk pool value; false uses chart sizing when
     # connectionBudget is set.
     poolMaxFromEnvFrom: null
+    # Amazon RDS / Aurora IAM database authentication.
+    # Generates a fresh 15-minute IAM token per new connection in the query
+    # pool, cache pool, LISTEN/NOTIFY client, and migration Job, using the pod's
+    # AWS credentials (IRSA, EKS Pod Identity, OIDC token projection, or env/secret
+    # credentials) and verifying the RDS TLS certificate with the bundled cloud
+    # database CA certificates.
+    iamAuth:
+      enabled: false
+      # Optional AWS region for RDS IAM token signing. Derived from the RDS
+      # endpoint hostname or AWS_REGION / AWS_DEFAULT_REGION when left empty.
+      awsRegion: ""
+      # Optional IAM role ARN for RDS IAM authentication.
+      # - On EKS (injectWebIdentityTokenVolume: false): automatically sets
+      #   `eks.amazonaws.com/role-arn` on the platform ServiceAccount (IRSA) unless
+      #   already set in `archestra.orchestrator.kubernetes.serviceAccount.annotations`.
+      # - On non-EKS clusters with OIDC federation (injectWebIdentityTokenVolume: true):
+      #   sets `AWS_ROLE_ARN` on the web, worker, and migration Job pods.
+      roleArn: ""
+      # Mount a projected Kubernetes ServiceAccount token volume (`aws-iam-token`)
+      # and set `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` on web, worker,
+      # and migration Job pods. Enable this on non-EKS Kubernetes clusters (GKE,
+      # AKS, kind, on-prem) federated with an AWS IAM OIDC identity provider.
+      # Leave false on EKS (where the EKS Pod Identity Webhook or Pod Identity
+      # Agent injects credentials automatically).
+      injectWebIdentityTokenVolume: false
+      # Audience for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenAudience: "sts.amazonaws.com"
+      # Expiration (in seconds) for the projected ServiceAccount token when
+      # injectWebIdentityTokenVolume is true.
+      webIdentityTokenExpirationSeconds: 3600
+    # Google Cloud SQL Auth Proxy, run as a native sidecar (Kubernetes 1.29+)
+    # in the web, worker, and migration Job pods. The proxy opens a TLS
+    # connection to the instance with an ephemeral client certificate and, with
+    # --auto-iam-authn, logs in as the pod's Google service account (Workload
+    # Identity), so no database password is needed anywhere.
+    #
+    # Point postgresql.external_database_url at the proxy and the IAM user:
+    #   postgresql://<sa-name>%40<project>.iam@127.0.0.1:5432/<database>?sslmode=disable
+    # (traffic to 127.0.0.1 never leaves the pod; the proxy encrypts the rest),
+    # set postgresql.enabled=false, and annotate the platform ServiceAccount
+    # with iam.gke.io/gcp-service-account.
+    cloudSqlProxy:
+      enabled: false
+      # project:region:instance
+      instanceConnectionName: ""
+      image:
+        repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+        tag: "2.26.3"
+        digest: "sha256:f333a9c59890c3c67b8505166c5dbdcc0b29fca9173a2e09ca0446ab6997a736"
+      # Local port the application connects to on 127.0.0.1.
+      port: 5432
+      # Port of the proxy's health endpoints, used by the startup probe.
+      healthPort: 9801
+      # Extra flags. Defaults connect over the VPC and log in with IAM.
+      args:
+        - --private-ip
+        - --auto-iam-authn
+        - --structured-logs
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)
@@ -452,6 +517,18 @@ archestra:
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
+    serviceAccount:
+      # Run the Job under a hook-only <fullname>-migrate ServiceAccount, created
+      # right before it on each upgrade with the platform ServiceAccount's
+      # annotations and imagePullSecrets. Without it, the Job uses the platform
+      # ServiceAccount, which Helm updates only after the hook: a changed
+      # annotation such as iam.gke.io/gcp-service-account reaches the Job one
+      # upgrade late. Grant the cloud identity to this account name too, or the
+      # Job loses it: on GKE, roles/iam.workloadIdentityUser for
+      # serviceAccount:<project>.svc.id.goog[<namespace>/<fullname>-migrate] on
+      # the Google service account; on EKS, the role's trust-policy subject
+      # system:serviceaccount:<namespace>:<fullname>-migrate.
+      create: false
 
   # Verifies that this cluster actually enforces NetworkPolicy, by running the
   # experiment rather than inferring it. After each install/upgrade two throwaway
@@ -540,10 +617,20 @@ archestra:
       timeoutSeconds: 45
       failureThreshold: 3
 
+  # Digests of the images released with this chart's version (the platform,
+  # MCP server base, p4 shim, Agent catalog images), filled in by the release
+  # pipeline. The chart pins the platform image and the platform pins its
+  # default images to them, so an install runs exactly the images released and
+  # attested with it. Leave it as is: a mirror or an
+  # explicit image setting is used as configured, and charts built outside a
+  # release ship none, so the images follow their version tags.
+  releaseImageDigests: {}
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.19" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.26" # x-release-please-version
+    # (released charts pin it to its digest; see releaseImageDigests)
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers

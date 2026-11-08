@@ -2,12 +2,14 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 7
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Know what every agent did, as whom, and what it cost. Archestra logs every model request, tool call, and admin change, from Chat, messaging channels, and connected clients. You do not turn anything on.
+
+To forward events from the **Audit** tab to your SIEM, configure [audit log export](/docs/admin/observability/audit-logs).
 
 ![An incident investigation with model requests and parallel MCP tool calls on a shared waterfall timeline, including timing, tokens, cost, and conversation details](/docs/automated_screenshots/admin-logs_session-waterfall.webp)
 
@@ -22,6 +24,10 @@ Know what every agent did, as whom, and what it cost. Archestra logs every model
 | **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Activity** | Drill into a group to see which agents and gateways it used |
 
 Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
+
+When your coding agent [hands a task to a Remote Agent](/docs/agents/runtime/handoff) and brings it back, the run's requests join the session's timeline. **Ran on** shows when the work was in your client and when it was in Agent Runtime. Click an Agent Runtime stretch to open the run.
+
+If a model response stream ends cleanly before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
 
 In **Agent connections**, the **Usage** tab groups calls with **Show** and **by**; select a bar or row to drill down, and **Back** to step out. The page follows the selected date range, except the **State** column on **User connections**, which always reflects the last 30 days. **User connections** lists users with no calls too, and **Export CSV** saves the filtered list.
 

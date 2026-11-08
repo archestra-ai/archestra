@@ -255,18 +255,23 @@ describe("battery helper bridge", () => {
     ).toBe(502);
   });
 
-  test("a helper that exits non-zero answers 502", async ({
+  test("a failed consult reports why it failed and with which exit status", async ({
     makeInternalMcpCatalog,
   }) => {
     const install = await installBoundGithub(makeInternalMcpCatalog);
     stubSandbox({ exitCode: 3, stdout: "", stderr: "traceback" });
 
-    const response = await consult({
+    const outcome = await openappaHelperBridge.consult({
       installId: install.id,
-      authorization: bridgeBearer(),
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
     });
 
-    expect(response.statusCode).toBe(502);
+    expect(outcome).toMatchObject({
+      kind: "failed",
+      reason: "the helper exited with status 3",
+      exitStatus: 3,
+    });
   });
 
   test("the last line a helper wrote to stderr is passed through as X-Appa-Diagnostics", async ({
@@ -345,6 +350,8 @@ describe("battery helper bridge", () => {
     expect(params?.secretEnv).toEqual([
       { name: "APPA_PROVIDER_GITHUB_TOKEN", value: CREDENTIAL_VALUE },
     ]);
+    expect(params?.timeoutSeconds).toBe(4);
+    expect(params?.command).toMatch(/^APPA_CONSULT_TIMEOUT_MS=4000 /);
     // Everything the run carries besides the secret channel: the mounted
     // battery files, the command, the envelope on stdin.
     const { secretEnv: _secret, ...rest } = params ?? {};
@@ -523,7 +530,7 @@ describe("battery helper bridge", () => {
     expect((await openappaHelperBridge.consult(params)).kind).toBe("failed");
   });
 
-  test("sandbox executions retain their concurrency cap and release capacity on completion", async ({
+  test("sandbox executions retain their concurrency cap, hand a freed slot to a waiting consult, and release capacity on completion", async ({
     makeInternalMcpCatalog,
   }) => {
     const install = await installBoundGithub(makeInternalMcpCatalog);
@@ -556,21 +563,31 @@ describe("battery helper bridge", () => {
     const pool = config.daggerRuntime.maxConcurrent;
     config.daggerRuntime.maxConcurrent = 1;
     const first = openappaHelperBridge.consult(params);
+    let waiting: ReturnType<typeof openappaHelperBridge.consult> | undefined;
     try {
       await entered;
+      // No slot frees up while it may wait: the consult is turned away.
       expect((await openappaHelperBridge.consult(params)).kind).toBe("busy");
+      // A slot that frees up while a consult waits is handed to it.
+      waiting = openappaHelperBridge.consult(params);
+      await new Promise((resolve) => setTimeout(resolve, 200));
       expect(run).toHaveBeenCalledTimes(1);
+      release(result);
+      await first;
+      expect((await waiting)?.kind).toBe("answered");
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       release(result);
       await first;
+      await waiting;
       config.daggerRuntime.maxConcurrent = pool;
     }
     expect((await openappaHelperBridge.consult(params)).kind).toBe("answered");
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   test.skipIf(!config.daggerRuntime.enabled)(
-    "a bound helper runs in the sandbox with the envelope on stdin and the credential in its environment",
+    "a bound helper runs in the sandbox with the envelope on stdin, and the credential and its budget in its environment",
     async ({ makeInternalMcpCatalog }) => {
       const files = [
         {
@@ -583,7 +600,7 @@ describe("battery helper bridge", () => {
         },
         {
           path: "echo.py",
-          text: 'import hashlib, json, os, sys\nrequest = json.load(sys.stdin)\ntoken = os.environ["APPA_PROVIDER_ACME_TOKEN"]\nprint(json.dumps({"version": 1, "answer": {"echo": request["arguments"], "token_sha256": hashlib.sha256(token.encode()).hexdigest()}}))\n',
+          text: 'import hashlib, json, os, sys\nrequest = json.load(sys.stdin)\ntoken = os.environ["APPA_PROVIDER_ACME_TOKEN"]\nprint(json.dumps({"version": 1, "answer": {"echo": request["arguments"], "token_sha256": hashlib.sha256(token.encode()).hexdigest(), "budget_ms": os.environ.get("APPA_CONSULT_TIMEOUT_MS")}}))\n',
         },
       ];
       await openappaBatteriesService.uploadPackage({
@@ -645,6 +662,7 @@ describe("battery helper bridge", () => {
           token_sha256: createHash("sha256")
             .update("acme-secret-value")
             .digest("hex"),
+          budget_ms: "4000",
         },
       });
     },

@@ -7,6 +7,7 @@ import {
 } from "@/database/retry";
 import { extractVaultErrorMessage } from "@/secrets-manager/utils";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import { ServerDrainingError } from "@/types/server-draining-error";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import {
   collectErrorCodes,
@@ -16,10 +17,9 @@ import {
 } from "@/utils/network-errors";
 
 /**
- * Sink-agnostic policy for what backend errors reach our exception trackers,
- * shared by every capture path (the Sentry `beforeSend` filter and the
- * PostHog request-error / unhandled-rejection capture funnels) so the two
- * sinks agree and the rules live in one place.
+ * Policy for what backend errors reach error reporting, applied by the Sentry
+ * `beforeSend` filter to every capture path (request errors, unhandled
+ * rejections, direct captures).
  *
  * Two kinds of non-bug failure are handled:
  *
@@ -32,15 +32,11 @@ import {
  *     into a single issue instead of fragmenting per in-flight query/route.
  */
 interface ErrorTrackingDecision {
-  /** When false, the error is expected noise — skip both exception sinks. */
+  /** When false, the error is expected noise and is not reported. */
   report: boolean;
-  /**
-   * Stable grouping key for an availability incident. Applied by each sink in
-   * its own shape (Sentry `event.fingerprint`, PostHog `$exception_fingerprint`
-   * joined with "/").
-   */
+  /** Stable grouping key for an availability incident (Sentry fingerprint). */
   fingerprint?: string[];
-  /** Tags/properties describing the grouping, merged into the sink's payload. */
+  /** Tags describing the grouping, merged into the report. */
   tags?: Record<string, string>;
 }
 
@@ -173,6 +169,7 @@ const MCP_UNREACHABLE_ERROR_NAMES = new Set([
 ]);
 
 function isNonActionableError(error: unknown): boolean {
+  if (error instanceof ServerDrainingError) return true;
   if (error instanceof Error && MCP_UNREACHABLE_ERROR_NAMES.has(error.name)) {
     return true;
   }

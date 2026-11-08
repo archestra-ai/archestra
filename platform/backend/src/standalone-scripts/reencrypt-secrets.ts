@@ -23,8 +23,16 @@
  *
  * Needs the same DB env as the server, plus both encryption secrets.
  */
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import config from "@/config";
+import db, { initializeDatabase } from "@/database";
+import { assertPortsBound } from "@/models/ports";
 import { reencryptStoredSecrets } from "@/secrets-manager/reencrypt";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 async function main(): Promise<void> {
   const nextSecret = config.secretsManager.encryptionSecret;
@@ -42,25 +50,30 @@ async function main(): Promise<void> {
     return;
   }
 
-  const result = await reencryptStoredSecrets({ previousSecret, nextSecret });
+  await initializeDatabase();
+  try {
+    const result = await reencryptStoredSecrets({ previousSecret, nextSecret });
 
-  if (result.status === "noop") {
+    if (result.status === "noop") {
+      console.log(
+        "[reencrypt-secrets] encryption secret unchanged — nothing to re-encrypt.",
+      );
+      return;
+    }
+
     console.log(
-      "[reencrypt-secrets] encryption secret unchanged — nothing to re-encrypt.",
+      `[reencrypt-secrets] done: reencrypted=${result.reencrypted} ` +
+        `alreadyNew=${result.alreadyNew} notEncrypted=${result.notEncrypted} ` +
+        `unreadable=${result.unreadable} total=${result.total}`,
     );
-    return;
-  }
-
-  console.log(
-    `[reencrypt-secrets] done: reencrypted=${result.reencrypted} ` +
-      `alreadyNew=${result.alreadyNew} notEncrypted=${result.notEncrypted} ` +
-      `unreadable=${result.unreadable} total=${result.total}`,
-  );
-  if (result.unreadable > 0) {
-    console.warn(
-      `[reencrypt-secrets] WARNING: ${result.unreadable} secret(s) could not be ` +
-        "decrypted with the previous key and must be re-entered.",
-    );
+    if (result.unreadable > 0) {
+      console.warn(
+        `[reencrypt-secrets] WARNING: ${result.unreadable} secret(s) could not be ` +
+          "decrypted with the previous key and must be re-entered.",
+      );
+    }
+  } finally {
+    await db.$client.end();
   }
 }
 

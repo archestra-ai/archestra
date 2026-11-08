@@ -30,6 +30,7 @@ import { handleInteractionSessionPreviewBackfill } from "./interaction-session-p
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
+import { handleLlmUsageRollup } from "./llm-usage-rollup-handler";
 import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
 import { handleModelCostBackfill } from "./model-cost-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
@@ -53,6 +54,7 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "interaction_user_activity_rebuild",
     handleInteractionUserActivityRebuild,
   );
+  taskQueueService.registerHandler("llm_usage_rollup", handleLlmUsageRollup);
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);

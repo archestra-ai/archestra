@@ -4,6 +4,7 @@ import {
   isAzureOpenAiEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
 import { normalizeAzureApiKey } from "@/clients/azure-url";
+import ModelModel from "@/models/model";
 
 interface NativeRerankScore {
   index: number;
@@ -51,6 +52,11 @@ export async function callNativeRerank(params: {
   documents: string[];
 }): Promise<NativeRerankScore[]> {
   const { url, headers } = await buildRerankRequest(params);
+
+  await ModelModel.assertAvailable({
+    provider: params.provider,
+    modelId: params.model,
+  });
 
   const response = await fetch(url, {
     method: "POST",

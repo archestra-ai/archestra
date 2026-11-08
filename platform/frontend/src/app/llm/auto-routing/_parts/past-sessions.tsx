@@ -161,9 +161,7 @@ function BackfillStatus({
   const { progress } = backfill;
   const unread = progress
     ? [
-        ...(progress.noText > 0
-          ? [`${count(progress.noText)} without text`]
-          : []),
+        ...(progress.noText > 0 ? [`${count(progress.noText)} skipped`] : []),
         ...(progress.failed > 0 ? [`${count(progress.failed)} failed`] : []),
       ]
     : [];
@@ -195,7 +193,15 @@ function BackfillStatus({
               {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
             </p>
             {unread.length > 0 && <p>Not scored: {unread.join(", ")}</p>}
-            {backfill.phase === "score" && <p>Spent {spend(backfill)}</p>}
+            {backfill.phase === "score" && (
+              <>
+                <p>Budget accounted: {spend(backfill)}</p>
+                <p>
+                  Includes estimates when the scorer did not report a cost. This
+                  is not a billing statement.
+                </p>
+              </>
+            )}
           </div>
           <ClientBreakdown breakdown={backfill.breakdown} />
         </div>

@@ -5,6 +5,7 @@ import { vi } from "vitest";
 // access-control map and @/auth/utils are configuration/logic seams. The
 // database (UserModel / ServiceAccountModel) is NOT mocked — it's real PGlite.
 vi.mock("@/auth");
+vi.mock("@/auth/better-auth");
 vi.mock("@/auth/utils");
 vi.mock("@archestra/shared/access-control", async (importOriginal) => ({
   // Keep the real buildForbiddenErrorMessage so 403 messages stay realistic.
@@ -20,7 +21,8 @@ vi.mock("@archestra/shared/access-control", async (importOriginal) => ({
   memberPermissions: {},
 }));
 
-import { betterAuth, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
+import { auth as betterAuth } from "@/auth/better-auth";
 import { createFastifyInstance } from "@/fastify-instance";
 import { UserModel } from "@/models";
 import {

@@ -147,7 +147,8 @@ RUN apk add --no-cache \
    # CVE-2026-22796 and 11 others: OpenSSL vulnerabilities fixed in 3.5.5-r0
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
-   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
+   # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest.
+   # CVE-2026-107891 requires a newer musl package than that digest contains.
    # CVE-2026-92392: curl/libcurl vulnerabilities are resolved in 8.23.0-r0.
    # The explicit `apk add curl` above installs them, so explicit floors below ensure
    # a cached layer cannot retain the older packages.
@@ -175,13 +176,9 @@ RUN apk add --no-cache \
    # stale cache.
    apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
        "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
-   # CVE-2026-76641, CVE-2026-66046: expat vulnerabilities (HIGH) fixed in 2.8.4-r0.
-   # CVE-2026-93990: expat vulnerability (HIGH) fixed in 2.8.5-r0.
-   # CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0.
-   # expat is pulled in transitively (python), never named in an `apk add` here, so it
-   # needs its own floor for the same reason the openssl ones above do: the cached layer
-   # never re-runs against a newer index on its own.
-   apk add --no-cache --upgrade "expat>=2.9.0-r0" && \
+   # Require patched expat and invalidate cached package layers that retain the
+   # older XML parser. Python brings this package in transitively.
+   apk add --no-cache --upgrade "expat>=2.10.0-r0" && \
    # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
    # package layer, which otherwise retains the vulnerable 10.48-r0 build.
    apk add --no-cache --upgrade "pcre2>=10.49-r0" && \
@@ -192,7 +189,11 @@ RUN apk add --no-cache \
    # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
-   apk add --no-cache --upgrade "zlib>=1.3.2-r1"
+   # CVE-2026-4738: zlib vulnerability (CRITICAL) fixed in 1.4-r0.
+   apk add --no-cache --upgrade "zlib>=1.4-r0" && \
+   # Require the Alpine 3.23 musl fix for both installed packages and invalidate
+   # cached layers with 1.2.5-r23.
+   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

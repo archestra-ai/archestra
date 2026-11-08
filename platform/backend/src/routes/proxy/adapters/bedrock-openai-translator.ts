@@ -3,6 +3,7 @@ import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
+import { assertUnstructuredResponseFormat } from "../translated-response-format";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import { parseJsonObject } from "./openai-translator-utils";
 
@@ -40,6 +41,7 @@ type Loose = any;
  * entire LLM-proxy pipeline sees Converse shapes.
  */
 export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
+  assertUnstructuredResponseFormat(req, "the Bedrock Converse translation");
   assertModelRouterCacheControls("bedrock", req);
   const loose = req as Loose;
   const system: NonNullable<BedrockRequest["system"]> = [];
@@ -250,6 +252,7 @@ export function mapStopReason(
     case "tool_use":
       return "tool_calls";
     case "max_tokens":
+    case "model_context_window_exceeded":
       return "length";
     case "guardrail_intervened":
     case "content_filtered":
@@ -750,7 +753,10 @@ function buildInferenceConfig(loose: Loose): BedrockRequest["inferenceConfig"] {
   if (typeof loose.temperature === "number")
     cfg.temperature = loose.temperature;
   if (typeof loose.top_p === "number") cfg.topP = loose.top_p;
-  if (typeof loose.max_tokens === "number") cfg.maxTokens = loose.max_tokens;
+  // Newer clients send max_completion_tokens and omit max_tokens. Same
+  // precedence as the Gemini translator: the completion cap wins.
+  const maxTokens = loose.max_completion_tokens ?? loose.max_tokens;
+  if (typeof maxTokens === "number") cfg.maxTokens = maxTokens;
   if (typeof loose.stop === "string") cfg.stopSequences = [loose.stop];
   else if (Array.isArray(loose.stop))
     cfg.stopSequences = loose.stop.map(String);

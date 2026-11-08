@@ -40,6 +40,38 @@ export type ObjectPolicy = Pick<
 >;
 
 export default class ResourcePermissionPolicyModel {
+  /** An opaque upstream router cannot prove which model policy it will exercise. */
+  static async hasRestrictedModels(organizationId: string): Promise<boolean> {
+    const table = schema.resourcePermissionPoliciesTable;
+    const policies = await db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, organizationId),
+          eq(table.resource, "llmModel"),
+        ),
+      );
+    const wildcard = policies.find((policy) => policy.scope === "*");
+    return policies.some(
+      (policy) =>
+        policy.scope !== "*" &&
+        !ResourcePermissionPolicyModel.isOrganizationWide({
+          policy,
+          scope: policy.scope,
+          action: "use",
+        }) &&
+        !(
+          wildcard &&
+          ResourcePermissionPolicyModel.isOrganizationWide({
+            policy: wildcard,
+            scope: policy.scope,
+            action: "use",
+          })
+        ),
+    );
+  }
+
   /** Bound application memory while upgrading a large legacy policy catalog. */
   static async listForPresetUpgrade(params: {
     tx: Transaction;
@@ -649,7 +681,7 @@ export default class ResourcePermissionPolicyModel {
       SELECT CASE
         WHEN bool_or(audience_entry->'subject'->>'type' IN ('organization', 'role')) THEN 'organization'
         WHEN bool_or(audience_entry->'subject'->>'type' = 'team') THEN 'team'
-        WHEN bool_or(audience_entry->'subject'->>'type' = 'serviceAccount'
+        WHEN bool_or(audience_entry->'subject'->>'type' IN ('serviceAccount', 'oauthClient')
           OR (audience_entry->'subject'->>'type' = 'user'
             AND audience_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)) THEN 'user'
       END

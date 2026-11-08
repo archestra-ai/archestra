@@ -867,6 +867,69 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "NAMESPACE"
 
+  - it: should pass the release image digests the release pipeline recorded
+    documentIndex: 1
+    set:
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          mcp-server-base: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+            value: '{"images":{"mcp-server-base":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"version":"1.6.0"}'
+
+  - it: should pin the default platform image to its release digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  - it: should use another platform image or tag as configured despite a release digest
+    documentIndex: 1
+    set:
+      archestra.image: registry.example.com/archestra/platform
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry.example.com/archestra/platform:1.6.0"
+
+  - it: should not pin the platform image when its tag differs from the released version
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.1"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.1"
+
+  - it: should not set ARCHESTRA_RELEASE_IMAGE_DIGESTS for a chart built outside a release
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+          any: true
+
   - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1
     set:
@@ -1916,6 +1979,101 @@ tests:
             name: ARCHESTRA_AUTH_SECRET
             value: "auth-secret-helm-tests-32-chars!"
 
+  - it: should read chart-injected auth secrets from envFromSecrets instead of the auth Secret
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets:
+        - name: ARCHESTRA_AUTH_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_AUTH_SECRET
+        - name: ARCHESTRA_AUTH_SESSION_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+        - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+        - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+          secretName: runtime-secrets
+          secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: runtime-secrets
+                key: ARCHESTRA_AUTH_SECRET
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: auth-secret
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: session-secret
+                optional: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: secrets-encryption-secret
+                optional: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: offer-signing-secret
+                optional: true
+
+  - it: should keep integration credentials out of the pod spec
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: "outlook-client-secret-value"
+        ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: "mfiles-token-value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-agents-incoming-email-outlook-client-secret
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-knowledge-base-mfiles-vaf-add-on-github-token
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+            value: "outlook-client-secret-value"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            value: "mfiles-token-value"
+
   - it: should set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET from the generated offer-signing-secret key
     documentIndex: 1
     asserts:
@@ -2267,6 +2425,21 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-otel-exporter-otlp-auth-bearer
+
+  - it: should use secretKeyRef for ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER: "audit-bearer-token"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-audit-log-otel-auth-bearer
 
   - it: should use secretKeyRef for ARCHESTRA_METRICS_SECRET when provided
     documentIndex: 1
@@ -3345,3 +3518,107 @@ tests:
                 name: external-auth-secret
                 key: "1e3"
                 optional: true
+
+  - it: sets RDS IAM authentication env vars on the platform deployment when archestra.database.iamAuth is enabled
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+
+  - it: fails when archestra.database.iamAuth.enabled is true while postgresql.enabled is true
+    set:
+      postgresql.enabled: true
+      archestra.database.iamAuth.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: When archestra.database.iamAuth.enabled is true, you must set postgresql.enabled=false and configure an external RDS/Aurora PostgreSQL database."
+
+  - it: fails when archestra.database.iamAuth.injectWebIdentityTokenVolume is true without roleArn
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: When archestra.database.iamAuth.injectWebIdentityTokenVolume is true, you must set archestra.database.iamAuth.roleArn (or archestra.env.AWS_ROLE_ARN)."
+
+  - it: mounts projected OIDC token volume and sets AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE when injectWebIdentityTokenVolume is true
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.roleArn: arn:aws:iam::123456789012:role/non-eks-rds-role
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ROLE_ARN
+            value: arn:aws:iam::123456789012:role/non-eks-rds-role
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_WEB_IDENTITY_TOKEN_FILE
+            value: /var/run/secrets/aws-iam-token/serviceaccount/token
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: aws-iam-token
+            mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: aws-iam-token
+            projected:
+              defaultMode: 420
+              sources:
+                - serviceAccountToken:
+                    audience: sts.amazonaws.com
+                    expirationSeconds: 3600
+                    path: token
+
+  - it: references AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN from auth Secret instead of plaintext
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      archestra.database.iamAuth.enabled: true
+      archestra.env:
+        AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+        AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+        AWS_SESSION_TOKEN: IQoJb3JpZ2luX2VjEJr//////////wEaCXVzLWVhc3QtMSJHMEUCIQD
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            value: AKIAIOSFODNN7EXAMPLE
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: aws-secret-access-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SESSION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: aws-session-token

@@ -34,6 +34,11 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
+  agentNetworkRuntimeChanged,
+  assertCanWriteAgentNetworkPolicy,
+  syncAgentNetworkRuntimes,
+} from "@/services/agent-network-policy";
+import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
   assertAgentRuntimeTiersExist,
@@ -43,7 +48,13 @@ import {
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, AgentRuntime, ToolExposureMode } from "@/types";
+import type {
+  Agent,
+  AgentRuntime,
+  NetworkPolicy,
+  NetworkPolicyInput,
+  ToolExposureMode,
+} from "@/types";
 import {
   AgentActivationSkillSchema,
   AgentRuntimeSchema,
@@ -52,6 +63,7 @@ import {
   ApiError,
   InsertAgentSchemaBase,
   LabelWithDetailsSchema,
+  NetworkPolicyInputSchema,
   SuggestedPromptInputSchema,
   ToolExposureModeSchema,
   UuidIdSchema,
@@ -170,7 +182,7 @@ export const AgentRuntimeToolInputSchema = z
       .required({ image: true })
       .strict()
       .describe(
-        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the model router.",
+        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the unified model API.",
       ),
   ])
   .describe(
@@ -350,6 +362,7 @@ export async function handleCreateResource<
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
     runtime?: AgentRuntimeToolInput;
+    networkPolicy?: NetworkPolicyInput;
     llmApiKeyId?: string;
     modelId?: string;
   },
@@ -419,6 +432,13 @@ export async function handleCreateResource<
       createParams.accessAllSubagents = args.accessAllSubagents;
     }
     Object.assign(createParams, runtimeAndModel);
+    if (args.networkPolicy !== undefined) {
+      createParams.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: null,
+      });
+    }
 
     // A template-backed agent starts with what the catalog card would give
     // it: a coding-agent prompt and dynamic tool access.
@@ -488,13 +508,20 @@ export async function handleCreateResource<
     const created = await AgentModel.create(createParams, context.userId, {
       initialPermissionGrants: args.initialGrants ?? [],
     });
+    if (created.networkPolicy) {
+      syncAgentNetworkRuntimes({
+        agentId: created.id,
+        organizationId: created.organizationId,
+      });
+    }
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (targetAgentType === "agent" || targetAgentType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
         : [];
 
@@ -718,6 +745,7 @@ export async function handleEditResource<
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
     runtime?: AgentRuntimeToolInput | null;
+    networkPolicy?: NetworkPolicyInput | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
   },
@@ -798,6 +826,13 @@ export async function handleEditResource<
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);
     }
+    if (args.networkPolicy !== undefined) {
+      updateData.networkPolicy = await resolveNetworkPolicyForWrite({
+        context,
+        input: args.networkPolicy,
+        existing: existingAgent.networkPolicy,
+      });
+    }
 
     if (expectedType === "agent" || expectedType === "mcp_gateway") {
       if (expectedType === "agent" && args.systemPrompt !== undefined) {
@@ -835,13 +870,21 @@ export async function handleEditResource<
     }
     // A Slack bot of this agent follows its name and icon (best effort).
     void slackAppFactory.syncAgentIdentity(args.id);
+    if (agentNetworkRuntimeChanged({ before: existingAgent, after: updated })) {
+      syncAgentNetworkRuntimes({
+        agentId: updated.id,
+        organizationId: updated.organizationId,
+        engine: !!(existingAgent.networkPolicy || updated.networkPolicy),
+      });
+    }
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
         ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
-      expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0
+      (expectedType === "agent" || expectedType === "mcp_gateway") &&
+      (args.subAgentIds?.length ?? 0) > 0
         ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
         : [];
 
@@ -886,6 +929,43 @@ async function resolveNewAgentEnvironmentId(params: {
     resource,
     userId,
   });
+}
+
+/**
+ * Validate a network policy argument with the API's own schema and the same
+ * permission the agents REST routes require. Returns the normalized policy, or
+ * null to inherit the environment's policy.
+ */
+async function resolveNetworkPolicyForWrite(params: {
+  context: ArchestraContext;
+  input: NetworkPolicyInput | null;
+  existing: NetworkPolicy | null | undefined;
+}): Promise<NetworkPolicy | null> {
+  const { context, input, existing } = params;
+  let policy: NetworkPolicy | null = null;
+  if (input !== null) {
+    const parsed = NetworkPolicyInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ApiError(
+        400,
+        `Invalid networkPolicy: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    }
+    policy = parsed.data;
+  }
+  if (!context.userId || !context.organizationId) {
+    throw new ApiError(
+      403,
+      "User and organization context are required to set a network policy.",
+    );
+  }
+  await assertCanWriteAgentNetworkPolicy({
+    userId: context.userId,
+    organizationId: context.organizationId,
+    before: existing,
+    after: policy,
+  });
+  return policy;
 }
 
 /**

@@ -148,8 +148,8 @@ describe("OpenAPPA child-return markers", () => {
       extra: { type: "encrypted_content", encrypted_content: "unverified" },
     },
     {
-      name: "unrecognized message",
-      text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+      name: "unrecognized kind",
+      text: "Message Type: CHANNEL_POST\nTask name: /root\nSender: /root/worker\nPayload:\n391",
     },
   ])("refuses malformed or unsupported native mailbox returns: $name", ({
     author,
@@ -191,7 +191,7 @@ describe("OpenAPPA child-return markers", () => {
     expect(body).toEqual(sent);
   });
 
-  test("still collects a mailbox return next to messages it cannot read", () => {
+  test("still collects a mailbox return next to messages it does not read", () => {
     const header =
       "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
     const mail = (text: string, id?: string, payload?: string) => ({
@@ -208,6 +208,7 @@ describe("OpenAPPA child-return markers", () => {
     });
     // The kinds a Codex agent sends besides a task and its final answer. Codex
     // 0.162 sends the text of a message between agents as an encrypted part.
+    // A message is not a return: the reader leaves it for relay admission.
     const message = mail(
       "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
       undefined,
@@ -231,7 +232,6 @@ describe("OpenAPPA child-return markers", () => {
     });
 
     expect(refusals).toEqual([
-      "OpenAPPA withheld an unsupported Codex mailbox message",
       "OpenAPPA withheld an unsupported Codex mailbox message",
     ]);
     expect(collected.completions).toEqual([
@@ -744,11 +744,19 @@ describe("OpenAPPA child-return markers", () => {
           value: RETURN.value,
           envelopeId: "d2a07213-03ad-49a9-a289-6acec57aba87",
           assistantOrigin: false,
+          replayIdentity: {
+            childId: "5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef",
+            turn: 0,
+          },
         },
         {
           value: "second turn",
           envelopeId: "d2a07213-03ad-49a9-a289-6acec57aba87",
           assistantOrigin: false,
+          replayIdentity: {
+            childId: "5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef",
+            turn: 1,
+          },
         },
       ]);
     });
@@ -775,6 +783,80 @@ describe("OpenAPPA child-return markers", () => {
       expect(() =>
         collectAndStripChildReturns(body, { copilotAgentReports: true }),
       ).toThrow("malformed agent report");
+    });
+
+    test("keeps the replay coordinate stable across incremental reads and stamped call ids", () => {
+      const marker = requiredMarker(COPILOT_RETURN);
+      const body = readAgent(
+        report([carrier(marker)]).replace("[Turn 0]", "[Turn 12]"),
+      );
+      const id = stampToolCallId({
+        callId: "read-again",
+        organizationId: RETURN.organizationId,
+        sessionId: RETURN.parentId,
+        callerId: RETURN.callerId,
+        secret: SECRET,
+      });
+      body.input[1].call_id = id;
+      body.input[2].call_id = id;
+      const { completions } = collectAndStripChildReturns(body, {
+        copilotAgentReports: true,
+      });
+      expect(completions).toEqual([
+        expect.objectContaining({
+          value: RETURN.value,
+          replayIdentity: {
+            childId: "5ef9a71d-f2c6-47f4-abe6-3d0adb3141ef",
+            turn: 12,
+          },
+        }),
+      ]);
+    });
+
+    test("refuses a report whose child differs from the read's argument", () => {
+      const body = readAgent(report([carrier(requiredMarker(COPILOT_RETURN))]));
+      body.input[1].arguments = '{"agent_id":"another-child"}';
+      expect(() =>
+        collectAndStripChildReturns(body, { copilotAgentReports: true }),
+      ).toThrow("different child");
+    });
+
+    test.each([
+      "[Turn 0]",
+      "[Turn 9007199254740992]",
+    ])("refuses duplicated or unsafe turn coordinates (%s)", (heading) => {
+      const body = readAgent(
+        report([
+          carrier(requiredMarker(COPILOT_RETURN)),
+          carrier(requiredMarker(COPILOT_RETURN)),
+        ]).replace("[Turn 1]", heading),
+      );
+      expect(() =>
+        collectAndStripChildReturns(body, { copilotAgentReports: true }),
+      ).toThrow("malformed agent report");
+    });
+
+    test("refuses conflicting children for the same native call id", () => {
+      const body = readAgent(report([carrier(requiredMarker(COPILOT_RETURN))]));
+      body.input.push({
+        type: "function_call",
+        name: "read_agent",
+        call_id: "d2a07213-03ad-49a9-a289-6acec57aba87",
+        arguments: '{"agent_id":"another-child"}',
+      });
+      expect(() =>
+        collectAndStripChildReturns(body, { copilotAgentReports: true }),
+      ).toThrow("conflicting Copilot agent reads");
+    });
+
+    test("does not infer replay coordinates from an unbound report header", () => {
+      const body = readAgent(report([carrier(requiredMarker(COPILOT_RETURN))]));
+      body.input[1].arguments = "{}";
+      const { completions } = collectAndStripChildReturns(body, {
+        copilotAgentReports: true,
+      });
+      expect(completions).toHaveLength(1);
+      expect(completions[0].replayIdentity).toBeUndefined();
     });
   });
 

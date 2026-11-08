@@ -1,0 +1,122 @@
+name: Frontend Dev Cache
+
+# Publishes the frontend's production build, made exactly as an Agent
+# Runtime's lite dev stack makes it (`scripts/dev-lite.sh`), and that build's
+# Turbopack cache, for every main commit that changes the frontend's inputs. A
+# dev stack on a clean checkout of a published commit installs the build
+# instead of making it (a cold build holds about 3.5 GiB); after an edit it
+# starts its build from the cache. platform/scripts/frontend-prebuilt.mjs
+# computes the key, packs and installs.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "platform/frontend/**"
+      - "platform/shared/**"
+      - "platform/pnpm-lock.yaml"
+      - "platform/pnpm-workspace.yaml"
+      - "platform/package.json"
+      - "platform/patches/**"
+      - "platform/.env.example"
+      - "platform/scripts/dev-lite.sh"
+      - "platform/scripts/frontend-prebuilt.mjs"
+      - ".github/workflows/frontend-dev-cache.yml"
+  workflow_dispatch:
+    inputs:
+      republish:
+        description: "Build and publish even if an entry for this key exists"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: frontend-dev-cache-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish the prebuilt dev frontend
+    # Forks and the private mirror cannot write the public org's packages.
+    if: github.repository == 'archestra-ai/archestra'
+    runs-on: ubuntu-24.04-8core
+    timeout-minutes: 30
+    permissions:
+      contents: read # Check out the frontend sources.
+      packages: write # Publish the cache to GHCR.
+    env:
+      REPOSITORY: ghcr.io/archestra-ai/ci/frontend-dev-cache
+      # As an Agent Runtime's stack builds: no source maps.
+      ARCHESTRA_DEV_LITE_SOURCE_MAPS: "false"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup node/pnpm + install dependencies
+        uses: $/.github/actions/setup-env
+
+      # The key covers the build's environment, part of which comes from
+      # platform/.env: let dev-lite.sh write it as it does in a pod.
+      - name: Compute cache key
+        id: key
+        run: |
+          rm -f platform/.env
+          echo "value=$(bash platform/scripts/dev-lite.sh frontend-artifact key)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Check for a published entry
+        id: published
+        env:
+          KEY: ${{ steps.key.outputs.value }}
+          REPUBLISH: ${{ inputs.republish }}
+        run: |
+          if [ "$REPUBLISH" != "true" ] && docker manifest inspect "$REPOSITORY:$KEY" >/dev/null 2>&1 \
+            && docker manifest inspect "$REPOSITORY:cache-$KEY" >/dev/null 2>&1; then
+            echo "Already published: $REPOSITORY:$KEY"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # CI=false: Next tells Turbopack when it builds on CI, and the build
+      # must be the one a pod makes.
+      - name: Build the frontend as an Agent Runtime's dev stack does
+        if: steps.published.outputs.exists != 'true'
+        env:
+          KEY: ${{ steps.key.outputs.value }}
+          CI: "false"
+        run: |
+          mkdir -p "$RUNNER_TEMP/frontend-dev-cache"
+          packed="$(bash platform/scripts/dev-lite.sh frontend-artifact pack "$RUNNER_TEMP/frontend-dev-cache" | tail -n 1)"
+          test "$packed" = "$KEY"
+          du -sh "$RUNNER_TEMP/frontend-dev-cache"/*
+
+      - name: Publish
+        if: steps.published.outputs.exists != 'true'
+        env:
+          KEY: ${{ steps.key.outputs.value }}
+        run: |
+          for kind in cache build; do
+            dir="$RUNNER_TEMP/frontend-dev-cache/$kind"
+            test "$(jq -r .key "$dir/manifest.json")" = "$KEY"
+            tag="$KEY"
+            [ "$kind" = cache ] && tag="cache-$KEY"
+            docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+              --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              --tag "$REPOSITORY:$tag" --push --file - "$dir" <<'EOF'
+          FROM scratch
+          COPY . /
+          EOF
+            echo "Published $REPOSITORY:$tag"
+          done

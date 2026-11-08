@@ -1,4 +1,5 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
+import { ERROR_REPORTING_DATA_COLLECTION } from "@archestra/shared/error-reporting";
 import { SpanKind } from "@opentelemetry/api";
 import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
 import type { ErrorEvent, EventHint, TransactionEvent } from "@sentry/core";
@@ -20,6 +21,33 @@ function makeEvent(): ErrorEvent {
 function hintFor(error: unknown): EventHint {
   return { originalException: error } as EventHint;
 }
+
+describe("error reporting data collection", () => {
+  // Setting `dataCollection` switches the SDK's baseline to collecting
+  // everything, so a category the shared option leaves out is collected.
+  // A new SDK category shows up here as a difference to decide on.
+  test("the SDK collects no request, user, or local-variable data", () => {
+    const client = new Sentry.NodeClient({
+      dataCollection: ERROR_REPORTING_DATA_COLLECTION,
+      integrations: [],
+      transport: Sentry.makeNodeTransport,
+      stackParser: Sentry.defaultStackParser,
+    });
+
+    expect(client.getDataCollectionOptions()).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      stackFrameVariables: false,
+      frameContextLines: 5,
+    });
+  });
+});
 
 describe("buildRawProviderError", () => {
   test("attaches the upstream status code to the error", () => {
@@ -60,6 +88,7 @@ describe("filterErrorEvent", () => {
         data: { messages: [{ content: "Private conversation" }] },
         query_string: "token=private-query",
       },
+      user: { id: "user-1", email: "private-user@example.com" },
     };
 
     const result = filterErrorEvent(
@@ -76,6 +105,7 @@ describe("filterErrorEvent", () => {
       method: "POST",
       url: "https://app.example.com/api/chat",
     });
+    expect(result?.user).toEqual({ id: "user-1" });
     expect(JSON.stringify(result)).not.toContain("private-");
     expect(JSON.stringify(result)).not.toContain("Private conversation");
   });

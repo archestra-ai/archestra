@@ -1,8 +1,16 @@
 "use client";
-// one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
+// one result: headline, chart, sortable summary or heat-shaded pivot, exports,
 // and the REST call that returns the same data.
 
-import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  Info,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import {
   type SetStateAction,
@@ -14,12 +22,19 @@ import {
 } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -48,7 +63,10 @@ import {
 import {
   ApiLine,
   ChartKindToggle,
-  copyCsv,
+  csvFilename,
+  exportCsv,
+  exportJson,
+  exportParquet,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -73,8 +91,17 @@ export default function CostExplorer() {
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
-  const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
+  const limitsAccess = useTeamLimitAccess();
+  const { data: canReadCosts, isPending: isCostAccessPending } =
+    useHasPermissions({ llmCost: ["read"] });
+  // Without organization cost access, a team admin sees only their teams'
+  // requests, which the backend scopes for the team and cost endpoints.
+  const teamScoped =
+    !isCostAccessPending && !canReadCosts && limitsAccess.isTeamAdmin;
+  const [teamId, setTeamId] = useState<string>();
+  const ready = enabled && !isCostAccessPending;
   const canGroup = (group: DimId) =>
+    (!teamScoped || TEAM_SCOPED_GROUPS.includes(group)) &&
     (group !== "app" || canReadApps) &&
     (group !== "skill" || canReadSkills) &&
     (group !== "pool" || poolsEnabled);
@@ -84,9 +111,39 @@ export default function CostExplorer() {
     encode: encodeCostExplorer,
     timeframe,
   });
-  const { query, focus, view, pivotCols } = explorer;
+  const { focus, view, pivotCols } = explorer;
+  // A shared link may name a grouping, breakdown or model drill-down a team
+  // admin cannot read (breakdowns come from the organization-wide usage
+  // endpoint); fall back to spend by model, or drop the breakdown.
+  // Team-scoped sources carry no subscription estimate per team or model,
+  // so a team admin explores billed spend; the KPI still shows the estimate.
+  const scopeQuery = (raw: PivotQuery): PivotQuery =>
+    !teamScoped
+      ? raw
+      : raw.metric === "subscription"
+        ? scopeQuery({ ...raw, metric: "billed" })
+        : !canGroup(raw.group) || raw.model
+          ? {
+              ...raw,
+              metric: supports("model", raw.metric) ? raw.metric : "billed",
+              group: "model",
+              split: "none",
+              model: undefined,
+            }
+          : raw.split !== "none"
+            ? { ...raw, split: "none" }
+            : raw;
+  const query = scopeQuery(explorer.query);
+  // Controls change the query on screen, never a hidden grouping or model
+  // filter that would force the fallback again.
+  const scopeQueryRef = useRef(scopeQuery);
+  scopeQueryRef.current = scopeQuery;
   const setQ = useCallback(
-    (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
+    (value: SetStateAction<PivotQuery>) =>
+      setExplorer("query", (previous) => {
+        const shown = scopeQueryRef.current(previous);
+        return typeof value === "function" ? value(shown) : value;
+      }),
     [setExplorer],
   );
   const setFocus = useCallback(
@@ -100,7 +157,7 @@ export default function CostExplorer() {
 
   const labelKeys = useProxyLabelKeys({
     timeframe,
-    enabled: enabled && query.group === "label",
+    enabled: ready && query.group === "label",
   });
   const labelKey = labelKeys.data?.includes(query.labelKey ?? "")
     ? query.labelKey
@@ -129,8 +186,11 @@ export default function CostExplorer() {
     setQ,
     setFocus,
   ]);
-  const kpis = useKpis({ timeframe, enabled });
-  const allModelsCube = usePivotCube(q, timeframe, enabled && !q.model);
+  const kpis = useKpis({ timeframe, teamId, enabled: ready });
+  const allModelsCube = usePivotCube(q, timeframe, ready && !q.model, {
+    teamId,
+    teamScoped,
+  });
   const modelCube = useModelUsageCube({
     model: q.model,
     group: q.group === "key" || q.group === "agent" ? q.group : "person",
@@ -151,7 +211,8 @@ export default function CostExplorer() {
 
   const statistics = useCostStatistics({
     timeframe,
-    enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
+    teamId,
+    enabled: ready && (q.metric === "billed" || q.metric === "subscription"),
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -188,9 +249,9 @@ export default function CostExplorer() {
     q.group === "label"
       ? { label: q.labelKey ?? "Label", plural: "label values" }
       : DIMS[q.group];
-  const splits = (q.model ? [] : splitOptions(q.metric, q.group)).filter(
-    (d) => d !== "method" && canGroup(d) && d !== q.group,
-  );
+  const splits = (
+    q.model || teamScoped ? [] : splitOptions(q.metric, q.group)
+  ).filter((d) => d !== "method" && canGroup(d) && d !== q.group);
   const hasSplit = q.split !== "none";
   const activeView = SAVED_VIEWS.find(
     (v) =>
@@ -208,7 +269,7 @@ export default function CostExplorer() {
       : q.group === "app" && ["billed", "requests", "tokens"].includes(q.metric)
         ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
         : q.group === "key" && !q.model
-          ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
+          ? "Credential names and recorded IDs are shown in full. Calls without an individual credential ID cannot be distinguished further."
           : q.group === "providerKey" || q.group === "pool"
             ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
             : null;
@@ -219,11 +280,14 @@ export default function CostExplorer() {
     let trend: number | null = null;
     if (n >= 4) {
       const half = Math.floor(n / 2);
+      const { bucketTotals } = cube;
       const sumRange = (a: number, b: number) =>
-        cube.rows.reduce(
-          (acc, r) => acc + r.series.slice(a, b).reduce((x, y) => x + y, 0),
-          0,
-        );
+        bucketTotals
+          ? bucketTotals.slice(a, b).reduce((x, y) => x + y, 0)
+          : cube.rows.reduce(
+              (acc, r) => acc + r.series.slice(a, b).reduce((x, y) => x + y, 0),
+              0,
+            );
       const first = sumRange(0, half);
       const second = sumRange(n - half, n);
       trend = first > 0 ? (second - first) / first : null;
@@ -239,8 +303,25 @@ export default function CostExplorer() {
     .filter((r) => focus.has(r.key))
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
+  const exportParams = {
+    cube,
+    metric: q.metric,
+    dimLabel: dim.label,
+    view,
+    bySplit: pivotBySplit,
+    filename: csvFilename({
+      scope: "costs",
+      parts: [
+        view === "summary" && cube.exportTable ? null : metric.label,
+        `by ${dim.label}`,
+        hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
+        q.model,
+      ],
+      timeframe: String(timeframe),
+    }),
+  };
   const focusedRows = cube.rows.filter((row) => focus.has(row.key));
-  const limitsLink = canReadLimits
+  const limitsLink = limitsAccess.canRead
     ? getCostLimitsLink(
         q,
         focusedRows.length === 1 ? focusedRows[0] : undefined,
@@ -251,8 +332,28 @@ export default function CostExplorer() {
     focusedRows.length === 1 ? focusedRows[0] : undefined,
   );
 
+  const drilldownFrom =
+    q.group === "model" && !teamScoped ? drilldown : undefined;
   const queryControls = (
     <>
+      {teamScoped && limitsAccess.teams.length > 1 && (
+        <QueryChip
+          label="Team"
+          className="max-sm:grow"
+          value={teamId ?? ALL_TEAMS}
+          options={[
+            { id: ALL_TEAMS, label: "All my teams" },
+            ...limitsAccess.teams.map((team) => ({
+              id: team.id,
+              label: team.name,
+            })),
+          ]}
+          onChange={(id) => {
+            setTeamId(id === ALL_TEAMS ? undefined : id);
+            setFocus(new Set());
+          }}
+        />
+      )}
       {/* A saved view is a preset of the controls beside it; changing
               any of them makes the view custom. */}
       <QueryChip
@@ -263,7 +364,10 @@ export default function CostExplorer() {
           ...SAVED_VIEWS.filter(
             (v) =>
               canGroup(v.q.group) &&
-              (!q.model || ["person", "key", "agent"].includes(v.q.group)),
+              // A model drill-down answers one grouping and no split.
+              (!q.model ||
+                (["person", "key", "agent"].includes(v.q.group) &&
+                  v.q.split === "none")),
           ).map((v) => ({
             id: v.id,
             label: v.label,
@@ -296,7 +400,10 @@ export default function CostExplorer() {
                 "cacheWrite",
               ].includes(m)) &&
             (m !== "appRuns" || canReadApps) &&
-            (m !== "skillActivations" || canReadSkills),
+            (m !== "skillActivations" || canReadSkills) &&
+            (!teamScoped ||
+              (m !== "subscription" &&
+                DIM_IDS.some((d) => canGroup(d) && supports(d, m)))),
         ).map((m) => ({
           id: m,
           label: METRICS[m].label,
@@ -560,7 +667,7 @@ export default function CostExplorer() {
                 cube={cube}
                 metric={q.metric}
                 kind={chart}
-                onDrilldown={q.group === "model" ? drilldown : undefined}
+                onDrilldown={drilldownFrom}
                 split={hasSplit}
                 focus={focus}
               />
@@ -608,7 +715,7 @@ export default function CostExplorer() {
             ) : (
               chart !== "table" && (
                 <span className="hidden text-muted-foreground text-xs md:inline">
-                  {q.group === "model"
+                  {drilldownFrom
                     ? "Select a model name to explore its people, keys and agents. Click rows to compare."
                     : q.model
                       ? "Filtered to the selected model. Summary cards above cover all models."
@@ -616,24 +723,33 @@ export default function CostExplorer() {
                 </span>
               )
             )}
-            <Button
-              variant="ghost"
-              size="xs"
-              className="ml-auto"
-              disabled={cube.rows.length === 0}
-              onClick={() =>
-                copyCsv({
-                  cube,
-                  metric: q.metric,
-                  dimLabel: dim.label,
-                  view,
-                  bySplit: pivotBySplit,
-                })
-              }
-            >
-              <ClipboardCopy />
-              Copy as CSV
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto"
+                  disabled={cube.rows.length === 0}
+                >
+                  <Download />
+                  Export
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => exportCsv(exportParams)}>
+                  <FileSpreadsheet /> CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportJson(exportParams)}>
+                  <FileJson /> JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void exportParquet(exportParams)}
+                >
+                  <Download /> Parquet
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="border-t">
             {cube.error ? null : cube.isLoading ? (
@@ -655,7 +771,7 @@ export default function CostExplorer() {
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
-                onDrilldown={q.group === "model" ? drilldown : undefined}
+                onDrilldown={drilldownFrom}
               />
             ) : (
               <PivotTable
@@ -744,3 +860,6 @@ function Empty({ text }: { text: string }) {
 }
 
 const CUSTOM_VIEW = "custom";
+const ALL_TEAMS = "all";
+/** The groupings the team-scoped endpoints answer. */
+const TEAM_SCOPED_GROUPS: DimId[] = ["time", "team", "model"];

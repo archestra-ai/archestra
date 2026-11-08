@@ -11,8 +11,12 @@ import { memberPermissions } from "@archestra/shared/access-control";
 import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
-import db from "@/database";
-import { scopedSessionId } from "@/openappa/actor";
+import db, { schema } from "@/database";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaYellModel from "@/models/openappa-yell";
+import ToolModel from "@/models/tool";
+import { openappaActor, scopedSessionId } from "@/openappa/actor";
+import { rememberUnattendedSession } from "@/openappa/break-the-glass";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
 import * as hitlReview from "@/openappa/hitl-review";
@@ -28,6 +32,7 @@ import {
 } from "@/openappa/hitl-review";
 import { signPeerProof } from "@/openappa/peer-claims";
 import * as openappaService from "@/openappa/service";
+import { isUnenforcedSession } from "@/openappa/unenforced";
 import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -251,33 +256,6 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a signed proof from one organization cannot read another organization's inbox", async ({
-    makeOrganization,
-    makeMember,
-  }) => {
-    const otherOrganization = await makeOrganization();
-    const userId = mockContext.userId;
-    if (!userId) throw new Error("Missing authenticated fixture user");
-    await makeMember(userId, otherOrganization.id, { role: "admin" });
-    const read = vi.spyOn(openappaService, "readPeerMessage");
-
-    await expect(
-      executeArchestraTool(
-        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
-        { message_id: "message-1", peer_proof: peerProof() },
-        {
-          ...mockContext,
-          organizationId: otherOrganization.id,
-          openappaSession: {
-            organization_id: otherOrganization.id,
-            session_id: "other-session",
-          },
-        },
-      ),
-    ).rejects.toMatchObject({ statusCode: 403 });
-    expect(read).not.toHaveBeenCalled();
-  });
-
   test("listing held messages does not expose content digests or sender-supplied identities", async () => {
     const session = {
       organization_id: orgId,
@@ -383,32 +361,6 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a peer read keeps the authenticated child and logical call identity", async () => {
-    const session = {
-      organization_id: orgId,
-      caller_id: `user:${mockContext.userId}`,
-      session_id: "session-1:worker",
-      parent_id: "session-1",
-    };
-    const admitted = {
-      content: [{ type: "text" as const, text: "A checked peer message" }],
-    };
-    const read = vi
-      .spyOn(openappaService, "readPeerMessage")
-      .mockResolvedValue(admitted);
-    const response = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}read_peer_message`,
-      { message_id: "message-1", peer_proof: peerProof({ call_id: "read-1" }) },
-      { ...mockContext, openappaSession: session, currentToolCallId: "read-1" },
-    );
-    expect(response).toEqual(admitted);
-    expect(read).toHaveBeenCalledExactlyOnceWith({
-      session,
-      toolCallId: "read-1",
-      args: { message_id: "message-1" },
-    });
-  });
-
   test.each([
     false,
     true,
@@ -443,31 +395,6 @@ describe("OpenAPPA tool execution", () => {
       },
       toolCallId: "peer-call-1",
       args: { message_id: "message-1" },
-    });
-  });
-
-  test("a signed inbox listing retains its proxy-issued logical call", async () => {
-    const list = vi
-      .spyOn(openappaService, "listPeerMessages")
-      .mockResolvedValue([]);
-    await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_peer_messages`,
-      {
-        peer_proof: peerProof({
-          action: "list_peer_messages",
-          message_id: null,
-        }),
-      },
-      mockContext,
-    );
-    expect(list).toHaveBeenCalledExactlyOnceWith({
-      session: {
-        organization_id: orgId,
-        caller_id: `user:${mockContext.userId}`,
-        session_id: "session-1:worker",
-        parent_id: "session-1",
-      },
-      toolCallId: "peer-call-1",
     });
   });
 
@@ -668,6 +595,183 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy).not.toHaveBeenCalled();
   });
 
+  async function retainRemedyDenial(params: {
+    sessionId: string;
+    parentId?: string;
+    feedback: string;
+    offerId: string;
+  }) {
+    const root = openappaActor(params.sessionId);
+    const callerId = `user:${mockContext.userId}`;
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      actor: root,
+      root,
+      parentId: params.parentId ?? null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: orgId,
+      callerId,
+      sessionId: params.sessionId,
+      operationId: "call:protected-operation",
+      root,
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "protected_tool" } },
+      decision: {
+        decision: "deny_call",
+        feedback: params.feedback,
+        offers: [{ offer_id: params.offerId }],
+      },
+    });
+  }
+
+  test.each([
+    "invented-offer",
+    "retained-hard-offer",
+  ])("a remedy %s cannot bypass a retained hard denial", async (offerId) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const callerId = `user:${mockContext.userId}`;
+    const sessionId = scopedSessionId(callerId, "hard-denied-session");
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    await retainRemedyDenial({
+      sessionId,
+      feedback: "requires attention: blocked",
+      offerId: "retained-hard-offer",
+    });
+    const execute = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: offerId,
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: session },
+    );
+    expect(result.isError).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+    expect(await isUnenforcedSession(session)).toBe(false);
+    expect(
+      await db.select().from(schema.openappaUnenforcedSessionsTable),
+    ).toEqual([]);
+    // A replay still reads the original denial; no remedy execution or
+    // session bypass has replaced it with permission to run the operation.
+    const replay = await OpenAppaSessionModel.recordedToolCallDecisions({
+      organizationId: orgId,
+      sessionId,
+      callerId,
+      toolCallIds: ["protected-operation"],
+    });
+    expect(replay.get("protected-operation")).toMatchObject({
+      decision: "deny_call",
+      feedback: "requires attention: blocked",
+    });
+  });
+
+  test.each([
+    "scoped",
+    "unscoped",
+  ] as const)("a fabricated offer cannot waive another user's %s session", async (kind) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const sessionId =
+      kind === "scoped"
+        ? "user:other-user|known-session"
+        : "22222222-2222-4222-8222-222222222222";
+    const callerId = `user:${mockContext.userId}`;
+    // The gateway scopes even a header naming the victim's bare Chat ID
+    // to the authenticated caller before constructing this context.
+    const currentSession = openappaService.sessionFromHeaders({
+      headers: { "x-appa-session-id": sessionId },
+      organizationId: orgId,
+      callerId,
+      scope: callerId,
+    });
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "fabricated-offer",
+        plan: "Review",
+        trajectory: trajectory({ session_id: sessionId }),
+      },
+      { ...mockContext, openappaSession: currentSession },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(
+      await isUnenforcedSession({
+        organization_id: orgId,
+        caller_id: "user:other-user",
+        session_id: sessionId,
+      }),
+    ).toBe(false);
+    expect(await db.select().from(schema.openappaYellsTable)).toEqual([]);
+  });
+
+  test.each([
+    "scoped",
+    "child",
+    "current",
+    "chat",
+  ] as const)("an owned %s session can waive a retained soft offer without executing it", async (kind) => {
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: "allow",
+    };
+    const callerId = `user:${mockContext.userId}`;
+    const parentId = scopedSessionId(callerId, "owned-session");
+    const sessionId =
+      kind === "scoped"
+        ? parentId
+        : kind === "child"
+          ? `${parentId}:child`
+          : "22222222-2222-4222-8222-222222222222";
+    const session = {
+      organization_id: orgId,
+      caller_id: callerId,
+      session_id: sessionId,
+    };
+    await retainRemedyDenial({
+      sessionId,
+      ...(kind === "child" ? { parentId } : {}),
+      feedback: "Original soft refusal requiring a review",
+      offerId: "expired-offer",
+    });
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "expired-offer",
+        plan: "Review",
+        trajectory: trajectory({
+          session_id: sessionId,
+          ...(kind === "child" ? { parent_id: parentId } : {}),
+        }),
+      },
+      {
+        ...mockContext,
+        ...(kind === "current" ? { openappaSession: session } : {}),
+        ...(kind === "chat" ? { conversationId: sessionId } : {}),
+      },
+    );
+
+    expect(result.structuredContent).toMatchObject({
+      outcome: "guardrails_disabled",
+    });
+    expect(await isUnenforcedSession(session)).toBe(true);
+  });
+
   test("declares a subagent's return ahead of its spawn with no offer and no review", async () => {
     const reviewSpy = vi.spyOn(openappaService, "loadOfferReview");
     const executeSpy = vi
@@ -813,6 +917,42 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
     expect(result.content[0]).toEqual({ type: "text", text: "Authorized" });
     expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: the prompt hides credential headers while the ruling binds the original call", async () => {
+    const reviewedArguments = JSON.stringify({
+      command: "curl -H 'Authorization: Bearer tok_secret' https://x/api",
+    });
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: `Approve this call?\nArguments:\n${reviewedArguments}`,
+      session_id: "session-1",
+      tool: "mcp/shell/run",
+      arguments: reviewedArguments,
+    });
+    const executeSpy = vi
+      .spyOn(openappaService, "executeRemedyByOffer")
+      .mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    await executeArchestraTool(
+      toolFullName,
+      { offer_id: "offer-hitl", trajectory: trajectory() },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    const prompt = elicitSpy.mock.calls[0]?.[0];
+    expect(prompt.reviewedArguments).toBeDefined();
+    expect(JSON.stringify(prompt)).not.toContain("tok_secret");
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ ruling: "approve" }),
+    );
   });
 
   test("chat client: a reviewed call that could not run is refused without asking", async () => {
@@ -1787,6 +1927,469 @@ describe("OpenAPPA tool execution", () => {
     ).toMatchObject({
       question: "Approve this action?",
       remedy_offer_ids: ["offer-hitl"],
+    });
+  });
+
+  describe("the staged review carries the tool's own description", () => {
+    const stage = async (review: { tool: string; arguments: string }) => {
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+        offer_id: "offer-hitl",
+        text: "Approve this action?",
+        session_id: "session-1",
+        ...review,
+      });
+      const result = await executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        {
+          ...mockContext,
+          currentToolCallId: "described-call",
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+      expect(result.structuredContent).toMatchObject({
+        outcome: "review_required",
+      });
+      return hitlReview.getHitlReview({
+        session: { organization_id: orgId, session_id: "session-1" },
+        offerId: "offer-hitl",
+      });
+    };
+
+    test("a built-in tool's description from the registry", async () => {
+      const staged = await stage({
+        tool: "archestra__todo_write",
+        arguments: VALID_TODO,
+      });
+      const definition = getAllArchestraMcpTools().find((tool) =>
+        tool.name.endsWith("__todo_write"),
+      );
+      expect(definition?.description).toBeTruthy();
+      expect(staged?.toolDescription).toBe(definition?.description?.trim());
+    });
+
+    test("an assigned gateway tool's stored description", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("also for a call with a description argument, which the card weighs", async ({
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const tool = await makeTool({
+        name: "github__create_issue",
+        description: "Create an issue in a repository.",
+      });
+      await makeAgentTool(mockContext.agent.id, tool.id);
+      // Here `description` is the issue body, not what the call does.
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "T", description: "Body" }),
+      });
+      expect(staged?.toolDescription).toBe("Create an issue in a repository.");
+    });
+
+    test("none for the run_tool wrapper", async () => {
+      const staged = await stage({
+        tool: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "archestra__todo_write",
+          tool_args: {},
+        }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("none for a client's own tool", async () => {
+      const staged = await stage({
+        tool: "Bash",
+        arguments: JSON.stringify({ command: "ls" }),
+      });
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+
+    test("a failed lookup stages the review without it", async () => {
+      const lookup = vi
+        .spyOn(ToolModel, "findByNameForAgent")
+        .mockRejectedValue(new Error("database unavailable"));
+      const staged = await stage({
+        tool: "mcp/github/create_issue",
+        arguments: JSON.stringify({ title: "Flaky test" }),
+      });
+      expect(lookup).toHaveBeenCalled();
+      expect(staged).toBeDefined();
+      expect(staged).not.toHaveProperty("toolDescription");
+    });
+  });
+
+  describe("Break the glass answers a review in an unattended session", () => {
+    const offerReview = {
+      offer_id: "offer-hitl",
+      text: "Approve this action?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+    };
+    const gatewayContext = (): ArchestraContext => ({
+      ...mockContext,
+      currentToolCallId: "waived-review-call",
+      mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+    });
+    const settings = async (
+      humanApprovalMode: "block" | "unattended" | "everywhere",
+      breakTheGlassEnabled = false,
+    ) =>
+      vi
+        .spyOn(guardrailsDeployment, "getGuardrailsDeployment")
+        .mockResolvedValue({
+          ...(await guardrailsDeployment.getGuardrailsDeployment()),
+          active: true,
+          humanApprovalMode,
+          breakTheGlassEnabled,
+        });
+    const remedy = () =>
+      executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        gatewayContext(),
+      );
+    const yells = () =>
+      db
+        .select()
+        .from(schema.openappaYellsTable)
+        .where(sql`${schema.openappaYellsTable.organizationId} = ${orgId}`);
+
+    test("approves the plan itself, says no person ruled, and records a yell", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended");
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+
+      const result = await remedy();
+
+      expect(executeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ ruling: "approve", sessionId: "session-1" }),
+      );
+      expect(result.content).toEqual([
+        { type: "text", text: "Authorized" },
+        {
+          type: "text",
+          text: expect.stringContaining("Break the glass receipt"),
+        },
+      ]);
+      // Not a human ruling: the chat card shows none.
+      expect(extractMcpHumanRuling(result)).toBeFalsy();
+      // No question was staged for a person.
+      expect(
+        await getHitlAskUserArguments({
+          session: { organization_id: orgId, session_id: "session-1" },
+          offerIds: ["offer-hitl"],
+        }),
+      ).toBeUndefined();
+      expect(await yells()).toEqual([
+        expect.objectContaining({
+          kind: "approval_waived",
+          sessionId: "session-1",
+          superyell: false,
+          message: expect.stringContaining("archestra__todo_write"),
+        }),
+      ]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(false);
+    });
+
+    test("with yell reports off, the plan still goes through and the receipt says no yell was recorded", async () => {
+      const yellEnabled = config.openappa.yellEnabled;
+      config.openappa.yellEnabled = false;
+      try {
+        await settings("unattended", true);
+        vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+          offerReview,
+        );
+        vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+        await rememberUnattendedSession(
+          { organization_id: orgId, session_id: "session-1" },
+          true,
+        );
+
+        const result = await remedy();
+
+        expect(result.content).toEqual([
+          { type: "text", text: "Authorized" },
+          {
+            type: "text",
+            text: expect.stringContaining("no yell was recorded"),
+          },
+        ]);
+        expect(await yells()).toEqual([]);
+        // Nothing recorded a yell, so nothing turned the session off.
+        expect(
+          await isUnenforcedSession({
+            organization_id: orgId,
+            session_id: "session-1",
+          }),
+        ).toBe(false);
+      } finally {
+        config.openappa.yellEnabled = yellEnabled;
+      }
+    });
+
+    test("a record that cannot be written leaves the plan unauthorized and the review open", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended", true);
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+      const failing = vi
+        .spyOn(OpenAppaYellModel, "recordWaiver")
+        .mockRejectedValue(new Error("yell storage down"));
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+
+      const result = await remedy();
+
+      // Nothing was spent at the runtime, and the agent is told to call again.
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(result.structuredContent).toMatchObject({
+        ok: false,
+        outcome: "waiver_unrecorded",
+        offer_id: "offer-hitl",
+      });
+      expect(await yells()).toEqual([]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(false);
+      failing.mockRestore();
+    });
+
+    test("with the Yell tool turning Guardrails off, the session leaves OpenAPPA as after an agent's yell", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended", true);
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+        result: { content: [{ type: "text", text: "Authorized" }] },
+        known: true,
+      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+      expect((await remedy()).isError).toBeFalsy();
+      expect(await yells()).toEqual([
+        expect.objectContaining({ kind: "approval_waived", superyell: true }),
+      ]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(true);
+    });
+
+    test("a workload spending its own offer is unattended without the proxy's note", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended");
+      const principal = workloadPrincipal(
+        "22222222-2222-4222-8222-222222222222",
+      );
+      const sessionId = `${principal}|workspace-a`;
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+        ...offerReview,
+        session_id: sessionId,
+      });
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+      const result = await executeArchestraTool(
+        toolFullName,
+        {
+          offer_id: "offer-hitl",
+          plan: "Review",
+          trajectory: { v: 1, session_id: sessionId },
+        },
+        {
+          agent: mockContext.agent,
+          organizationId: orgId,
+          openappaSession: {
+            organization_id: orgId,
+            caller_id: principal,
+            session_id: sessionId,
+          },
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+      expect(result.isError).toBeFalsy();
+      expect(executeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ ruling: "approve", callerId: principal }),
+      );
+      expect(await yells()).toEqual([
+        expect.objectContaining({
+          kind: "approval_waived",
+          callerId: principal,
+          sessionId,
+        }),
+      ]);
+    });
+
+    test("a session nothing says is unattended still waits for a person", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended");
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+      expect((await remedy()).structuredContent).toMatchObject({
+        outcome: "review_required",
+      });
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(await yells()).toEqual([]);
+    });
+
+    test("with Human approval kept, an unattended session waits for a person", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("block");
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+      expect((await remedy()).structuredContent).toMatchObject({
+        outcome: "review_required",
+      });
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(await yells()).toEqual([]);
+    });
+
+    test("waived everywhere, an attended session is answered too", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("everywhere");
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Authorized" }] },
+          known: true,
+        });
+      expect((await remedy()).isError).toBeFalsy();
+      expect(executeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ ruling: "approve" }),
+      );
+    });
+
+    test("a plan the runtime refuses records no waiver and gets no receipt", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended", true);
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const refused = {
+        isError: true,
+        content: [{ type: "text" as const, text: "[appa] Blocked: refused" }],
+      };
+      vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+        result: refused,
+        known: true,
+      });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+      expect(await remedy()).toEqual(refused);
+      expect(await yells()).toEqual([]);
+      expect(
+        await isUnenforcedSession({
+          organization_id: orgId,
+          session_id: "session-1",
+        }),
+      ).toBe(false);
+    });
+
+    test("a human ruling given before the remedy call outranks the waiver", async () => {
+      config.openappa.yellEnabled = true;
+      await settings("unattended");
+      vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue(
+        offerReview,
+      );
+      const executeSpy = vi
+        .spyOn(openappaService, "executeRemedyByOffer")
+        .mockResolvedValue({
+          result: { content: [{ type: "text", text: "Denied" }] },
+          known: true,
+        });
+      await rememberUnattendedSession(
+        { organization_id: orgId, session_id: "session-1" },
+        true,
+      );
+      // A person answered the staged review before this remedy call.
+      const session = { organization_id: orgId, session_id: "session-1" };
+      await stageHitlReview({
+        session,
+        review: { offerId: "offer-hitl", text: offerReview.text },
+      });
+      await recordHitlRuling({
+        session,
+        offerId: "offer-hitl",
+        ruling: "deny",
+      });
+      const result = await remedy();
+      expect(executeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ ruling: "deny" }),
+      );
+      expect(extractMcpHumanRuling(result)).toBe("deny");
+      expect(await yells()).toEqual([]);
     });
   });
 

@@ -20,7 +20,7 @@ catalog:
   "@better-auth/core": 1.7.7
   "@better-auth/oauth-provider": 1.6.22
   "@better-auth/sso": 1.6.22
-  # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
+  # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1.
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
   # stays on the 6.x API via a shim whose binary is renamed `tsc6` — two packages
   # cannot both install a `tsc` bin.
@@ -293,6 +293,9 @@ patchedDependencies:
   # Keep all credential rules; remove after an upstream upgrade passes logging
   # redaction coverage without parsing paths on every record.
   '@pinojs/redact@0.4.0': patches/@pinojs__redact@0.4.0.patch
+  # Settle reconnect failures and cancellation; do not reopen after disconnect.
+  # Remove after an upstream upgrade passes the real Socket Mode lifecycle tests.
+  '@slack/socket-mode@2.0.5': patches/@slack__socket-mode@2.0.5.patch
   better-auth@1.7.7: patches/better-auth@1.7.7.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
   confluence.js@2.1.0: patches/confluence.js@2.1.0.patch

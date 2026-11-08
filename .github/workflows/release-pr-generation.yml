@@ -15,7 +15,7 @@ jobs:
       group: release-generation-select-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     if: >-
-      github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+      github.event.pull_request.user.login == 'archestra-releaser[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.head_ref, 'release-please--branches--') &&
       endsWith(github.head_ref, '--components--platform')
@@ -40,7 +40,7 @@ jobs:
     name: Generate release OpenAPI
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 25
     concurrency:
       group: release-generation-openapi-${{ github.event.pull_request.number }}
@@ -50,8 +50,6 @@ jobs:
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,7 +85,7 @@ jobs:
     name: Generate release screenshots
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     concurrency:
       group: release-generation-screenshots-${{ github.event.pull_request.number }}
@@ -154,7 +152,7 @@ jobs:
           path: generation-artifacts
       - name: Generate publication token
         id: token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

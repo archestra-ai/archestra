@@ -14,6 +14,11 @@
 #                              adds Keycloak with the e2e realm, for the
 #                              identity-provider and JWKS specs
 #   scripts/dev-lite.sh start [same options]   start without waiting
+#   scripts/dev-lite.sh prepare                dependencies, prebuilt native addons,
+#                              PostgreSQL and migrations only: no build and no server.
+#                              An Agent Runtime's bootstrap runs this, so a pod does
+#                              not build while its agent starts; `up` builds what is
+#                              missing and starts the rest when the stack is needed
 #   scripts/dev-lite.sh wait                   wait until backend and frontend answer
 #   scripts/dev-lite.sh status                 processes, memory, disk, URLs
 #   scripts/dev-lite.sh logs <component> [n]   tail a component log (db, migrate,
@@ -30,8 +35,16 @@
 #   scripts/dev-lite.sh reload backend|frontend  restart one component, rebuilt
 #                              first when it runs a build (the backend without
 #                              its watcher, the frontend as a production build)
+#   scripts/dev-lite.sh pause                  stop the backend and frontend servers and
+#                              keep PostgreSQL and the builds: room for one command
+#                              that needs the memory they hold
+#   scripts/dev-lite.sh resume                 start the paused servers again from their
+#                              builds, without rebuilding
 #   scripts/dev-lite.sh down                   stop everything; data and caches stay
 #   scripts/dev-lite.sh reset                  down, then delete the database and state
+#   scripts/dev-lite.sh frontend-artifact key|pack <dir>  CI: the key of the
+#                              frontend build an Agent Runtime makes, or that
+#                              build and its cache, packed for publishing
 #
 # The database is the installed PostgreSQL (postgresql-18 with pgvector in the
 # agent image), initialised under the state dir with durability settings off.
@@ -58,13 +71,18 @@
 #       Agent Runtime, true elsewhere, as for the Tilt stack.
 #   ARCHESTRA_DEV_LITE_SOURCE_MAPS
 #       true: the backend server (without the watcher) runs with
-#       --enable-source-maps, about 300 MB more at idle. Default false inside
-#       an Agent Runtime, true elsewhere.
+#       --enable-source-maps, about 300 MB more at idle, and the frontend's
+#       production build writes source maps, about 1.1 GiB more at its peak.
+#       Default false inside an Agent Runtime, true elsewhere.
 #   ARCHESTRA_DEV_LITE_FRONTEND
 #       dev: the Next dev server (about 3.5 GB once six pages are open); build:
 #       a production build served by its standalone server (about 0.24 GB;
 #       `reload frontend` rebuilds it after changes). Default build inside an
 #       Agent Runtime, dev elsewhere. --e2e always builds.
+#   ARCHESTRA_DEV_FRONTEND_PREBUILT
+#       false: always build the production frontend here. By default a clean
+#       checkout of a main commit installs the build CI published for it, and
+#       a build starts from CI's build cache (scripts/frontend-prebuilt.mjs)
 #   ARCHESTRA_DEV_LITE_KUBECONFIG
 #       kubeconfig for the MCP orchestrator (default: none, orchestrator disabled)
 #   ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL, ARCHESTRA_DEV_LITE_PUBLIC_API_URL
@@ -95,6 +113,15 @@ FRONTEND_MODE_FILE="$STATE_DIR/frontend-mode"
 # starts, removed by `down`. Readiness and `e2e` fail when a requested Keycloak
 # is not running, instead of treating it as never asked for.
 KEYCLOAK_REQUESTED_FILE="$STATE_DIR/keycloak-requested"
+# Written by `pause` with the frontend mode it stopped (or `none`), removed by
+# `resume`/`up`/`down`: the servers were stopped on purpose, to give one
+# memory-heavy command their memory, and come back from the same builds.
+PAUSED_FILE="$STATE_DIR/paused"
+# Written whenever a backend or frontend session starts, with the platform/
+# directory it serves, and removed by `down`: after `prepare` alone there is
+# nothing to wait for yet, and `pause`/`resume` from another checkout (a
+# worktree's type check) act on the checkout that runs the stack.
+SERVERS_FILE="$STATE_DIR/servers-started"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
 DB_USER=archestra
@@ -259,6 +286,9 @@ start_session() {
     return 0
   fi
   mkdir -p "$LOG_DIR"
+  case "$name" in
+    backend | frontend) printf '%s\n' "$PLATFORM_DIR" > "$SERVERS_FILE" ;;
+  esac
   # One log per run: readiness checks must not read an earlier run's crash.
   if [ -f "$LOG_DIR/$name.log" ]; then mv -f "$LOG_DIR/$name.log" "$LOG_DIR/$name.previous.log"; fi
   tmx new-session -d -s "$name" -c "$dir" \
@@ -363,30 +393,52 @@ install_dependencies() {
 
 # The backend lazily loads NAPI addons whose .node binaries are gitignored and
 # never built by pnpm install. Install the prebuilt ones published for main's
-# archestra-rs tree (scripts/napi-prebuilt.mjs, about a second), else build
-# them: several minutes of cargo, more on a small pod.
-ensure_native_addons() {
-  local crate filters=()
-  if (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2; then
-    return 0
-  fi
+# archestra-rs tree (scripts/napi-prebuilt.mjs, about a second). Those still
+# missing (a changed archestra-rs tree, or none published) are built by `up`,
+# with the other builds: never by `prepare`, which runs beside the agent.
+install_native_addons() {
+  (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2 || true
+}
+
+# Restore before the agent edits source; later checks reuse the compiler's
+# incremental state. A missing publication never makes bootstrap compile.
+install_backend_declarations() {
+  (cd "$PLATFORM_DIR" && node --import tsx scripts/heavy-lane.ts \
+    --label "backend declaration cache" --peak-gib 0.8 \
+    -- node scripts/backend-types-prebuilt.mjs install) >&2 || true
+}
+
+# The crates whose addon is not built, one per line.
+missing_native_addons() {
+  local crate
   for crate in "${CRATES[@]}"; do
-    if ! ls "$PLATFORM_DIR/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
-      filters+=("--filter" "@archestra/$crate")
-    fi
+    ls "$PLATFORM_DIR/archestra-rs/$crate"/*.node >/dev/null 2>&1 || echo "$crate"
   done
+}
+
+# Several minutes of cargo, more on a small pod: one crate at a time, as the
+# other builds run.
+build_native_addons() {
+  local crate filters=()
+  while IFS= read -r crate; do
+    filters+=("--filter" "@archestra/$crate")
+  done < <(missing_native_addons)
   [ ${#filters[@]} -eq 0 ] && return 0
   command -v cargo >/dev/null 2>&1 \
     || die "Rust toolchain not found; cannot build ${filters[*]}"
-  # Parallel napi builds each ask rustup for the components in
-  # rust-toolchain.toml and race on the same download; install them once first.
+  # Each napi build asks rustup for the components in rust-toolchain.toml;
+  # install them once first.
   (cd "$PLATFORM_DIR" && rustup show > /dev/null 2>&1) || true
   log "building native addons (several minutes): ${filters[*]}"
-  (cd "$PLATFORM_DIR" && pnpm "${filters[@]}" build:dev) > "$LOG_DIR/napi-build.log" 2>&1 \
+  (cd "$PLATFORM_DIR" && pnpm --workspace-concurrency=1 "${filters[@]}" build:dev) > "$LOG_DIR/napi-build.log" 2>&1 \
     || { tail -n 40 "$LOG_DIR/napi-build.log" >&2; die "native addon build failed"; }
 }
 
 # --- application -----------------------------------------------------------
+
+# The builds run one after the other, and before the servers start: a cold
+# frontend build holds about 3.5 GiB, and the backend's build (about 0.8 GiB)
+# or a running server next to it took a 4 GiB pod over its limit.
 
 # A survivor from an earlier run keeps a port bound and the next server dies
 # with EADDRINUSE, so sweep the dev ports before starting (as
@@ -408,6 +460,38 @@ free_ports() {
 # `pnpm dev --filter`, which costs four extra Node processes per server (pnpm,
 # turbo, pnpm again, the pnpm shim) and about 1 GB of RSS in total. The turbo
 # `dev` task has no dependencies, so nothing is skipped.
+backend_watch() {
+  local watch="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
+  if [ -z "$watch" ]; then
+    # Inside an Agent Runtime the agent reloads on demand; elsewhere keep the
+    # watcher.
+    if in_agent_runtime; then watch=false; else watch=true; fi
+  fi
+  [ "$watch" != false ]
+}
+
+# Without the watcher the backend is built here, in the foreground, so the
+# build never overlaps the frontend's. The watcher builds in its own session.
+build_backend() {
+  local started=$SECONDS dist="$PLATFORM_DIR/backend/dist" kept="$STATE_DIR/backend-dist.previous"
+  log "building the backend; log in $LOG_DIR/backend-build.log"
+  # tsdown empties dist/ before it compiles: keep the last build, so a failed
+  # one leaves a backend to start again.
+  rm -rf "$kept"
+  if [ -f "$dist/server.mjs" ]; then
+    mkdir -p "$STATE_DIR" && cp -a "$dist" "$kept" || die "could not keep the last backend build"
+  fi
+  if ! (cd "$PLATFORM_DIR/backend" && ./node_modules/.bin/tsdown) > "$LOG_DIR/backend-build.log" 2>&1; then
+    tail -n 30 "$LOG_DIR/backend-build.log" >&2
+    if [ -d "$kept" ]; then
+      rm -rf "$dist" && mv "$kept" "$dist" && log "kept the last backend build"
+    fi
+    die "backend build failed"
+  fi
+  rm -rf "$kept"
+  log "backend built in $((SECONDS - started)) s"
+}
+
 start_backend() {
   # A running server owns the ports: freeing them first would kill it.
   if session_alive backend; then
@@ -417,23 +501,18 @@ start_backend() {
   free_ports "$BACKEND_PORT" 9050
   # The backend loads platform/.env itself. With the watcher on, tsdown rebuilds
   # on every save and restarts the server (backend/tsdown.config.ts); with it
-  # off, tsdown builds once and the server runs alone until `reload backend`.
-  local run="exec ./node_modules/.bin/tsdown --watch" watch="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
-  if [ -z "$watch" ]; then
-    # Inside an Agent Runtime the agent reloads on demand; elsewhere keep the
-    # watcher.
-    if in_agent_runtime; then watch=false; else watch=true; fi
-  fi
-  if [ "$watch" = false ]; then
+  # off, the server runs the last build alone until `reload backend`.
+  local run="exec ./node_modules/.bin/tsdown --watch"
+  if ! backend_watch; then
     log "backend watcher off: run 'archestra-dev-lite reload backend' after backend changes"
-    # Build once, then run the server in a restart loop: this session is the
-    # server, so a crash or an OOM kill would otherwise end it. Five exits
-    # within 60 s of starting end the loop so a server that cannot start does
-    # not spin.
+    [ -f "$PLATFORM_DIR/backend/dist/server.mjs" ] || build_backend
+    # Run the server in a restart loop: this session is the server, so a crash
+    # or an OOM kill would otherwise end it. Five exits within 60 s of starting
+    # end the loop so a server that cannot start does not spin.
     local flags
     flags="$(backend_node_flags)"
     # shellcheck disable=SC2016 # expanded by the session's own shell
-    run='./node_modules/.bin/tsdown || exit 1; quick_exits=0; while :; do started=$(date +%s); node'"$flags"' dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
+    run='quick_exits=0; while :; do started=$(date +%s); node'"$flags"' dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
   fi
   start_session backend "$PLATFORM_DIR/backend" \
     "export ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_DEV_LITE_BACKEND_LOG_LEVEL:-info} ARCHESTRA_ANALYTICS=disabled ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=0; $run"
@@ -459,22 +538,28 @@ frontend_env() {
 # compiles each page on its first visit and then holds about 3.5 GB after six
 # pages. `build` is a production build served by its standalone server, as CI
 # and the released image serve it: about 240 MB after the same pages, at the
-# cost of a build (about 80 s at 2 CPUs, about 5.5 GB while it runs) before it
-# starts and again after every frontend change (`reload frontend`). `e2e` is
-# `build` with the e2e environment, for the Playwright suite. Inside an Agent
-# Runtime the default is `build`, elsewhere `dev`; ARCHESTRA_DEV_LITE_FRONTEND
-# chooses.
+# cost of a build before it starts (cold, about 75 s at 2 CPUs and 3.7 GiB
+# without source maps, 4.8 to 5.0 GiB with them) and again after every
+# frontend change (`reload frontend`, about 13 s and 1.2 GiB from the warm
+# build cache). `e2e` is `build` with the e2e environment, for the Playwright
+# suite. Inside an Agent Runtime the default is `build`, elsewhere `dev`;
+# ARCHESTRA_DEV_LITE_FRONTEND chooses.
 start_frontend() {
-  local mode="${1:-dev}"
+  local mode="${1:-dev}" build="${2:-rebuild}"
   if session_alive frontend; then
     log "frontend already running"
     return 0
   fi
   free_ports "$FRONTEND_PORT"
   if [ "$mode" != dev ]; then
-    build_frontend
+    # `keep` serves the build already on disk (just built, or paused); without
+    # one it builds anyway.
+    if [ "$build" != keep ] || [ ! -f "$STANDALONE_DIR/server.js" ]; then
+      build_frontend
+    fi
     start_session frontend "$STANDALONE_DIR" \
-      "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js"
+      "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js" \
+      || return 1
     echo "$mode" > "$FRONTEND_MODE_FILE"
     return 0
   fi
@@ -495,20 +580,32 @@ default_frontend_mode() {
   esac
 }
 
-# Node flags of the backend server when it runs without the watcher. Source
-# maps give stack traces in TypeScript, and cost about 300 MB of the server's
-# 1.2 GB at idle: off inside an Agent Runtime, on elsewhere;
-# ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses.
-backend_node_flags() {
+# Whether the stack carries source maps: off inside an Agent Runtime, on
+# elsewhere; ARCHESTRA_DEV_LITE_SOURCE_MAPS (true or false) chooses. They give
+# stack traces in TypeScript. The backend server holds about 300 MB more with
+# them (1.2 GB at idle), and a cold frontend build peaks about 1.1 GiB higher
+# (4.8 to 5.0 GiB against 3.7 GiB at 2 CPUs).
+source_maps_on() {
   local maps="${ARCHESTRA_DEV_LITE_SOURCE_MAPS:-}"
   if [ -z "$maps" ]; then
     if in_agent_runtime; then maps=false; else maps=true; fi
   fi
   case "$maps" in
-    true) printf ' --enable-source-maps' ;;
-    false) ;;
+    true) return 0 ;;
+    false) return 1 ;;
     *) die "ARCHESTRA_DEV_LITE_SOURCE_MAPS must be true or false, not $maps" ;;
   esac
+}
+
+# Node flags of the backend server when it runs without the watcher.
+backend_node_flags() {
+  if source_maps_on; then printf ' --enable-source-maps'; fi
+}
+
+# Environment of the frontend's production build: next.config.ts writes no
+# source maps when it says so.
+frontend_build_env() {
+  if ! source_maps_on; then printf 'ARCHESTRA_DEV_LITE_SOURCE_MAPS=false '; fi
 }
 
 # Inside an Agent Runtime: the pod sets ARCHESTRA_AGENT_RUNTIME_TASK_ID.
@@ -516,8 +613,34 @@ in_agent_runtime() {
   [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]
 }
 
-# `next build` with the stack's environment, then the static assets and public
-# files next to the standalone server, as the platform image lays them out.
+# Node with the arguments given, in platform/frontend and in the frontend
+# build's environment: the .env file, the build's own variables and the
+# browser-visible copies.
+frontend_build_node() {
+  local build_env
+  build_env="$(frontend_build_env)" || exit 1
+  # frontend_env quotes its values for a shell, as the session commands do.
+  (
+    cd "$PLATFORM_DIR/frontend"
+    bash -c "exec env $build_env$(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") $(printf '%q ' "$@")"
+  )
+}
+
+# The frontend CI builds for main (scripts/frontend-prebuilt.mjs): `install`
+# its standalone server, `install-cache` its build cache. Run in the build's
+# environment, which the artifacts' key covers.
+frontend_prebuilt() {
+  frontend_build_node "$SCRIPT_DIR/frontend-prebuilt.mjs" "$@"
+}
+
+# The frontend's production build, with the static assets and public files
+# next to the standalone server, as the platform image lays them out. A clean
+# checkout of a main commit installs the build CI published for it (about
+# 40 MB, seconds) instead: a cold build takes minutes and about 3.5 GiB.
+# Otherwise the build starts from CI's build cache of a commit with the same
+# configuration, when this checkout has none: about 1 to 1.5 GiB after small
+# changes. ARCHESTRA_DEV_FRONTEND_PREBUILT=false builds without either.
+#
 # Node loads the env file for a small launcher that runs the build as a child,
 # as scripts/dev.mjs does for the dev server: Next passes its own Node flags to
 # its workers, and Node refuses --env-file there. Next sizes its workers from
@@ -525,19 +648,129 @@ in_agent_runtime() {
 # CPUs this stack can count on.
 build_frontend() {
   local started=$SECONDS cpus launcher
+  if frontend_prebuilt install; then
+    log "frontend installed from CI's build in $((SECONDS - started)) s"
+    return 0
+  fi
+  frontend_prebuilt install-cache || true
   cpus="$(available_cpus)"
-  launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
+  # Release Turbopack's native heap before starting page-generation workers,
+  # including when reload rebuilds an edited frontend from CI's warm cache.
+  launcher='for (const mode of ["compile", "generate"]) { const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack", "--experimental-build-mode=" + mode], { stdio: "inherit" }); const code = status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1); if (code) process.exit(code); }'
   log "building the frontend (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
-  # frontend_env quotes its values for a shell, as the session commands do.
-  (
-    cd "$PLATFORM_DIR/frontend"
-    bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
-  ) > "$LOG_DIR/frontend-build.log" 2>&1 \
+  CIRCLE_NODE_TOTAL=$((cpus + 1)) frontend_build_node -e "$launcher" > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
-  rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"
-  cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static"
-  cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public"
+  prepare_frontend_standalone
   log "frontend built in $((SECONDS - started)) s"
+}
+
+# Next's standalone output omits these assets. Refresh them after generation
+# so `resume` can serve the current build without rebuilding it.
+prepare_frontend_standalone() {
+  # Checked one by one: a caller's `if` switches errexit off in here.
+  rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public" \
+    && cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static" \
+    && cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public" \
+    || die "could not copy the frontend's static and public files next to its server"
+}
+
+# A subshell keeps these lifetime traps out of callers that source dev-lite.
+# Cancellation may terminate the whole build group, including this shell.
+run_frontend_artifact_build() (
+  local launcher="$1" split="$2" package_assets="$3"
+  shift 3
+  local standalone_root="$PLATFORM_DIR/frontend/.next/standalone" previous="" complete=0 build_started=0 mode
+  cleanup_frontend_artifact() {
+    local status=$?
+    trap - EXIT
+    trap '' HUP INT TERM
+    if [ "$complete" = 0 ]; then
+      if [ -n "$previous" ] && [ -d "$previous/tree" ]; then
+        rm -rf "$standalone_root" && mv "$previous/tree" "$standalone_root" \
+          || die "could not restore the frontend's previous standalone build"
+      elif [ "$build_started" = 1 ]; then
+        rm -rf "$standalone_root" || die "could not remove the incomplete standalone build"
+      fi
+    fi
+    if [ -n "$previous" ]; then
+      rm -rf "$previous" || die "could not remove the previous standalone build's backup"
+    fi
+    exit "$status"
+  }
+  trap cleanup_frontend_artifact EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  # Next can clear .next and replace server.js before failing. Keep the whole
+  # serving tree outside .next until generation and asset packaging succeed.
+  if [ -d "$standalone_root" ]; then
+    previous="$(mktemp -d "$PLATFORM_DIR/frontend/.standalone-previous.XXXXXX")" \
+      && mv "$standalone_root" "$previous/tree" \
+      || die "could not preserve the frontend's previous standalone build"
+  fi
+  build_started=1
+  if [ "$split" = 1 ]; then
+    # Release Turbopack's compiler heap before starting generation workers.
+    for mode in compile generate; do
+      frontend_build_node -e "$launcher" -- "$@" "--experimental-build-mode=$mode" || exit $?
+    done
+  else
+    frontend_build_node -e "$launcher" -- "$@" || exit $?
+  fi
+  if [ "$package_assets" = 1 ]; then
+    prepare_frontend_standalone
+    complete=1
+  fi
+  exit 0
+)
+
+# CI (.github/workflows/frontend-dev-cache.yml): `key` prints the key of this
+# checkout's frontend as an Agent Runtime's stack builds it, `pack <dir>`
+# builds it that way and collects the artifacts to publish. `build` uses the
+# same environment/cache for a root workspace build, always compiling so all
+# of Next's build output is present, including after source edits.
+cmd_frontend_artifact() {
+  require_platform_dir
+  mkdir -p "$STATE_DIR" "$LOG_DIR"
+  ensure_env 0 0
+  case "${1:-}" in
+    key) frontend_prebuilt --key --explain ;;
+    build)
+      shift
+      local arg mode explicit_mode=0 selected_mode="" mode_value_next=0 webpack=0
+      for arg in "$@"; do
+        if [ "$mode_value_next" = 1 ]; then
+          selected_mode="$arg"
+          mode_value_next=0
+          continue
+        fi
+        case "$arg" in
+          --experimental-build-mode) explicit_mode=1; mode_value_next=1 ;;
+          --experimental-build-mode=*) explicit_mode=1; selected_mode="${arg#*=}" ;;
+          --webpack) webpack=1 ;;
+        esac
+      done
+      # CI's cache and phase split are for Turbopack. An explicit Webpack
+      # build keeps its usual single phase, but still packages assets before
+      # the heavy lane resumes the standalone server.
+      local launcher='const { status, signal } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(1)], { stdio: "inherit" }); process.exit(status ?? (signal ? 128 + require("node:os").constants.signals[signal] : 1));'
+      local split=0 package_assets=0
+      if [ "$webpack" = 0 ]; then
+        frontend_prebuilt install-cache || true
+        if [ "$explicit_mode" = 0 ]; then split=1; fi
+      fi
+      if [ "$explicit_mode" = 0 ] || [ "$selected_mode" = generate ]; then
+        package_assets=1
+      fi
+      run_frontend_artifact_build "$launcher" "$split" "$package_assets" "$@"
+      ;;
+    pack)
+      [ -n "${2:-}" ] || die "frontend-artifact pack: expected an output directory"
+      ARCHESTRA_DEV_FRONTEND_PREBUILT=false build_frontend
+      frontend_prebuilt --pack "$(cd "$2" && pwd)"
+      ;;
+    *) die "frontend-artifact: expected key, build, or pack <dir>" ;;
+  esac
 }
 
 start_e2e_deps() {
@@ -644,15 +877,29 @@ http_ok() {
 
 # Every session this stack started must still be alive: the first one that
 # exited fails the wait with the tail of its log, whatever answered before.
+# The application servers readiness waits for: both, or what a resume started.
+WAIT_SERVERS="backend frontend"
+# Set by `resume` while it waits for the servers it started: the pause marker
+# stays until they answer, so a failed resume can be retried.
+RESUMING=0
+
 require_sessions_alive() {
-  local name
-  for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
+  local name servers="$WAIT_SERVERS"
+  # Paused on purpose: the command that paused them resumes them.
+  [ -f "$PAUSED_FILE" ] && [ "$RESUMING" = 0 ] && servers=""
+  if [ -n "$servers" ] && [ ! -f "$SERVERS_FILE" ] && ! session_alive backend && ! session_alive frontend; then
+    die "the backend and frontend are not started (the stack is only prepared): run 'archestra-dev-lite up'"
+  fi
+  for name in $servers $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
     session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
   done
 }
 
 wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
+  case " $WAIT_SERVERS " in *" backend "*) ;; *) backend_ok=1 ;; esac
+  case " $WAIT_SERVERS " in *" frontend "*) ;; *) frontend_ok=1 ;; esac
+  [ -f "$PAUSED_FILE" ] && [ "$RESUMING" = 0 ] && log "the backend and frontend are paused for a memory-heavy command; waiting until they resume ('archestra-dev-lite resume' resumes them now)"
   while (( SECONDS < deadline )); do
     require_sessions_alive
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
@@ -673,7 +920,10 @@ wait_ready() {
     if [ "$backend_ok" = 1 ] && [ "$frontend_ok" = 1 ] && [ "$e2e_ok" = 1 ] && [ "$keycloak_ok" = 1 ]; then
       # Answers are cached from earlier polls; the processes are checked now.
       require_sessions_alive
-      echo "dev stack ready: frontend :$FRONTEND_PORT, backend :$BACKEND_PORT"
+      local ready=""
+      case " $WAIT_SERVERS " in *" frontend "*) ready="frontend :$FRONTEND_PORT" ;; esac
+      case " $WAIT_SERVERS " in *" backend "*) ready="${ready:+$ready, }backend :$BACKEND_PORT" ;; esac
+      echo "dev stack ready: $ready"
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0
     fi
@@ -693,6 +943,28 @@ wait_ready() {
 }
 
 # --- commands --------------------------------------------------------------
+
+# The EXIT trap of `up`: when it fails after stopping servers, start again,
+# from the builds on disk, the backend and frontend that ran when it began.
+UP_RESTORE_BACKEND=0
+UP_RESTORE_FRONTEND=""
+restore_servers() {
+  local status="$1"
+  trap - EXIT
+  if [ "$status" != 0 ]; then
+    if [ "$UP_RESTORE_BACKEND" = 1 ] && ! session_alive backend \
+      && { backend_watch || [ -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; }; then
+      log "up failed: starting the backend again"
+      start_backend || true
+    fi
+    if [ -n "$UP_RESTORE_FRONTEND" ] && ! session_alive frontend \
+      && { [ "$UP_RESTORE_FRONTEND" = dev ] || [ -f "$STANDALONE_DIR/server.js" ]; }; then
+      log "up failed: starting the frontend again"
+      start_frontend "$UP_RESTORE_FRONTEND" keep || true
+    fi
+  fi
+  exit "$status"
+}
 
 cmd_start() {
   local wait="$1" e2e=0 keycloak=0 mock_data=0 name frontend
@@ -718,6 +990,12 @@ cmd_start() {
     [ "$wait" = 1 ] && wait_ready
     return 0
   fi
+  # From here on `up` stops servers to restart or build: if it fails, the
+  # ones running now come back (restore_servers).
+  UP_RESTORE_BACKEND=0 UP_RESTORE_FRONTEND=""
+  if session_alive backend; then UP_RESTORE_BACKEND=1; fi
+  if session_alive frontend; then UP_RESTORE_FRONTEND="$(frontend_mode)"; fi
+  trap 'restore_servers $?' EXIT
   # The servers read .env when they start: switching a running stack to the
   # e2e environment restarts them, and e2e needs the production frontend.
   if [ "$e2e" = 1 ] && ! session_alive wiremock; then
@@ -738,7 +1016,8 @@ cmd_start() {
   fi
   ensure_env "$e2e" "$keycloak"
   install_dependencies
-  ensure_native_addons
+  install_native_addons
+  install_backend_declarations
   start_postgres
   wait_for_db
   migrate
@@ -747,18 +1026,149 @@ cmd_start() {
     (cd "$PLATFORM_DIR/backend" && pnpm db:seed:mock-data) > "$LOG_DIR/seed-mock-data.log" 2>&1 \
       || { tail -n 20 "$LOG_DIR/seed-mock-data.log" >&2; die "mock data seed failed"; }
   fi
-  start_backend
-  if [ "$e2e" = 1 ]; then start_frontend e2e; else start_frontend "$frontend"; fi
+  [ "$e2e" = 1 ] && frontend=e2e
+  # What needs building, decided before any server stops. Servers that `pause`
+  # stopped come back from their builds; the paused frontend's build is reused
+  # only for the mode it served.
+  local paused=0 keep_frontend=0 builds=() frontend_start="$frontend"
+  if [ -f "$PAUSED_FILE" ]; then
+    paused=1
+    [ "$(paused_value frontend)" = "$frontend" ] && keep_frontend=1
+  fi
+  if [ -n "$(missing_native_addons)" ]; then builds+=(native_addons); fi
+  if [ "$frontend" != dev ] && ! session_alive frontend \
+    && { [ "$keep_frontend" = 0 ] || [ ! -f "$STANDALONE_DIR/server.js" ]; }; then
+    builds+=(frontend)
+  fi
+  if ! backend_watch && ! session_alive backend \
+    && { [ "$paused" = 0 ] || [ ! -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; }; then
+    builds+=(backend)
+  fi
+  # A running frontend keeps its mode.
+  if session_alive frontend; then frontend_start="$(frontend_mode)"; fi
+  # The builds run one at a time and with no server beside them: a running one
+  # stops first and starts again after them (see build_backend).
+  if [ ${#builds[@]} -gt 0 ]; then
+    for name in backend frontend; do
+      if session_alive "$name"; then
+        log "stopping the $name while the builds run (${builds[*]})"
+        stop_session "$name"
+      fi
+    done
+    for name in "${builds[@]}"; do
+      "build_$name" || die "the $name build failed"
+    done
+  fi
+  start_backend || die "the backend did not start; see $LOG_DIR/backend.log"
+  start_frontend "$frontend_start" keep || die "the frontend did not start; see $LOG_DIR/frontend.log"
+  rm -f "$PAUSED_FILE"
   [ "$e2e" = 1 ] && start_e2e_deps
   [ "$keycloak" = 1 ] && start_keycloak
+  trap - EXIT
   log "started; logs in $LOG_DIR"
   if [ "$wait" = 1 ]; then
     wait_ready
   fi
 }
 
+# What a pod's bootstrap runs: everything `up` needs that holds no memory once
+# done. The builds and servers wait for `up`, so a pod does not build while its
+# agent starts its first turn.
+cmd_prepare() {
+  require_platform_dir
+  mkdir -p "$STATE_DIR" "$LOG_DIR"
+  # Markers a killed container left behind: nothing runs yet.
+  if ! session_alive backend && ! session_alive frontend; then
+    rm -f "$PAUSED_FILE" "$SERVERS_FILE"
+  fi
+  ensure_env 0 0
+  install_dependencies
+  install_native_addons
+  start_postgres
+  wait_for_db
+  migrate
+  echo "dev stack prepared (dependencies, PostgreSQL, migrations); 'archestra-dev-lite up' builds and starts the backend and frontend"
+}
+
+# A value `pause` recorded: frontend=<mode or none>, backend=1 or 0.
+paused_value() {
+  sed -n "s/^$1=//p" "$PAUSED_FILE" 2>/dev/null | head -n 1
+}
+
+# pause and resume act on the checkout whose servers run (recorded when they
+# started), not on the checkout they are called from: a type check in another
+# worktree must restore the stack it paused.
+delegate_to_stack_checkout() {
+  local recorded
+  recorded="$(cat "$SERVERS_FILE" 2>/dev/null || true)"
+  if [ -n "$recorded" ] && [ "$recorded" != "$PLATFORM_DIR" ]; then
+    [ -f "$recorded/scripts/dev-lite.sh" ] \
+      || die "the dev stack runs from $recorded, which has no scripts/dev-lite.sh any more: run 'down' and 'up' from the checkout that should serve it"
+    exec bash "$recorded/scripts/dev-lite.sh" "$@"
+  fi
+}
+
+# Stop the two servers and keep PostgreSQL and the builds: the memory they hold
+# (about 0.8 GiB after use) goes to one command that cannot fit beside them.
+cmd_pause() {
+  local name stopped="" frontend=none backend=0
+  require_platform_dir
+  delegate_to_stack_checkout pause
+  mkdir -p "$STATE_DIR"
+  if session_alive frontend; then frontend="$(frontend_mode)"; fi
+  session_alive backend && backend=1
+  for name in frontend backend; do
+    if session_alive "$name"; then
+      stop_session "$name"
+      stopped="$stopped $name"
+    fi
+  done
+  if [ -n "$stopped" ] || [ -f "$PAUSED_FILE" ]; then
+    if [ ! -f "$PAUSED_FILE" ]; then
+      printf 'frontend=%s\nbackend=%s\n' "$frontend" "$backend" > "$PAUSED_FILE"
+    fi
+    echo "dev stack paused:${stopped:- nothing was running}; 'archestra-dev-lite resume' starts it again"
+  else
+    echo "dev stack not running; nothing to pause"
+  fi
+}
+
+# Start what `pause` stopped, from the builds on disk: a missing build is made
+# first, before either server starts. The pause stays recorded until both
+# start, so a failed resume can be retried.
+cmd_resume() {
+  require_platform_dir
+  delegate_to_stack_checkout resume
+  if [ ! -f "$PAUSED_FILE" ]; then
+    echo "dev stack not paused"
+    return 0
+  fi
+  local frontend backend
+  frontend="$(paused_value frontend)"
+  backend="$(paused_value backend)"
+  db_ready || start_postgres
+  wait_for_db
+  if [ "$frontend" != none ] && [ "$frontend" != dev ] && [ ! -f "$STANDALONE_DIR/server.js" ]; then
+    build_frontend
+  fi
+  if [ "$backend" = 1 ] && ! backend_watch && [ ! -f "$PLATFORM_DIR/backend/dist/server.mjs" ]; then
+    build_backend
+  fi
+  if [ "$backend" = 1 ]; then start_backend || die "the backend did not start; the stack stays paused"; fi
+  if [ "$frontend" != none ]; then start_frontend "$frontend" keep || die "the frontend did not start; the stack stays paused"; fi
+  # Wait for what was resumed, not for a server pause never stopped; the pause
+  # ends once they answer.
+  WAIT_SERVERS=""
+  if [ "$backend" = 1 ]; then WAIT_SERVERS="backend"; fi
+  if [ "$frontend" != none ]; then WAIT_SERVERS="$WAIT_SERVERS frontend"; fi
+  RESUMING=1
+  wait_ready
+  rm -f "$PAUSED_FILE"
+}
+
 cmd_status() {
   local name pid rss url code
+  [ -f "$PAUSED_FILE" ] && echo "servers paused (archestra-dev-lite resume starts them again)"
   printf '%-10s %-8s %-8s %s\n' COMPONENT STATE PID RSS_MB
   pid="$(postgres_pid)"
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
@@ -810,7 +1220,7 @@ cmd_down() {
     session_alive "$name" && { log "stopping $name"; stop_session "$name"; }
   done
   tmx kill-server 2>/dev/null || true
-  rm -f "$KEYCLOAK_REQUESTED_FILE"
+  rm -f "$KEYCLOAK_REQUESTED_FILE" "$PAUSED_FILE" "$SERVERS_FILE"
   if [ -s "$PGDATA/PG_VERSION" ] && pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
     log "stopping postgres"
     pg_ctl -D "$PGDATA" -m fast -w stop >> "$LOG_DIR/db-ctl.log" 2>&1 || true
@@ -856,7 +1266,12 @@ cmd_e2e() {
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
   cpus="$(available_cpus)"
-  if [ "$cpus" -le 2 ]; then
+  # At one CPU two workers and their browsers only contend, and each worker
+  # with its renderer holds 0.6 GiB; one worker keeps the run beside the stack
+  # in a 4 GiB pod.
+  if [ "$cpus" -le 1 ]; then
+    export E2E_WORKERS="${E2E_WORKERS:-1}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-4}"
+  elif [ "$cpus" -le 2 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-2}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-3}"
   elif [ "$cpus" -le 4 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-3}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-2}"
@@ -884,7 +1299,7 @@ cmd_e2e() {
   # The backend reaches Keycloak on the loopback; the browser uses localhost.
   keycloak_requested && export E2E_KEYCLOAK_BACKEND_URL="http://127.0.0.1:$KEYCLOAK_PORT"
   if [ $# -gt 0 ]; then
-    exec pnpm exec playwright test "$@"
+    run_playwright "$@"
   fi
   # Same projects as scripts/e2e-lite.sh; identity-providers needs Keycloak.
   # Without Keycloak, the specs that need it (identity providers, JWKS auth for
@@ -892,7 +1307,15 @@ cmd_e2e() {
   # those that need a Kubernetes cluster (MCP server installs, the orchestrator).
   local projects=(--project=chromium --project=api)
   keycloak_requested && projects+=(--project=identity-providers)
-  exec pnpm exec playwright test "${projects[@]}" --grep-invert @quickstart
+  run_playwright "${projects[@]}" --grep-invert @quickstart
+}
+
+# Playwright from the e2e package, without pnpm's two wrapper processes, in
+# the heavy lane (scripts/heavy-lane.ts) so it never runs beside a type check
+# or a build. It declares no peak: the servers it tests are never paused.
+run_playwright() {
+  exec "$PLATFORM_DIR/node_modules/.bin/tsx" "$SCRIPT_DIR/heavy-lane.ts" \
+    --label "e2e (Playwright)" -- "$PLATFORM_DIR/e2e-tests/node_modules/.bin/playwright" test "$@"
 }
 
 cmd_restart() {
@@ -905,17 +1328,51 @@ cmd_restart() {
 # changes reach the running server: tsdown builds, then the server starts.
 cmd_reload() {
   require_platform_dir
+  [ -f "$PAUSED_FILE" ] && die "the backend and frontend are paused for a memory-heavy command: run 'archestra-dev-lite resume' first"
   case "${1:-}" in
     backend)
       log "reloading the backend"
       stop_session backend
-      start_backend
+      if ! backend_watch; then
+        # The build runs alone: a running frontend stops for it and comes back
+        # from its build afterwards, also when the build fails.
+        local frontend_was=""
+        if session_alive frontend; then
+          frontend_was="$(frontend_mode)"
+          log "stopping the frontend while the backend builds"
+          stop_session frontend
+        fi
+        if ! (build_backend) || ! start_backend; then
+          if [ -n "$frontend_was" ]; then start_frontend "$frontend_was" keep; fi
+          die "the backend did not build or start; see $LOG_DIR/backend-build.log and $LOG_DIR/backend.log"
+        fi
+        if [ -n "$frontend_was" ]; then start_frontend "$frontend_was" keep; fi
+      else
+        start_backend
+      fi
       ;;
     frontend)
       # A production build (build or e2e mode) is rebuilt first.
       log "reloading the frontend"
       stop_session frontend
-      start_frontend "$(frontend_mode)"
+      # A production build runs alone: the backend stops for it and comes
+      # back from its own build before the frontend starts.
+      local mode restart_backend=0
+      mode="$(frontend_mode)"
+      if [ "$mode" != dev ] && session_alive backend; then
+        log "stopping the backend while the frontend builds"
+        stop_session backend
+        restart_backend=1
+      fi
+      if [ "$mode" != dev ] && ! (build_frontend); then
+        if [ "$restart_backend" = 1 ]; then start_backend; fi
+        die "frontend build failed; see $LOG_DIR/frontend-build.log"
+      fi
+      if [ "$restart_backend" = 1 ] && ! start_backend; then
+        start_frontend "$mode" keep
+        die "the backend did not start again; see $LOG_DIR/backend.log"
+      fi
+      start_frontend "$mode" keep
       ;;
     *) die "reload: expected backend or frontend" ;;
   esac
@@ -933,10 +1390,14 @@ case "${1:-}" in
   restart) shift; cmd_restart "$@" ;;
   reload) shift; cmd_reload "$@" ;;
   start) shift; cmd_start 0 "$@" ;;
+  prepare) cmd_prepare ;;
+  pause) cmd_pause ;;
+  resume) cmd_resume ;;
   wait) wait_ready ;;
   status) cmd_status ;;
   logs) shift; cmd_logs "$@" ;;
   e2e) shift; cmd_e2e "$@" ;;
+  frontend-artifact) shift; cmd_frontend_artifact "$@" ;;
   down) cmd_down ;;
   reset) cmd_reset ;;
   -h|--help|help) usage 0 ;;

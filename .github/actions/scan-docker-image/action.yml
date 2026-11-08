@@ -1,6 +1,7 @@
 name: Scan Docker Image
 description: |
   Scans a Docker image for CVEs using Docker Scout.
+  Log in to Docker Hub first (Docker Hub OIDC); Scout reads that login.
   Fails if critical or high severity CVEs with available fixes are found.
 
 inputs:
@@ -19,12 +20,6 @@ inputs:
     description: "Scan images concurrently. Scout's shared indexing cache can lock when two images are indexed at once."
     required: false
     default: "false"
-  dockerhub-user:
-    description: "Docker Hub username for Scout authentication"
-    required: true
-  dockerhub-password:
-    description: "Docker Hub password for Scout authentication"
-    required: true
   only-severities:
     description: "Comma-separated list of severities to check"
     required: false
@@ -77,8 +72,6 @@ runs:
     - name: Docker Scout CVE Check
       shell: bash
       env:
-        DOCKER_SCOUT_HUB_USER: ${{ inputs.dockerhub-user }}
-        DOCKER_SCOUT_HUB_PASSWORD: ${{ inputs.dockerhub-password }}
         SCOUT_IMAGE: ${{ inputs.image }}
         SCOUT_ADDITIONAL_IMAGES: ${{ inputs.additional-images }}
         SCOUT_PLATFORM: ${{ inputs.platform }}
@@ -127,15 +120,28 @@ runs:
               scout_args+=(--exit-code)
             fi
 
-            DOCKER_CONFIG="$docker_config" \
-              "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}"
+            # A Scout backend outage is different from a CVE finding.
+            # Retry only that service error; every scan must ultimately pass.
+            for attempt in 1 2 3; do
+              if DOCKER_CONFIG="$docker_config" \
+                "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}" >"$log" 2>&1; then
+                return 0
+              else
+                status=$?
+              fi
+              if [ "$attempt" -eq 3 ] || ! grep -q 'code:DOWNSTREAM_SERVICE_ERROR' "$log"; then
+                return "$status"
+              fi
+              echo "Docker Scout backend error for $image (attempt $attempt); retrying." >&2
+              sleep $((attempt * 10))
+            done
           }
 
           if [ "$SCOUT_CONCURRENT" = "true" ]; then
-            scan_image >"$log" 2>&1 &
+            scan_image &
             pids+=("$!")
             statuses+=("")
-          elif scan_image >"$log" 2>&1; then
+          elif scan_image; then
             pids+=("")
             statuses+=("0")
           else

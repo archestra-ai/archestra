@@ -442,6 +442,82 @@ describe("MSTeamsProvider file attachment downloads", () => {
     expect(result?.attachments?.[0].name).toBe("report.pdf");
   });
 
+  test.each([
+    "http://contoso.sharepoint.com/sites/Engineering/Documents/file.pdf",
+    "https://user:pass@contoso.sharepoint.com/sites/Engineering/Documents/file.pdf",
+    "https://contoso.sharepoint.com:444/sites/Engineering/Documents/file.pdf",
+    "https://contoso.sharepoint.com.evil.example/sites/Engineering/Documents/file.pdf",
+    "https://graph.microsoft.com/v1.0/me/drive/root",
+  ])("rejects unsafe reference URL %s without requesting it", async (contentUrl) => {
+    const message = await createProvider().parseWebhookNotification(
+      makeActivity({
+        attachments: [
+          { contentType: "reference", contentUrl, name: "file.pdf" },
+        ],
+      }),
+      {},
+    );
+    expect(message?.attachments).toBeUndefined();
+    expect(message?.skippedAttachments?.[0].reason).toBe("download_failed");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("rejects a redirect to an untrusted host before requesting it", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://127.0.0.1/private" },
+      }),
+    );
+    const outcomes = await createProvider().downloadFiles([
+      {
+        url: "https://teams.blob.core.windows.net/files/report.pdf",
+        mimetype: "application/pdf",
+        name: "report.pdf",
+      },
+    ]);
+    expect(outcomes[0].status).toBe("skipped");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("authenticated downloads strip the bot token on a validated cross-origin redirect", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        HttpResponse.json({ access_token: "bot-token-123" }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: {
+            location: "https://download.files.1drv.com/report.pdf",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response("%PDF-1.7 file", {
+          headers: { "content-type": "application/pdf" },
+        }),
+      );
+    const message = await createProvider().parseWebhookNotification(
+      makeActivity({
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl:
+              "https://smba.trafficmanager.net/amer/v3/attachments/report.pdf",
+            name: "report.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+    expect(message?.attachments).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls[2]).toEqual([
+      "https://download.files.1drv.com/report.pdf",
+      { headers: {}, redirect: "manual" },
+    ]);
+  });
+
   test("message with neither text nor attachments returns null", async () => {
     const provider = createProvider();
 
@@ -532,7 +608,7 @@ describe("MSTeamsProvider file attachment downloads", () => {
     // Blob URLs are not on the serviceUrl domain — no auth header sent
     expect(fetch).toHaveBeenCalledWith(
       "https://teams.blob.core.windows.net/files/photo.png",
-      undefined,
+      { headers: {}, redirect: "manual" },
     );
   });
 
@@ -578,7 +654,10 @@ describe("MSTeamsProvider file attachment downloads", () => {
     // File download should include auth header
     expect(vi.mocked(fetch).mock.calls[1]).toEqual([
       "https://smba.trafficmanager.net/amer/v3/attachments/photo.png",
-      { headers: { Authorization: "Bearer bot-token-123" } },
+      {
+        headers: { Authorization: "Bearer bot-token-123" },
+        redirect: "manual",
+      },
     ]);
   });
 
@@ -1880,12 +1959,20 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     ];
   }
 
-  test("a file sent in a direct message is downloaded from its pre-signed link", async () => {
+  test.each([
+    "https://contoso-my.sharepoint.com/download.aspx?UniqueId=abc&tempauth=signed",
+    "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf?sig=signed",
+  ])("a DM file is downloaded directly from its supplied signed link %s", async (downloadUrl) => {
     server.use(
       // The page URL needs a SharePoint login the bot does not have.
       http.get(
         "https://contoso-my.sharepoint.com/personal/:user/:library/:folder/:file",
-        () => new HttpResponse(null, { status: 403 }),
+        ({ request }) =>
+          new URL(request.url).searchParams.has("sig")
+            ? new HttpResponse(PDF_BYTES, {
+                headers: { "content-type": "application/octet-stream" },
+              })
+            : new HttpResponse(null, { status: 403 }),
       ),
       http.get(
         "https://contoso-my.sharepoint.com/download.aspx",
@@ -1910,8 +1997,7 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
               "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents/Microsoft Teams Chat Files/report.pdf",
             name: "report.pdf",
             content: {
-              downloadUrl:
-                "https://contoso-my.sharepoint.com/download.aspx?UniqueId=abc&tempauth=signed",
+              downloadUrl,
               uniqueId: "abc",
               fileType: "pdf",
             },
@@ -1930,10 +2016,15 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     ]);
   });
 
-  test("a file sent in a channel thread is read from SharePoint with the Graph token", async () => {
+  test.each([
+    { mode: "post", reply: false },
+    { mode: "thread reply", reply: true },
+  ])("a file sent in a channel $mode is read from SharePoint with the Graph token", async ({
+    reply,
+  }) => {
     server.use(
       http.get(
-        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/${ROOT_MESSAGE_ID}/replies/${REPLY_MESSAGE_ID}`,
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/${reply ? `${ROOT_MESSAGE_ID}/replies/${REPLY_MESSAGE_ID}` : REPLY_MESSAGE_ID}`,
         () =>
           HttpResponse.json({
             id: REPLY_MESSAGE_ID,
@@ -1963,7 +2054,7 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
       messageId: REPLY_MESSAGE_ID,
       channelId: CHANNEL_ID,
       workspaceId: TEAM_ID,
-      threadId: ROOT_MESSAGE_ID,
+      threadId: reply ? ROOT_MESSAGE_ID : undefined,
       senderId: "user-1",
       senderName: "Alice",
       text: "",
@@ -1983,6 +2074,129 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
         },
       },
     ]);
+  });
+
+  test.each([
+    { contentType: "reference", prefix: "" },
+    { contentType: "application/pdf", prefix: "" },
+    { contentType: "reference", prefix: "/:b:/r" },
+  ])("activity SharePoint files with $contentType and $prefix use Graph, including private-channel sites", async ({
+    contentType,
+    prefix,
+  }) => {
+    server.use(
+      ...sharePointFile({
+        host: "contoso.sharepoint.com",
+        sitePath: "sites/Engineering-Private",
+        libraryUrl:
+          "https://contoso.sharepoint.com/sites/Engineering-Private/Shared%20Documents",
+        itemPath: "General/Design spec.pdf",
+      }),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+    const message = await provider.parseWebhookNotification(
+      makeActivity({
+        attachments: [
+          {
+            contentType,
+            contentUrl: `https://contoso.sharepoint.com${prefix}/sites/Engineering-Private/Shared%20Documents/General/Design%20spec.pdf`,
+            name: "Design spec.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+    expect(message?.attachments?.[0]).toEqual({
+      contentType: "application/pdf",
+      contentBase64: PDF_BYTES.toString("base64"),
+      name: "Design spec.pdf",
+    });
+  });
+
+  test("missing site consent reports a skipped file without fetching the SharePoint page", async () => {
+    server.use(
+      ...sharePointFile({
+        host: "contoso.sharepoint.com",
+        sitePath: "sites/Engineering",
+        libraryUrl:
+          "https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents",
+        itemPath: "General/Design spec.pdf",
+        status: 403,
+      }),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+    const message = await provider.parseWebhookNotification(
+      makeActivity({
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentUrl:
+              "https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents/General/Design%20spec.pdf",
+            name: "Design spec.pdf",
+          },
+        ],
+      }),
+      {},
+    );
+    expect(message?.attachments).toBeUndefined();
+    expect(message?.skippedAttachments).toEqual([
+      {
+        name: "Design spec.pdf",
+        reason: "download_failed",
+        sizeBytes: undefined,
+      },
+    ]);
+  });
+
+  test("file-only channel activities survive parsing for the later Graph lookup", async () => {
+    const provider = makeGraphProvider();
+    await provider.initialize();
+    const message = await provider.parseWebhookNotification(
+      makeActivity({ text: undefined, attachments: undefined }),
+      {},
+    );
+    expect(message?.text).toBe("");
+    expect(message?.metadata?.conversationType).toBe("channel");
+  });
+
+  test("files processed from the activity are not downloaded again from Graph", async () => {
+    const fileUrl =
+      "https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents/General/report.pdf";
+    server.use(
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/${ROOT_MESSAGE_ID}`,
+        () =>
+          HttpResponse.json({
+            attachments: [
+              {
+                contentType: "reference",
+                contentUrl: fileUrl,
+                name: "report.pdf",
+              },
+            ],
+          }),
+      ),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+    const outcomes = await provider.downloadMessageFiles({
+      messageId: ROOT_MESSAGE_ID,
+      channelId: CHANNEL_ID,
+      workspaceId: TEAM_ID,
+      senderId: "user-1",
+      senderName: "Alice",
+      text: "summarize",
+      rawText: "summarize",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: {
+        conversationType: "channel",
+        teamsActivityFileUrls: [fileUrl],
+      },
+    });
+    expect(outcomes).toEqual([]);
   });
 
   test("a file sent in a group chat is read from the sender's OneDrive", async () => {
@@ -2348,4 +2562,31 @@ describe("MSTeamsProvider group-chat files read with the sender's sign-in", () =
 
     expect(posted).toBe(false);
   });
+});
+
+test.each([
+  ["Change which agent handles the conversation", "/select-agent"],
+  ["Change which agent handles this conversation", "/select-agent"],
+  ["Show current agent for this conversation", "/status"],
+  ["Show available commands", "/help"],
+  ["Stop the bot reading your group-chat files", "/sign-out"],
+])("old menu text %s invokes %s after removing the mention", async (description, command) => {
+  const message = await createProvider().parseWebhookNotification(
+    makeActivity({ text: `<at>TestBot</at> ${description}` }),
+    {},
+  );
+  expect(message?.text).toBe(command);
+  expect(message?.rawText).toContain(description);
+});
+
+test("ordinary prose mentioning agent selection stays ordinary prose", async () => {
+  const message = await createProvider().parseWebhookNotification(
+    makeActivity({
+      text: "Please change which agent handles this conversation later",
+    }),
+    {},
+  );
+  expect(message?.text).toBe(
+    "Please change which agent handles this conversation later",
+  );
 });

@@ -1,3 +1,5 @@
+// Binds the ports of the layers below before any other module loads.
+import "@/server/composition";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -6,7 +8,6 @@ import {
   ARCHESTRA_TOOL_GROUPS,
   type ArchestraToolGroupId,
   type ArchestraToolShortName,
-  DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolGroupId,
   getArchestraToolShortName,
   isAppRuntimeOnlyArchestraToolShortName,
@@ -20,6 +21,11 @@ import {
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
+import { assertPortsBound } from "@/models/ports";
+
+// The composition module, imported first, bound the ports of the layers
+// below; stop here if one is unbound.
+assertPortsBound();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,15 +80,19 @@ const groupLabel = new Map<ArchestraToolGroupId, string>(
  * with no entry has no requirement beyond its RBAC permission.
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  get_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Returns an internal agent's skill activation policy.",
+  patch_agent_skill_policy:
+    "Also requires [`skill:read`](/docs/reference/permissions#skill:read). Requires the current revision and an update grant on the agent. Only skills the caller can access may be added.",
   // Membership mutations gate on `team:read`, then require the caller to be an
-  // organization-level team manager (holds `team:create`) OR an admin
+  // organization-level team manager (holds `team:update`) OR an admin
   // (team-member role) of the target team.
   add_team_member:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   update_team_member_role:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   remove_team_member:
-    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+    "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:update`) or an **admin** of the target team.",
   create_schedule_trigger:
     "Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
@@ -105,11 +115,11 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
-    "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) can only read teams they are a member of.",
   list_team_members:
-    "Callers without organization-level team management (`team:create`) can only read members of teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) can only read members of teams they are a member of.",
   list_teams:
-    "Callers without organization-level team management (`team:create`) only see teams they are a member of.",
+    "Callers without organization-level team management (`team:update`) only see teams they are a member of.",
   // The read tools stay on the caller's own reach: `project:admin` oversight of
   // a foreign project is a REST/UI capability and does not extend to them.
   list_projects:
@@ -154,7 +164,7 @@ async function main() {
 
   const docsFilePath = path.join(
     __dirname,
-    "../../../../docs/pages/reference/archestra-mcp-server.md",
+    "../../../../docs/pages/reference/archestra-mcp-server/index.md",
   );
 
   const docsDir = path.dirname(docsFilePath);
@@ -162,13 +172,16 @@ async function main() {
     fs.mkdirSync(docsDir, { recursive: true });
   }
 
-  let existingContent: string | null = null;
-  if (fs.existsSync(docsFilePath)) {
-    existingContent = fs.readFileSync(docsFilePath, "utf-8");
+  const files = generateDocsFiles({
+    readFile: (name) => {
+      const file = path.join(docsDir, name);
+      return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : null;
+    },
+    today: new Date().toISOString().slice(0, 10),
+  });
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(docsDir, name), content);
   }
-
-  const markdownContent = generateMarkdownContent(existingContent);
-  fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
@@ -185,20 +198,54 @@ async function main() {
   logger.info(`   - ${groupCount} groups`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    logger.error({ error }, "Error generating documentation");
-    process.exit(1);
-  });
+/**
+ * Renders the index and topic pages, keyed by file name in the docs directory.
+ * The shared `lastUpdated` date moves to `today` only when some page's content
+ * changed, so a re-run with unchanged tools reproduces the committed pages on
+ * any day (CI checks that codegen leaves no diff).
+ */
+export function generateDocsFiles(params: {
+  readFile: (name: string) => string | null;
+  today: string;
+}): Record<string, string> {
+  const { readFile, today } = params;
+  const existingDate = extractLastUpdatedFromMarkdown(
+    readFile("index.md") ?? "",
+  );
+  if (existingDate) {
+    const files = renderDocsFiles(existingDate);
+    if (
+      Object.entries(files).every(
+        ([name, content]) => readFile(name) === content,
+      )
+    ) {
+      return files;
+    }
+  }
+  return renderDocsFiles(today);
 }
 
 // === Internal helpers ===
+
+function renderDocsFiles(lastUpdated: string): Record<string, string> {
+  const { index, pages } = splitToolReference(
+    generateMarkdownContent(lastUpdated),
+  );
+  return Object.fromEntries([
+    ["index.md", `${index.trimEnd()}\n`],
+    ...Object.entries(pages).map(([slug, body]) => [
+      `${slug}.md`,
+      `${body.trimEnd()}\n`,
+    ]),
+  ]);
+}
 
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Archestra MCP Server"
 description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
 order: 4
+explore: false
 lastUpdated: ${lastUpdated}
 ---`;
 }
@@ -210,14 +257,6 @@ function generateMarkdownBody(): string {
     const shortName = getArchestraToolShortName(tool.name);
     return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
   });
-
-  const allPreInstalledShortNames = DEFAULT_ARCHESTRA_TOOL_NAMES.map(
-    (name) => getArchestraToolShortName(name) ?? name,
-  );
-
-  const preInstalledShortNames = allPreInstalledShortNames.filter(
-    (n): n is ArchestraToolShortName => isArchestraToolShortName(n),
-  );
 
   // Group tools
   const grouped = new Map<
@@ -283,7 +322,7 @@ function generateMarkdownBody(): string {
       const permissionCell = tool.accessNote
         ? `${tool.requiredPermission} †`
         : tool.requiredPermission;
-      section += `| \`${tool.shortName}\` | ${escapeTableCell(tool.description)} | ${escapeTableCell(permissionCell)} |\n`;
+      section += `| [\`${tool.shortName}\`](#${tool.shortName}) | ${escapeTableCell(tool.description)} | ${escapeTableCell(permissionCell)} |\n`;
     }
 
     if (groupTools.some((tool) => tool.accessNote)) {
@@ -309,10 +348,6 @@ function generateMarkdownBody(): string {
     referenceSections.push(section);
   }
 
-  const preInstalledList = new Intl.ListFormat("en", {
-    type: "conjunction",
-  }).format(preInstalledShortNames.map((n) => formatToolLink(n)));
-
   return `
 <!--
 This file is auto-generated by \`pnpm codegen:archestra-mcp-server-docs\`.
@@ -320,32 +355,27 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-Let an agent run Archestra for you: ask it to create an agent, install an MCP server, or build an app, and it calls these tools. The Archestra MCP Server is built into every deployment and acts as the person using the agent, with their permissions. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
+Ask an agent to create another agent, install an MCP server, or build an app through Archestra's built-in MCP tools. Tool calls use the access of the account authenticated to Archestra. Tool names start with \`archestra__\`; the reference uses their short names.
 
 <span id="access"></span>
 
 ## Give an Agent These Tools
 
-Pick these tools like any other MCP server's tools, on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings:
+New agents start with some built-in tools already assigned; the initial selection depends on enabled features. You can add or remove tools later on the agent's **Tools, Skills & Knowledge** tab.
 
-- **Manual:** assign the tools you want.
-- **All:** the agent gets every tool the person can use, but built-in tools start out excluded. Remove a tool from the exclusions to allow it.
-
-New agents include ${preInstalledList}. Turning on a feature adds its own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has a [knowledge base or connector](/docs/knowledge) attached.
+Use **Manual** to assign tools explicitly, or **All** with exclusions. See [Choose What the Agent Can Use](/docs/agents#choose-what-the-agent-can-use) for how these modes work. For gateways, change **Tools & Knowledge** under **Settings**; see [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
 ## Permissions
 
-Each tool needs the permission in the last column of its table. A person sees only the tools their permissions allow: without \`knowledgeSource:create\`, for example, ${formatToolLink("create_knowledge_base")} is hidden. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
+Assigning a tool does not grant access to the resources it manages. Each tool entry lists the RBAC permission and any additional access requirements checked for the authenticated account.
+
+- **RBAC permission:** links to the [Permissions reference](/docs/reference/permissions). \`None\` means no additional RBAC permission; the tool still enforces its own access checks.
+- **Granted per item:** requires access to the specific agent, app, or other resource. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+- **Additional requirements:** notes in the tool entry cover restrictions such as ownership or an acting user. [Guardrails](/docs/agents/guardrails) policies also apply to tool calls.
 
 ## Tools Reference
 
 ${referenceSections.join("\n")}`;
-}
-
-function extractBodyFromMarkdown(content: string): string {
-  const frontmatterEnd = content.indexOf("---", 4);
-  if (frontmatterEnd === -1) return content;
-  return content.slice(frontmatterEnd + 3).trim();
 }
 
 function extractLastUpdatedFromMarkdown(content: string): string | null {
@@ -353,25 +383,133 @@ function extractLastUpdatedFromMarkdown(content: string): string | null {
   return match ? match[1] : null;
 }
 
-function generateMarkdownContent(existingContent: string | null): string {
+function generateMarkdownContent(lastUpdated: string): string {
   const newBody = linkPermissionMentions(generateMarkdownBody());
+  return `${generateFrontmatter(lastUpdated)}${newBody}`;
+}
 
-  let lastUpdated: string;
+const toolPageGroups: Record<string, { slug: string; title: string }> = {
+  Identity: {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  Chat: {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  "Tool Discovery": {
+    slug: "getting-started",
+    title: "Identity, Chat, and Tool Discovery",
+  },
+  Skills: { slug: "skills-and-files", title: "Skills, Files, and Sandbox" },
+  Files: { slug: "skills-and-files", title: "Skills, Files, and Sandbox" },
+  "Code Sandbox": {
+    slug: "skills-and-files",
+    title: "Skills, Files, and Sandbox",
+  },
+  Apps: { slug: "apps-and-projects", title: "Apps and Projects" },
+  Projects: { slug: "apps-and-projects", title: "Apps and Projects" },
+  "Agent Runtime": { slug: "agents", title: "Agents and Runtime" },
+  Agents: { slug: "agents", title: "Agents and Runtime" },
+  "Knowledge Management": {
+    slug: "knowledge-and-mcp",
+    title: "Knowledge and MCP",
+  },
+  "MCP Servers": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  "MCP Gateways": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  "Tool Assignment": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
+  Guardrails: { slug: "guardrails", title: "Guardrails" },
+  Limits: { slug: "organization", title: "Organization" },
+  Teams: { slug: "organization", title: "Organization" },
+  Plugins: { slug: "organization", title: "Organization" },
+};
 
-  if (existingContent) {
-    const existingBody = extractBodyFromMarkdown(existingContent);
-    const existingLastUpdated = extractLastUpdatedFromMarkdown(existingContent);
+function splitToolReference(markdown: string): {
+  index: string;
+  pages: Record<string, string>;
+} {
+  const marker = "## Tools Reference\n\n";
+  const splitAt = markdown.indexOf(marker);
+  if (splitAt === -1)
+    throw new Error("Generated MCP reference has no Tools Reference section");
+  const intro = markdown.slice(0, splitAt);
+  const reference = markdown.slice(splitAt + marker.length);
+  const sections = reference.split(/(?=^### )/m).filter(Boolean);
+  const pages = new Map<string, { title: string; sections: string[] }>();
+  const groups: { heading: string; slug: string; tools: string[] }[] = [];
+  const toolDestination = new Map<string, string>();
 
-    if (existingBody === newBody.trim() && existingLastUpdated) {
-      lastUpdated = existingLastUpdated;
-    } else {
-      lastUpdated = new Date().toISOString().split("T")[0];
-    }
-  } else {
-    lastUpdated = new Date().toISOString().split("T")[0];
+  for (const section of sections) {
+    const heading = section.match(/^### ([^\n]+)/)?.[1];
+    if (!heading || !toolPageGroups[heading])
+      throw new Error(`Unmapped MCP tool group: ${heading}`);
+    const { slug, title } = toolPageGroups[heading];
+    const page = pages.get(slug) ?? { title, sections: [] };
+    page.sections.push(section.trim());
+    pages.set(slug, page);
+    const tools = [...section.matchAll(/^#### ([a-z0-9_]+)$/gm)].map(
+      (match) => match[1],
+    );
+    groups.push({ heading, slug, tools });
+    for (const tool of tools) toolDestination.set(tool, slug);
   }
 
-  return `${generateFrontmatter(lastUpdated)}${newBody}`;
+  const toolUrl = (tool: string) =>
+    `/docs/reference/archestra-mcp-server/${toolDestination.get(tool)}#${tool}`;
+  const linkedIntro = intro.replace(
+    /\]\(#([a-z0-9_]+)\)/g,
+    (match, tool: string) =>
+      toolDestination.has(tool) ? `](${toolUrl(tool)})` : match,
+  );
+  const indexSections = groups.map(({ heading, slug, tools }) => {
+    const groupAnchor = heading
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-$/, "");
+    return `<span id="${groupAnchor}"></span>\n\n**[${heading}](/docs/reference/archestra-mcp-server/${slug})**\n\n${tools.map((tool) => `- <span id="${tool}"></span>[\`${tool}\`](${toolUrl(tool)})`).join("\n")}`;
+  });
+  const topicDescriptions: Record<string, string> = {
+    "getting-started":
+      "Identify the current agent, manage conversation todos, and discover available tools.",
+    "skills-and-files":
+      "Load and edit skills, work with files, and run commands in the sandbox.",
+    "apps-and-projects":
+      "Build and publish apps, manage projects, and configure scheduled work.",
+    agents:
+      "Create and configure agents, start runs, and manage their workspaces.",
+    "knowledge-and-mcp":
+      "Manage knowledge sources, MCP servers, gateways, and tool assignments.",
+    guardrails:
+      "Inspect policy decisions, request reviews, and resolve blocked actions.",
+    organization: "Manage limits, teams, and plugins.",
+  };
+  const cards = [...pages]
+    .map(
+      ([slug, { title }]) =>
+        `- [${title}](/docs/reference/archestra-mcp-server/${slug}): ${topicDescriptions[slug]}`,
+    )
+    .join("\n");
+  const index = `${linkedIntro}\n## Tools Reference\n\nFind tool inputs, output fields, and access requirements by topic.\n\n:::cards\n${cards}\n:::\n\n<details>\n<summary>Find a tool by name</summary>\n\n${indexSections.join("\n\n")}\n\n</details>`;
+
+  const frontmatterDate =
+    markdown.match(/lastUpdated:\s*(\d{4}-\d{2}-\d{2})/)?.[1] ??
+    new Date().toISOString().slice(0, 10);
+  const output: Record<string, string> = {};
+  for (const [slug, { title, sections: pageSections }] of pages) {
+    const content = pageSections
+      .join("\n\n")
+      .replace(
+        /^(#{3,5}) /gm,
+        (_match, hashes: string) => `${hashes.slice(1)} `,
+      )
+      .replace(
+        /\]\(#code-sandbox\)/g,
+        "](/docs/reference/archestra-mcp-server/skills-and-files#code-sandbox)",
+      );
+    output[slug] =
+      `---\ntitle: "${title}"\ndescription: "Archestra MCP Server tools for ${title.toLowerCase()}"\norder: ${[...pages.keys()].indexOf(slug) + 1}\nlastUpdated: ${frontmatterDate}\n---\n<!-- Auto-generated by pnpm codegen:archestra-mcp-server-docs. Do not edit manually. -->\n\n${content}`;
+  }
+  return { index, pages: output };
 }
 
 /**
@@ -438,16 +576,6 @@ export function formatToolPermission(
     return `\`${permission.action}\` on the ${item} (granted per item)`;
   }
   return `\`${permission.resource}:${permission.action}\``;
-}
-
-function formatToolLink(toolShortName: ArchestraToolShortName): string {
-  return `[\`${toolShortName}\`](#${toolShortName})`;
-}
-
-function isArchestraToolShortName(
-  toolShortName: string,
-): toolShortName is ArchestraToolShortName {
-  return Object.hasOwn(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME, toolShortName);
 }
 
 // === Input schema rendering ===
@@ -790,4 +918,11 @@ function linkPermissionMentions(markdown: string): string {
         ? `[${mention}](/docs/reference/permissions#${resource}:${action})`
         : mention,
   );
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    logger.error({ error }, "Error generating documentation");
+    process.exit(1);
+  });
 }

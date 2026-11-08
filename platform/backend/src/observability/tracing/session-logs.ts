@@ -17,6 +17,9 @@ export class SessionOperationLogProcessor implements SpanProcessor {
     for (const key of [
       "gen_ai.agent.id",
       "gen_ai.agent.name",
+      "archestra.subagent.initial_agent_id",
+      "archestra.subagent.initial_agent_name",
+      "archestra.subagent.failover_count",
       "gen_ai.provider.name",
       "gen_ai.request.model",
       "gen_ai.operation.name",

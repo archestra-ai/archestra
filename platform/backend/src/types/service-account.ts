@@ -1,7 +1,7 @@
 import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
+import { schema } from "@/database/schema";
 import { LabelWithDetailsSchema } from "./label";
 
 export const SelectServiceAccountSchema = createSelectSchema(
@@ -56,6 +56,16 @@ export const ServiceAccountResponseSchema = z.object({
    * either no key works, or every working key is open-ended.
    */
   soonestExpiryAt: z.coerce.date().nullable(),
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Trust policies that let an external workload exchange its OIDC token for
+   * a short-lived token of this account. An account with one can authenticate
+   * without any API key.
+   */
+  federatedCredentialCount: z.number().int().nonnegative(),
+  // SPDX-SnippetEnd
 });
 
 export const ServiceAccountDetailResponseSchema =

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Asks the release-images publisher to copy the attested ci/ digests, and the
+# Asks the release publisher to copy the attested ci/ digests, and the
 # attested chart from this run, to their public names, then waits for its run.
 # Inputs: VERSION, PRESERVE_LATEST, PLATFORM_LATEST, CHART (the chart archive,
 # optional), SMOKE (true for a dry run to scratch names), PUBLISHER_REPO,
@@ -38,6 +38,6 @@ for _ in $(seq 1 40); do
   [ -n "$run_id" ] && break
   sleep 6
 done
-[ -n "$run_id" ] || { echo "::error::The release-images publisher did not start"; exit 1; }
+[ -n "$run_id" ] || { echo "::error::The release publisher did not start"; exit 1; }
 echo "Publisher run: https://github.com/$PUBLISHER_REPO/actions/runs/$run_id"
 gh run watch "$run_id" --repo "$PUBLISHER_REPO" --exit-status --interval 20

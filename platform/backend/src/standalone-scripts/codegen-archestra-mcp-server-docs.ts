@@ -57,8 +57,9 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   tool_assignment: 13,
   openappa: 14,
   limits: 15,
-  teams: 16,
-  plugins: 17,
+  logs: 16,
+  teams: 17,
+  plugins: 18,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",
@@ -420,6 +421,7 @@ const toolPageGroups: Record<string, { slug: string; title: string }> = {
   "Tool Assignment": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
   Guardrails: { slug: "guardrails", title: "Guardrails" },
   Limits: { slug: "organization", title: "Organization" },
+  Logs: { slug: "organization", title: "Organization" },
   Teams: { slug: "organization", title: "Organization" },
   Plugins: { slug: "organization", title: "Organization" },
 };

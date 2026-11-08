@@ -1422,7 +1422,16 @@ export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> =>
  *   undefined / ""  → false
  *   "true"          → true
  *   "false"         → false
- *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ *   anything else   → the trimmed IP/CIDR list, with `loopback` added
+ *
+ * Why `loopback` joins any list: the bundled frontend runs in the backend's
+ * container and its rewrites reach the API over 127.0.0.1, passing the load
+ * balancer's X-Forwarded-For on unchanged. Without trusting that hop, every
+ * request from the web UI resolves to 127.0.0.1, so audit records and per-IP
+ * rate limits never see the client the operator configured the list for.
+ * Only processes inside the pod connect from loopback, and trust decisions
+ * that must not honor forwarded headers read the raw socket peer
+ * (`isLoopbackRequest`), not `request.ip`.
  * @public — exported for testability
  */
 export const parseTrustProxy = (
@@ -1431,11 +1440,13 @@ export const parseTrustProxy = (
   const trimmed = envValue?.trim();
   if (!trimmed || trimmed === "false") return false;
   if (trimmed === "true") return true;
-  return trimmed
+  const proxies = trimmed
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean)
-    .join(",");
+    .filter(Boolean);
+  // proxy-addr's name for 127.0.0.0/8 and ::1.
+  if (!proxies.includes("loopback")) proxies.unshift("loopback");
+  return proxies.join(",");
 };
 
 /** @public — exported for testability */
@@ -4262,6 +4273,9 @@ const config = {
   auditLog: {
     otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
     otelExporter: getAuditLogOtelExporter(),
+    // Adds the actor's email and display name to each exported record.
+    otelIncludeActorIdentity:
+      process.env.ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY === "true",
     // Retention is enterprise-licensed; the boot-time assertion in
     // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(

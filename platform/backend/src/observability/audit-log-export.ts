@@ -84,7 +84,11 @@ export const auditLogExporter = new AuditLogExporter();
 
 const AUDIT_SCOPE = "archestra-audit";
 
-/** An explicit allowlist: snapshots and free text must never leak into export. */
+/**
+ * An explicit allowlist: snapshots and free text must never leak into export.
+ * The actor's email and display name are the one exception, and only when the
+ * operator opts in, so a SIEM can say who acted without a lookup by ID.
+ */
 function auditLogAttributes(row: AuditLog): Record<string, string | number> {
   const attributes: Record<string, string | number> = {
     "event.name": `archestra.audit.${row.action}`,
@@ -107,6 +111,10 @@ function auditLogAttributes(row: AuditLog): Record<string, string | number> {
     "http.route": row.httpRoute,
     "http.response.status_code": row.httpStatus,
     "client.address": row.sourceIp,
+    ...(config.auditLog.otelIncludeActorIdentity && {
+      "archestra.audit.actor_email": row.actorEmail,
+      "archestra.audit.actor_name": row.actorName,
+    }),
   };
   for (const [key, value] of Object.entries(optional)) {
     if (value !== null && value !== undefined) attributes[key] = value;

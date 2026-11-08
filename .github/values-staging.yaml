@@ -103,6 +103,8 @@ archestra:
     # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
     ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
     ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    # The security archive's alerts name who acted.
+    ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY: "true"
     # Labels this installation's records environment=staging in the archive.
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=staging"
     ARCHESTRA_SENTRY_BACKEND_DSN: "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232"

@@ -257,3 +257,62 @@ describe("policy edits", () => {
     ).toMatchObject({ revision: 1, content });
   });
 });
+
+describe("rules naming tools", () => {
+  test("a rule for a missing tool warns at preview and publish; an existing tool's metadata reaches the model", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const github = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub",
+    });
+    await makeTool({
+      catalogId: github.id,
+      name: "github__create_issue",
+      description: "Create an issue in a repository.",
+      parameters: { type: "object", properties: { repo: {}, title: {} } },
+    });
+    const { revision } = await saveRevision(initialPolicy());
+    const edits = (names: string[]) => [
+      { oldText: ANCHOR, newText: `${rules(names)}${ANCHOR}` },
+    ];
+
+    const known = modelText(
+      await preview({
+        edits: edits(["github__create_issue"]),
+        expectedRevision: revision,
+      }),
+    );
+    const missing = modelText(
+      await preview({
+        edits: edits(["github__delete_issue"]),
+        expectedRevision: revision,
+      }),
+    );
+
+    expect(known).toMatchObject({ valid: true, warnings: [] });
+    expect(known.touchedTools).toMatchObject({
+      tools: [
+        {
+          name: "github__create_issue",
+          description: "Create an issue in a repository.",
+          arguments: ["repo", "title"],
+        },
+      ],
+      omitted: 0,
+    });
+    expect(missing).toMatchObject({ valid: true });
+    expect(missing.warnings).toHaveLength(1);
+    expect(missing.touchedTools).toBeNull();
+    expect(missing.instruction).not.toBe(known.instruction);
+
+    const published = modelText(
+      await publish({
+        edits: edits(["github__delete_issue"]),
+        expectedRevision: revision,
+      }),
+    );
+    expect(published.warnings).toEqual(missing.warnings);
+  });
+});

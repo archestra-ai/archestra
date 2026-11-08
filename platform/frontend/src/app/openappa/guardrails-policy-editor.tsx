@@ -51,7 +51,6 @@ export function GuardrailsPolicyEditor({
   focusLine?: number;
 }) {
   const declarations = usePolicyDeclarations();
-  const policy = useGuardrailsPolicy();
   const router = useRouter();
   const [tab, setTab] = useState<"policy" | "effective">("policy");
   const effective = useEffectivePolicy(tab === "effective");
@@ -121,13 +120,6 @@ export function GuardrailsPolicyEditor({
               </>
             ) : (
               <>
-                {policy.data && (
-                  <output className="text-xs text-muted-foreground">
-                    {policy.data.revision === 0
-                      ? "Not yet saved"
-                      : `Revision ${policy.data.revision}`}
-                  </output>
-                )}
                 {/* Last, so on a phone the bare icon sits on the card's edge
                     above the picker's end rather than floating mid-row. */}
                 <Button

@@ -497,12 +497,16 @@ test("the composed view lists no stub while every battery is active", async () =
   ).not.toBeInTheDocument();
 });
 
-test("the source picker and revision show only in the Source view", async () => {
+test("the source picker shows only in the Source view", async () => {
   mount();
-  expect(await screen.findByText("Revision 1")).toBeVisible();
   expect(
-    screen.getByRole("textbox", { name: "Organization guardrails policy" }),
+    await screen.findByRole("textbox", {
+      name: "Organization guardrails policy",
+    }),
   ).toHaveAttribute("readonly");
+  // A revision label beside a read-only source reads as unsaved edits.
+  expect(screen.queryByText(/^Revision \d+$/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Not yet saved")).not.toBeInTheDocument();
   expect(screen.getAllByRole("tablist")).toHaveLength(1);
   expect(
     screen.getByRole("combobox", { name: "Policy source file" }),
@@ -512,7 +516,6 @@ test("the source picker and revision show only in the Source view", async () => 
   expect(
     screen.queryByRole("combobox", { name: "Policy source file" }),
   ).not.toBeInTheDocument();
-  expect(screen.queryByText("Revision 1")).not.toBeInTheDocument();
   expect(
     screen.getByText("What the runtime enforces, batteries included."),
   ).toBeVisible();

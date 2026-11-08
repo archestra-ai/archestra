@@ -367,7 +367,7 @@ jobs:
     environment:
       name: releaser
       deployment: false # A secrets and branch gate; nothing is deployed.
-    # A stable release waits in release-images for an Engineering member who
+    # A stable release waits in release-publisher for an Engineering member who
     # did not merge it to approve it; this job waits with it, up to the
     # longest a GitHub-hosted job may run.
     timeout-minutes: 360
@@ -390,7 +390,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
       TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-      PUBLISHER_REPO: archestra-ai/release-images
+      PUBLISHER_REPO: archestra-ai/release-publisher
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

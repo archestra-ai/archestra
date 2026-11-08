@@ -387,7 +387,7 @@ sleep() { :; }
             env=os.environ | chart_env | {
                 "VERSION": version, "PRESERVE_LATEST": preserve_latest, "CALLS": str(calls),
                 "PLATFORM_LATEST": platform_latest,
-                "PUBLISHER_REPO": "archestra-ai/release-images", "GITHUB_RUN_ID": "77",
+                "PUBLISHER_REPO": "archestra-ai/release-publisher", "GITHUB_RUN_ID": "77",
                 "GITHUB_RUN_ATTEMPT": "2", "RUNS": json.dumps({"workflow_runs": runs}),
                 "WATCH_STATUS": "0",
             },

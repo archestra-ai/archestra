@@ -4,7 +4,7 @@ Archestra uses two release pipelines:
 - **Beta:** Automatic releases from `main` (for example, `1.4.0-beta.2`).
 - **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
-[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`. Every image and chart is published by archestra-ai/release-images, which holds each stable release until a second person approves it.
+[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`. Every image and chart is published by archestra-ai/release-publisher, which holds each stable release until a second person approves it.
 
 ## Image CVE Gate
 
@@ -136,7 +136,7 @@ Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
 ## Test And Approve Stable
 
-Merging a release PR on `release/X.Y` builds the artifacts and asks archestra-ai/release-images to publish them. The publisher run waits at **Approve stable release** for an Engineering member who did not merge or start the release (the release workflow's publish step links the run). Test these exact artifacts before approving:
+Merging a release PR on `release/X.Y` builds the artifacts and asks archestra-ai/release-publisher to publish them. The publisher run waits at **Approve stable release** for an Engineering member who did not merge or start the release (the release workflow's publish step links the run). Test these exact artifacts before approving:
 
 1. [ ] Confirm all build jobs in the workflow run completed successfully.
 2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts.
@@ -144,7 +144,7 @@ Merging a release PR on `release/X.Y` builds the artifacts and asks archestra-ai
 4. [ ] Test a clean install and an upgrade from the previous stable version:
    - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
    - Confirm existing data remains intact after upgrade.
-5. [ ] Have a second maintainer approve the publisher run's `stable-release` environment in archestra-ai/release-images. Its Plan job summary lists the digests to compare.
+5. [ ] Have a second maintainer approve the publisher run's `stable-release` environment in archestra-ai/release-publisher. Its Plan job summary lists the digests to compare.
    - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
    - A rerun or new candidate requires a fresh approval after its artifacts are verified.
    - Approve within six hours: the release workflow's publish job waits no longer.
@@ -161,7 +161,7 @@ Merging a release PR on `release/X.Y` builds the artifacts and asks archestra-ai
   1. Do not publish artifacts or move `latest` manually.
   2. Inspect GitHub releases and container registries.
    3. Keep the existing draft release and git tag. Re-run failed jobs in the original workflow run using the saved artifacts.
-   4. Obtain explicit authorization before approving a retry that waits for the release-images stable approval.
+   4. Obtain explicit authorization before approving a retry that waits for the release-publisher stable approval.
    5. If the retry fails or state remains inconsistent, stop and investigate.
 
 <details>

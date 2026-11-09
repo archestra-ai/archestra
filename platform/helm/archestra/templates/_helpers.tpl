@@ -161,6 +161,50 @@ pool. HPA maxReplicas is the web ceiling. Overlapping rollouts need extra headro
 {{- end }}
 
 {{/*
+Keys of the chart-managed auth Secret that come from Helm values: the external
+database URL, sensitive archestra.env values, ARCHESTRA_CHAT_*_API_KEY values,
+and authSecret.extraData. Rendered into secret.yaml and hashed by
+archestra-platform.authSecretChecksum.
+*/}}
+{{- define "archestra-platform.authSecretValuesData" -}}
+{{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") }}
+database-url: {{ .Values.postgresql.external_database_url | b64enc }}
+{{- end }}
+{{- range splitList "," (include "archestra-platform.sensitiveEnvVars" .) }}
+{{- if hasKey $.Values.archestra.env . }}
+{{- $value := index $.Values.archestra.env . }}
+{{- if $value }}
+{{ . | lower | replace "_" "-" }}: {{ $value | b64enc }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $key, $value := .Values.archestra.env }}
+{{- if and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key) $value }}
+{{ $key | lower | replace "_" "-" }}: {{ $value | b64enc }}
+{{- end }}
+{{- end }}
+{{- range $key, $value := .Values.archestra.authSecret.extraData }}
+{{ $key }}: {{ $value | toString | b64enc }}
+{{- end }}
+{{- end }}
+
+{{/*
+Checksum of the values-sourced keys of the chart-managed auth Secret, set as
+the checksum/auth-secret pod annotation on the web and worker Deployments so a
+changed value rolls them. Empty when authSecret.existingSecretName is set: the
+chart renders no Secret then. The generated keys (auth-secret, session-secret,
+secrets-encryption-secret, offer-signing-secret) are left out on purpose: they
+are random on any render without cluster access (helm template, GitOps
+controllers), which would roll the pods on every sync. Change one in the
+Secret directly and restart the pods.
+*/}}
+{{- define "archestra-platform.authSecretChecksum" -}}
+{{- if not .Values.archestra.authSecret.existingSecretName -}}
+{{- include "archestra-platform.authSecretValuesData" . | sha256sum -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Sensitive environment variables, comma-joined. A non-empty archestra.env value
 for one of them is stored in the Helm-managed auth Secret (secret.yaml) and
 referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.

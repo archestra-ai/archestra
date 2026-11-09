@@ -2325,10 +2325,21 @@ tests:
           value: "4Gi"
 
   # Pod annotations tests
-  - it: should not have pod annotations when archestra.podAnnotations is empty
+  - it: should have only the auth Secret checksum when archestra.podAnnotations is empty
     documentIndex: 1
     set:
       archestra.podAnnotations: {}
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            checksum/auth-secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+  - it: should not have pod annotations when archestra.podAnnotations is empty and an external auth Secret is used
+    documentIndex: 1
+    set:
+      archestra.podAnnotations: {}
+      archestra.authSecret.existingSecretName: my-auth
     asserts:
       - isNull:
           path: spec.template.metadata.annotations

@@ -805,8 +805,9 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (default kubeconfig locations)
   - Example: `/etc/archestra/kubeconfig`
 
-- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Namespace that MCP server pods run in.
-  - Default: `default`. The Helm chart sets the release namespace.
+- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Namespace that MCP servers, Agent Runtime sessions, and code sandbox engines run in, unless an [environment](/docs/admin/environments) names another one.
+  - Default: `default`. The Helm chart sets `archestra.orchestrator.kubernetes.namespace`, or the release namespace.
+  - To run them in a namespace of their own, follow [Cluster Security](/docs/admin/deployment/production#cluster-security).
 
 - **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Namespaces the platform service account has permissions in, offered as a dropdown in the [environment](/docs/admin/environments) editor.
   - Default: unset (the editor takes free text)

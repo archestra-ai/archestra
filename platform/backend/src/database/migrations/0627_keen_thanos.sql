@@ -106,4 +106,25 @@ WHERE a."organization_id" = o."id"
   AND a."is_default" = true
   AND a."deleted_at" IS NULL
   AND a."auto_routing_enabled";--> statement-breakpoint
+-- Existing chats on the normal tier were routed before Auto became explicit.
+-- Keep that selection only for agents that followed organization routing,
+-- without opting pinned agents, pools, other models or Runtime chats in.
+-- Runtime eligibility and key access are still checked when a turn is sent.
+UPDATE "conversations" AS c
+SET "auto_model" = true
+FROM "organization" AS o, "auto_routing_tiers" AS t, "agents" AS a
+WHERE c."organization_id" = o."id"
+  AND o."default_auto_model"
+  AND t."organization_id" = o."id"
+  AND t."tier" = 'normal'
+  AND c."model_id" = t."model_id"
+  AND c."model_pool_id" IS NULL
+  AND c."deleted_at" IS NULL
+  AND a."id" = c."agent_id"
+  AND a."organization_id" = o."id"
+  AND a."runtime" IS NULL
+  AND a."llm_api_key_id" IS NULL
+  AND a."model_id" IS NULL
+  AND a."model_pool_id" IS NULL
+  AND a."deleted_at" IS NULL;--> statement-breakpoint
 DROP TABLE "org_trio_pending_normal_tier" CASCADE;

@@ -629,6 +629,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
+      // Auto is a live selection, not the normal tier snapshot saved when
+      // the conversation began. Refresh only this turn's view, including its
+      // provider, before attachment gating and wire/client selection.
+      const autoSelection = conversation.autoModel
+        ? await resolveAutoModelSelection(organizationId)
+        : null;
+      if (autoSelection) {
+        conversation.modelId = autoSelection.modelId;
+        conversation.chatApiKeyId = autoSelection.chatApiKeyId;
+      }
+
       // A shared agent may be configured to refuse callers who cannot reach one
       // of the MCP servers its tools come from, rather than letting them find
       // out mid-turn when such a tool errors. The picker greys these agents out,
@@ -1342,6 +1353,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
+                    providerKeySelection: autoSelection?.chatApiKeyId
+                      ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                      : undefined,
                     modelPoolId: conversation.modelPoolId,
                     autoRoutable: conversation.autoModel,
                     // Lets the proxy store this turn's interaction encrypted
@@ -1582,6 +1596,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
+                          providerKeySelection: autoSelection?.chatApiKeyId
+                            ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                            : undefined,
                           modelPoolId: conversation.modelPoolId,
                           autoRoutable: conversation.autoModel,
                           // A repair prompt carries the same conversation

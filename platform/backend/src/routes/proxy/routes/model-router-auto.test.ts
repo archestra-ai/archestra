@@ -1579,6 +1579,75 @@ describe("Model Router auto model", () => {
       });
     }
 
+    test.for([
+      false,
+      true,
+    ])("uses the configured tier key with overlapping catalogs (planned=%s)", async (planned, {
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const keys = [];
+      for (const tier of ["fast", "normal", "smart"] as const) {
+        const key = await makeLlmProviderApiKey(
+          org.organizationId,
+          (await makeSecret({ secret: { apiKey: `synthetic-${tier}` } })).id,
+          { provider: "openai", baseUrl: UPSTREAM },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          key.id,
+          org.trio.map((model) => model.id),
+        );
+        await db
+          .update(schema.autoRoutingTiersTable)
+          .set({ providerApiKeyId: key.id })
+          .where(
+            and(
+              eq(
+                schema.autoRoutingTiersTable.organizationId,
+                org.organizationId,
+              ),
+              eq(schema.autoRoutingTiersTable.tier, tier),
+            ),
+          );
+        keys.push(key);
+      }
+      if (planned) await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      const authorizations: (string | null)[] = [];
+      server.use(
+        http.post(`${UPSTREAM}/chat/completions`, async ({ request }) => {
+          authorizations.push(request.headers.get("authorization"));
+          const body = (await request.json()) as { model: string };
+          return HttpResponse.json(chatCompletion(body.model));
+        }),
+      );
+      for (let turn = 0; turn < 2; turn++) {
+        const response = await sendPlatformCall(org, {
+          userId,
+          callKeyId: keys[1].id,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const tier = planned ? 2 : 1;
+      expect(authorizations).toEqual(
+        Array(2).fill(`Bearer synthetic-${planned ? "smart" : "normal"}`),
+      );
+      expect(await platformCalls(org.agentId)).toEqual(
+        Array(2).fill({
+          model: org.trio[tier].modelId,
+          providerApiKeyId: keys[tier].id,
+        }),
+      );
+    });
+
     test("an agent inheriting the default runs on the session's routed tier while routing is on", async ({
       makeOrganization,
       makeSecret,

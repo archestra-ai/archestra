@@ -255,7 +255,16 @@ export async function routeInternalAutoSession(params: {
       params.callApiKeyId,
     ],
   });
-  const eligibility = await checkTrio({ auth, endpoint: null, trio });
+  const eligibility = await checkTrio({
+    auth,
+    endpoint: null,
+    trio,
+    preferredTierKeyIds: [
+      settings.fastApiKeyId,
+      settings.normalApiKeyId,
+      settings.smartApiKeyId,
+    ],
+  });
   const ineligible = eligibility.find((tier) => !tier.eligible);
   if (ineligible && !ineligible.eligible) {
     return unroutable(
@@ -525,11 +534,26 @@ function checkTrio(params: {
   auth: ModelRouterAuth;
   endpoint: ModelRouterEndpoint | null;
   trio: Trio;
+  /** Internal Auto calls prefer each tier's configured key, not the first tier's key. */
+  preferredTierKeyIds?: readonly (string | null)[];
 }): Promise<TierEligibility[]> {
   return Promise.all(
-    params.trio.map((model) =>
+    params.trio.map((model, index) =>
       checkAutoTierEligibility({
-        auth: params.auth,
+        auth: params.preferredTierKeyIds
+          ? {
+              ...params.auth,
+              providerApiKeys: [...params.auth.providerApiKeys].sort(
+                (a, b) =>
+                  Number(
+                    b.providerApiKeyId === params.preferredTierKeyIds?.[index],
+                  ) -
+                  Number(
+                    a.providerApiKeyId === params.preferredTierKeyIds?.[index],
+                  ),
+              ),
+            }
+          : params.auth,
         endpoint: params.endpoint,
         model,
       }),

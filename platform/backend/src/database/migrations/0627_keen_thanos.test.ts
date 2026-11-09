@@ -43,7 +43,14 @@ async function makeDatabase() {
       default_fast_model_id uuid,
       default_smart_model_id uuid
     );
-    CREATE TABLE conversations (id text PRIMARY KEY);
+    CREATE TABLE conversations (
+      id text PRIMARY KEY,
+      organization_id text NOT NULL,
+      agent_id text,
+      model_id uuid,
+      model_pool_id uuid,
+      deleted_at timestamp
+    );
     CREATE TABLE agents (
       id text PRIMARY KEY,
       organization_id text NOT NULL,
@@ -55,6 +62,7 @@ async function makeDatabase() {
       runtime jsonb,
       llm_api_key_id uuid,
       model_id uuid,
+      model_pool_id uuid,
       ${TIER_COLUMNS.map(
         (column) =>
           `${column} uuid CONSTRAINT agents_${column}_models_id_fk REFERENCES models(id)`,
@@ -120,6 +128,59 @@ test("an organization 0613 parked for the startup check routes again, on its tie
        WHERE a.id = 'proxy'`,
     );
     expect(routing.rows).toEqual([{ enabled: true, defaultAuto: true }]);
+  } finally {
+    await database.close();
+  }
+});
+
+test("keeps eligible existing chats on Auto without opting other chats in", async () => {
+  const database = await makeDatabase();
+  try {
+    await database.query(
+      "INSERT INTO organization VALUES ('enabled', $1, $2, $3, $4), ('disabled', $1, $2, $3, $4)",
+      [MODEL.normal0, KEY, MODEL.fast0, MODEL.smart0],
+    );
+    await database.query(
+      "INSERT INTO chat_api_keys VALUES ($1, 'enabled', NULL, false, '2026-01-01')",
+      [KEY],
+    );
+    for (const model of Object.values(MODEL)) {
+      await database.query("INSERT INTO api_key_models VALUES ($1, $2)", [
+        KEY,
+        model,
+      ]);
+    }
+    await database.query(
+      `INSERT INTO agents (id, organization_id, agent_type, is_default, auto_routing_enabled, auto_routing_budget_usd_per_day, auto_routing_fast_model_id, auto_routing_normal_model_id, auto_routing_smart_model_id)
+       VALUES ('proxy', 'enabled', 'llm_proxy', true, true, 5, $1, $2, $3)`,
+      [MODEL.fast0, MODEL.normal0, MODEL.smart0],
+    );
+    await database.exec(`
+      INSERT INTO agents (id, organization_id, agent_type) VALUES ('chat', 'enabled', 'agent'), ('off', 'disabled', 'agent');
+      INSERT INTO agents (id, organization_id, agent_type, runtime, model_id)
+        VALUES ('runtime', 'enabled', 'agent', '{"command":["codex"]}', '${MODEL.normal0}');
+      INSERT INTO agents (id, organization_id, agent_type, model_id, llm_api_key_id, model_pool_id) VALUES
+        ('pinned-model', 'enabled', 'agent', '${MODEL.normal0}', NULL, NULL),
+        ('pinned-key', 'enabled', 'agent', NULL, '${KEY}', NULL),
+        ('pinned-pool', 'enabled', 'agent', NULL, NULL, '${KEY}');
+      INSERT INTO conversations (id, organization_id, agent_id, model_id, model_pool_id, deleted_at) VALUES
+        ('pinned-model', 'enabled', 'pinned-model', '${MODEL.normal0}', NULL, NULL),
+        ('pinned-key', 'enabled', 'pinned-key', '${MODEL.normal0}', NULL, NULL),
+        ('pinned-pool', 'enabled', 'pinned-pool', '${MODEL.normal0}', NULL, NULL),
+        ('eligible', 'enabled', 'chat', '${MODEL.normal0}', NULL, NULL),
+        ('other-model', 'enabled', 'chat', '${MODEL.smart0}', NULL, NULL),
+        ('pool', 'enabled', 'chat', '${MODEL.normal0}', '${KEY}', NULL),
+        ('runtime', 'enabled', 'runtime', '${MODEL.normal0}', NULL, NULL),
+        ('disabled', 'disabled', 'off', '${MODEL.normal0}', NULL, NULL),
+        ('deleted', 'enabled', 'chat', '${MODEL.normal0}', NULL, now()),
+        ('missing-agent', 'enabled', NULL, '${MODEL.normal0}', NULL, NULL);
+    `);
+    await database.exec(migration("0613_org_trio_auto_routed"));
+    await database.exec(migration("0627_keen_thanos"));
+    const chats = await database.query(
+      "SELECT id FROM conversations WHERE auto_model ORDER BY id",
+    );
+    expect(chats.rows).toEqual([{ id: "eligible" }]);
   } finally {
     await database.close();
   }

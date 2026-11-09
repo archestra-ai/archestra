@@ -128,7 +128,7 @@ jobs:
       # this repository attested.
       - name: Verify the publication
         if: ${{ steps.request.outputs.publish == 'true' }}
-        uses: archestra-ai/.github/actions/release-publish-verify@c04e990eb4f791dfa68a1e476421559141574cb9 # archestra-ai/.github#72 head; repin to its release tag
+        uses: archestra-ai/.github/actions/release-publish-verify@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
         with:
           token: ${{ steps.publisher-token.outputs.token }}
           attestation-token: ${{ github.token }}

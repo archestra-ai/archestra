@@ -680,7 +680,7 @@ jobs:
     needs: [release-please, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@eb4e01f03710d0a8fb50d169b45e8f7412d983bf # archestra-ai/.github#73 head; repin to its release tag
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -776,7 +776,7 @@ jobs:
     needs: publisher-smoke
     permissions:
       actions: read # Download the smoke chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@add9951c121764e9d62f71591ab694b257c14077 # v1.21.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser

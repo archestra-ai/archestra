@@ -160,14 +160,59 @@ pool. HPA maxReplicas is the web ceiling. Overlapping rollouts need extra headro
 {{- end -}}
 {{- end }}
 
-{{- define "archestra-platform.env" -}}
 {{/*
-List of sensitive environment variables that should be stored in the Secret
-and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
-This must match the list in secret.yaml.
-Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
+Keys of the chart-managed auth Secret that come from Helm values: the external
+database URL, sensitive archestra.env values, ARCHESTRA_CHAT_*_API_KEY values,
+and authSecret.extraData. Rendered into secret.yaml and hashed by
+archestra-platform.authSecretChecksum.
 */}}
-{{- $sensitiveEnvVars := list
+{{- define "archestra-platform.authSecretValuesData" -}}
+{{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") }}
+database-url: {{ .Values.postgresql.external_database_url | b64enc }}
+{{- end }}
+{{- range splitList "," (include "archestra-platform.sensitiveEnvVars" .) }}
+{{- if hasKey $.Values.archestra.env . }}
+{{- $value := index $.Values.archestra.env . }}
+{{- if $value }}
+{{ . | lower | replace "_" "-" }}: {{ $value | b64enc }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $key, $value := .Values.archestra.env }}
+{{- if and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key) $value }}
+{{ $key | lower | replace "_" "-" }}: {{ $value | b64enc }}
+{{- end }}
+{{- end }}
+{{- range $key, $value := .Values.archestra.authSecret.extraData }}
+{{ $key }}: {{ $value | toString | b64enc }}
+{{- end }}
+{{- end }}
+
+{{/*
+Checksum of the values-sourced keys of the chart-managed auth Secret, set as
+the checksum/auth-secret pod annotation on the web and worker Deployments so a
+changed value rolls them. Empty when authSecret.existingSecretName is set: the
+chart renders no Secret then. The generated keys (auth-secret, session-secret,
+secrets-encryption-secret, offer-signing-secret) are left out on purpose: they
+are random on any render without cluster access (helm template, GitOps
+controllers), which would roll the pods on every sync. Change one in the
+Secret directly and restart the pods.
+*/}}
+{{- define "archestra-platform.authSecretChecksum" -}}
+{{- if not .Values.archestra.authSecret.existingSecretName -}}
+{{- include "archestra-platform.authSecretValuesData" . | sha256sum -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Sensitive environment variables, comma-joined. A non-empty archestra.env value
+for one of them is stored in the Helm-managed auth Secret (secret.yaml) and
+referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
+Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as
+sensitive. Read it with: splitList "," (include "archestra-platform.sensitiveEnvVars" .)
+*/}}
+{{- define "archestra-platform.sensitiveEnvVars" -}}
+{{- join "," (list
   "ARCHESTRA_AUTH_SECRET"
   "ARCHESTRA_AUTH_SESSION_SECRET"
   "ARCHESTRA_SECRETS_ENCRYPTION_SECRET"
@@ -180,7 +225,11 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   "ARCHESTRA_METRICS_SECRET"
   "ARCHESTRA_HASHICORP_VAULT_TOKEN"
   "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET"
-}}
+  "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN"
+) -}}
+{{- end }}
+
+{{- define "archestra-platform.env" -}}
 {{- $podNameProvided := hasKey .Values.archestra.env "POD_NAME" }}
 {{- $podNamespaceProvided := hasKey .Values.archestra.env "POD_NAMESPACE" }}
 {{- range .Values.archestra.envWithValueFrom }}
@@ -380,7 +429,7 @@ An explicit archestra.env value overrides the injection.
 {{- end }}
 {{/* This binary is copied into arbitrary MCP images and must be static: the
      generic init-container busybox can use a libc the target image lacks. */}}
-{{- $prepullBootstrapImage := include "archestra-platform.imageRegistry" (dict "image" (.bootstrapImage | default "docker.io/library/busybox:1.36-musl") "registry" .bootstrapImageRegistry) }}
+{{- $prepullBootstrapImage := include "archestra-platform.pinnedImage" (dict "image" (.bootstrapImage | default "docker.io/library/busybox:1.36-musl") "registry" .bootstrapImageRegistry "defaultImage" "docker.io/library/busybox:1.36-musl" "digest" .bootstrapImageDigest) }}
 {{- if $prepullBootstrapImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
   value: {{ $prepullBootstrapImage | quote }}
@@ -453,32 +502,7 @@ An explicit archestra.env value overrides the injection.
   value: {{ .Values.archestra.fileStorage.filesystem.mountPath | quote }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
-{{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
-{{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
-{{/* Only use secretKeyRef for sensitive vars with non-empty values; empty values are set as regular env vars */}}
-{{- if and $isSensitive $value }}
-{{/* Sensitive env vars with values are stored in the Secret and referenced via secretKeyRef */}}
-- name: {{ $key }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "archestra-platform.authSecretName" $ }}
-      key: {{ $key | lower | replace "_" "-" }}
-{{- /*
-optional: the pre-upgrade migrate Job renders from the NEW templates but runs
-BEFORE the upgraded Secret is applied, so on the upgrade that first introduces
-one of these keys the referenced Secret key does not exist yet and a required
-ref would wedge the Job in CreateContainerConfigError until its deadline.
-Migrations don't need the key; app pods start after the Secret update in the
-same apply, and the application's own fail-closed key check (canary) catches a
-genuinely missing key loudly at startup.
-*/}}
-{{- if has $key (list "ARCHESTRA_CONTENT_ENCRYPTION_SECRET" "ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS") }}
-      optional: true
-{{- end }}
-{{- else }}
-- name: {{ $key }}
-  value: {{ $value | quote }}
-{{- end }}
+{{- include "archestra-platform.envEntry" (dict "root" $ "key" $key "value" $value) }}
 {{- end }}
 {{- range .Values.archestra.envFromSecrets }}
 - name: {{ .name }}
@@ -507,6 +531,44 @@ genuinely missing key loudly at startup.
 - name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
   value: {{ include "archestra-platform.shutdownPodGrace" . | quote }}
 
+{{- end }}
+
+{{/*
+One archestra.env entry. A sensitive value is read from the auth Secret, which
+holds it (templates/secret.yaml); anything else renders as a literal.
+Usage: include "archestra-platform.envEntry" (dict "root" $ "key" $key "value" $value)
+*/}}
+{{- define "archestra-platform.envEntry" -}}
+{{- $root := .root }}
+{{- $key := .key }}
+{{- $value := .value }}
+{{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
+{{- $sensitiveEnvVars := splitList "," (include "archestra-platform.sensitiveEnvVars" $root) }}
+{{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
+{{/* Only use secretKeyRef for sensitive vars with non-empty values; empty values are set as regular env vars */}}
+{{- if and $isSensitive $value }}
+{{/* Sensitive env vars with values are stored in the Secret and referenced via secretKeyRef */}}
+- name: {{ $key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "archestra-platform.authSecretName" $root }}
+      key: {{ $key | lower | replace "_" "-" }}
+{{- /*
+optional: the pre-upgrade migrate Job renders from the NEW templates but runs
+BEFORE the upgraded Secret is applied, so on the upgrade that first introduces
+one of these keys the referenced Secret key does not exist yet and a required
+ref would wedge the Job in CreateContainerConfigError until its deadline.
+Migrations don't need the key; app pods start after the Secret update in the
+same apply, and the application's own fail-closed key check (canary) catches a
+genuinely missing key loudly at startup.
+*/}}
+{{- if has $key (list "ARCHESTRA_CONTENT_ENCRYPTION_SECRET" "ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS" "ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN") }}
+      optional: true
+{{- end }}
+{{- else }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -907,6 +969,7 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 - name: vault-secrets
   image: {{ include "archestra-platform.image" . }}
   workingDir: /app/backend
+  {{- include "archestra-platform.containerSecurityContext" . | nindent 2 }}
   env:
     {{- include "archestra-platform.env" . | nindent 4 }}
     - name: VAULT_INJECTOR_SECRETS
@@ -921,6 +984,7 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 - name: setup-postgres-extensions
   {{- /* Honor the digest pin the same way the Bitnami subchart does: with a digest, the tag is informational and the digest wins. */}}
   image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}{{ with .Values.postgresql.image.digest }}@{{ . }}{{ end }}
+  {{- include "archestra-platform.containerSecurityContext" . | nindent 2 }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -950,14 +1014,22 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 {{- end }}
 - name: wait-for-postgres
   image: {{ include "archestra-platform.busyboxImage" . }}
+  {{- include "archestra-platform.containerSecurityContext" . | nindent 2 }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- /*
+  Only the database URL and what it expands: this container runs a third-party
+  image and needs nothing else, so it never sees the platform's other secrets.
+  */}}
+  {{- $waitForPostgresEnv := include "archestra-platform.waitForPostgresEnv" . | trim }}
+  {{- if $waitForPostgresEnv }}
   env:
-    {{- include "archestra-platform.env" . | nindent 4 }}
-  {{- /* ARCHESTRA_DATABASE_URL may come from envFrom, so mirror the main container's sources. */}}
-  {{- if or .Values.archestra.envFrom .initContainerExtraEnvFrom }}
+    {{- $waitForPostgresEnv | nindent 4 }}
+  {{- end }}
+  {{- /* Bulk sources are mirrored only when they are the URL's sole possible source. */}}
+  {{- if and (or .Values.archestra.envFrom .initContainerExtraEnvFrom) (ne (include "archestra-platform.databaseUrlFromEnvFrom" .) "") }}
   envFrom:
     {{- with .Values.archestra.envFrom }}
     {{- toYaml . | nindent 4 }}
@@ -1014,6 +1086,69 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 {{- end }}
 
 {{/*
+Environment for the wait-for-postgres init container: ARCHESTRA_DATABASE_URL
+from whichever source the main container uses, plus any variable a literal URL
+expands through $(NAME). Entries keep the main container's order, so
+expansion resolves the same way.
+*/}}
+{{- define "archestra-platform.waitForPostgresEnv" -}}
+{{- /* Render the full env for its validation failures only; it is not emitted. */}}
+{{- $_ := include "archestra-platform.env" . }}
+{{- include "archestra-platform.databaseEnv" . }}
+{{- $names := dict "ARCHESTRA_DATABASE_URL" true }}
+{{- $literalUrl := toString (get (.Values.archestra.env | default dict) "ARCHESTRA_DATABASE_URL" | default "") }}
+{{- range regexFindAll "\\$\\([A-Za-z_][A-Za-z0-9_]*\\)" $literalUrl -1 }}
+{{- $_ := set $names (trimSuffix ")" (trimPrefix "$(" .)) true }}
+{{- end }}
+{{- range $key, $value := .Values.archestra.env }}
+{{- if hasKey $names $key }}
+{{- include "archestra-platform.envEntry" (dict "root" $ "key" $key "value" $value) }}
+{{- end }}
+{{- end }}
+{{- range .Values.archestra.envFromSecrets }}
+{{- if hasKey $names .name }}
+- name: {{ .name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: {{ .secretKey }}
+{{- end }}
+{{- end }}
+{{- range .Values.archestra.envWithValueFrom }}
+{{- if hasKey $names .name }}
+- name: {{ .name }}
+  valueFrom:
+    {{- toYaml .valueFrom | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Non-empty when ARCHESTRA_DATABASE_URL can only come from a bulk envFrom
+source: no bundled or external database and no named entry supplies it.
+*/}}
+{{- define "archestra-platform.databaseUrlFromEnvFrom" -}}
+{{- $named := or .Values.postgresql.enabled .Values.postgresql.external_database_url (hasKey (.Values.archestra.env | default dict) "ARCHESTRA_DATABASE_URL") }}
+{{- range .Values.archestra.envFromSecrets }}
+{{- if eq .name "ARCHESTRA_DATABASE_URL" }}{{- $named = true }}{{- end }}
+{{- end }}
+{{- range .Values.archestra.envWithValueFrom }}
+{{- if eq .name "ARCHESTRA_DATABASE_URL" }}{{- $named = true }}{{- end }}
+{{- end }}
+{{- if not $named }}true{{- end }}
+{{- end }}
+
+{{/*
+securityContext for the chart's own containers, from archestra.containerSecurityContext.
+*/}}
+{{- define "archestra-platform.containerSecurityContext" -}}
+{{- with .Values.archestra.containerSecurityContext -}}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
 Worker-only init container that blocks worker startup until the web Deployment
 has applied database migrations.
 
@@ -1024,6 +1159,7 @@ are covered by the pre-upgrade migration Job.
 {{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
 - name: wait-for-migrations
   image: {{ include "archestra-platform.busyboxImage" . }}
+  {{- include "archestra-platform.containerSecurityContext" . | nindent 2 }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -1215,7 +1351,23 @@ may include a mirror path prefix; ignore trailing slashes when joining.
 
 {{/* Shared by startup checks in web, migration, and worker pods. */}}
 {{- define "archestra-platform.busyboxImage" -}}
-{{- include "archestra-platform.imageRegistry" (dict "image" (.Values.archestra.initContainers.busyboxImage | default "busybox:1.36") "registry" .Values.archestra.initContainers.busyboxImageRegistry) -}}
+{{- $init := .Values.archestra.initContainers -}}
+{{- include "archestra-platform.pinnedImage" (dict "image" ($init.busyboxImage | default "docker.io/library/busybox:1.36") "registry" $init.busyboxImageRegistry "defaultImage" "docker.io/library/busybox:1.36" "digest" $init.busyboxImageDigest) -}}
+{{- end -}}
+
+{{/*
+An image reference with the chart's digest pin. The digest applies only while
+the image is the chart default and no registry override is set: a mirror or a
+custom image may not carry the same digest, so it is used as configured.
+Usage: include "archestra-platform.pinnedImage" (dict "image" ... "registry" ... "defaultImage" ... "digest" ...)
+*/}}
+{{- define "archestra-platform.pinnedImage" -}}
+{{- $registry := .registry | default "" | trimSuffix "/" -}}
+{{- if and .digest (not $registry) (eq .image .defaultImage) -}}
+{{- printf "%s@%s" .image .digest -}}
+{{- else -}}
+{{- include "archestra-platform.imageRegistry" (dict "image" .image "registry" $registry) -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Imported durations are preserved and checked against pod grace at startup. */}}

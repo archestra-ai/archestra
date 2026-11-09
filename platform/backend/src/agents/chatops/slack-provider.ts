@@ -153,6 +153,8 @@ class SlackProvider implements ChatOpsProvider {
    * default client can retry for minutes and hold the final reply back.
    */
   private bestEffortClient: WebClient | null = null;
+  /** Discovery must not pause the interactive client's queue on Slack 429s. */
+  private discoveryClient: WebClient | null = null;
   /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
@@ -195,6 +197,15 @@ class SlackProvider implements ChatOpsProvider {
       return Boolean(this.config.appLevelToken);
     }
     return Boolean(this.config.signingSecret);
+  }
+
+  /** Compare membership identity without exposing credentials to the coordinator. */
+  matchesDiscoveryConfig(config: SlackDbConfig): boolean {
+    return (
+      this.config.enabled === config.enabled &&
+      this.config.botToken === config.botToken &&
+      this.config.appId === config.appId
+    );
   }
 
   isSocketMode(): boolean {
@@ -324,6 +335,12 @@ class SlackProvider implements ChatOpsProvider {
       }
       abortController.signal.throwIfAborted();
       this.client = new WebClient(botToken);
+      this.discoveryClient = new WebClient(botToken, {
+        timeout: 15 * TimeInMs.Second,
+        retryConfig: { retries: 0 },
+        // The discovery coordinator owns retries and respects Retry-After.
+        rejectRateLimitedCalls: true,
+      });
     } catch (error) {
       abortController.abort();
       await this.cleanup();
@@ -381,6 +398,7 @@ class SlackProvider implements ChatOpsProvider {
     this.socketDedup.clear();
     this.client = null;
     this.bestEffortClient = null;
+    this.discoveryClient = null;
     this.botUserId = null;
     this.botId = null;
     this.botDisplayName = null;
@@ -1382,51 +1400,58 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async discoverChannels(_context: unknown): Promise<DiscoveredChannel[]> {
-    if (!this.client) {
-      return [];
+    const client = this.discoveryClient;
+    const workspaceId = this.teamId;
+    if (!client || !workspaceId || this.stopping) {
+      throw new Error("SlackProvider not initialized");
     }
 
-    try {
-      // Paginate through all channels using cursor-based pagination.
-      // Slack API returns at most `limit` channels per page (max 999).
-      const allChannels: NonNullable<
-        Awaited<ReturnType<WebClient["conversations"]["list"]>>["channels"]
-      > = [];
-      let cursor: string | undefined;
-
-      do {
-        const result = await this.client.conversations.list({
-          types: "public_channel,private_channel",
-          exclude_archived: true,
-          limit: 999,
-          cursor,
-        });
-        allChannels.push(...(result.channels || []));
-        cursor = result.response_metadata?.next_cursor || undefined;
-      } while (cursor);
-
-      // Only include channels where the bot is a member
-      return allChannels
-        .filter((ch) => ch.id && ch.is_member)
-        .map((ch) => ({
-          channelId: ch.id as string,
-          channelName: ch.name || null,
-          workspaceId: ch.shared_team_ids?.[0] || this.teamId || "default",
+    const deadline = Date.now() + 2 * TimeInMs.Minute;
+    const channels: DiscoveredChannel[] = [];
+    let cursor: string | undefined;
+    do {
+      if (
+        this.stopping ||
+        client !== this.discoveryClient ||
+        Date.now() >= deadline
+      ) {
+        throw new Error("Slack discovery interrupted");
+      }
+      // With a bot token and no user argument, this lists only its memberships.
+      // Unlike conversations.list, these results do not carry is_member.
+      const result = await client.users.conversations({
+        types: "public_channel,private_channel",
+        exclude_archived: true,
+        limit: 200,
+        cursor,
+      });
+      for (const channel of result.channels ?? []) {
+        if (!channel.id) continue;
+        channels.push({
+          channelId: channel.id,
+          channelName: channel.name || null,
+          // Slack Connect's shared_team_ids can start with a remote workspace.
+          workspaceId,
           workspaceName: this.teamName,
-        }));
-    } catch (error) {
-      logger.warn(
-        { error: errorMessage(error) },
-        "[SlackProvider] Failed to discover channels",
-      );
-      return [];
+        });
+      }
+      cursor = result.response_metadata?.next_cursor || undefined;
+    } while (cursor);
+
+    if (
+      this.stopping ||
+      client !== this.discoveryClient ||
+      Date.now() >= deadline
+    ) {
+      throw new Error("Slack discovery interrupted");
     }
+    return channels;
   }
 
   /**
    * Channels this bot can be in: every public channel, marked with whether the
-   * bot has joined, and the private channels it was invited to. Unlike
-   * discoverChannels, a failure propagates so the caller can say Slack failed.
+   * bot has joined, and the private channels it was invited to. Discovery
+   * deliberately uses memberships instead; this list powers the join UI.
    */
   async listJoinableChannels(): Promise<SlackJoinableChannel[]> {
     if (!this.client) throw new Error("SlackProvider not initialized");

@@ -7,8 +7,6 @@ archestra:
 
   orchestrator:
     kubernetes:
-      networkPolicy:
-        create: true
       serviceAccount:
         annotations:
           iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com

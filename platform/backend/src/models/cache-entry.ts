@@ -5,13 +5,13 @@ class CacheEntryModel {
   /** Lock even an absent scope, so deletion cannot let a stale writer recreate it. */
   static async withLock<T>(
     scope: string,
-    callback: (entries: CacheEntryModel) => Promise<T>,
+    callback: (entries: CacheEntryModel, tx: Transaction) => Promise<T>,
   ): Promise<T> {
     return db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`cache-entry:${scope}`}, 0))`,
       );
-      return callback(new CacheEntryModel(tx));
+      return callback(new CacheEntryModel(tx), tx);
     });
   }
 

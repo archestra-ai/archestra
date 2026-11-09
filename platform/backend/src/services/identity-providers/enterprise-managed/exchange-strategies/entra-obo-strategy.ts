@@ -59,7 +59,9 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
     }
 
     const scope = resolveScope(params.enterpriseManagedConfig);
-    const agentIdConfig = enterpriseConfig.entraAgentId;
+    const agentIdConfig = enterpriseConfig.entraAgentId?.blueprintClientId
+      ? enterpriseConfig.entraAgentId
+      : undefined;
     const agentIdentityId = params.entraAgentIdentityId?.trim() || null;
     if (agentIdentityId && !agentIdConfig) {
       throw new ApiError(

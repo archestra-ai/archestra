@@ -1188,6 +1188,7 @@ const baseAgent = {
   modelPoolId: null,
   autoModel: false,
   identityProviderId: null,
+  entraAgentIdentityId: null,
   environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,

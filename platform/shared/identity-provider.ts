@@ -89,8 +89,8 @@ export function getEmailDomain(email: string) {
  * agent binds its own agent identity created from it.
  */
 export const EntraAgentIdConfigSchema = z.object({
-  /** Application (client) ID of the agent identity blueprint. */
-  blueprintClientId: z.string().trim().min(1),
+  /** Application (client) ID of the agent identity blueprint. Blank = off. */
+  blueprintClientId: z.string().trim(),
   /** Blueprint client secret. Microsoft recommends a certificate in production. */
   clientSecret: z.string().optional(),
   /** PKCS#8 private key of a certificate uploaded to the blueprint. */

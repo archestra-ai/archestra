@@ -101,6 +101,7 @@ import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
+import { EntraAgentIdentitySection } from "@/components/entra-agent-identity-section";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -1325,6 +1326,7 @@ export function AgentForm({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
+  const [entraAgentIdentityId, setEntraAgentIdentityId] = useState("");
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
@@ -1563,6 +1565,11 @@ export function AgentForm({
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "agent";
+  const entraAgentIdBlueprintConfigured = identityProviders.some(
+    (provider) =>
+      !!provider.oidcConfig?.enterpriseManagedCredentials?.entraAgentId
+        ?.blueprintClientId,
+  );
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
   // Auto pins the behaviour, so the row reports what will happen rather than
@@ -1720,6 +1727,7 @@ export function AgentForm({
             modelPoolId: agentData.modelPoolId ?? null,
             autoModel: agentData.autoModel ?? false,
             identityProviderId: agentData.identityProviderId ?? undefined,
+            entraAgentIdentityId: agentData.entraAgentIdentityId ?? "",
             environmentId: agentData.environmentId ?? undefined,
             networkPolicy: agentData.networkPolicy ?? null,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1757,6 +1765,7 @@ export function AgentForm({
             modelPoolId: null,
             autoModel: false,
             identityProviderId: undefined,
+            entraAgentIdentityId: "",
             environmentId: undefined,
             networkPolicy: null,
             knowledgeBaseIds: [],
@@ -1789,6 +1798,7 @@ export function AgentForm({
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setIdentityProviderId(nextValues.identityProviderId);
+      setEntraAgentIdentityId(nextValues.entraAgentIdentityId);
       setEnvironmentId(nextValues.environmentId);
       setNetworkPolicy(nextValues.networkPolicy);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
@@ -2202,6 +2212,9 @@ export function AgentForm({
     hasUnsavedChanges(persistedAgent.networkPolicy ?? null, networkPolicy);
   // Saving it asks whether the editor may use its GitHub App, so it is sent
   // only when it changed.
+  const entraAgentIdentityIdChanged =
+    !!persistedAgent &&
+    (persistedAgent.entraAgentIdentityId ?? "") !== entraAgentIdentityId.trim();
   const githubActionsAccessChanged =
     !!persistedAgent &&
     hasUnsavedChanges(
@@ -2412,6 +2425,10 @@ export function AgentForm({
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
+              ...(supportsIdentityProvider &&
+                entraAgentIdentityIdChanged && {
+                  entraAgentIdentityId: entraAgentIdentityId.trim() || null,
+                }),
               ...(agentType === "mcp_gateway" && {
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -2480,6 +2497,10 @@ export function AgentForm({
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
+          ...(supportsIdentityProvider &&
+            entraAgentIdentityId.trim() && {
+              entraAgentIdentityId: entraAgentIdentityId.trim(),
+            }),
           knowledgeBaseIds: knowledgeBaseIds,
           connectorIds: connectorIds,
           toolExposureMode,
@@ -2713,6 +2734,8 @@ export function AgentForm({
     agentModelPoolId,
     llmSelectionChanged,
     identityProviderId,
+    entraAgentIdentityId,
+    entraAgentIdentityIdChanged,
     environmentId,
     environmentChanged,
     knowledgeBaseIds,
@@ -2874,6 +2897,7 @@ export function AgentForm({
     modelPoolId,
     autoModel,
     identityProviderId,
+    entraAgentIdentityId,
     environmentId,
     networkPolicy,
     knowledgeBaseIds,
@@ -4439,6 +4463,15 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {supportsIdentityProvider &&
+                (entraAgentIdBlueprintConfigured ||
+                  !!persistedAgent?.entraAgentIdentityId) && (
+                  <EntraAgentIdentitySection
+                    value={entraAgentIdentityId}
+                    onChange={setEntraAgentIdentityId}
+                  />
+                )}
+
               {/* Labels classify the finished configuration, so they stay at
                     the end of the panel. */}
               <SettingsSection
@@ -4566,6 +4599,7 @@ type AgentFormFields = {
   modelPoolId: string | null;
   autoModel: boolean;
   identityProviderId: string | null | undefined;
+  entraAgentIdentityId: string;
   environmentId: string | null | undefined;
   networkPolicy: AgentNetworkPolicy | null;
   knowledgeBaseIds: string[];

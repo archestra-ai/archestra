@@ -2,30 +2,30 @@ import { Badge } from "@/components/ui/badge";
 import type { AutoRouter } from "@/lib/auto-routing.query";
 import { isAutoRoutingSetUp } from "./setup-cards";
 
-type RouterStatusLabel = "On" | "Needs setup" | "Off";
+type RouterStatusLabel = "Active" | "Evaluating" | "Needs setup" | "Off";
 
-/** On, off, or still being set up. */
+const DOT: Record<RouterStatusLabel, string> = {
+  Active: "size-2 rounded-full bg-emerald-500",
+  Evaluating: "size-2 rounded-full bg-sky-500",
+  "Needs setup": "size-2 rounded-full bg-amber-500",
+  Off: "size-2 rounded-full border border-muted-foreground",
+};
+
+/**
+ * Where a router stands. A router that can route is evaluating sessions until
+ * it has a plan, which is why its figures are empty; then it is active.
+ */
 export function routerStatus(router: AutoRouter): RouterStatusLabel {
-  return isAutoRoutingSetUp(router)
-    ? "On"
-    : router.enabled
-      ? "Needs setup"
-      : "Off";
+  if (!isAutoRoutingSetUp(router)) {
+    return router.enabled ? "Needs setup" : "Off";
+  }
+  return router.status.activePlan ? "Active" : "Evaluating";
 }
 
 export function RouterStatus({ label }: { label: RouterStatusLabel }) {
   return (
     <Badge variant="outline" data-testid="auto-routing-header-status">
-      <span
-        aria-hidden
-        className={
-          label === "On"
-            ? "size-2 rounded-full bg-emerald-500"
-            : label === "Off"
-              ? "size-2 rounded-full border border-muted-foreground"
-              : "size-2 rounded-full bg-amber-500"
-        }
-      />
+      <span aria-hidden className={DOT[label]} />
       <span>{label}</span>
     </Badge>
   );

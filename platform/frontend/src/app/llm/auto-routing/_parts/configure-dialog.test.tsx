@@ -212,14 +212,16 @@ describe("ConfigureAutoRoutingDialog", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
-  it("shows the router named auto read-only", async () => {
-    renderDialog(autoRouter, []);
+  it("lets the router named auto be renamed like any other", async () => {
+    renderDialog(autoRouter, ["auto"]);
 
     const name = await screen.findByLabelText("Name");
 
-    expect(name).toHaveValue("auto");
-    expect(name).toHaveAttribute("readonly");
-    expect(screen.getByText("Configure auto")).toBeInTheDocument();
+    expect(name).toHaveValue("");
+    expect(name).toBeEnabled();
+    expect(
+      screen.getByText(/Leave the name empty to call the router auto/),
+    ).toBeInTheDocument();
   });
 
   it("blocks a name another router already has", async () => {

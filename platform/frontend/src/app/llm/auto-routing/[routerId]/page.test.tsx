@@ -294,13 +294,15 @@ describe("AutoRoutingOverviewPage", () => {
     const user = userEvent.setup();
     renderPage();
     const retry = await screen.findByRole("button", { name: "Retry" });
-    expect(screen.queryByTestId("auto-routing-status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-details"),
+    ).not.toBeInTheDocument();
 
     fail = false;
     await user.click(retry);
 
     expect(
-      await screen.findByTestId("auto-routing-status"),
+      await screen.findByTestId("auto-routing-details"),
     ).toBeInTheDocument();
   });
 
@@ -456,18 +458,15 @@ describe("AutoRoutingOverviewPage", () => {
       expect(updates).toEqual([{ budgetPreset: null, budgetUsdPerDay: 40 }]),
     );
   });
-  it("says where Auto is used", async () => {
-    settings = makeSettings({
-      usage: { agentCount: 7, organizationDefault: true },
-    });
+  it("shows what the router is made of", async () => {
     renderPage();
 
-    expect(
-      await screen.findByText(
-        "Auto is the organization default: every chat and agent without a model of its own runs on it. 7 agents also have it set directly.",
-      ),
-    ).toBeInTheDocument();
+    const details = await screen.findByTestId("auto-routing-details");
+    expect(details).toHaveTextContent("Fastclaude-haikuOrg key");
+    expect(details).toHaveTextContent("Daily budget$20.00/day");
+    expect(details).toHaveTextContent("Decision modeljev-1.13.0Jev");
   });
+
   it("shows the setup steps until a tier is set, with the tiers set so far", async () => {
     settings = makeSettings({
       tiers: { ...makeSettings().tiers, smart: null },
@@ -497,7 +496,9 @@ describe("AutoRoutingOverviewPage", () => {
     expect(screen.getByTestId("auto-routing-setup-1")).toHaveTextContent(
       "Connected",
     );
-    expect(screen.queryByTestId("auto-routing-status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-details"),
+    ).not.toBeInTheDocument();
   });
 
   it("asks for a Jev key until one is connected", async () => {
@@ -535,49 +536,35 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(
-      await screen.findByTestId("auto-routing-status"),
+      await screen.findByTestId("auto-routing-details"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Configure" }),
     ).not.toBeInTheDocument();
   });
-  it("reports cold-start progress while no plan is active", async () => {
+  it("says it is evaluating and keeps the figures, empty, while no plan is active", async () => {
     renderPage();
 
-    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start · 12 of 100 sessions scored",
-    );
+    expect(
+      await screen.findByTestId("auto-routing-evaluating"),
+    ).toHaveTextContent("Evaluating sessions");
+    const placeholder = screen.getByTestId("auto-routing-plan-placeholder");
+    expect(placeholder).toHaveTextContent("Expected spend");
+    expect(placeholder).toHaveTextContent("of $20.00 budget");
+    expect(placeholder).toHaveTextContent("100.0% sessions");
   });
 
-  it("leaves cold start once enough sessions are scored, while the first fit is pending", async () => {
+  it("shows the failed fit instead of the evaluating notice", async () => {
     const base = makeSettings();
     settings = makeSettings({
-      status: {
-        ...base.status,
-        coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
-      },
+      status: { ...base.status, lastFitError: "fit exploded" },
     });
     renderPage();
 
-    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Fitting the first plan · 1,064 sessions scored, enough for a plan",
-    );
-  });
-
-  it("does not claim a fit is coming after the last one failed", async () => {
-    const base = makeSettings();
-    settings = makeSettings({
-      status: {
-        ...base.status,
-        coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
-        lastFitError: "fit exploded",
-      },
-    });
-    renderPage();
-
-    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "No plan yet · 1,064 sessions scored",
-    );
+    expect(await screen.findByText("Last fit failed")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-evaluating"),
+    ).not.toBeInTheDocument();
   });
 
   it("summarizes the active plan", async () => {
@@ -592,9 +579,12 @@ describe("AutoRoutingOverviewPage", () => {
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByText("84.0%")).toBeInTheDocument();
     expect(screen.getByText("+2.0 points")).toBeInTheDocument();
-    expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan",
+    expect(screen.getByTestId("auto-routing-plan-caption")).toHaveTextContent(
+      "Plan updated",
     );
+    expect(
+      screen.queryByTestId("auto-routing-evaluating"),
+    ).not.toBeInTheDocument();
   });
 
   it("simulates a traffic change on the active plan without saving", async () => {
@@ -793,9 +783,12 @@ describe("AutoRoutingOverviewPage", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
-    expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan",
+    expect(screen.getByTestId("auto-routing-plan-caption")).toHaveTextContent(
+      "Plan updated",
     );
+    expect(
+      screen.queryByTestId("auto-routing-evaluating"),
+    ).not.toBeInTheDocument();
     expect(await screen.findByText("420")).toBeInTheDocument();
   });
   it("shows the error of a save whose fit failed", async () => {
@@ -1087,7 +1080,7 @@ describe("past sessions", () => {
     renderPage();
 
     expect(
-      await screen.findByTestId("auto-routing-status"),
+      await screen.findByTestId("auto-routing-details"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("auto-routing-past-sessions"),
@@ -1312,10 +1305,10 @@ describe("past sessions", () => {
 
       await vi.advanceTimersByTimeAsync(5_000);
       // The fit has not published yet: nothing re-read the settings.
-      expect(screen.queryByText(/Active plan/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Plan updated/)).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(5_000);
 
-      expect(await screen.findByText(/Active plan/)).toBeInTheDocument();
+      expect(await screen.findByText(/Plan updated/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

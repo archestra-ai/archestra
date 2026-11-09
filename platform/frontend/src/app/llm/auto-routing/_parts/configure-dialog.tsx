@@ -300,41 +300,30 @@ function NameSection({
   autoTaken: boolean;
   disabled: boolean;
 }) {
-  const fixed = router?.name === AUTO_ROUTER_NAME;
+  // The bare name `auto` is a name like any other: free unless another router has it.
+  const autoFree = !autoTaken || router?.name === AUTO_ROUTER_NAME;
   return (
     <section className="space-y-2">
       <Label htmlFor="auto-router-name" className="text-sm font-medium">
         Name
       </Label>
-      {fixed ? (
+      <div className="flex items-center">
+        <span className="flex h-9 items-center rounded-l-md border border-r-0 bg-muted px-3 font-mono text-sm text-muted-foreground">
+          {AUTO_ROUTER_NAME_PREFIX}
+        </span>
         <Input
           id="auto-router-name"
-          value={AUTO_ROUTER_NAME}
-          readOnly
-          disabled
-          className="font-mono"
+          className="rounded-l-none font-mono"
+          placeholder="support"
+          autoComplete="off"
+          disabled={disabled}
+          {...form.register("nameSuffix")}
         />
-      ) : (
-        <div className="flex items-center">
-          <span className="flex h-9 items-center rounded-l-md border border-r-0 bg-muted px-3 font-mono text-sm text-muted-foreground">
-            {AUTO_ROUTER_NAME_PREFIX}
-          </span>
-          <Input
-            id="auto-router-name"
-            className="rounded-l-none font-mono"
-            placeholder="support"
-            autoComplete="off"
-            disabled={disabled}
-            {...form.register("nameSuffix")}
-          />
-        </div>
-      )}
+      </div>
       <p className="text-xs text-muted-foreground">
-        {fixed
-          ? "The model name clients request. The first router keeps the name auto."
-          : autoTaken
-            ? "The model name clients request. Lowercase letters, numbers, dots, dashes and underscores."
-            : "The model name clients request. Leave the name empty to call the router auto."}
+        {autoFree
+          ? "The model name clients request. Leave the name empty to call the router auto."
+          : "The model name clients request. Lowercase letters, numbers, dots, dashes and underscores."}
       </p>
     </section>
   );
@@ -835,7 +824,6 @@ function validateName(
   router: AutoRouter | null,
   existingNames: string[],
 ): string | null {
-  if (router?.name === AUTO_ROUTER_NAME) return null;
   const trimmed = suffix.trim();
   if (trimmed && !NAME_SUFFIX_PATTERN.test(trimmed)) {
     return "Use lowercase letters, numbers, dots, dashes and underscores in the name.";

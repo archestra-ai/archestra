@@ -56,18 +56,6 @@ export function SetupCards({ settings }: { settings: AutoRouter }) {
   );
 }
 
-/** Where Auto is picked, for the routing-at-a-glance view. */
-export function UsageLine({ settings }: { settings: AutoRouter }) {
-  return (
-    <span>
-      <span>{usageText(settings)}</span>{" "}
-      <Link href="/settings/agents" className="text-primary hover:underline">
-        Change the organization default
-      </Link>
-    </span>
-  );
-}
-
 // =============================================================================
 // Internal
 // =============================================================================

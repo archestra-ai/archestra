@@ -579,6 +579,166 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * All configured Slack bots share one complete snapshot and admission lease.
+   * Slack I/O happens outside the lock; the final owner check and reconciliation
+   * share one short transaction, so an expired worker cannot publish stale data.
+   */
+  async discoverSlackChannels(context: unknown): Promise<void> {
+    if (this.stopping) return;
+    const providers = this.getSlackProviders().filter((provider) =>
+      provider.isConfigured(),
+    );
+    if (!providers.length) return;
+    const scope =
+      `${CacheKey.ChannelDiscoveryLease}-slack-all` as AllowedCacheKey;
+    const freshnessKey =
+      `${CacheKey.ChannelDiscovery}-slack-all` as AllowedCacheKey;
+    const owner = randomUUID();
+    const configuration = JSON.stringify(
+      providers
+        .map((provider) => [provider.getWorkspaceId(), provider.getBotUserId()])
+        .sort(),
+    );
+    const isCurrent = () =>
+      !this.stopping &&
+      providers.length ===
+        this.getSlackProviders().filter((provider) => provider.isConfigured())
+          .length &&
+      providers.every((provider) =>
+        this.getSlackProviders().includes(provider),
+      );
+    try {
+      const admitted = await cacheManager.withLock(scope, async (cache, tx) => {
+        if (!(await this.hasCurrentSlackDiscoveryConfig(tx))) return false;
+        if (
+          (await cache.get(scope)) ||
+          (await cache.get(freshnessKey)) === configuration
+        )
+          return false;
+        // Discovery bounds each scan to two minutes plus one request timeout.
+        // A crashed process cannot retain admission indefinitely.
+        await cache.set(scope, { owner }, 3 * 60_000);
+        return true;
+      });
+      if (!admitted) return;
+      try {
+        const workspaceIds = [
+          ...new Set(
+            providers.map((provider) => {
+              const workspaceId = provider.getWorkspaceId();
+              if (!workspaceId)
+                throw new Error(
+                  "Slack discovery requires an authenticated workspace",
+                );
+              return workspaceId;
+            }),
+          ),
+        ];
+        // Wait for every bot, even after one fails: no orphan scan may overlap
+        // a later attempt admitted after the failure cooldown.
+        const results = await Promise.allSettled(
+          providers.map((provider) => provider.discoverChannels(context)),
+        );
+        const failed = results.filter((result) => result.status === "rejected");
+        if (failed.length) {
+          const retryAfter = Math.max(
+            0,
+            ...failed.map((result) => {
+              const value = result.reason?.retryAfter;
+              return typeof value === "number" && Number.isFinite(value)
+                ? value
+                : 0;
+            }),
+          );
+          throw Object.assign(new Error("Slack channel snapshot incomplete"), {
+            retryAfter,
+          });
+        }
+        const channels = results.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        );
+        const uniqueChannels = [
+          ...new Map(
+            channels.map((channel) => [
+              `${channel.workspaceId}:${channel.channelId}`,
+              channel,
+            ]),
+          ).values(),
+        ];
+        const organizationId = await getDefaultOrganizationId();
+        await cacheManager.withLock(scope, async (cache, tx) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          if (
+            !isCurrent() ||
+            !(await this.hasCurrentSlackDiscoveryConfig(tx))
+          ) {
+            await cache.delete(scope);
+            return;
+          }
+          await ChatOpsChannelBindingModel.ensureChannelsExist(
+            { organizationId, provider: "slack", channels: uniqueChannels },
+            tx,
+          );
+          for (const workspaceId of workspaceIds) {
+            await ChatOpsChannelBindingModel.deleteStaleChannels(
+              {
+                organizationId,
+                provider: "slack",
+                workspaceIds: [workspaceId],
+                activeChannelIds: uniqueChannels
+                  .filter((channel) => channel.workspaceId === workspaceId)
+                  .map((channel) => channel.channelId),
+                allowEmptySnapshot: true,
+              },
+              tx,
+            );
+          }
+          // Keep an empty snapshot eligible for the next trigger, so a first
+          // invitation is not hidden behind successful-result freshness.
+          if (uniqueChannels.length) {
+            await cache.set(
+              freshnessKey,
+              configuration,
+              CHATOPS_CHANNEL_DISCOVERY.TTL_MS,
+            );
+          } else {
+            await cache.delete(freshnessKey);
+          }
+          await cache.delete(scope);
+          // A reload/shutdown can happen during any awaited publication query.
+          // Throw before committing so bindings and freshness roll back together.
+          if (!isCurrent()) throw new Error("Slack discovery interrupted");
+        });
+      } catch (error) {
+        await cacheManager.withLock(scope, async (cache) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          const retryAfter =
+            error &&
+            typeof error === "object" &&
+            "retryAfter" in error &&
+            typeof error.retryAfter === "number"
+              ? error.retryAfter
+              : 0;
+          // Manual refresh clears freshness only, never admission or Retry-After.
+          await cache.set(
+            scope,
+            { owner: null },
+            Math.max(30_000, retryAfter * 1_000),
+          );
+        });
+        throw error;
+      }
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Slack channel discovery failed; retaining existing bindings",
+      );
+    }
+  }
+
   async initialize(): Promise<void> {
     if (this.stopping) return;
     // Seed DB from env vars on first run (no-op if DB already has config)
@@ -2704,160 +2864,6 @@ export class ChatOpsManager {
           provider?.isConfigured() && provider.matchesDiscoveryConfig(config),
       )
     );
-  }
-
-  /**
-   * All configured Slack bots share one complete snapshot and admission lease.
-   * Slack I/O happens outside the lock; the final owner check and reconciliation
-   * share one short transaction, so an expired worker cannot publish stale data.
-   */
-  private async discoverSlackChannels(context: unknown): Promise<void> {
-    if (this.stopping) return;
-    const providers = this.getSlackProviders().filter((provider) =>
-      provider.isConfigured(),
-    );
-    if (!providers.length) return;
-    const scope =
-      `${CacheKey.ChannelDiscoveryLease}-slack-all` as AllowedCacheKey;
-    const freshnessKey =
-      `${CacheKey.ChannelDiscovery}-slack-all` as AllowedCacheKey;
-    const owner = randomUUID();
-    const configuration = JSON.stringify(
-      providers
-        .map((provider) => [provider.getWorkspaceId(), provider.getBotUserId()])
-        .sort(),
-    );
-    const isCurrent = () =>
-      !this.stopping &&
-      providers.length ===
-        this.getSlackProviders().filter((provider) => provider.isConfigured())
-          .length &&
-      providers.every((provider) =>
-        this.getSlackProviders().includes(provider),
-      );
-    try {
-      const admitted = await cacheManager.withLock(scope, async (cache, tx) => {
-        if (!(await this.hasCurrentSlackDiscoveryConfig(tx))) return false;
-        if (
-          (await cache.get(scope)) ||
-          (await cache.get(freshnessKey)) === configuration
-        )
-          return false;
-        // Discovery bounds each scan to two minutes plus one request timeout.
-        // A crashed process cannot retain admission indefinitely.
-        await cache.set(scope, { owner }, 3 * 60_000);
-        return true;
-      });
-      if (!admitted) return;
-      try {
-        const workspaceIds = [
-          ...new Set(
-            providers.map((provider) => {
-              const workspaceId = provider.getWorkspaceId();
-              if (!workspaceId)
-                throw new Error(
-                  "Slack discovery requires an authenticated workspace",
-                );
-              return workspaceId;
-            }),
-          ),
-        ];
-        // Wait for every bot, even after one fails: no orphan scan may overlap
-        // a later attempt admitted after the failure cooldown.
-        const results = await Promise.allSettled(
-          providers.map((provider) => provider.discoverChannels(context)),
-        );
-        const failed = results.filter((result) => result.status === "rejected");
-        if (failed.length) {
-          const retryAfter = Math.max(
-            0,
-            ...failed.map((result) => {
-              const value = result.reason?.retryAfter;
-              return typeof value === "number" && Number.isFinite(value)
-                ? value
-                : 0;
-            }),
-          );
-          throw Object.assign(new Error("Slack channel snapshot incomplete"), {
-            retryAfter,
-          });
-        }
-        const channels = results.flatMap((result) =>
-          result.status === "fulfilled" ? result.value : [],
-        );
-        const uniqueChannels = [
-          ...new Map(
-            channels.map((channel) => [
-              `${channel.workspaceId}:${channel.channelId}`,
-              channel,
-            ]),
-          ).values(),
-        ];
-        const organizationId = await getDefaultOrganizationId();
-        await cacheManager.withLock(scope, async (cache, tx) => {
-          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
-            return;
-          if (
-            !isCurrent() ||
-            !(await this.hasCurrentSlackDiscoveryConfig(tx))
-          ) {
-            await cache.delete(scope);
-            return;
-          }
-          await ChatOpsChannelBindingModel.ensureChannelsExist(
-            { organizationId, provider: "slack", channels: uniqueChannels },
-            tx,
-          );
-          for (const workspaceId of workspaceIds) {
-            await ChatOpsChannelBindingModel.deleteStaleChannels(
-              {
-                organizationId,
-                provider: "slack",
-                workspaceIds: [workspaceId],
-                activeChannelIds: uniqueChannels
-                  .filter((channel) => channel.workspaceId === workspaceId)
-                  .map((channel) => channel.channelId),
-                allowEmptySnapshot: true,
-              },
-              tx,
-            );
-          }
-          await cache.set(
-            freshnessKey,
-            configuration,
-            CHATOPS_CHANNEL_DISCOVERY.TTL_MS,
-          );
-          await cache.delete(scope);
-          // A reload/shutdown can happen during any awaited publication query.
-          // Throw before committing so bindings and freshness roll back together.
-          if (!isCurrent()) throw new Error("Slack discovery interrupted");
-        });
-      } catch (error) {
-        await cacheManager.withLock(scope, async (cache) => {
-          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
-            return;
-          const retryAfter =
-            error &&
-            typeof error === "object" &&
-            "retryAfter" in error &&
-            typeof error.retryAfter === "number"
-              ? error.retryAfter
-              : 0;
-          // Manual refresh clears freshness only, never admission or Retry-After.
-          await cache.set(
-            scope,
-            { owner: null },
-            Math.max(30_000, retryAfter * 1_000),
-          );
-        });
-        throw error;
-      }
-    } catch (error) {
-      logger.warn(
-        { error: errorMessage(error) },
-        "[ChatOps] Slack channel discovery failed; retaining existing bindings",
-      );
-    }
   }
 
   /**

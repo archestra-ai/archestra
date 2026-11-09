@@ -7109,7 +7109,7 @@ describe("ChatOpsManager Slack discovery snapshots", () => {
     }
   });
 
-  test("caches an authoritative empty snapshot, removes stale channels and preserves DMs", async ({
+  test("reconciles an empty snapshot without caching it, so the next trigger discovers a first invitation", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -7131,8 +7131,16 @@ describe("ChatOpsManager Slack discovery snapshots", () => {
     await scan(manager, bot);
     expect(await read("COLD")).toBeNull();
     expect((await read("DKEEP"))?.id).toBe(dm.id);
+    expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+    expect(await cacheManager.get(leaseKey)).toBeUndefined();
+    vi.mocked(bot.discoverChannels).mockResolvedValue([channel("CINVITED")]);
     await scan(manager, bot);
-    expect(bot.discoverChannels).toHaveBeenCalledTimes(1);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(2);
+    expect(await read("CINVITED")).not.toBeNull();
+    expect((await read("DKEEP"))?.id).toBe(dm.id);
+    // Nonempty snapshots still suppress repeated scans.
+    await scan(manager, bot);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(2);
   });
 
   test("reconciles each authenticated workspace without collapsing shared channel IDs", async ({

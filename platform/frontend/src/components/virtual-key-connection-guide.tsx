@@ -51,10 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  AUTO_MODEL,
-  useAutoRoutingOffer,
-} from "@/components/use-auto-routing-offer";
+import { useAutoRoutingOffer } from "@/components/use-auto-routing-offer";
 import {
   buildCurlExample,
   getImageExampleOperations,
@@ -65,6 +62,7 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
+import { isAutoRouterName } from "@/lib/auto-router-name";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -435,6 +433,7 @@ export function RequestExample({
   onModelChange,
   fixedModel,
   offerAutoModel = false,
+  virtualApiKeyId,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -475,6 +474,8 @@ export function RequestExample({
    * up. Only the Unified Model API accepts `auto`.
    */
   offerAutoModel?: boolean;
+  /** The virtual key the example is for, which reaches only the auto routers it was given. */
+  virtualApiKeyId?: string;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -610,11 +611,21 @@ export function RequestExample({
   const selectedModel = allOptions.find((option) => option.value === model);
   const autoRouting = useAutoRoutingOffer({
     enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
+    virtualApiKeyId: virtualApiKeyId ?? null,
     routableModels: modelOptions,
     modelsPending: isPending,
   });
-  const [autoPicked, setAutoPicked] = useState(initialModel === AUTO_MODEL);
-  const isAuto = autoPicked && autoRouting.kind === "available";
+  const offeredRouters =
+    autoRouting.kind === "available" ? autoRouting.routers : [];
+  const [pickedRouter, setPickedRouter] = useState<string | null>(
+    initialModel && isAutoRouterName(initialModel) ? initialModel : null,
+  );
+  const [autoPicked, setAutoPicked] = useState(pickedRouter !== null);
+  const autoRouter = autoPicked
+    ? (offeredRouters.find((router) => router.name === pickedRouter) ??
+      offeredRouters[0])
+    : undefined;
+  const isAuto = autoRouter !== undefined;
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
   const selectedImageOperation =
@@ -632,12 +643,9 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model: isAuto ? AUTO_MODEL : (selectedModel?.pool ?? model),
+      model: autoRouter?.name ?? selectedModel?.pool ?? model,
       isPool: !!selectedModel?.pool,
-      routerEndpoint:
-        isAuto && autoRouting.kind === "available"
-          ? autoRouting.endpoint
-          : undefined,
+      routerEndpoint: autoRouter?.endpoint,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
@@ -716,14 +724,23 @@ export function RequestExample({
                   checked={isAuto}
                   onCheckedChange={(checked) => {
                     setAutoPicked(checked);
-                    if (checked) onModelChange?.(AUTO_MODEL);
+                    const first = pickedRouter ?? offeredRouters[0]?.name;
+                    if (checked && first) onModelChange?.(first);
                     else if (model) onModelChange?.(model);
                   }}
                 />
               </div>
             )}
-            {isAuto ? (
-              <AutoModelField id="virtual-key-example-model" />
+            {autoRouter ? (
+              <AutoModelField
+                id="virtual-key-example-model"
+                names={offeredRouters.map((router) => router.name)}
+                value={autoRouter.name}
+                onValueChange={(name) => {
+                  setPickedRouter(name);
+                  onModelChange?.(name);
+                }}
+              />
             ) : (
               <ProviderGroupedModelSelect
                 id="virtual-key-example-model"

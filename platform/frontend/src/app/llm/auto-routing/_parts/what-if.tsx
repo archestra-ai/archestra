@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  type AutoRoutingSettings,
+  type AutoRouter,
   type AutoRoutingSimulation,
   type SimulatedTraffic,
   useSimulateAutoRouting,
@@ -34,7 +34,7 @@ export function WhatIf({
   savedTiers,
 }: {
   savedBudgetUsdPerDay: number;
-  savedTiers: AutoRoutingSettings["tiers"];
+  savedTiers: AutoRouter["tiers"];
 }) {
   const [multiplier, setMultiplier] = useState<Multiplier>("1");
   const [budgetText, setBudgetText] = useState(String(savedBudgetUsdPerDay));
@@ -120,7 +120,7 @@ function SimulationResult({
   result: AutoRoutingSimulation;
   budgetUsdPerDay: number;
   multiplier: number;
-  savedTiers: AutoRoutingSettings["tiers"];
+  savedTiers: AutoRouter["tiers"];
 }) {
   switch (result.status) {
     case "feasible":
@@ -164,7 +164,7 @@ function FeasibleResult({
   result: Extract<AutoRoutingSimulation, { status: "feasible" }>;
   budgetUsdPerDay: number;
   multiplier: number;
-  savedTiers: AutoRoutingSettings["tiers"];
+  savedTiers: AutoRouter["tiers"];
 }) {
   const tierModels = useFittedTierModels(result.tiersFingerprint, savedTiers);
   const summary = parsePlanSummary(result.summary);

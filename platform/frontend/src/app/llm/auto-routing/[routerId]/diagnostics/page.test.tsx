@@ -15,8 +15,11 @@ import {
   vi,
 } from "vitest";
 import { authQueryKeys } from "@/lib/auth/auth.query";
-import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
-import { budgetScale } from "../_parts/budget-scale";
+import {
+  AutoRouterIdContext,
+  type AutoRoutingDiagnostics,
+} from "@/lib/auto-routing.query";
+import { budgetScale } from "../../_parts/budget-scale";
 import AutoRoutingDiagnosticsPage from "./page";
 
 const API_ORIGIN = "http://localhost:9000";
@@ -94,16 +97,21 @@ const gated = async (budget: number | null) => {
 };
 
 const PLAN_ID = "00000000-0000-4000-8000-000000000001";
+const ROUTER_ID = "00000000-0000-4000-8000-0000000000a1";
+const ROUTER_URL = `${API_ORIGIN}/api/auto-routing/routers/${ROUTER_ID}`;
 
 const server = setupServer(
-  http.get(`${API_ORIGIN}/api/auto-routing/settings`, () =>
-    HttpResponse.json({
-      status: {
-        activePlan: { id: PLAN_ID, createdAt: "2026-10-27T22:10:33Z" },
+  http.get(`${API_ORIGIN}/api/auto-routing/routers`, () =>
+    HttpResponse.json([
+      {
+        id: ROUTER_ID,
+        status: {
+          activePlan: { id: PLAN_ID, createdAt: "2026-10-27T22:10:33Z" },
+        },
       },
-    }),
+    ]),
   ),
-  http.get(`${API_ORIGIN}/api/auto-routing/plans/${PLAN_ID}`, () =>
+  http.get(`${ROUTER_URL}/plans/${PLAN_ID}`, () =>
     HttpResponse.json({
       id: PLAN_ID,
       diagnostics: {
@@ -115,7 +123,7 @@ const server = setupServer(
       },
     }),
   ),
-  http.get(`${API_ORIGIN}/api/auto-routing/diagnostics`, ({ request }) => {
+  http.get(`${ROUTER_URL}/diagnostics`, ({ request }) => {
     const param = new URL(request.url).searchParams.get("budgetUsdPerDay");
     const budget = param === null ? null : Number(param);
     requestedBudgets.push(budget);
@@ -146,7 +154,9 @@ function renderPage() {
   queryClient.setQueryData(authQueryKeys.session(), null);
   render(
     <QueryClientProvider client={queryClient}>
-      <AutoRoutingDiagnosticsPage />
+      <AutoRouterIdContext.Provider value={ROUTER_ID}>
+        <AutoRoutingDiagnosticsPage />
+      </AutoRouterIdContext.Provider>
     </QueryClientProvider>,
   );
   return queryClient;

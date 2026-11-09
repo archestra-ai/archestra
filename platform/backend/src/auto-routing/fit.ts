@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import ModelModel from "@/models/model";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel, {
@@ -21,8 +21,8 @@ import RoutingUsageModel, {
 } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import {
+  type AutoRouter,
   type AutoRoutingBudgetPreset,
-  type AutoRoutingSettings,
   type RouterDocument,
   RouterDocumentSchema,
   type RoutingFitOutcome,
@@ -48,6 +48,7 @@ import {
 /** Everything a fit is computed from, read without the routing-plan lock. */
 type FitInputs = {
   organizationId: string;
+  routerId: string;
   trigger: RoutingPlanTrigger;
   generation: number;
   inputWatermark: Date;
@@ -77,26 +78,24 @@ type FitTiers =
 
 /**
  * Reads a fit's inputs, first making this process's scorer version the
- * organization's (a change bumps the generation). Nothing else is locked:
+ * router's (a change bumps the generation). Nothing else is locked:
  * publication rejects the fit when settings moved on meanwhile. Null when
- * auto routing is not (or no longer) fully configured for the organization.
+ * the router is gone or not (or no longer) fully configured.
  * @public — `runFit` runs it; exported so tests can interleave fits
  */
 export async function prepareFit(
-  organizationId: string,
+  routerId: string,
   requestedTrigger?: RoutingPlanTrigger,
   maxSessions?: number,
 ): Promise<FitInputs | null> {
-  const scorerVersion = await activeSourceVersion();
-  await AutoRoutingSettingsModel.activateScorerVersion(
-    organizationId,
-    scorerVersion.id,
-  );
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const router = await AutoRouterModel.find(routerId);
+  if (!router) return null;
+  const scorerVersion = await activeSourceVersion(router.scorerModel);
+  await AutoRouterModel.activateScorerVersion(routerId, scorerVersion.id);
+  const settings = await AutoRouterModel.find(routerId);
   return (
     settings &&
     readFitInputs({
-      organizationId,
       settings,
       scorerVersionId: scorerVersion.id,
       requestedTrigger,
@@ -107,7 +106,7 @@ export async function prepareFit(
 
 /** Whether a fit would run on `settings`, or why none would. */
 export async function fitReadiness(
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<
   | { kind: "ready"; trio: Trio; budget: FitBudget }
   | { kind: "blocked"; reason: string }
@@ -142,14 +141,12 @@ export async function fitReadiness(
  * cheapest routing.
  */
 export async function infeasibleBudget(
-  organizationId: string,
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<number | null> {
   if (settings.budgetPreset) return null;
   const inputs = await readFitInputs({
-    organizationId,
     settings,
-    scorerVersionId: (await activeSourceVersion()).id,
+    scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
     requestedTrigger: "settings",
   });
   if (!inputs) return null;
@@ -162,40 +159,38 @@ export async function infeasibleBudget(
  * to, would plan if the fitted usage window's
  * sessions and tokens per day were `volumeMultiplier` times what they were.
  * Runs regardless of the enabled switch and publishes nothing. Each one reads
- * and fits the whole usage window, so an organization runs one at a time and
+ * and fits the whole usage window, so a router runs one at a time and
  * the process at most `MAX_SIMULATIONS`; excess calls are refused with a 429.
  */
 export function simulateFit(
-  organizationId: string,
+  routerId: string,
   params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
-  return simulationAdmission(organizationId, () =>
-    simulate(organizationId, params),
-  );
+  return simulationAdmission(routerId, () => simulate(routerId, params));
 }
 
 /**
  * A pool admitting unpublished `kind` runs over the whole usage window: one
- * per organization and `maxInFlight` per process; excess calls are refused
+ * per router and `maxInFlight` per process; excess calls are refused
  * with a 429.
  */
 export function fitAdmission(kind: string, maxInFlight: number) {
   const inFlight = new Set<string>();
-  return async <T>(organizationId: string, work: () => Promise<T>) => {
-    if (inFlight.has(organizationId)) {
+  return async <T>(routerId: string, work: () => Promise<T>) => {
+    if (inFlight.has(routerId)) {
       throw new ApiError(
         429,
-        `A ${kind} is already running for this organization; retry when it finishes.`,
+        `A ${kind} is already running for this auto router; retry when it finishes.`,
       );
     }
     if (inFlight.size >= maxInFlight) {
       throw new ApiError(429, `Too many ${kind}s are running; retry shortly.`);
     }
-    inFlight.add(organizationId);
+    inFlight.add(routerId);
     try {
       return await work();
     } finally {
-      inFlight.delete(organizationId);
+      inFlight.delete(routerId);
     }
   };
 }
@@ -206,11 +201,10 @@ export function fitAdmission(kind: string, maxInFlight: number) {
  * the same usage window.
  */
 export async function fitInputsUnchanged(
-  organizationId: string,
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
   plan: RoutingPlan,
 ): Promise<boolean> {
-  const scorerVersion = await activeSourceVersion();
+  const scorerVersion = await activeSourceVersion(settings.scorerModel);
   if (
     plan.planFormatVersion !== planFormatVersion() ||
     plan.generation !== settings.generation ||
@@ -227,7 +221,7 @@ export async function fitInputsUnchanged(
     return false;
   }
   const window = await readFitWindow({
-    organizationId,
+    router: settings,
     scorerVersionId: scorerVersion.id,
     inputWatermark: new Date(),
   });
@@ -239,12 +233,12 @@ export async function fitInputsUnchanged(
  * sessions: the cold-start progress, and what a refit would change.
  */
 export async function readFitWindow(params: {
-  organizationId: string;
+  router: FitScope;
   scorerVersionId: string;
   inputWatermark: Date;
 }): Promise<FitWindowSummary> {
   const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitVolume(params),
+    RoutingUsageModel.findFitVolume({ ...params, routerId: params.router.id }),
     readPastSessions({ ...params, longContextThreshold: null }, false),
   ]);
   return summarizeWindow(live, past);
@@ -266,6 +260,7 @@ function publish(
 ): Promise<RoutingPublishResult> {
   return RoutingPlanModel.publish({
     organizationId: inputs.organizationId,
+    routerId: inputs.routerId,
     trigger: inputs.trigger,
     generation: inputs.generation,
     inputWatermark: inputs.inputWatermark,
@@ -298,29 +293,28 @@ type FitWindowSummary = {
 export type FitSessions = { scorerVersionId: string; sessions: number };
 
 /**
- * Prepares, fits and publishes; one fit at a time per organization in this
+ * Prepares, fits and publishes; one fit at a time per router in this
  * process. A caller arriving while a fit runs waits for it and takes its run
  * when it read the caller's generation or a newer one; otherwise it runs the
- * next fit, which every caller still waiting shares. Null when auto routing
- * is not fully configured.
+ * next fit, which every caller still waiting shares. Null when the router is
+ * not fully configured.
  * @public — `fitNow` runs it; exported so tests can fit without its retries
  */
 export async function runFit(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<FitRun | null> {
   let generation: number | undefined;
   for (;;) {
-    const running = fitsInFlight.get(organizationId);
+    const running = fitsInFlight.get(routerId);
     if (!running) {
-      const flight = prepareAndComplete(organizationId, trigger).finally(() =>
-        fitsInFlight.delete(organizationId),
+      const flight = prepareAndComplete(routerId, trigger).finally(() =>
+        fitsInFlight.delete(routerId),
       );
-      fitsInFlight.set(organizationId, flight);
+      fitsInFlight.set(routerId, flight);
       return flight;
     }
-    generation ??=
-      (await AutoRoutingSettingsModel.find(organizationId))?.generation ?? 0;
+    generation ??= (await AutoRouterModel.find(routerId))?.generation ?? 0;
     const done = await running.catch(() => null);
     if (done && done.inputs.generation >= generation) return done;
   }
@@ -332,10 +326,10 @@ export async function runFit(
  * for older usage than an accepted fit reports that fit, the newest outcome.
  * An error that left no outcome recorded is reported as a failure without a
  * plan; the generation stays unplanned, so the dispatcher retries it. Null
- * when auto routing is not fully configured.
+ * when the router is not fully configured.
  */
 export async function fitNow(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<{
   fit: AutoRoutingFitResult;
@@ -344,23 +338,20 @@ export async function fitNow(
   let sessions: FitSessions | null = null;
   try {
     for (let attempt = 0; attempt < INLINE_FIT_ATTEMPTS; attempt++) {
-      const run = await runFit(organizationId, trigger);
+      const run = await runFit(routerId, trigger);
       if (!run) return null;
       sessions = fitSessions(run.inputs);
       if (run.published.kind === "recorded")
         return { fit: fitResult(run.published.plan), sessions };
       if (run.published.reason === "stale_watermark") break;
     }
-    const latest = await RoutingPlanModel.findLatestOutcome(organizationId);
+    const latest = await RoutingPlanModel.findLatestOutcome(routerId);
     return {
       fit: latest ? fitResult(latest) : { status: "cold_start", planId: null },
       sessions,
     };
   } catch (error) {
-    logger.error(
-      { err: error, organizationId },
-      "[AutoRouting] Plan fit threw",
-    );
+    logger.error({ err: error, routerId }, "[AutoRouting] Plan fit threw");
     return {
       fit: {
         status: "failed",
@@ -383,14 +374,13 @@ type SimulateParams = { volumeMultiplier: number } & (
 );
 
 async function simulate(
-  organizationId: string,
+  routerId: string,
   params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const settings = await AutoRouterModel.find(routerId);
   const inputs =
     settings &&
     (await readFitInputs({
-      organizationId,
       settings: {
         ...settings,
         enabled: true,
@@ -401,7 +391,7 @@ async function simulate(
               budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
             }),
       },
-      scorerVersionId: (await activeSourceVersion()).id,
+      scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
       requestedTrigger: "manual",
     }));
   if (!inputs) {
@@ -444,10 +434,9 @@ async function simulate(
   }
 }
 
-/** Why a fit nobody requested runs: what moved since the organization's last fit outcome. */
+/** Why a fit nobody requested runs: what moved since the router's last fit outcome. */
 async function scheduledTrigger(params: {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   scorerVersionId: string;
   latestScorerVersionId: string | null;
 }): Promise<RoutingPlanTrigger> {
@@ -460,8 +449,9 @@ async function scheduledTrigger(params: {
   const unplanned = settings.generation > settings.plannedGeneration;
   if (
     unplanned &&
+    settings.usesPastSessions &&
     (await RoutingBackfillModel.bumpedGeneration(
-      params.organizationId,
+      settings.organizationId,
       settings.generation,
     ))
   )
@@ -471,23 +461,22 @@ async function scheduledTrigger(params: {
 }
 
 async function readFitInputs(params: {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   scorerVersionId: string;
   requestedTrigger?: RoutingPlanTrigger;
   maxSessions?: number;
 }): Promise<FitInputs | null> {
-  const { organizationId, settings, scorerVersionId } = params;
+  const { settings, scorerVersionId } = params;
   const readiness = await fitReadiness(settings);
   if (readiness.kind !== "ready") return null;
   const tiers = fitTiers(readiness.trio);
-  const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
+  const [latest] = await RoutingPlanModel.findHistory(settings.id, 1);
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
       ? await readFitHistory(
           {
-            organizationId,
+            router: settings,
             scorerVersionId,
             inputWatermark,
             longContextThreshold: tiers.tiers.long_context_threshold,
@@ -498,13 +487,13 @@ async function readFitInputs(params: {
   const trigger =
     params.requestedTrigger ??
     (await scheduledTrigger({
-      organizationId,
       settings,
       scorerVersionId,
       latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
     }));
   return {
-    organizationId,
+    organizationId: settings.organizationId,
+    routerId: settings.id,
     trigger,
     generation: settings.generation,
     inputWatermark,
@@ -529,12 +518,13 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
 }
 
 /**
- * Live auto sessions and scored past sessions, each weighted by how many
- * sessions of its window it stands for.
+ * The router's live sessions and, for the router that uses them, the
+ * organization's scored past sessions, each weighted by how many sessions of
+ * its window it stands for.
  */
 export async function readFitHistory(
   params: {
-    organizationId: string;
+    router: FitScope;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
@@ -542,7 +532,10 @@ export async function readFitHistory(
   maxSessions?: number,
 ): Promise<FitHistory> {
   const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitHistory(params, maxSessions),
+    RoutingUsageModel.findFitHistory(
+      { ...params, routerId: params.router.id },
+      maxSessions,
+    ),
     readPastSessions(params, true),
   ]);
   // The live sample is capped while its volume counts the whole window.
@@ -557,22 +550,28 @@ export async function readFitHistory(
   };
 }
 
+/** Which sessions a fit reads: the router's own, plus the organization's past ones when it uses them. */
+type FitScope = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+
+/** A router created after its organization could have several starts cold: it reads no past sessions. */
 async function readPastSessions(
   params: {
-    organizationId: string;
+    router: FitScope;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
   },
   withSample: boolean,
 ): Promise<PastWindow & { sample: HistoryFitRow[] }> {
-  const frame = await RoutingBackfillModel.findLatestScanned(
-    params.organizationId,
-  );
-  if (!frame)
-    return { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
+  const none = { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
+  if (!params.router.usesPastSessions) return none;
+  const { organizationId } = params.router;
+  const frame = await RoutingBackfillModel.findLatestScanned(organizationId);
+  if (!frame) return none;
   return RoutingHistoryModel.findFitSnapshot({
-    ...params,
+    organizationId,
+    scorerVersionId: params.scorerVersionId,
+    longContextThreshold: params.longContextThreshold,
     frame,
     windowStart: new Date(params.inputWatermark.getTime() - HISTORY_MS),
     withSample,
@@ -605,17 +604,17 @@ export function cheapestBudget(error: string): number | null {
 const fitsInFlight = new Map<string, Promise<FitRun | null>>();
 
 async function prepareAndComplete(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<FitRun | null> {
-  const inputs = await prepareFit(organizationId, trigger);
+  const inputs = await prepareFit(routerId, trigger);
   if (!inputs) return null;
   try {
     return { inputs, published: await completeFit(inputs) };
   } catch (error) {
     // Recorded, so the generation it read is planned rather than pending forever.
     logger.error(
-      { err: error, organizationId },
+      { err: error, routerId },
       "[AutoRouting] Plan fit failed unexpectedly",
     );
     const published = await publish(inputs, {
@@ -796,7 +795,7 @@ async function fit(
     const coded = CodedErrorSchema.safeParse(error);
     if (!coded.success) throw error;
     const expected = RouterFailureSchema.safeParse(error).success;
-    const log = { organizationId: inputs.organizationId, ...coded.data };
+    const log = { routerId: inputs.routerId, ...coded.data };
     if (expected) logger.warn(log, "[AutoRouting] Plan fit failed");
     else logger.error(log, "[AutoRouting] Plan fit failed unexpectedly");
     return {

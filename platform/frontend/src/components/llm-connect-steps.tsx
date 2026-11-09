@@ -603,6 +603,7 @@ export function LlmConnectSteps({
       initialModel={pickedModel}
       onModelChange={setPickedModel}
       offerAutoModel={offerAutoModel && isRouter && !pool}
+      virtualApiKeyId={pickedKey?.id}
     />
   );
 

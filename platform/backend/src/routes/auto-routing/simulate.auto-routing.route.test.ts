@@ -2,10 +2,10 @@ import { simulateFit } from "@/auto-routing/fit";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import { autoRouterId, configureAutoRouting } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
@@ -19,17 +19,17 @@ type Summary = {
   sessions_per_day: number;
 };
 
-describe("POST /api/auto-routing/simulate", () => {
+describe("POST /api/auto-routing/routers/:id/simulate", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 
-  const simulate = (budgetUsdPerDay: number, volumeMultiplier = 1) =>
+  const simulate = async (budgetUsdPerDay: number, volumeMultiplier = 1) =>
     ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/simulate",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/simulate`,
       payload: { budgetUsdPerDay, volumeMultiplier },
     });
 
@@ -59,6 +59,7 @@ describe("POST /api/auto-routing/simulate", () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
       modelId: trio[2].id,
       scorerVersionId: (await activeSourceVersion()).id,
       sessions,
@@ -127,11 +128,11 @@ describe("POST /api/auto-routing/simulate", () => {
   });
 
   test("refuses simulations beyond the process-wide limit", async () => {
-    const organizations = Array.from({ length: 5 }, () => crypto.randomUUID());
+    const routerIds = Array.from({ length: 5 }, () => crypto.randomUUID());
 
     const results = await Promise.allSettled(
-      organizations.map((organizationId) =>
-        simulateFit(organizationId, {
+      routerIds.map((routerId) =>
+        simulateFit(routerId, {
           budgetUsdPerDay: 50,
           volumeMultiplier: 1,
         }),
@@ -143,7 +144,7 @@ describe("POST /api/auto-routing/simulate", () => {
     );
     expect(statuses).toEqual([400, 400, 400, 400, 429]);
     await expect(
-      simulateFit(organizations[4], {
+      simulateFit(routerIds[4], {
         budgetUsdPerDay: 50,
         volumeMultiplier: 1,
       }),
@@ -163,20 +164,24 @@ describe("POST /api/auto-routing/simulate", () => {
 
   test("at the saved budget and current volume it matches the plan a re-plan publishes, without publishing", async () => {
     await withHistory();
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await AutoRouterModel.find(
+      await autoRouterId(ctx.organizationId),
+    );
 
     const simulated = await feasible(50);
 
     expect(await db.$count(schema.routingPlansTable)).toBe(0);
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(
+      await AutoRouterModel.find(await autoRouterId(ctx.organizationId)),
+    ).toEqual(before);
     const replanned = await ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/replan",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/replan`,
     });
     expect(replanned.statusCode, replanned.body).toBe(200);
-    const active = await RoutingPlanModel.findActive(ctx.organizationId);
+    const active = await RoutingPlanModel.findActive(
+      await autoRouterId(ctx.organizationId),
+    );
     expect(active?.summary).toEqual(simulated);
   });
 
@@ -193,6 +198,7 @@ describe("POST /api/auto-routing/simulate", () => {
     const scorerVersionId = (await activeSourceVersion()).id;
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
       modelId: trio[2].id,
       scorerVersionId,
       sessions: 40,
@@ -216,7 +222,7 @@ describe("POST /api/auto-routing/simulate", () => {
     const atPreset = async (budgetPreset: string) => {
       const response = await ctx.app.inject({
         method: "POST",
-        url: "/api/auto-routing/simulate",
+        url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/simulate`,
         payload: { budgetPreset, volumeMultiplier: volume },
       });
       expect(response.statusCode, response.body).toBe(200);

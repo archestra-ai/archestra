@@ -1608,20 +1608,30 @@ class AgentModel {
       );
   }
 
-  /** Agents set to `auto` themselves (not through the organization default). */
-  static async countOnAutoModel(organizationId: string): Promise<number> {
-    const [row] = await db
-      .select({ total: count() })
+  /** How many agents are set to each auto router themselves (not through the organization default), by router id. */
+  static async countOnAutoRouters(
+    organizationId: string,
+  ): Promise<Map<string, number>> {
+    const rows = await db
+      .select({
+        routerId: schema.agentsTable.autoRouterId,
+        total: count(),
+      })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.autoModel, true),
+          isNotNull(schema.agentsTable.autoRouterId),
           isNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
         ),
-      );
-    return row?.total ?? 0;
+      )
+      .groupBy(schema.agentsTable.autoRouterId);
+    return new Map(
+      rows.flatMap((row) =>
+        row.routerId ? [[row.routerId, row.total] as const] : [],
+      ),
+    );
   }
 
   static async findRuntimeTargets(organizationId: string) {
@@ -4118,7 +4128,7 @@ class AgentModel {
   ): Promise<{
     llmApiKeyId: string | null;
     modelId: string | null;
-    autoModel: boolean;
+    autoRouterId: string | null;
     runtime: Agent["runtime"];
   } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
@@ -4129,7 +4139,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        autoModel: schema.agentsTable.autoModel,
+        autoRouterId: schema.agentsTable.autoRouterId,
         runtime: schema.agentsTable.runtime,
       })
       .from(schema.agentsTable)
@@ -6813,7 +6823,7 @@ const CHAT_ROSTER_COLUMNS = {
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
   modelPoolId: schema.agentsTable.modelPoolId,
-  autoModel: schema.agentsTable.autoModel,
+  autoRouterId: schema.agentsTable.autoRouterId,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

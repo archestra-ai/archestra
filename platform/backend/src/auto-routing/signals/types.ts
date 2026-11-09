@@ -11,6 +11,8 @@ export interface PreRunInput {
 
 export interface SignalSourceContext {
   organizationId: string;
+  /** The router's decision-model key; the organization's primary key when unset or no longer usable. */
+  apiKeyId?: string | null;
   /** Overrides the live-routing scorer timeout, for callers no request waits on. */
   timeoutMs?: number;
 }

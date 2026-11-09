@@ -55,13 +55,15 @@ const SessionAnswersSchema = DecisionsResponseSchema.extend({
   }),
 });
 
-/** Whether the organization's sessions can be scored: a Jev key resolves for it. */
+/** Whether sessions can be scored: the given key, else the organization's Jev key, resolves. */
 export async function scorerState(
   organizationId: string,
+  apiKeyId?: string | null,
 ): Promise<AutoRoutingScorerState> {
   const { apiKey } = await resolveProviderApiKey({
     organizationId,
     provider: "jev",
+    agentLlmApiKeyId: apiKeyId,
   });
   return apiKey ? "ready" : "no_jev_key";
 }
@@ -83,6 +85,7 @@ export class JevSessionSource
     const { apiKey, baseUrl } = await resolveProviderApiKey({
       organizationId: ctx.organizationId,
       provider: "jev",
+      agentLlmApiKeyId: ctx.apiKeyId,
     });
     if (!apiKey) {
       throw new SignalSourceError(

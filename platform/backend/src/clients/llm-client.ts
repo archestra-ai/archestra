@@ -14,7 +14,7 @@ import {
   APP_ID_HEADER,
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
@@ -241,8 +241,8 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
   modelPoolId?: string | null;
-  /** The call may be auto routed; see AUTO_ROUTABLE_HEADER. */
-  autoRoutable?: boolean;
+  /** The auto router the call runs on; see AUTO_ROUTER_ID_HEADER. */
+  autoRouterId?: string | null;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -322,8 +322,8 @@ export function createLLMModel(params: {
   if (params.modelPoolId) {
     clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
   }
-  if (params.autoRoutable) {
-    clientHeaders[AUTO_ROUTABLE_HEADER] = "true";
+  if (params.autoRouterId) {
+    clientHeaders[AUTO_ROUTER_ID_HEADER] = params.autoRouterId;
   }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
@@ -382,7 +382,7 @@ export async function createLLMModelForAgent(params: {
   /** The conversation's model pool; its turns go to the pool's members. */
   modelPoolId?: string | null;
   /** No pool or explicit tier: the call may be auto routed. */
-  autoRoutable?: boolean;
+  autoRouterId?: string | null;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -544,7 +544,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     chatApiKeyId,
     modelPoolId: params.modelPoolId,
-    autoRoutable: params.autoRoutable,
+    autoRouterId: params.autoRouterId,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     unattended: params.unattended,

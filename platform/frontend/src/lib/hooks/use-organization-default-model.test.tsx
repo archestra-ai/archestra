@@ -78,51 +78,84 @@ function renderDefaultModel(followsRouting?: boolean) {
   });
 }
 
+const ROUTER = { id: "router-a", name: "auto", tiers: TIERS };
+const SUPPORT_ROUTER = {
+  id: "router-b",
+  name: "auto:support",
+  tiers: {
+    fast: tier(4, "Flash"),
+    normal: tier(5, "Pro"),
+    smart: tier(6, "Ultra"),
+  },
+};
+
 describe("useOrganizationDefaultModel", () => {
-  it("reads Auto, with the tiers in its offer, while the default is auto and routing is on", async () => {
+  it("reads Auto, with the routed tiers, while the default is the auto router", async () => {
     summary = {
       model: TIERS.normal,
-      defaultAutoModel: true,
-      autoRouting: { active: true, tiers: TIERS },
+      defaultAutoRouterId: ROUTER.id,
+      autoRouters: [ROUTER, SUPPORT_ROUTER],
     };
     const { result } = renderDefaultModel();
     await waitFor(() => expect(result.current.label).toBe("Auto"));
-    expect(result.current.auto?.description).toMatch(/Haiku.*Sonnet.*Opus/);
+    expect(result.current.defaultAutoRouterId).toBe(ROUTER.id);
+    expect(result.current.autoRoutedTiers).toEqual(TIERS);
   });
 
-  it("names the default model while auto routing is off", async () => {
+  it("reads a named router's label and tiers while the default is that router", async () => {
     summary = {
       model: TIERS.normal,
-      defaultAutoModel: true,
-      autoRouting: { active: false },
+      defaultAutoRouterId: SUPPORT_ROUTER.id,
+      autoRouters: [ROUTER, SUPPORT_ROUTER],
+    };
+    const { result } = renderDefaultModel();
+    await waitFor(() => expect(result.current.label).toBe("Auto · support"));
+    expect(result.current.autoRoutedTiers).toEqual(SUPPORT_ROUTER.tiers);
+  });
+
+  it("names the default model while its router cannot route", async () => {
+    summary = {
+      model: TIERS.normal,
+      defaultAutoRouterId: ROUTER.id,
+      autoRouters: [],
     };
     const { result } = renderDefaultModel();
     await waitFor(() =>
       expect(result.current.label).toBe("Anthropic · Sonnet"),
     );
+    expect(result.current.autoRoutedTiers).toBeNull();
+    expect(result.current.defaultAutoRouterId).toBe(ROUTER.id);
   });
 
   it("names only the default model for an agent auto routing skips", async () => {
     summary = {
       model: TIERS.normal,
-      defaultAutoModel: true,
-      autoRouting: { active: true, tiers: TIERS },
+      defaultAutoRouterId: ROUTER.id,
+      autoRouters: [ROUTER],
     };
     const { result } = renderDefaultModel(false);
     await waitFor(() =>
       expect(result.current.label).toBe("Anthropic · Sonnet"),
     );
+    expect(result.current.autoRoutedTiers).toBeNull();
   });
 
-  it("offers auto with its tiers while routing is on, though the default is not auto", async () => {
+  it("offers every router with its label and tiers, though the default is not one", async () => {
     summary = {
       model: TIERS.normal,
-      defaultAutoModel: false,
-      autoRouting: { active: true, tiers: TIERS },
+      defaultAutoRouterId: null,
+      autoRouters: [ROUTER, SUPPORT_ROUTER],
     };
     const { result } = renderDefaultModel();
-    await waitFor(() => expect(result.current.auto).not.toBeNull());
+    await waitFor(() => expect(result.current.autoRouters).toHaveLength(2));
     expect(result.current.label).toBe("Anthropic · Sonnet");
-    expect(result.current.auto?.description).toMatch(/Haiku.*Sonnet.*Opus/);
+    expect(result.current.autoRouters).toMatchObject([
+      { id: "router-a", label: "Auto", description: "Haiku, Sonnet, Opus" },
+      {
+        id: "router-b",
+        label: "Auto · support",
+        description: "Flash, Pro, Ultra",
+      },
+    ]);
   });
 });

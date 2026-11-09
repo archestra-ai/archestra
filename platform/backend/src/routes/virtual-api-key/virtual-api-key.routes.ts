@@ -26,8 +26,10 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { assertCanGrantAutoRouters } from "@/services/auto-router-grants";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { credentialBilling } from "@/services/credential-billing";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
@@ -87,6 +89,11 @@ const VirtualApiKeyBodyObjectSchema = z.object({
    * members. Omit to keep the key's current pools. Needs model pools on.
    */
   modelPoolIds: ModelPoolIdsInputSchema,
+  /**
+   * Auto routers the key may call by name; it then runs on their tiers' keys.
+   * Omit to keep the key's current routers. Needs auto routing on.
+   */
+  autoRouterIds: z.array(z.string().uuid()).max(500).optional(),
 });
 
 /**
@@ -111,6 +118,13 @@ function refineVirtualApiKeyBody(
         code: "custom",
         path: ["modelPoolIds"],
         message: "Passthrough virtual keys cannot use model pools",
+      });
+    }
+    if (value.autoRouterIds?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["autoRouterIds"],
+        message: "Passthrough virtual keys cannot use auto routers",
       });
     }
     return;
@@ -566,6 +580,11 @@ async function createVirtualApiKey(params: {
     organizationId,
     userId: user.id,
   });
+  await assertCanGrantAutoRouters({
+    autoRouterIds: body.autoRouterIds,
+    organizationId,
+    userId: user.id,
+  });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
     await VirtualApiKeyModel.create({
@@ -595,6 +614,7 @@ async function createVirtualApiKey(params: {
     organizationId,
     virtualApiKeyId: virtualKey.id,
   });
+  await setAutoRouters(virtualKey.id, body.autoRouterIds);
 
   return {
     ...virtualKey,
@@ -748,6 +768,11 @@ async function updateVirtualApiKey(params: {
       organizationId,
       userId: user.id,
     });
+    await assertCanGrantAutoRouters({
+      autoRouterIds: body.autoRouterIds,
+      organizationId,
+      userId: user.id,
+    });
     await CredentialResourcePermissions.validateVirtual({
       keyType: accessContext.keyType,
       ownerId: accessContext.authorId,
@@ -789,6 +814,7 @@ async function updateVirtualApiKey(params: {
       organizationId,
       virtualApiKeyId: id,
     });
+    await setAutoRouters(id, body.autoRouterIds);
   }
 
   const visibilityMetadata =
@@ -821,6 +847,18 @@ async function setModelPools(params: {
     virtualApiKeyId: params.virtualApiKeyId,
     poolIds: params.modelPoolIds,
   });
+}
+
+/** Saves the auto routers a create/update body names; undefined keeps the current ones. */
+async function setAutoRouters(
+  virtualApiKeyId: string,
+  autoRouterIds: string[] | undefined,
+): Promise<void> {
+  if (autoRouterIds === undefined || !config.autoRouting.enabled) return;
+  await AutoRouterModel.setRoutersForVirtualApiKey(
+    virtualApiKeyId,
+    autoRouterIds,
+  );
 }
 
 async function readBilling(virtualKey: {

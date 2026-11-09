@@ -6,6 +6,7 @@ import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-trac
 import appConfig from "@/config";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import type { A2AAttachment } from "@/types/a2a-attachment";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
@@ -860,18 +861,19 @@ describe("executeA2AMessage current turn assembly", () => {
     const org = await makeOrganization();
     const actor = await makeUser();
     await makeMember(actor.id, org.id);
+    const router = await ensureAutoRouter(org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
-      autoModel: true,
+      autoRouterId: router.id,
     });
     const deployed = appConfig.autoRouting.enabled;
     appConfig.autoRouting.enabled = true;
     onTestFinished(() => {
       appConfig.autoRouting.enabled = deployed;
     });
-    const routable: Record<string, boolean> = {};
+    const routed: Record<string, string | null | undefined> = {};
     for (const tier of [undefined, "normal", "fast", "smart"] as const) {
       primeStreamMocks();
       mockCreateLLMModelForAgent.mockClear();
@@ -885,15 +887,15 @@ describe("executeA2AMessage current turn assembly", () => {
         selfFork: true,
         tier,
       });
-      routable[tier ?? "omitted"] =
-        mockCreateLLMModelForAgent.mock.calls[0]?.[0].autoRoutable;
+      routed[tier ?? "omitted"] =
+        mockCreateLLMModelForAgent.mock.calls[0]?.[0].autoRouterId;
     }
 
-    expect(routable).toEqual({
-      omitted: true,
-      normal: true,
-      fast: false,
-      smart: false,
+    expect(routed).toEqual({
+      omitted: router.id,
+      normal: router.id,
+      fast: null,
+      smart: null,
     });
   });
 
@@ -1098,7 +1100,7 @@ describe("executeA2AMessage model selection", () => {
 
     expect(mockResolveForkParentSelection).toHaveBeenCalledWith({
       agent: {
-        autoModel: false,
+        autoRouterId: null,
         llmApiKeyId: null,
         modelId: null,
       },

@@ -86,7 +86,9 @@ export default function AgentSettingsPage() {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [tiers, setTiers] = useState<ModelTierSelection>(EMPTY_MODEL_TIERS);
-  const [defaultAutoModel, setDefaultAutoModel] = useState(false);
+  const [defaultAutoRouterId, setDefaultAutoRouterId] = useState<string | null>(
+    null,
+  );
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState(true);
   const [playwrightEnabled, setPlaywrightEnabled] = useState(true);
@@ -97,7 +99,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId: "",
     defaultModel: "",
     tiers: EMPTY_MODEL_TIERS,
-    defaultAutoModel: false,
+    defaultAutoRouterId: null,
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
@@ -139,7 +141,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setTiers(state.tiers);
-    setDefaultAutoModel(state.defaultAutoModel);
+    setDefaultAutoRouterId(state.defaultAutoRouterId);
     setDefaultAgentId(state.defaultAgentId);
     const savedFileUploads = organization.allowChatFileUploads ?? true;
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
@@ -161,7 +163,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId,
     defaultModel,
     tiers,
-    defaultAutoModel,
+    defaultAutoRouterId,
     defaultAgentId,
   };
 
@@ -200,7 +202,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setTiers(saved.tiers);
-    setDefaultAutoModel(saved.defaultAutoModel);
+    setDefaultAutoRouterId(saved.defaultAutoRouterId);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
@@ -277,6 +279,12 @@ export default function AgentSettingsPage() {
   const blocked = selectedModel ? blockedBy(selectedModel) : null;
 
   const organizationDefaultModel = useOrganizationDefaultModel();
+  // Undefined while the chosen router is no longer offered (auto routing
+  // off, or a tier missing); it then reads as the plain "Auto".
+  const defaultAutoRouter = organizationDefaultModel.autoRouters.find(
+    (router) => router.id === defaultAutoRouterId,
+  );
+  const defaultAutoRouterLabel = defaultAutoRouter?.label ?? "Auto";
   const defaultModelName =
     modelItems.find((item) => item.value === defaultModel)?.model ?? null;
 
@@ -296,7 +304,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId("");
     setDefaultModel("");
     setTiers(EMPTY_MODEL_TIERS);
-    setDefaultAutoModel(false);
+    setDefaultAutoRouterId(null);
   }, []);
 
   const isSaving =
@@ -348,7 +356,7 @@ export default function AgentSettingsPage() {
                     open={apiKeySelectorOpen}
                     onOpenChange={setApiKeySelectorOpen}
                     onSelectKey={(value) => {
-                      setDefaultAutoModel(false);
+                      setDefaultAutoRouterId(null);
                       // Back from Auto to the key it kept: the model stays.
                       if (value !== selectedApiKeyId) {
                         setSelectedApiKeyId(value);
@@ -356,30 +364,40 @@ export default function AgentSettingsPage() {
                       }
                       setApiKeySelectorOpen(false);
                     }}
-                    auto={
-                      organizationDefaultModel.auto || defaultAutoModel
-                        ? {
-                            selected: defaultAutoModel,
-                            description:
-                              organizationDefaultModel.auto?.description,
-                            onSelect: () => {
-                              setDefaultAutoModel(true);
-                              setApiKeySelectorOpen(false);
+                    autoRouters={[
+                      ...organizationDefaultModel.autoRouters,
+                      // A saved router that is no longer offered stays listed
+                      // as the selection, so it can be seen and changed.
+                      ...(defaultAutoRouterId && !defaultAutoRouter
+                        ? [
+                            {
+                              id: defaultAutoRouterId,
+                              label: "Auto",
+                              description: undefined,
                             },
-                          }
-                        : undefined
-                    }
+                          ]
+                        : []),
+                    ].map((router) => ({
+                      id: router.id,
+                      label: router.label,
+                      description: router.description,
+                      selected: router.id === defaultAutoRouterId,
+                      onSelect: () => {
+                        setDefaultAutoRouterId(router.id);
+                        setApiKeySelectorOpen(false);
+                      },
+                    }))}
                     triggerVariant="select"
                     triggerClassName="w-full"
                     popoverClassName="w-80"
                     emptyTriggerLabel="Select provider key..."
                   />
-                  {defaultAutoModel ? (
+                  {defaultAutoRouterId ? (
                     <p className="text-xs text-muted-foreground">
                       <span>
                         {defaultModelName
-                          ? `New chats and agents on the default use Auto. Built-in agents keep running on ${defaultModelName}.`
-                          : "New chats and agents on the default use Auto. Built-in agents have no default model yet: pick a key and model, then choose Auto again."}
+                          ? `New chats and agents on the default use ${defaultAutoRouterLabel}. Built-in agents keep running on ${defaultModelName}.`
+                          : `New chats and agents on the default use ${defaultAutoRouterLabel}. Built-in agents have no default model yet: pick a key and model, then choose ${defaultAutoRouterLabel} again.`}
                       </span>
                     </p>
                   ) : (
@@ -418,7 +436,7 @@ export default function AgentSettingsPage() {
                       modelName={selectedModel.displayName ?? selectedModel.id}
                     />
                   )}
-                  {!defaultAutoModel && selectedApiKey && defaultModel && (
+                  {!defaultAutoRouterId && selectedApiKey && defaultModel && (
                     <ModelTierPickers
                       value={tiers}
                       onChange={setTiers}
@@ -442,7 +460,9 @@ export default function AgentSettingsPage() {
                     disabled={
                       isSaving ||
                       !hasPermission ||
-                      (!selectedApiKeyId && !defaultModel && !defaultAutoModel)
+                      (!selectedApiKeyId &&
+                        !defaultModel &&
+                        !defaultAutoRouterId)
                     }
                   >
                     Reset

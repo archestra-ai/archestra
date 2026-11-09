@@ -3,6 +3,13 @@
 import { Info, Shuffle } from "lucide-react";
 import Link from "next/link";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -68,20 +75,47 @@ export function AutoRoutingLabelAction({
 }
 
 /**
- * Stands in for the model picker while the request asks for `auto`, with a
+ * Stands in for the model picker while the request asks for an auto router:
+ * its name, or a choice between the routers the credential can call, with a
  * link to configure auto routing for viewers who can.
  */
-export function AutoModelField({ id }: { id: string }) {
+export function AutoModelField({
+  id,
+  names,
+  value,
+  onValueChange,
+}: {
+  id: string;
+  names: string[];
+  value: string;
+  onValueChange: (name: string) => void;
+}) {
   const { data: canConfigure = false } = useHasPermissions({
     llmProxy: ["update"],
   });
+  if (names.length > 1) {
+    return (
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger id={id} className="w-full font-mono">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {names.map((name) => (
+            <SelectItem key={name} value={name} className="font-mono">
+              {name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
   return (
     <div
       id={id}
       className="flex h-9 w-full items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm"
     >
       <Shuffle className="size-4 text-muted-foreground" aria-hidden="true" />
-      <span className="font-mono">auto</span>
+      <span className="font-mono">{value}</span>
       {canConfigure && (
         <Link
           href={AUTO_ROUTING_URL}
@@ -106,6 +140,14 @@ export function AutoRoutingUnavailableHint({
       <p className="text-xs text-muted-foreground">
         Auto routing is on, but its models don't share an API endpoint, so no
         request can use it.
+      </p>
+    );
+  }
+  if (offer.kind === "unassigned") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        This key has no auto router. Add one in the key's settings to request
+        it.
       </p>
     );
   }

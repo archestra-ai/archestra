@@ -8,6 +8,10 @@ import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { formatExpiration } from "@/components/create-virtual-key-dialog";
 import {
+  AutoRoutersField,
+  useCanSetAutoRouters,
+} from "@/components/credential-billing/auto-routers-field";
+import {
   BudgetFields,
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
@@ -33,6 +37,7 @@ import {
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
+import { useAvailableAutoRouters } from "@/lib/auto-routing.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useModelPools } from "@/lib/model-pools.query";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -87,6 +92,27 @@ export function EditVirtualKeyDialog({
       { ids: [...grantedPoolIds].sort() },
       { ids: [...modelPoolIds].sort() },
     );
+  // Undefined until edited, like the pools.
+  const [autoRouterIds, setAutoRouterIds] = useState<string[]>();
+  const canSetAutoRouters = useCanSetAutoRouters();
+  const { data: autoRouters } = useAvailableAutoRouters({
+    enabled: canSetAutoRouters,
+  });
+  const grantedRouterIds = useMemo(
+    () =>
+      (autoRouters ?? [])
+        .filter((router) =>
+          virtualKey ? router.virtualApiKeyIds.includes(virtualKey.id) : false,
+        )
+        .map((router) => router.id),
+    [autoRouters, virtualKey],
+  );
+  const autoRoutersChanged =
+    autoRouterIds !== undefined &&
+    hasUnsavedChanges(
+      { ids: [...grantedRouterIds].sort() },
+      { ids: [...autoRouterIds].sort() },
+    );
   const { data: myTeams = [] } = useMyTeams({ includeDescendants: true });
   const canManageTeamCap =
     !!virtualKey?.billingTeamId &&
@@ -135,6 +161,7 @@ export function EditVirtualKeyDialog({
     setBillingTeamId(virtualKey.billingTeamId);
     setSpendCap(initialSpendCap);
     setModelPoolIds(undefined);
+    setAutoRouterIds(undefined);
     initialSnapshotRef.current = {
       name: virtualKey.name,
       includeFutureProviders: virtualKey.includeFutureProviders,
@@ -180,6 +207,7 @@ export function EditVirtualKeyDialog({
             labels: finalLabels,
             ...billing,
             ...(modelPoolsChanged && { modelPoolIds }),
+            ...(autoRoutersChanged && { autoRouterIds }),
           },
     });
     if (result) onOpenChange(false);
@@ -197,6 +225,8 @@ export function EditVirtualKeyDialog({
     spendCap,
     modelPoolIds,
     modelPoolsChanged,
+    autoRouterIds,
+    autoRoutersChanged,
   ]);
 
   if (!virtualKey) return null;
@@ -208,6 +238,7 @@ export function EditVirtualKeyDialog({
   const isDirty =
     permissionsDirty ||
     modelPoolsChanged ||
+    autoRoutersChanged ||
     (initialSnapshotRef.current !== null &&
       hasUnsavedChanges(initialSnapshotRef.current, {
         name,
@@ -358,6 +389,12 @@ export function EditVirtualKeyDialog({
             <ModelPoolsField
               value={modelPoolIds ?? grantedPoolIds}
               onChange={setModelPoolIds}
+            />
+          )}
+          {canSetAutoRouters && !isPassthrough && (
+            <AutoRoutersField
+              value={autoRouterIds ?? grantedRouterIds}
+              onChange={setAutoRouterIds}
             />
           )}
         </div>

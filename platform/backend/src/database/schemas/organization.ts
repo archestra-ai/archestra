@@ -203,11 +203,15 @@ const organizationsTable = pgTable("organization", {
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
   /**
-   * Chats and agents on the organization default run on auto routing.
+   * The auto router chats and agents on the organization default run on.
    * `defaultModelId` stays what built-in tasks (titles, compaction) and
    * forked subagents run on.
+   * FK to auto_routers(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
    */
-  defaultAutoModel: boolean("default_auto_model").notNull().default(false),
+  defaultAutoRouterId: uuid("default_auto_router_id"),
+
+  /** Auto routers route sessions. Off: each runs on its normal tier. */
+  autoRoutingEnabled: boolean("auto_routing_enabled").notNull().default(false),
 
   /**
    * Optional `fast` / `smart` tiers of the default trio, on any provider.

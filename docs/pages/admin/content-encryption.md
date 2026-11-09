@@ -44,12 +44,32 @@ For a source checkout configured with the deployment's database and keys, run `p
 
 ## Rotating the Key
 
-Keep both keys available until every replica can read the replacement.
+Replace the key without downtime: every replica learns the new key before any replica writes with it, then a sweep moves stored content to it. Change the variables as in [Change a Platform Secret](/docs/admin/deployment/secret-rotation#change-a-platform-secret), and let each rollout finish on every web and worker pod before you go on.
 
-1. Keep the current key active and put the new key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS). Finish a rollout.
-2. Swap the active and previous keys, then finish another rollout.
-3. Let the background sweep finish, or run the sweep command above to verify all stored content uses the new key.
-4. Remove the previous key in a later rollout.
+1. Keep the current key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) and put the new key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS). Finish a rollout.
+2. Swap them: the new key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET), the old key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS). Finish a rollout.
+3. Once every web and worker pod runs with the swapped keys, run the sweep:
+
+   ```bash
+   kubectl -n archestra exec deploy/archestra-platform -- \
+     sh -c 'cd /app/backend && node dist/standalone-scripts/reencrypt-content.ee.mjs'
+   ```
+
+   It exits successfully and its last line shows `"status":"completed"`. Run it again: `"totalRewritten":0` confirms no content is left under the old key.
+
+4. Remove the old key from [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS), or set it to the new key, and finish a rollout.
+
+- The background sweep is not enough on its own. It can mark itself complete while a pod that has not restarted still writes with the old key, and those rows would become unreadable once the old key is gone.
+- During the swap rollout, workers that have not restarted yet can move some rows back to the old key. This is harmless, and it is why the sweep runs only after the rollout finishes.
+- The database cannot show which key a row uses. The second sweep run is the check.
+
+### Roll Back a Rotation
+
+Roll back by keeping every key that any pod has written with:
+
+- **During the first rollout:** restore the original values.
+- **During the swap or before the sweep finishes:** set the old key active and the new key previous. Never drop the new key once a pod has run with it active.
+- **After you removed the old key:** if conversations or LLM Logs pages fail to load, put the old key back as the previous key, finish a rollout, and run the sweep again.
 
 For every other secret, see [Secret Rotation](/docs/admin/deployment/secret-rotation).
 

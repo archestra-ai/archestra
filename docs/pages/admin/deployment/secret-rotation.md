@@ -53,7 +53,7 @@ API keys and MCP gateway OAuth tokens keep working. Archestra replaces its token
 
 ### Content Encryption Key
 
-[`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) encrypts LLM Logs, chat messages, and tool results. Content cannot be entered again, so keep both keys until the sweep finishes. Follow [Rotating the Key](/docs/admin/content-encryption#rotating-the-key).
+[`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) encrypts LLM Logs, chat messages, and tool results. Content cannot be entered again, so keep the old key until a second run of the sweep rewrites nothing. Follow [Rotating the Key](/docs/admin/content-encryption#rotating-the-key).
 
 ### Legacy Combined Secret
 

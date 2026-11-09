@@ -313,7 +313,7 @@ function resolveOverrideClient(params: {
   if (!config.clientSecretOverride) {
     throw new ApiError(
       400,
-      "This MCP server overrides the token exchange client, but has no client secret or private key for it. Add one in the server's Identity Provider Token Exchange settings.",
+      "This MCP server overrides the token exchange client, but has no client secret or private key for it. Add one under the server's Exchange Client settings.",
     );
   }
 
@@ -346,7 +346,7 @@ function resolveBlueprintClient(params: {
   if (!agentIdConfig.clientSecret) {
     throw new ApiError(
       400,
-      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Enterprise-Managed Credentials → Entra Agent ID.",
+      "The identity provider's Entra agent identity blueprint has no client secret or certificate. Add one under Tool Authentication → Entra Agent ID.",
     );
   }
 
@@ -628,7 +628,7 @@ function buildExchangeErrorMessage(
   if (providerMessage?.includes("AADSTS65001")) {
     return (
       "Entra has no consent for this client to call the requested resource on the user's behalf (AADSTS65001). " +
-      "Grant admin consent for the scope to the client named in the error: the agent identity, the MCP server's override client, or the identity provider's app registration. " +
+      "Grant admin consent for the scope to the client named in the error: the agent identity, the MCP server's exchange client, or the identity provider's app registration. " +
       `Provider error: ${providerMessage}`
     );
   }

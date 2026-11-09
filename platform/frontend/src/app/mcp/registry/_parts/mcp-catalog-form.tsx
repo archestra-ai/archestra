@@ -247,8 +247,7 @@ export function McpCatalogForm({
     "upstream-mcp-server-authentication",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
-    DocsPage.McpAuthentication,
-    "token-exchange-configuration",
+    DocsPage.McpIdpTokenExchange,
   );
   const mcpAuthJwksDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,

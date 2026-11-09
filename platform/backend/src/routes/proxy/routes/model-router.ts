@@ -871,6 +871,14 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   });
   if (auto.kind === "usage_limited")
     return sendUsageLimitRefusal(reply, auto.violation);
+  const poolId =
+    auto.kind === "as_requested"
+      ? await usableModelPoolId({ auth, model: body.model })
+      : null;
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openAiResponsesAdapterFactory);
+  }
   const resolution = await resolveModelRoute({
     requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),

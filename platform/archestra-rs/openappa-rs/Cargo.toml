@@ -44,11 +44,13 @@ crate-type = ["cdylib"]
 # and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
 # then the planner-cap lint's redispatch index (#792), the battery scripts'
 # run lines (#793), kagent demo fixes (#794, #796), and a credential link
-# declaration that requires an internal audience (#798).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5c94b4c405ddf33171be7fa53aba8244959ba130" }
+# declaration that requires an internal audience (#798) and the LLM log tools
+# labeled (#852); then, ahead of its merge, `mcp/*.toml` include entries that
+# load every policy file in one folder (#799), on the #852 head.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fe423e3d4c424f2741ee90472995008f4e01206d", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fe423e3d4c424f2741ee90472995008f4e01206d" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fe423e3d4c424f2741ee90472995008f4e01206d", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "fe423e3d4c424f2741ee90472995008f4e01206d" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

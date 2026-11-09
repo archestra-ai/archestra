@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,10 +22,25 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
    - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
    - **Use an existing repository:** one that already holds an OpenAPPA policy.
-2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
+2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with the [permissions below](#github-app-permissions) and no keys to copy. Install it on the policy repository only: its tokens never reach past that repository, and so GitHub's own grant need not either.
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents and Pull requests to sync and propose changes, on Checks to check pull requests, and on Administration to keep the branch rules. On GitHub Enterprise Server it also needs Workflows. Each job gets its own token, limited to the policy repository and to the permissions that job uses, and it expires within an hour. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+
+### GitHub App Permissions
+
+Each permission serves one part of Git sync, and a part whose permission is missing is reported on **Settings → Guardrails**, not failed. The App subscribes to no events: sync polls the repository on its schedule, so GitHub needs no route to Archestra.
+
+| Permission | Access | What it does | Without it |
+| --- | --- | --- | --- |
+| Metadata | Read | Lists the repositories the installation covers, in setup. GitHub grants it to every App. | Nothing to choose. |
+| Contents | Read and write | Reads `appa.toml`, the server files, `code-owners.toml` and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
+| Pull requests | Read and write | Finds the open pull requests to check and the setup pull request. Opens pull requests: a server's rules from the APPA Keeper, `CODEOWNERS`, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
+| Checks | Read and write | Posts the **Guardrails policy** check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
+| Administration | Read and write | Creates the **Guardrails policy** ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
+| Workflows | Read and write, GitHub Enterprise Server only | Lets setup commit the template's workflow files into an empty repository; GitHub refuses that commit otherwise. On GitHub.com the template repository brings them. | Setup on GitHub Enterprise Server fails on the workflow files. |
+
+Each job mints its own token, good for the policy repository and under an hour, with that job's slice alone: reading the policy takes Contents read; checking pull requests takes Pull requests read and Checks write; opening a pull request takes Contents and Pull requests write; the branch rules take Administration write. An App created before a part existed needs the permission added in its settings on GitHub and the change accepted on its installation.
 
 ### GitLab
 
@@ -59,6 +74,17 @@ include = [
 ```
 
 Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below: OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+
+### Before Editors Start
+
+Four things put a server's rules in its editors' hands; each is in place once and holds for every server.
+
+1. **Git sync on GitHub**, with an App that has [every permission above](#github-app-permissions). A GitLab project gets the pull requests and the check, but no code owners and no branch rules; protect its branch in GitLab.
+2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules** and become the file's code owners.
+3. **The APPA Keeper for those teams.** Only administrators can use the agent until you share it with the editors' teams for use.
+4. **A GitHub identity for each editor**, so GitHub counts their review: a GitHub user credential they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential), or a line in [`code-owners.toml`](#protect-each-servers-file). Each owner also needs write access to the repository on GitHub, or GitHub ignores the owner line. Settings lists the editors who have no owner yet.
+
+### Change a Server's Rules
 
 1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
@@ -114,3 +140,4 @@ Required permissions:
 - [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to set up Git sync.
 - [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or GitLab token.
 - [`credential:create`](/docs/reference/permissions#credential:create) to create a GitHub App or save a GitLab token.
+- To change a server's rules: the server shared for editing and the APPA Keeper agent shared for use ([Granular Access Control](/docs/admin/access-control#granular-access-control)). No Guardrails permission.

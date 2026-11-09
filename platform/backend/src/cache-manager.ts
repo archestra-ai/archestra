@@ -110,12 +110,10 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** First native conversation to present a verified setup reference */
   ConnectionSetupConversation: "connection-setup-conversation",
-  /** Archestra VAF Add On package proxy rate limiting per IP */
+  /** Archestra VAF Add On package and script rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
   MfilesVafAddOnReleasePin: "mfiles-vaf-add-on-release-pin",
-  /** Latest CI-built add-on artifact for the dev source-ref override */
-  MfilesVafAddOnCiArtifact: "mfiles-vaf-add-on-ci-artifact",
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",

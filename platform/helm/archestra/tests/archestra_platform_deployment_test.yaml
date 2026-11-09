@@ -2045,7 +2045,7 @@ tests:
     set:
       archestra.env:
         ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: "outlook-client-secret-value"
-        ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: "mfiles-token-value"
+        ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET: "drive-client-secret-value"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -2058,11 +2058,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            name: ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
-                key: archestra-knowledge-base-mfiles-vaf-add-on-github-token
+                key: archestra-knowledge-base-google-drive-oauth-client-secret
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
@@ -2071,8 +2071,8 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
-            value: "mfiles-token-value"
+            name: ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET
+            value: "drive-client-secret-value"
 
   - it: should set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET from the generated offer-signing-secret key
     documentIndex: 1

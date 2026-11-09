@@ -145,7 +145,7 @@ export function ConfigureAutoRoutingDialog({
                   disabled={update.isPending}
                   aria-label="Auto routing on"
                 />
-                <span className="space-y-0.5">
+                <span className="space-y-1">
                   <span className="block text-sm font-medium">
                     {field.value ? "Auto routing is on" : "Auto routing is off"}
                   </span>
@@ -159,7 +159,7 @@ export function ConfigureAutoRoutingDialog({
             )}
           />
           <section className="space-y-3">
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <h3 className="text-sm font-medium">Models</h3>
               <p className="text-xs text-muted-foreground">
                 Only provider keys shared with the whole organization can run
@@ -239,8 +239,8 @@ export function ConfigureAutoRoutingDialog({
 
 /**
  * A preset Auto re-derives from usage on every plan, or a custom daily budget:
- * one row of a segmented choice and its cost, where sessions would land on
- * today's traffic, then one line on what the choice does.
+ * a line on what the choice does, one row of the segmented choice and its
+ * cost, then where sessions would land on today's traffic.
  */
 function BudgetSection({
   form,
@@ -262,11 +262,14 @@ function BudgetSection({
     !!form.formState.dirtyFields.tiers,
   );
   return (
-    <section className="space-y-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <section className="space-y-3">
+      <div className="space-y-1">
         <h3 id="auto-routing-budget-heading" className="text-sm font-medium">
           Daily budget
         </h3>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
         <Controller
           control={form.control}
           name="budgetMode"
@@ -333,7 +336,6 @@ function BudgetSection({
           {estimate.note}
         </p>
       ) : null}
-      <p className="text-xs text-muted-foreground">{hint}</p>
     </section>
   );
 }
@@ -427,7 +429,7 @@ function TierSplit({
 }) {
   return (
     <div
-      className={cn("space-y-1", stale && "opacity-60")}
+      className={cn("space-y-2", stale && "opacity-60")}
       data-testid="auto-routing-budget-split"
     >
       <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
@@ -474,8 +476,8 @@ function TierRow({
   const [keyOpen, setKeyOpen] = useState(false);
   const keyId = form.watch(`tiers.${tier}.providerApiKeyId`);
   return (
-    <li className="grid gap-2 px-3 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1.25fr)] sm:items-start">
-      <div className="space-y-0.5 sm:pt-2">
+    <li className="grid gap-3 p-3 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,1.25fr)] sm:items-start">
+      <div className="space-y-1 sm:pt-2">
         <span className="block text-sm font-medium">{TIER_LABELS[tier]}</span>
         <span className="block text-xs text-muted-foreground">
           {TIER_HINTS[tier]}

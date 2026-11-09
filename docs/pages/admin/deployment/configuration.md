@@ -1,7 +1,7 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 7
+order: 8
 lastUpdated: 2026-11-09
 ---
 
@@ -171,7 +171,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 - **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password of the default admin user, set on first startup.
   - Default: `password`
-  - Change it for any deployment other people can reach.
+  - Change it for any deployment other people can reach. It applies only when the admin is created; to change the password later, see [Default Admin Password](/docs/admin/deployment/secret-rotation#default-admin-password).
 
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra origins allowed for CORS and sign-in, besides [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL).
   - Default: unset
@@ -225,10 +225,12 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 
 ## Encryption and Secrets
 
+To change any of these secrets, follow [Secret Rotation](/docs/admin/deployment/secret-rotation).
+
 - **`ARCHESTRA_AUTH_SESSION_SECRET`** - Signs session cookies and encrypts JWT signing keys and two-factor secrets.
   - Default: Helm generates one in the `<release>-auth` Secret under `session-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SECRET).
   - Values: a random string of at least 32 characters, for example from `openssl rand -base64 32`
-  - Changing it signs out every user, invalidates issued JWTs, and makes users with two-factor authentication enroll again.
+  - Changing it signs out every user and makes users with two-factor authentication set up their authenticator again. See [Session Secret](/docs/admin/deployment/secret-rotation#session-secret).
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Encrypts secrets stored in the database, such as API keys and tokens.
   - Default: Helm generates one in the `<release>-auth` Secret under `secrets-encryption-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SECRET).
@@ -244,7 +246,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Values: `true`, `false`
   - Set it for one boot, then unset it. Secrets encrypted with the old key stay unreadable. Enter them again.
 
-- **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset.
+- **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset. To change it safely, see [Legacy Combined Secret](/docs/admin/deployment/secret-rotation#legacy-combined-secret).
   - Default: generated on first start. Helm stores it in the `<release>-auth` Secret; the Docker image saves it to `/app/data/.auth_secret`.
   - Set the two dedicated secrets instead, so you can rotate them separately.
   - Once both are set, Archestra uses this secret only as [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) when that is unset.
@@ -260,7 +262,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
 - **`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`** - Turns on [encrypted chats](/docs/chat#encrypted-chats). Archestra escrows each chat key to this RSA public key for recovery.
   - Default: unset (encrypted chats unavailable)
   - Values: an RSA public key of at least 2048 bits, as PEM or base64-encoded PEM. Startup fails on any other value.
-  - Set it in its own rollout, after the release is deployed. See [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/content-encryption#recovering-an-encrypted-chat).
+  - Set it in its own rollout, after the release is deployed. To replace it, see [Encrypted Chat Escrow Key](/docs/admin/deployment/secret-rotation#encrypted-chat-escrow-key). See [Key Escrow for Encrypted Chats](/docs/admin/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/content-encryption#recovering-an-encrypted-chat).
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
@@ -1439,7 +1441,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token that clients must send to read `/metrics`.
   - Default: unset (no authentication)
-  - Clients send `Authorization: Bearer <token>`.
+  - Clients send `Authorization: Bearer <token>`. To change it, see [Metrics Token](/docs/admin/deployment/secret-rotation#metrics-token).
 
 - **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics/llm#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
@@ -1538,7 +1540,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs Guardrails delegation between agents and agent-to-agent messages.
   - Default: Helm generates one and keeps it across upgrades. Without Helm, it derives from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
-  - Set it to rotate this key separately from the session secret.
+  - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)

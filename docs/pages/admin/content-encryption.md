@@ -3,7 +3,7 @@ title: "Content Encryption at Rest"
 sidebarTitle: Encryption
 description: Encrypt stored messages and tool results and rotate their keys
 order: 6
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -50,6 +50,8 @@ Keep both keys available until every replica can read the replacement.
 2. Swap the active and previous keys, then finish another rollout.
 3. Let the background sweep finish, or run the sweep command above to verify all stored content uses the new key.
 4. Remove the previous key in a later rollout.
+
+For every other secret, see [Secret Rotation](/docs/admin/deployment/secret-rotation).
 
 ## Disk Headroom
 

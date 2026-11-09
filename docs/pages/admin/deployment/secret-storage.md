@@ -34,7 +34,7 @@ With Helm:
 
 Outside Helm, stop every process, set both variables on all of them, and start one. Start the rest once its log shows the re-encryption.
 
-Startup refuses a key that cannot decrypt existing secrets. Preserve the old key until rotation finishes.
+Startup refuses a key that cannot decrypt existing secrets. Preserve the old key until rotation finishes. For every other secret, see [Secret Rotation](/docs/admin/deployment/secret-rotation).
 
 ## HashiCorp Vault
 

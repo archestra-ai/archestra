@@ -179,6 +179,14 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      # MCP server pods, Agent Runtime sessions and code-runtime Dagger engines
+      # run here, away from the platform pods and the content-encryption Secret
+      # in `archestra`. archestra-ai/infra (gcp/gke/mcp-namespace.tf) creates
+      # the namespace, its Pod Security labels and the CI deployer's RBAC;
+      # apply that before this deploys, or the chart's RoleBindings there fail.
+      # Objects started in `archestra` before the move are not cleaned up by
+      # the platform: .github/scripts/cleanup-staging-mcp-namespace.sh.
+      namespace: archestra-mcp
       serviceAccount:
         annotations:
           iam.gke.io/gcp-service-account: archestra-staging-platform@friendly-path-465518-r6.iam.gserviceaccount.com

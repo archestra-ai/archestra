@@ -22,8 +22,18 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   }),
 }));
 
+const canModifyCatalogItem = vi.fn(() => ({
+  canModify: false,
+  isLoading: false,
+}));
 vi.mock("./catalog-edit-access", () => ({
-  useCanModifyCatalogItem: () => ({ canModify: false, isLoading: false }),
+  useCanModifyCatalogItem: () => canModifyCatalogItem(),
+}));
+
+const serverRulesHref = vi.fn<() => string | null>(() => null);
+vi.mock("./server-rules-launch", () => ({
+  SERVER_RULES_LABEL: "Edit Guardrails rules",
+  useServerRulesHref: () => serverRulesHref(),
 }));
 
 vi.mock("./use-chat-with-catalog-item", () => ({
@@ -299,6 +309,37 @@ describe("McpServerTable uninstall permission", () => {
     expect(
       screen.getAllByRole("link", { name: /Learn more/ }),
     ).not.toHaveLength(0);
+  });
+
+  it("offers a server's editors its Guardrails rules among the row actions", async () => {
+    const user = userEvent.setup();
+    canModifyCatalogItem.mockReturnValue({ canModify: true, isLoading: false });
+    serverRulesHref.mockReturnValue("/chat?agentId=keeper&user_prompt=rules");
+
+    renderTable(
+      <McpServerTable
+        items={[item]}
+        getServerInfo={() => ({ installedServer: personalInstall })}
+        envLabelByCatalog={new Map()}
+        issuesByCatalog={new Map()}
+        deploymentFeedState="ready"
+        deploymentStatuses={{}}
+        installingItemId={null}
+        onInstall={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "More actions some-remote-server" }),
+    );
+    const rules = await screen.findByRole("menuitem", {
+      name: "Edit Guardrails rules",
+    });
+    expect(rules.closest("a")).toHaveAttribute(
+      "href",
+      "/chat?agentId=keeper&user_prompt=rules",
+    );
   });
 
   it("keeps queue actions inline without triggering row navigation", async () => {

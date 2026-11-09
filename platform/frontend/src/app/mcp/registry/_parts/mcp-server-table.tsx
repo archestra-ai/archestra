@@ -27,6 +27,7 @@ import {
 import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
+import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import type { TableRowAction } from "@/components/table-row-actions";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -78,6 +79,7 @@ import type {
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { useRegistryPageServers } from "./registry-page-servers";
+import { SERVER_RULES_LABEL, useServerRulesHref } from "./server-rules-launch";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -467,6 +469,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const { canModify: canEditCatalog } = useCanModifyCatalogItem(
     !isBuiltin ? item : null,
   );
+  const serverRulesHref = useServerRulesHref(item);
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const actionModel = getMcpServerActionModel(item);
@@ -711,6 +714,15 @@ const McpServerRowActions = memo(function McpServerRowActions({
       icon: <Users className="h-4 w-4" />,
       label: connectionsAction.label,
       href: connectionsAction.href,
+    });
+  }
+  // The server's own Guardrails rules, for its editors: a pull request through
+  // the APPA Keeper, so it sits with the edit actions and needs no Guardrails permission.
+  if (canEditCatalog && !isBuiltin && serverRulesHref) {
+    actions.push({
+      icon: <AppaKeeperIcon />,
+      label: SERVER_RULES_LABEL,
+      href: serverRulesHref,
     });
   }
   if (hasLocalInstalls && !hasRuntimeIssue) {

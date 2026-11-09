@@ -10,7 +10,9 @@ import { useFeature } from "@/lib/config/config.query";
 import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
 import { openAppaChatHref } from "@/lib/openappa-routes";
 
-type ServerRulesCatalog = { id: string; name: string };
+export type ServerRulesCatalog = { id: string; name: string };
+
+export const SERVER_RULES_LABEL = "Edit Guardrails rules";
 
 /**
  * For a server's editors: change its own Guardrails rules with the APPA
@@ -29,7 +31,7 @@ export function ServerRulesMenuItem({
     <DropdownMenuItem asChild>
       <Link href={href}>
         <AppaKeeperIcon />
-        Edit Guardrails rules
+        {SERVER_RULES_LABEL}
       </Link>
     </DropdownMenuItem>
   );
@@ -54,7 +56,8 @@ export function ServerRulesButton({
   );
 }
 
-function useServerRulesHref(catalog: ServerRulesCatalog): string | null {
+/** The chat href for a server's rules, or null when the Keeper is out of reach. */
+export function useServerRulesHref(catalog: ServerRulesCatalog): string | null {
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const agents = useChatAgentBootstrap(openappaEnabled);
   const keeper = agents.data?.find(

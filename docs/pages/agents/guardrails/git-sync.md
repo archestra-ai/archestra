@@ -60,7 +60,7 @@ include = [
 
 Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below: OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
 
-1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
+1. In the **MCP Registry**, open the server's row actions or the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
 4. A reviewer merges it, and Git sync applies it at the next sync.

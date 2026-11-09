@@ -185,7 +185,7 @@ archestra:
       # the namespace, its Pod Security labels and the CI deployer's RBAC;
       # apply that before this deploys, or the chart's RoleBindings there fail.
       # Objects started in `archestra` before the move are not cleaned up by
-      # the platform; they were removed by hand after the rollout.
+      # the platform; they are cleaned up by hand after the rollout.
       namespace: archestra-mcp
       serviceAccount:
         annotations:

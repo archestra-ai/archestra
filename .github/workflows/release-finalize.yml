@@ -30,6 +30,12 @@ on:
 
 permissions: {}
 
+# One finalize per request at a time (a redelivered dispatch waits and then
+# finds the release already published); one sweep at a time.
+concurrency:
+  group: release-finalize-${{ github.ref }}-${{ inputs.request_id || 'sweep' }}
+  cancel-in-progress: false
+
 jobs:
   sweep:
     name: Find approved releases

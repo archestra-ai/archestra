@@ -14,7 +14,7 @@ import {
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import { reconcileToolSearchTexts } from "./tool-search-text-reconcile";
+import { reconcileToolSearchTexts } from "./tool-search-text-reconcile-handler";
 
 const BASE_URL = "https://llm.test/v1";
 const FAST_MODEL = "fast-model";

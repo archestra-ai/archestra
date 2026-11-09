@@ -9,7 +9,6 @@ import {
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
-import { reconcileToolSearchTexts } from "@/services/tool-search-text-reconcile";
 import type { TaskQueueService } from "../task-queue";
 import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
@@ -40,6 +39,7 @@ import { handlePluginGithubSync } from "./plugin-github-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
+import { reconcileToolSearchTexts } from "./tool-search-text-reconcile-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);

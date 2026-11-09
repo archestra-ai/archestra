@@ -1273,15 +1273,18 @@ describe("inspection state", () => {
   });
 });
 
-type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];
-
 /** Fails the first read inside the next entered lock once, transiently. */
 function failNextLockedRead(): void {
   const lock = cacheManager.withLock.bind(cacheManager);
   let failed = false;
   vi.spyOn(cacheManager, "withLock").mockImplementation(
-    <T>(scope: AllowedCacheKey, callback: (cache: LockedCache) => Promise<T>) =>
-      lock(scope, async (cache) => {
+    <T>(
+      scope: AllowedCacheKey,
+      callback: (
+        ...args: Parameters<Parameters<typeof cacheManager.withLock>[1]>
+      ) => Promise<T>,
+    ) =>
+      lock(scope, async (cache, tx) => {
         const get = cache.get;
         cache.get = async <V>(key: AllowedCacheKey) => {
           if (!failed) {
@@ -1290,7 +1293,7 @@ function failNextLockedRead(): void {
           }
           return get<V>(key);
         };
-        return callback(cache);
+        return callback(cache, tx);
       }),
   );
 }

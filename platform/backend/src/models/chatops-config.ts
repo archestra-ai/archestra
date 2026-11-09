@@ -337,20 +337,10 @@ class ChatOpsConfigModel {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${"slack-discovery-config"}, 0))`,
       );
-      const [row] = await tx
-        .select()
-        .from(schema.secretsTable)
-        .where(eq(schema.secretsTable.name, name));
-      const secret = encryptSecretValue(value);
-      if (row)
-        await tx
-          .update(schema.secretsTable)
-          .set({ secret })
-          .where(eq(schema.secretsTable.id, row.id));
+      const row = await SecretModel.findByName(name, tx);
+      if (row) await SecretModel.update(row.id, { secret: value }, tx);
       else
-        await tx
-          .insert(schema.secretsTable)
-          .values({ name, secret, isVault: false });
+        await SecretModel.create({ name, secret: value, isVault: false }, tx);
     });
   }
 

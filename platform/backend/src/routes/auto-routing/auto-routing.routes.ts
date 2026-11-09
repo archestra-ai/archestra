@@ -169,7 +169,7 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SimulateAutoRouting,
         description:
-          "Fit a plan at a budget and a scaled traffic volume without publishing it",
+          "Fit a plan at a budget, or a budget preset, and a scaled traffic volume without publishing it",
         tags: TAGS,
         body: AutoRoutingSimulateBodySchema,
         response: {

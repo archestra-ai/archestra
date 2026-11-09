@@ -56,7 +56,7 @@ function WhatIfSection() {
   const { data: plan } = useAutoRoutingPlan(
     settings?.status.activePlan?.id ?? null,
   );
-  if (!settings || !plan) return null;
+  if (!settings || !plan || plan.budgetUsdPerDay === null) return null;
   return (
     <WhatIf
       key={`${plan.id}-${plan.budgetUsdPerDay}`}

@@ -1,6 +1,6 @@
 ---
 title: Production
-description: Prepare database recovery, public access, and cluster capacity before serving traffic
+description: Prepare database recovery, public access, cluster security, and capacity before serving traffic
 order: 2
 lastUpdated: 2026-11-09
 ---
@@ -24,12 +24,33 @@ Configure [Networking](/docs/admin/deployment/networking#public-urls-and-ingress
 - Test a streaming model request and an MCP tool call through the public endpoint. Set proxy timeouts for long responses.
 - For MCP Apps that need persistent browser storage, configure a [sandbox domain](/docs/admin/deployment/networking#mcp-apps-sandbox).
 
+## Cluster Security
+
+Archestra runs code other people wrote: MCP servers, agent runs, and sandboxed commands. Keep that code away from the platform's keys, and keep everything except the ingress private.
+
+- **MCP server namespace:** set `archestra.orchestrator.kubernetes.namespace` to a namespace of its own. Create it before you install; the chart grants the platform its permissions there. Kubernetes lets a pod use only the Secrets, ServiceAccounts, and volume claims of its own namespace, so an MCP server there cannot reach the platform's keys or act as its ServiceAccount. The [code sandbox](/docs/admin/deployment/networking#code-sandbox-requirements) runs privileged engines in the same namespace, so leave its Pod Security Admission level at `privileged` while the sandbox is on.
+- **Agent Runtime:** set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME) to a sandboxing RuntimeClass such as gVisor, so a run does not share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker: privileged runs ignore the RuntimeClass. Put runtime pods on their own tainted node pool with [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR), which adds the matching toleration. See [Privileged Containers](/docs/agents/runtime/setup#privileged-containers).
+- **Secrets outside the chart:** keep the platform keys in your secret manager and sync them into a Kubernetes Secret, for example with External Secrets or the Secrets Store CSI driver. Point `archestra.authSecret.existingSecretName` and `archestra.envFromSecrets` at it. Argo CD and other tools that render with `helm template` [need `existingSecretName`](/docs/admin/deployment/helm#install). To keep saved credentials out of PostgreSQL, use [Vault](/docs/admin/deployment/secret-storage#hashicorp-vault).
+- **Cloud access:** give pods cloud permissions through workload identity, such as GKE Workload Identity, EKS IRSA, or AKS Workload Identity, instead of static keys. Grant only the roles Archestra uses. [Connect a Database](/docs/admin/deployment/database#connect-a-database) shows it for each cloud's PostgreSQL.
+- **Private by default:** expose only the ingress. Keep the cluster's control plane and the [database](/docs/admin/deployment/database#connect-a-database) on private networks. Set [`ARCHESTRA_METRICS_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_SECRET) and keep the metrics port, 9050, off the ingress. Put SSO, an identity-aware proxy, or a VPN in front of non-production instances.
+- **Egress:** verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
+- **Release images:** a released chart pins every image to its digest, and Archestra's release workflow attests each digest's build provenance. Check the image you run before you deploy it:
+
+  ```bash
+  IMAGE=$(kubectl -n archestra get deployment archestra-platform \
+    -o jsonpath='{.spec.template.spec.containers[0].image}')
+  gh attestation verify "oci://docker.io/archestra/platform@${IMAGE#*@}" \
+    --repo archestra-ai/archestra
+  ```
+
+- **Audit trail:** export Archestra's [audit log](/docs/admin/observability/audit-logs) over OTLP with [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED), and send your cluster's Kubernetes audit log to the same SIEM.
+- **Deploy access:** with the default values, the chart creates nothing outside its namespaces. The CI identity that runs `helm upgrade` needs write access only to the release namespace, the MCP server namespace, and any environment namespaces you list. Do not give people cluster-admin for day-to-day work.
+
 ## Cluster Capacity
 
 Size the web pods, workers, and database for your organization with [Sizing and High Availability](/docs/admin/deployment/scaling), which also sets them up to survive a lost node or zone. Validate the size against realistic requests, payloads, and background work in staging before serving production traffic.
 
 - Reserve separate capacity for the [code sandbox](/docs/admin/deployment/networking#code-sandbox-requirements).
-- Verify that your network dataplane [enforces workload egress policies](/docs/admin/deployment/networking#enforce-workload-egress). Policy objects alone do not isolate workloads.
 
 ### MCP Servers
 

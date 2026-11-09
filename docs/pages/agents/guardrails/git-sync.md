@@ -49,7 +49,7 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Let Each Server's Team Own Its Rules
 
-The people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
+The people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. They do it in a chat with the **APPA Keeper** agent, which only administrators can use until you [share the agent](/docs/admin/access-control#share-a-resource) with their team. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
 
 ```toml
 include = [

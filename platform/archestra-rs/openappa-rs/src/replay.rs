@@ -11,7 +11,8 @@
 //! whole.
 use appa_runtime::{
     api::{
-        ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Remedies, Runtime,
+        ConsultRecord, ConsultTranscriber, ExternalOutcome, ExternalRole, OfferKind, Remedies,
+        Runtime,
     },
     config::{Config, HostDefaults, Implementation},
     replay::{self, Got, StepOutcome, Taken, Trace, TraceReport, Verdict},
@@ -255,7 +256,7 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
         Remedies::StandIn,
     )
     .map_err(|error| error.to_string())?
-    .recording(unanswered.clone());
+    .transcribing(unanswered.clone());
     let runtime = match &request.annotator_context {
         Some(context) => runtime.with_archestra_context(context.clone()),
         None => runtime,
@@ -278,7 +279,7 @@ struct Replaying {
 #[derive(Default)]
 struct Unanswered(Mutex<Vec<String>>);
 
-impl ConsultRecorder for Unanswered {
+impl ConsultTranscriber for Unanswered {
     fn record(&self, record: ConsultRecord) {
         if let (ExternalRole::AudienceSource, ExternalOutcome::NoAnswer(_)) =
             (record.role, record.outcome)

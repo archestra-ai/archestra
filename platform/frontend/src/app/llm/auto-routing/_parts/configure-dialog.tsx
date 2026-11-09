@@ -3,7 +3,7 @@
 import { providerSupportsChat } from "@archestra/shared";
 import { Loader2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Controller, type UseFormReturn, useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -20,11 +20,7 @@ import {
 } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  RadioGroup,
-  RadioGroupItem,
-  radioCardClass,
-} from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
@@ -33,7 +29,7 @@ import {
   useSimulateAutoRouting,
   useUpdateAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
@@ -41,7 +37,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { BUDGET_PRESET_LABELS, type BudgetPreset } from "./budget-presets";
 import { MAX_BUDGET, MIN_BUDGET } from "./budget-scale";
 import { parsePlanSummary } from "./plan-document";
-import { TIER_LABELS, TIER_NAMES, type TierName } from "./tiers";
+import { TIER_COLOR, TIER_LABELS, TIER_NAMES, type TierName } from "./tiers";
 
 type TierValue = { providerApiKeyId: string; modelId: string };
 type BudgetMode = BudgetPreset | "custom";
@@ -56,19 +52,23 @@ const BUDGET_MODES: { value: BudgetMode; label: string; hint: string }[] = [
   {
     value: "cost_efficient",
     label: BUDGET_PRESET_LABELS.cost_efficient,
-    hint: "Mostly the fast model",
+    hint: "Mostly the fast model, sized to your traffic on every refit.",
   },
   {
     value: "balanced",
     label: BUDGET_PRESET_LABELS.balanced,
-    hint: "A mix, halfway in cost",
+    hint: "A mix of all three models, sized to your traffic on every refit.",
   },
   {
     value: "intelligence",
     label: BUDGET_PRESET_LABELS.intelligence,
-    hint: "Mostly the smart model",
+    hint: "Mostly the smart model, sized to your traffic on every refit.",
   },
-  { value: "custom", label: "Custom", hint: "Your own daily budget" },
+  {
+    value: "custom",
+    label: "Custom",
+    hint: "Auto spends up to this much a day, sending the sessions that benefit most to the bigger models.",
+  },
 ];
 
 const TIER_HINTS: Record<TierName, string> = {
@@ -237,7 +237,11 @@ export function ConfigureAutoRoutingDialog({
 // Internal
 // =============================================================================
 
-/** A preset Auto re-derives from usage on every plan, or a custom daily budget. */
+/**
+ * A preset Auto re-derives from usage on every plan, or a custom daily budget:
+ * one row of a segmented choice and its cost, where sessions would land on
+ * today's traffic, then one line on what the choice does.
+ */
 function BudgetSection({
   form,
   settings,
@@ -249,120 +253,208 @@ function BudgetSection({
   disabled: boolean;
   budgetError: string | null;
 }) {
-  const appName = useAppName();
   const mode = form.watch("budgetMode");
+  const hint = BUDGET_MODES.find((option) => option.value === mode)?.hint;
+  const estimate = useBudgetEstimate(
+    mode,
+    form.watch("budgetUsdPerDay"),
+    settings,
+    !!form.formState.dirtyFields.tiers,
+  );
   return (
-    <section className="space-y-3">
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-medium">Daily budget</h3>
-        <p className="text-xs text-muted-foreground">
-          {mode === "custom"
-            ? "Auto spends up to this much a day, sending the sessions that benefit most to the bigger models."
-            : `${appName} sets the budget from recent traffic and adjusts it every time the plan is refitted.`}
-        </p>
-      </div>
-      <Controller
-        control={form.control}
-        name="budgetMode"
-        render={({ field }) => (
-          <RadioGroup
-            value={field.value}
-            onValueChange={(value) => field.onChange(value as BudgetMode)}
-            disabled={disabled}
-            aria-label="Daily budget"
-            className="grid-cols-2 gap-2 sm:grid-cols-4"
-          >
-            {BUDGET_MODES.map((option) => (
-              <Label
-                key={option.value}
-                className={cn(
-                  radioCardClass(),
-                  "flex cursor-pointer items-start gap-2 rounded-lg p-3 font-normal",
-                )}
-              >
-                <RadioGroupItem value={option.value} className="mt-0.5" />
-                <span className="space-y-0.5">
-                  <span className="block text-sm font-medium">
-                    {option.label}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {option.hint}
-                  </span>
-                </span>
-              </Label>
-            ))}
-          </RadioGroup>
-        )}
-      />
-      {mode === "custom" ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="auto-routing-budget">USD per day</Label>
-          <Input
-            id="auto-routing-budget"
-            type="number"
-            inputMode="decimal"
-            step="any"
-            className="w-40"
-            disabled={disabled}
-            aria-invalid={budgetError !== null}
-            {...form.register("budgetUsdPerDay")}
-          />
-        </div>
-      ) : (
-        <PresetEstimate
-          preset={mode}
-          settings={settings}
-          tiersEdited={!!form.formState.dirtyFields.tiers}
+    <section className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h3 id="auto-routing-budget-heading" className="text-sm font-medium">
+          Daily budget
+        </h3>
+        <Controller
+          control={form.control}
+          name="budgetMode"
+          render={({ field }) => (
+            // The soft segmented look of the table/card view toggle, built on
+            // radios so the choice keeps radio semantics and arrow keys.
+            <RadioGroup
+              value={field.value}
+              onValueChange={(value) => field.onChange(value as BudgetMode)}
+              disabled={disabled}
+              aria-labelledby="auto-routing-budget-heading"
+              className="inline-flex h-8 items-center gap-0.5 rounded-md border bg-muted p-px"
+            >
+              {BUDGET_MODES.map((option) => (
+                <Label
+                  key={option.value}
+                  className="flex h-7 cursor-pointer items-center rounded-sm px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[[data-state=checked]]:bg-raised has-[[data-state=checked]]:text-foreground has-[[data-state=checked]]:shadow-sm dark:has-[[data-state=checked]]:bg-accent"
+                >
+                  <RadioGroupItem value={option.value} className="sr-only" />
+                  <span>{option.label}</span>
+                </Label>
+              ))}
+            </RadioGroup>
+          )}
         />
-      )}
+        <div className="ml-auto">
+          {mode === "custom" ? (
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-muted-foreground">$</span>
+              <Input
+                id="auto-routing-budget"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                aria-label="USD per day"
+                className="h-8 w-24"
+                disabled={disabled}
+                aria-invalid={budgetError !== null}
+                {...form.register("budgetUsdPerDay")}
+              />
+              <span className="text-muted-foreground">/ day</span>
+            </div>
+          ) : estimate.split ? (
+            <p
+              className={cn(
+                "text-sm font-medium",
+                estimate.stale && "opacity-60",
+              )}
+              title="At today's traffic"
+              data-testid="auto-routing-preset-estimate"
+            >
+              ≈ {formatCurrency(estimate.split.budgetUsdPerDay)}/day
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {estimate.split ? (
+        <TierSplit shares={estimate.split.shares} stale={estimate.stale} />
+      ) : estimate.note ? (
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="auto-routing-budget-note"
+        >
+          {estimate.note}
+        </p>
+      ) : null}
+      <p className="text-xs text-muted-foreground">{hint}</p>
     </section>
   );
 }
 
-/** What the preset resolves to on today's traffic, with the saved tiers. */
-function PresetEstimate({
-  preset,
-  settings,
-  tiersEdited,
-}: {
-  preset: BudgetPreset;
-  settings: AutoRoutingSettings;
-  tiersEdited: boolean;
-}) {
+type BudgetSplit = {
+  budgetUsdPerDay: number;
+  shares: readonly [number, number, number];
+};
+
+/**
+ * The selected budget re-solved on today's traffic with the saved tiers: its
+ * cost and the share of sessions each tier would get. A custom budget is
+ * estimated once typing pauses; the last split stays up, dimmed, meanwhile.
+ */
+function useBudgetEstimate(
+  mode: BudgetMode,
+  budgetText: string,
+  settings: AutoRoutingSettings,
+  tiersEdited: boolean,
+): { split: BudgetSplit | null; stale: boolean; note: string | null } {
   const tiersSaved = TIER_NAMES.every((tier) => settings.tiers[tier] !== null);
   const { coldStart } = settings.status;
-  const canEstimate =
+  const ready =
     tiersSaved && !tiersEdited && coldStart.sessions >= coldStart.required;
-  const { data, isPending, isError } = useSimulateAutoRouting(
-    canEstimate ? { budgetPreset: preset, volumeMultiplier: 1 } : null,
-  );
-  const text = (() => {
-    if (!tiersSaved || tiersEdited) {
-      return "The budget is estimated once the models are saved.";
-    }
-    if (coldStart.sessions < coldStart.required) {
-      return `The budget is set once ${coldStart.required.toLocaleString("en-US")} sessions are scored (${coldStart.sessions.toLocaleString("en-US")} so far). Until then, Auto runs every session on the normal model.`;
-    }
-    if (isPending) return "Estimating at today's traffic…";
-    if (isError || data?.status !== "feasible") {
-      return "No estimate at today's traffic.";
-    }
-    const summary = parsePlanSummary(data.summary);
-    const shares = summary
-      ? TIER_NAMES.map(
-          (tier, i) =>
-            `${Math.round(summary.tier_session_share[i] * 100)}% ${tier}`,
-        ).join(", ")
+  const budget = Number(budgetText);
+  const debouncedBudget = useDebouncedValue(budget, 400);
+  const customValid = validateBudget(budgetText, true) === null;
+  const body: Parameters<typeof useSimulateAutoRouting>[0] = !ready
+    ? null
+    : mode !== "custom"
+      ? { budgetPreset: mode, volumeMultiplier: 1 }
+      : customValid && debouncedBudget === budget
+        ? { budgetUsdPerDay: budget, volumeMultiplier: 1 }
+        : null;
+  const { data, isFetching, isError } = useSimulateAutoRouting(body);
+  const summary =
+    body && data?.status === "feasible" ? parsePlanSummary(data.summary) : null;
+  const current: BudgetSplit | null =
+    data?.status === "feasible" && summary
+      ? {
+          budgetUsdPerDay: data.budgetUsdPerDay,
+          shares: summary.tier_session_share,
+        }
       : null;
-    return `At today's traffic: about ${formatCurrency(data.budgetUsdPerDay)}/day${shares ? ` (sessions: ${shares})` : ""}.`;
-  })();
+  // The last split shown, kept up (dimmed) while the next one loads.
+  const lastRef = useRef<BudgetSplit | null>(null);
+  if (current) lastRef.current = current;
+  const last = lastRef.current;
+
+  if (!tiersSaved || tiersEdited) {
+    return {
+      split: null,
+      stale: false,
+      note: "Save the models to see where sessions would land.",
+    };
+  }
+  if (coldStart.sessions < coldStart.required) {
+    return {
+      split: null,
+      stale: false,
+      note: `Set after ${coldStart.required.toLocaleString("en-US")} sessions (${coldStart.sessions.toLocaleString("en-US")} so far). Until then, Auto uses the normal model.`,
+    };
+  }
+  if (mode === "custom" && !customValid) {
+    return { split: null, stale: false, note: null };
+  }
+  if (data?.status === "infeasible" && !isFetching) {
+    return {
+      split: null,
+      stale: false,
+      note: `Today's traffic needs at least ${formatCurrency(data.minBudgetUsdPerDay)}/day.`,
+    };
+  }
+  if (current && !isFetching)
+    return { split: current, stale: false, note: null };
+  if (last && !isError) return { split: last, stale: true, note: null };
+  return {
+    split: null,
+    stale: false,
+    note: isError ? "No estimate at today's traffic." : "Estimating…",
+  };
+}
+
+/** One thin bar of the session share per tier, with the percentages under it. */
+function TierSplit({
+  shares,
+  stale,
+}: {
+  shares: readonly [number, number, number];
+  stale: boolean;
+}) {
   return (
-    <p
-      className="text-xs text-muted-foreground"
-      data-testid="auto-routing-preset-estimate"
+    <div
+      className={cn("space-y-1", stale && "opacity-60")}
+      data-testid="auto-routing-budget-split"
     >
-      {text}
-    </p>
+      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
+        {TIER_NAMES.map((tier, i) =>
+          shares[i] > 0 ? (
+            <div
+              key={tier}
+              className={cn("transition-[flex-grow]", TIER_COLOR[tier].swatch)}
+              style={{ flexGrow: shares[i] }}
+            />
+          ) : null,
+        )}
+      </div>
+      <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+        {TIER_NAMES.map((tier, i) => (
+          <span key={tier} className="flex items-center gap-1.5">
+            <span
+              className={cn("size-2 rounded-sm", TIER_COLOR[tier].swatch)}
+            />
+            <span>
+              {Math.round(shares[i] * 100)}% {tier}
+            </span>
+          </span>
+        ))}
+        <span className="ml-auto">of sessions at today's traffic</span>
+      </p>
+    </div>
   );
 }
 

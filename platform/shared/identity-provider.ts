@@ -82,6 +82,35 @@ export function getEmailDomain(email: string) {
   return email.split("@")[1]?.trim().toLowerCase() ?? null;
 }
 
+/**
+ * Microsoft Entra Agent ID: the agent identity blueprint that Archestra
+ * authenticates as when an agent with a bound Entra agent identity calls a
+ * tool through Entra On-Behalf-Of. One blueprint per identity provider; each
+ * agent binds its own agent identity created from it.
+ */
+export const EntraAgentIdConfigSchema = z.object({
+  /** Application (client) ID of the agent identity blueprint. */
+  blueprintClientId: z.string().trim().min(1),
+  /** Blueprint client secret. Microsoft recommends a certificate in production. */
+  clientSecret: z.string().optional(),
+  /** PKCS#8 private key of a certificate uploaded to the blueprint. */
+  privateKeyPem: z.string().optional(),
+  /** SHA-1 thumbprint of that certificate, as Entra shows it (40 hex characters). */
+  certificateThumbprint: z.string().optional(),
+  /**
+   * Scope that gives the signed-in user's token the blueprint as its
+   * audience. Defaults to `api://<blueprintClientId>/.default`.
+   */
+  blueprintScope: z.string().optional(),
+  /**
+   * Fail closed for agents without a bound agent identity, instead of falling
+   * back to the identity provider's shared client.
+   */
+  requireAgentIdentity: z.boolean().optional(),
+});
+
+export type EntraAgentIdConfig = z.infer<typeof EntraAgentIdConfigSchema>;
+
 export const IdentityProviderOidcConfigSchema = z
   .object({
     issuer: z.string(),
@@ -127,6 +156,7 @@ export const IdentityProviderOidcConfigSchema = z
         privateKeyId: z.string().optional(),
         clientAssertionAudience: z.string().optional(),
         subjectTokenType: z.enum(ENTERPRISE_SUBJECT_TOKEN_TYPES).optional(),
+        entraAgentId: EntraAgentIdConfigSchema.optional(),
       })
       .optional(),
     mapping: z
@@ -232,6 +262,8 @@ export const IDENTITY_PROVIDER_SECRET_PATHS = [
   "oidcConfig.clientSecret",
   "oidcConfig.enterpriseManagedCredentials.clientSecret",
   "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+  "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+  "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
   "samlConfig.privateKey",
   "samlConfig.decryptionPvk",
   "samlConfig.spMetadata.privateKey",

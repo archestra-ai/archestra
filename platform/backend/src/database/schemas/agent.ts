@@ -155,6 +155,15 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
+     * Microsoft Entra agent identity (its app ID) this agent acts as when its
+     * tools exchange the caller's Entra token On-Behalf-Of. Downstream tokens
+     * then name the agent identity as the client, so Entra consent, Conditional
+     * Access and audit apply per agent. Null = the identity provider's (or MCP
+     * server's) shared client.
+     */
+    entraAgentIdentityId: text("entra_agent_identity_id"),
+
+    /**
      * Optional Environment whose runtime + egress NetworkPolicy this agent's
      * code sandbox runs under. Null = the shared/default runtime. The agent's
      * Dagger engine is provisioned per-environment and inherits the

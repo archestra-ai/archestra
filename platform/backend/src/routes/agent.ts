@@ -94,6 +94,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
+import { assertEntraAgentIdentityChange } from "@/services/identity-providers/enterprise-managed/agent-identity";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -809,6 +810,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: null,
         next: body.runtime,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await assertEntraAgentIdentityChange({
+        organizationId,
+        userId: user.id,
+        agentId: null,
+        previous: null,
+        next: body.entraAgentIdentityId,
+      });
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -2239,6 +2251,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: existingAgent.githubActionsAccess ?? null,
         next: body.githubActionsAccess,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await assertEntraAgentIdentityChange({
+        organizationId,
+        userId: user.id,
+        agentId: existingAgent.id,
+        previous: existingAgent.entraAgentIdentityId ?? null,
+        next: body.entraAgentIdentityId,
+      });
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {

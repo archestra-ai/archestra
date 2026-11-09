@@ -3191,6 +3191,37 @@ class AgentModel {
     return result ?? null;
   }
 
+  /** The Microsoft Entra agent identity the agent acts as, if it is bound to one. */
+  static async findEntraAgentIdentityId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ entraAgentIdentityId: schema.agentsTable.entraAgentIdentityId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.entraAgentIdentityId ?? null;
+  }
+
+  /** The agent bound to a Microsoft Entra agent identity, if any. */
+  static async findIdByEntraAgentIdentityId(params: {
+    organizationId: string;
+    entraAgentIdentityId: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          sql`lower(${schema.agentsTable.entraAgentIdentityId}) = ${params.entraAgentIdentityId.toLowerCase()}`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return result?.id ?? null;
+  }
+
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })

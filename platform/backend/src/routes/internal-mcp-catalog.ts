@@ -83,7 +83,10 @@ import {
 } from "@/services/mcp-advanced-settings";
 import {
   assertCatalogCredentialRecovery,
+  enterpriseManagedOverrideRecoveryKeys,
+  enterpriseManagedOverrideSecretValues,
   extractLocalConfigSecrets,
+  moveEnterpriseManagedOverrideSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { refreshCatalogImage } from "@/services/mcp-image-refresh";
@@ -113,7 +116,6 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
-  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
@@ -1065,20 +1067,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: restBody.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-        });
-        clientSecretId = result.id;
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+        enterpriseManagedConfig: restBody.enterpriseManagedConfig,
+        clientSecretId,
+        catalogName: restBody.name,
+      });
+      if (movedOverrides.clientSecretId !== clientSecretId) {
+        clientSecretId = movedOverrides.clientSecretId ?? undefined;
         restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
+      // SPDX-SnippetEnd
 
       if (
         restBody.localConfig?.environment ||
@@ -1637,9 +1638,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ...(originalCatalogItem.enterpriseManagedConfig
-            ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
-            : []),
+          ...enterpriseManagedOverrideRecoveryKeys(
+            originalCatalogItem.enterpriseManagedConfig,
+          ),
           // SPDX-SnippetEnd
         ],
         values: {
@@ -1649,12 +1650,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ...(restBody.enterpriseManagedConfig?.clientSecretOverride
-            ? {
-                [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
-                  restBody.enterpriseManagedConfig.clientSecretOverride,
-              }
-            : {}),
+          ...enterpriseManagedOverrideSecretValues(
+            restBody.enterpriseManagedConfig,
+          ),
           // SPDX-SnippetEnd
         },
       };
@@ -1774,21 +1772,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      const enterpriseManagedClientSecretOverride =
-        restBody.enterpriseManagedConfig?.clientSecretOverride;
-      if (enterpriseManagedClientSecretOverride) {
-        const result = await upsertCatalogClientSecretValue({
-          clientSecretId,
-          catalogName: originalCatalogItem.name,
-          key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-          value: enterpriseManagedClientSecretOverride,
-          recovery: clientSecretRecovery,
-        });
-        clientSecretId = result.id;
-        if (result.rotated) catalogSharedSecretValuesRotated = true;
-
+      const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+        enterpriseManagedConfig: restBody.enterpriseManagedConfig,
+        clientSecretId,
+        catalogName: originalCatalogItem.name,
+        recovery: clientSecretRecovery,
+      });
+      if (movedOverrides.rotated) catalogSharedSecretValuesRotated = true;
+      if (movedOverrides.clientSecretId !== clientSecretId) {
+        clientSecretId = movedOverrides.clientSecretId ?? null;
         restBody.clientSecretId = clientSecretId;
-        delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
 
       // SPDX-SnippetEnd

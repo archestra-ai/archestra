@@ -29,14 +29,16 @@ import K8sDeployment, {
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   classifySchedulingFailure,
   // SPDX-SnippetEnd
+  fetchPlatformCredentials,
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
   getCachedPlatformNodeSelector,
+  // SPDX-SnippetEnd
+  McpServerDeploymentFailedError,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   McpServerUnschedulableError,
-  // SPDX-SnippetEnd
   resetPlatformNodeSelectorCache,
   resetPlatformTolerationsCache,
 } from "./k8s-deployment";
@@ -5989,6 +5991,157 @@ describe("K8sDeployment.k8sDeploymentName", () => {
     });
 
     expect(k8sDeployment.k8sDeploymentName).toBe("mcp-my-mcp-server");
+  });
+});
+
+describe("K8sDeployment.generateDeploymentSpec platform credentials", () => {
+  const PLATFORM_POD = {
+    spec: {
+      serviceAccountName: "archestra-platform",
+      containers: [
+        {
+          name: "archestra-platform",
+          env: [
+            {
+              name: "ARCHESTRA_AUTH_SECRET",
+              valueFrom: {
+                secretKeyRef: { name: "archestra-platform-auth", key: "a" },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  beforeEach(async () => {
+    resetPlatformNodeSelectorCache();
+    vi.stubEnv("POD_NAME", "archestra-platform-0");
+    // The Kubernetes API is the boundary: serve the platform pod.
+    await fetchPlatformCredentials(
+      {
+        readNamespacedPod: vi.fn().mockResolvedValue(PLATFORM_POD),
+      } as unknown as k8s.CoreV1Api,
+      "archestra",
+    );
+  });
+
+  afterEach(() => {
+    resetPlatformNodeSelectorCache();
+  });
+
+  function deploymentFor(
+    catalogItem: Partial<InternalMcpCatalog>,
+    environmentValues?: Record<string, string>,
+  ) {
+    return new K8sDeployment({
+      mcpServer: {
+        id: "guarded-server-id",
+        name: "guarded-server",
+        catalogId: "guarded-catalog",
+      } as McpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as k8s.Attach,
+      k8sLog: {} as k8s.Log,
+      k8sExec: {} as Exec,
+      namespace: "archestra",
+      catalogItem: catalogItem as InternalMcpCatalog,
+      environmentValues,
+    });
+  }
+
+  test("refuses a stored spec that runs as the platform service account", () => {
+    const localConfig = {
+      command: "node",
+      serviceAccount: "archestra-platform",
+    };
+    const deployment = deploymentFor({ localConfig });
+
+    expect(() =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        localConfig,
+        false,
+        8080,
+      ),
+    ).toThrow(McpServerDeploymentFailedError);
+  });
+
+  test("catches a platform Secret chosen through an install-time value", () => {
+    // At save time the name is a placeholder; only the resolved spec shows it.
+    const localConfig = {
+      command: "node",
+      environment: [
+        {
+          key: "SECRET_NAME",
+          type: "plain_text" as const,
+          promptOnInstallation: true,
+          required: false,
+          description: "",
+        },
+      ],
+    };
+    const deployment = deploymentFor(
+      {
+        localConfig,
+        deploymentSpecYaml: `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          envFrom:
+            - secretRef:
+                name: \${env.SECRET_NAME}
+`,
+      },
+      { SECRET_NAME: "archestra-platform-auth" },
+    );
+
+    expect(() =>
+      deployment.generateDeploymentSpec(
+        "test:latest",
+        localConfig,
+        false,
+        8080,
+      ),
+    ).toThrow(/Secret "archestra-platform-auth"/);
+  });
+
+  test("deploys a spec that mounts only the server's own Secret", () => {
+    const localConfig = { command: "node" };
+    const deployment = deploymentFor({
+      localConfig,
+      deploymentSpecYaml: `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+      volumes:
+        - name: own
+          secret:
+            secretName: \${archestra.secret_name}
+`,
+    });
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      localConfig,
+      false,
+      8080,
+    );
+    expect(spec.spec?.template.spec?.volumes).toEqual([
+      {
+        name: "own",
+        secret: { secretName: "mcp-server-guarded-server-id-secrets" },
+      },
+    ]);
   });
 });
 

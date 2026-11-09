@@ -46,6 +46,7 @@ import {
   validateDeploymentYaml,
 } from "@/k8s/mcp-server-runtime/k8s-yaml-generator";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { findPlatformCredentialReferencesInYaml } from "@/k8s/mcp-server-runtime/platform-credential-guard";
 import logger from "@/logging";
 import {
   AppModel,
@@ -2566,7 +2567,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         catalogId,
       });
       const result = validateDeploymentYaml(yaml);
-      return reply.send(result);
+      const credentialErrors = findPlatformCredentialReferencesInYaml({
+        yaml,
+        platform: await mcpServerRuntimeManager.getPlatformCredentials(),
+      });
+      return reply.send({
+        ...result,
+        valid: result.valid && credentialErrors.length === 0,
+        errors: [...result.errors, ...credentialErrors],
+      });
     },
   );
 

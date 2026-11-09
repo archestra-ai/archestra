@@ -2,6 +2,8 @@ import { isDeepStrictEqual } from "node:util";
 import { hasScopedPermission } from "@archestra/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { userHasPermission } from "@/auth/utils";
+import { findPlatformCredentialReferencesInYaml } from "@/k8s/mcp-server-runtime/platform-credential-guard";
+import { port } from "@/models/ports";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { LocalConfig } from "@/types";
 import { ApiError } from "@/types";
@@ -44,6 +46,11 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   if (!yamlChanged && !envFromChanged && !serviceAccountChanged) return;
 
   await assertCanManageMcpDeployment(params);
+  await assertNoPlatformCredentialReferences({
+    yaml: params.requested !== undefined ? params.requested : params.current,
+    localConfig:
+      localConfig !== undefined ? localConfig : params.currentLocalConfig,
+  });
 }
 
 /**
@@ -166,6 +173,29 @@ async function canManageMcpDeployment(params: {
     grants,
     required: { ...context, action: "configure-deployment-spec" },
   });
+}
+
+/**
+ * Deployment settings may not hand an MCP server the platform's own service
+ * account, Secrets, or volume claims. Runs on every write that changes them,
+ * from the API and the Archestra MCP tools alike; the deploy step checks the
+ * resolved spec again.
+ */
+async function assertNoPlatformCredentialReferences(params: {
+  yaml: string | null | undefined;
+  localConfig:
+    | Pick<LocalConfig, "envFrom" | "serviceAccount">
+    | null
+    | undefined;
+}): Promise<void> {
+  const runtime = await port("mcpServerRuntime");
+  const errors = findPlatformCredentialReferencesInYaml({
+    yaml: params.yaml ?? "",
+    serviceAccountName: params.localConfig?.serviceAccount,
+    envFrom: params.localConfig?.envFrom,
+    platform: await runtime.getPlatformCredentials(),
+  });
+  if (errors.length > 0) throw new ApiError(400, errors.join(" "));
 }
 
 function containsDeploymentYaml(value: unknown): boolean {

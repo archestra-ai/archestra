@@ -2,7 +2,7 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,6 +29,7 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 - **Private image:** add an image pull secret, or the registry's credentials.
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
 - **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
+- **Platform credentials stay out:** a server cannot run as the Archestra platform's service account, or read a Secret or volume claim the platform pod uses. Saving such a setting fails, and so does starting a server that already has one. To share a Secret on purpose, list it in [`ARCHESTRA_ORCHESTRATOR_MCP_ALLOWED_PLATFORM_SECRETS`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_ALLOWED_PLATFORM_SECRETS).
 - **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. Everyone else edits only the name, icon, description, and labels.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/servers#identity-provider-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 

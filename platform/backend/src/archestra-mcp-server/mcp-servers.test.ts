@@ -736,6 +736,47 @@ spec:
     ).toBeFalsy();
   });
 
+  test("an admin cannot point deployment YAML at another server's Secret through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext(ADMIN_ROLE_NAME, {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      {
+        id: catalog.id,
+        deploymentSpecYaml: `${DEPLOYMENT_YAML}      volumes:
+        - name: stolen
+          secret:
+            secretName: mcp-server-mt-deadbeef-secrets
+`,
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "manages for another MCP server",
+    );
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBeNull();
+  });
+
   test("an admin can set deployment YAML through edit_mcp_config", async ({
     makeAgent,
     makeInternalMcpCatalog,

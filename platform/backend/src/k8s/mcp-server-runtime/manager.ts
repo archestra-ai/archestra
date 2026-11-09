@@ -84,10 +84,12 @@ import {
 import { McpImagePrepuller } from "./image-prepuller.ee";
 // SPDX-SnippetEnd
 import K8sDeployment, {
+  fetchPlatformCredentials,
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
   type RunningMcpImage,
 } from "./k8s-deployment";
+import type { PlatformCredentials } from "./platform-credential-guard";
 import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type {
   AvailableTool,
@@ -406,6 +408,16 @@ export class McpServerRuntimeManager {
     return process.env.POD_NAMESPACE || this.namespace;
   }
 
+  /**
+   * The platform's own service account, Secrets, and volume claims, which MCP
+   * server deployment settings may not reference. Null when the runtime is
+   * off or the platform pod cannot be read.
+   */
+  async getPlatformCredentials(): Promise<PlatformCredentials | null> {
+    if (!this.k8sApi) return null;
+    return fetchPlatformCredentials(this.k8sApi, this.platformNamespace);
+  }
+
   async validateNamespace(namespaceName: string): Promise<void> {
     if (!this.k8sAuthApi) {
       throw new Error("Kubernetes API client not initialized");
@@ -444,6 +456,7 @@ export class McpServerRuntimeManager {
       // This allows MCP servers to be scheduled on the same node pool as the platform
       await fetchPlatformPodNodeSelector(this.k8sApi, this.platformNamespace);
       await fetchPlatformPodTolerations(this.k8sApi, this.platformNamespace);
+      await fetchPlatformCredentials(this.k8sApi, this.platformNamespace);
 
       this.status = "running";
 

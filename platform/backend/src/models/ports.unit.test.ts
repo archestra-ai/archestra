@@ -17,7 +17,10 @@ describe("ports", () => {
   });
 
   test("bindings survive a module reset, so a test that resets modules keeps them", async () => {
-    const runtime: McpServerRuntimePort = { removeMcpServer: vi.fn() };
+    const runtime: McpServerRuntimePort = {
+      removeMcpServer: vi.fn(),
+      getPlatformCredentials: vi.fn(),
+    };
     const { bindPorts } = await import("./ports");
     bindPorts(bindings({ mcpServerRuntime: async () => runtime }));
 

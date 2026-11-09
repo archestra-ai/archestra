@@ -168,7 +168,10 @@ function RemedyStepCard({
     Object.keys(input).length > 0;
 
   return (
-    <Tool className="cursor-pointer">
+    <Tool
+      className="cursor-pointer"
+      defaultOpen={part.state === "approval-requested"}
+    >
       <ToolHeader
         type={`tool-${toolName}`}
         state={

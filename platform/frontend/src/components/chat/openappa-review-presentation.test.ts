@@ -141,14 +141,19 @@ describe("getReviewCardView", () => {
   });
 
   it("shows the platform's coverage when the message is already a prepared question", () => {
-    const coverage = "the coverage the platform read from the review";
     expect(
       getReviewCardView({
         message: "Approve Bash?\n\nApprove lets this exact call run.",
         reviewedTool: "Bash",
-        reviewedCoverage: [coverage],
-      }).description,
-    ).toContain(coverage);
+        reviewedCoverage: ["first", "second"],
+      }),
+    ).toEqual({
+      toolCard: { title: "Bash" },
+      description: [
+        REVIEW_STATUS_DESCRIPTION,
+        "Approving also accepts:\n  - first\n  - second",
+      ].join("\n\n"),
+    });
   });
 
   it("keeps the standard prompt when coverage is only the person's attention", () => {

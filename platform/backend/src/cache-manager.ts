@@ -3,7 +3,7 @@ import KeyvPostgres from "@keyv/postgres";
 import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
 import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";
@@ -102,6 +102,8 @@ export const CacheKey = {
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
+  /** Admission and failure cooldown, not cleared by manual freshness refresh. */
+  ChannelDiscoveryLease: "channel-scan-lease",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
@@ -502,7 +504,7 @@ class CacheManager {
   /** All participants must use the same scope and this transaction's cache methods. */
   async withLock<T>(
     scope: AllowedCacheKey,
-    callback: (cache: TransactionalCache) => Promise<T>,
+    callback: (cache: TransactionalCache, tx: Transaction) => Promise<T>,
   ): Promise<T> {
     const keyv = this.keyv;
     if (!keyv) throw new Error("CacheManager: Not started");
@@ -510,7 +512,7 @@ class CacheManager {
     if (keyv.opts.store instanceof KeyvPostgres) {
       await keyv.opts.store.query("SELECT 1");
     }
-    return CacheEntryModel.withLock(scope, async (entries) => {
+    return CacheEntryModel.withLock(scope, async (entries, tx) => {
       const decode = async <V>(
         raw: string | undefined,
       ): Promise<V | undefined> => {
@@ -530,27 +532,30 @@ class CacheManager {
         }
         return values;
       };
-      return callback({
-        get: async <V>(key: AllowedCacheKey) =>
-          decode<V>(await entries.get(`keyv:${key}`)),
-        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
-          const lifetime = ttl ?? this.defaultTtl;
-          const payload = await keyv.serializeData({
-            value,
-            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
-          });
-          await entries.set(
-            `keyv:${key}`,
-            typeof payload === "string" ? payload : JSON.stringify(payload),
-          );
-          return value;
+      return callback(
+        {
+          get: async <V>(key: AllowedCacheKey) =>
+            decode<V>(await entries.get(`keyv:${key}`)),
+          set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+            const lifetime = ttl ?? this.defaultTtl;
+            const payload = await keyv.serializeData({
+              value,
+              expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+            });
+            await entries.set(
+              `keyv:${key}`,
+              typeof payload === "string" ? payload : JSON.stringify(payload),
+            );
+            return value;
+          },
+          delete: async (key: AllowedCacheKey) =>
+            (await entries.take([`keyv:${key}`])).length > 0,
+          getAndDelete: async <V>(key: AllowedCacheKey) =>
+            (await take<V>([key]))[0]?.value,
+          getAndDeleteMany: take,
         },
-        delete: async (key: AllowedCacheKey) =>
-          (await entries.take([`keyv:${key}`])).length > 0,
-        getAndDelete: async <V>(key: AllowedCacheKey) =>
-          (await take<V>([key]))[0]?.value,
-        getAndDeleteMany: take,
-      });
+        tx,
+      );
     });
   }
 

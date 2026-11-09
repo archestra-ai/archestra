@@ -39,26 +39,29 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
         self.assertIn('name: Generate and record test results\n        id: generate', source)
 
     def test_release_publication_starts_the_updater(self):
-        release = (ROOT / '.github/workflows/release-please.yml').read_text()
+        # Release Please hands each release off; release-finalize.yml publishes it.
+        release = (ROOT / '.github/workflows/release-finalize.yml').read_text()
         job = release.split('  update-terraform-provider:\n', 1)[1]
         job = re.split(r'^  [\w-]+:\n', job, maxsplit=1, flags=re.M)[0]
-        self.assertRegex(job, r'needs:\n      - publish-github-release\n')
+        self.assertRegex(job, r'needs:\n      - finalize\n')
         self.assertRegex(job, r'permissions:\n      actions: write # .*\n    steps:')
         self.assertIn('run: gh workflow run update-terraform-provider.yml --ref main\n', job)
         self.assertNotIn('secrets.', job)
         condition = re.search(r'^    if: \$\{\{ (.+) \}\}$', job, re.M)[1]
-        for ref, result, expected in (
-            ('refs/heads/main', 'success', 'true'),
-            ('refs/heads/main', 'skipped', 'false'),
-            ('refs/heads/main', 'failure', 'false'),
-            ('refs/heads/release/1.4', 'success', 'false'),
+        # `published` is the finalize job's output: true only when it published
+        # a draft (a skipped or failed job has no output).
+        for ref, published, expected in (
+            ('refs/heads/main', 'true', 'true'),
+            ('refs/heads/main', 'false', 'false'),
+            ('refs/heads/main', '', 'false'),
+            ('refs/heads/release/1.4', 'true', 'false'),
         ):
             actual = subprocess.check_output(['node', '-e', '''
 const vm = require('node:vm');
-const [condition, ref, result] = process.argv.slice(1);
-process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{'publish-github-release':{result}}})));
-''', condition.replace("needs.publish-github-release", "needs['publish-github-release']"), ref, result], text=True)
-            self.assertEqual(actual, expected, (ref, result))
+const [condition, ref, published] = process.argv.slice(1);
+process.stdout.write(String(vm.runInNewContext(condition, {github:{ref}, needs:{finalize:{outputs:{published}}}})));
+''', condition, ref, published], text=True)
+            self.assertEqual(actual, expected, (ref, published))
         updater = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()
         triggers = updater.split('\non:\n', 1)[1].split('\npermissions:', 1)[0]
         self.assertIn('  workflow_dispatch:\n', triggers)

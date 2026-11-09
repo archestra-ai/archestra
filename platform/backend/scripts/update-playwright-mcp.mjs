@@ -13,6 +13,9 @@ const { values } = parseArgs({
       ),
     },
     "cooldown-days": { type: "string", default: "7" },
+    // How long an npm release may go without an upstream image before the job
+    // fails: Microsoft may have stopped publishing images.
+    "missing-image-days": { type: "string", default: "30" },
     now: { type: "string" },
     check: { type: "boolean", default: false },
   },
@@ -112,8 +115,15 @@ try {
     console.log("Upstream Playwright MCP image metadata is valid");
   else {
     const days = Number(values["cooldown-days"]),
+      missingImageDays = Number(values["missing-image-days"]),
       now = values.now ? Date.parse(values.now) : Date.now();
-    if (!Number.isFinite(days) || days < 0 || !Number.isFinite(now))
+    if (
+      !Number.isFinite(days) ||
+      days < 0 ||
+      !Number.isFinite(missingImageDays) ||
+      missingImageDays < 0 ||
+      !Number.isFinite(now)
+    )
       throw new Error("Invalid cooldown or clock");
     const registry = (
       process.env.NPM_CONFIG_REGISTRY || "https://registry.npmjs.org"
@@ -139,6 +149,7 @@ try {
     // skipped, not a failure: the next run picks the release up once
     // Microsoft publishes it.
     let next;
+    const skipped = [];
     for (const mcpVersion of candidates) {
       const deps = packument.versions[mcpVersion].dependencies;
       if (!deps?.playwright || deps.playwright !== deps["playwright-core"])
@@ -148,6 +159,7 @@ try {
         console.log(
           `Skipping Playwright MCP ${mcpVersion}: no upstream image published`,
         );
+        skipped.push(mcpVersion);
         continue;
       }
       next = {
@@ -161,6 +173,15 @@ try {
     if (!next)
       throw new Error(
         `No upstream Playwright MCP image for ${candidates.join(", ")}`,
+      );
+    const overdue = skipped.find(
+      (version) =>
+        Date.parse(packument.time[version]) <=
+        now - missingImageDays * 86_400_000,
+    );
+    if (overdue)
+      throw new Error(
+        `Playwright MCP ${overdue} has had no upstream image for over ${missingImageDays} days since its npm release; Microsoft may have stopped publishing images to mcr.microsoft.com/playwright/mcp`,
       );
     validate(next);
     if (JSON.stringify(next) === JSON.stringify(previous))

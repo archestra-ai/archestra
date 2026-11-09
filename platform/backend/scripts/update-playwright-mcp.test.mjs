@@ -183,6 +183,11 @@ for (const [name, options, message] of [
     /No upstream Playwright MCP image for 0\.0\.84, 0\.0\.83/,
   ],
   [
+    "a release without an upstream image past the grace period",
+    { missingImages: ["0.0.84"], args: ["--now", "2026-11-05T00:00:00Z"] },
+    /0\.0\.84 has had no upstream image for over 30 days/,
+  ],
+  [
     "unstable latest channel",
     { latest: "0.0.86-beta.1" },
     /not a stable version/,
@@ -200,7 +205,7 @@ for (const [name, options, message] of [
 ])
   test(`rejects ${name} without changing the pin`, async (t) => {
     const fixture = await setup(t, options);
-    const result = await fixture.run();
+    const result = await fixture.run(...(options.args ?? []));
     assert.equal(result.status, 1);
     assert.match(result.stderr, message);
     assert.equal(await readFile(fixture.file, "utf8"), fixture.initial);

@@ -85,7 +85,7 @@ interface EngineScheduling {
   tolerations: k8s.V1Toleration[] | null;
 }
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.9";
+const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.11";
 const ENGINE_CONTAINER = "dagger-engine";
 const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
 const ORGANIZATION_LABEL = "archestra.io/dagger-organization";

@@ -1557,7 +1557,7 @@ may include a mirror path prefix; ignore trailing slashes when joining.
 {{/* Shared by startup checks in web, migration, and worker pods. */}}
 {{- define "archestra-platform.busyboxImage" -}}
 {{- $init := .Values.archestra.initContainers -}}
-{{- include "archestra-platform.pinnedImage" (dict "image" ($init.busyboxImage | default "busybox:1.36") "registry" $init.busyboxImageRegistry "defaultImage" "docker.io/library/busybox:1.36" "digest" $init.busyboxImageDigest) -}}
+{{- include "archestra-platform.pinnedImage" (dict "image" ($init.busyboxImage | default "docker.io/library/busybox:1.36") "registry" $init.busyboxImageRegistry "defaultImage" "docker.io/library/busybox:1.36" "digest" $init.busyboxImageDigest) -}}
 {{- end -}}
 
 {{/*

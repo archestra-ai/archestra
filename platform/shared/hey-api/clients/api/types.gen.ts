@@ -87164,8 +87164,6 @@ export type GetInternalMcpCatalogResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
@@ -87556,8 +87554,6 @@ export type CreateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
@@ -88637,8 +88633,6 @@ export type GetInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
@@ -88998,8 +88992,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
@@ -89698,8 +89690,6 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
@@ -89930,8 +89920,6 @@ export type ApproveCatalogItemImageResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
-            privateKeyPemOverride?: string;
             privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;

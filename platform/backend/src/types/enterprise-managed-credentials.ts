@@ -108,6 +108,16 @@ export const EnterpriseManagedCredentialConfigSchema = z.object({
   cacheTtlSeconds: z.number().int().nonnegative().optional(),
 });
 
+/**
+ * The config as the API returns it. The exchange client's secret and private
+ * key are write-only: edit forms leave them blank to keep the stored value.
+ */
+export const EnterpriseManagedCredentialConfigResponseSchema =
+  EnterpriseManagedCredentialConfigSchema.omit({
+    clientSecretOverride: true,
+    privateKeyPemOverride: true,
+  });
+
 export type CredentialResolutionMode = z.infer<
   typeof CredentialResolutionModeSchema
 >;

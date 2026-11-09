@@ -344705,12 +344705,6 @@
                           "clientIdOverride": {
                             "type": "string"
                           },
-                          "clientSecretOverride": {
-                            "type": "string"
-                          },
-                          "privateKeyPemOverride": {
-                            "type": "string"
-                          },
                           "privateKeyIdOverride": {
                             "type": "string"
                           },
@@ -346495,12 +346489,6 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "privateKeyPemOverride": {
                           "type": "string"
                         },
                         "privateKeyIdOverride": {
@@ -350253,12 +350241,6 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "privateKeyPemOverride": {
-                          "type": "string"
-                        },
                         "privateKeyIdOverride": {
                           "type": "string"
                         },
@@ -351842,12 +351824,6 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "privateKeyPemOverride": {
                           "type": "string"
                         },
                         "privateKeyIdOverride": {
@@ -354643,12 +354619,6 @@
                           "clientIdOverride": {
                             "type": "string"
                           },
-                          "clientSecretOverride": {
-                            "type": "string"
-                          },
-                          "privateKeyPemOverride": {
-                            "type": "string"
-                          },
                           "privateKeyIdOverride": {
                             "type": "string"
                           },
@@ -355635,12 +355605,6 @@
                           "type": "string"
                         },
                         "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "privateKeyPemOverride": {
                           "type": "string"
                         },
                         "privateKeyIdOverride": {
@@ -580941,8 +580905,7 @@
                                 "type": "object",
                                 "properties": {
                                   "blueprintClientId": {
-                                    "type": "string",
-                                    "minLength": 1
+                                    "type": "string"
                                   },
                                   "clientSecret": {
                                     "type": "string"
@@ -581647,8 +581610,7 @@
                             "type": "object",
                             "properties": {
                               "blueprintClientId": {
-                                "type": "string",
-                                "minLength": 1
+                                "type": "string"
                               },
                               "clientSecret": {
                                 "type": "string"
@@ -582065,8 +582027,7 @@
                               "type": "object",
                               "properties": {
                                 "blueprintClientId": {
-                                  "type": "string",
-                                  "minLength": 1
+                                  "type": "string"
                                 },
                                 "clientSecret": {
                                   "type": "string"
@@ -583918,8 +583879,7 @@
                               "type": "object",
                               "properties": {
                                 "blueprintClientId": {
-                                  "type": "string",
-                                  "minLength": 1
+                                  "type": "string"
                                 },
                                 "clientSecret": {
                                   "type": "string"
@@ -584623,8 +584583,7 @@
                             "type": "object",
                             "properties": {
                               "blueprintClientId": {
-                                "type": "string",
-                                "minLength": 1
+                                "type": "string"
                               },
                               "clientSecret": {
                                 "type": "string"
@@ -585041,8 +585000,7 @@
                               "type": "object",
                               "properties": {
                                 "blueprintClientId": {
-                                  "type": "string",
-                                  "minLength": 1
+                                  "type": "string"
                                 },
                                 "clientSecret": {
                                   "type": "string"

@@ -5809,6 +5809,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      entraAgentIdentityId: row.entraAgentIdentityId ?? null,
       subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,

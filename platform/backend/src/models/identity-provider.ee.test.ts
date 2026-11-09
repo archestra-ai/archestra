@@ -129,6 +129,80 @@ describe("IdentityProviderModel", () => {
       }
     });
 
+    test("keeps the discovered userinfo endpoint off an Entra On-Behalf-Of provider", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+      const issuer = "https://login.microsoftonline.com/tenant-id/v2.0";
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          issuer,
+          authorization_endpoint:
+            "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/authorize",
+          token_endpoint:
+            "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token",
+          jwks_uri:
+            "https://login.microsoftonline.com/tenant-id/discovery/v2.0/keys",
+          userinfo_endpoint: "https://graph.microsoft.com/oidc/userinfo",
+        }),
+      });
+
+      try {
+        const created = await IdentityProviderModel.create(
+          {
+            providerId: "EntraID",
+            issuer,
+            domain: "example.com",
+            userId: user.id,
+            oidcConfig: {
+              issuer,
+              pkce: true,
+              clientId: "entra-client",
+              clientSecret: "secret",
+              discoveryEndpoint: `${issuer}/.well-known/openid-configuration`,
+              scopes: [
+                "openid",
+                "profile",
+                "api://entra-client/access_as_user",
+              ],
+              enterpriseManagedCredentials: {
+                exchangeStrategy: "entra_obo",
+              },
+            },
+          },
+          org.id,
+          new Headers(),
+          {
+            api: { registerSSOProvider },
+          } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+        );
+
+        expect(created.oidcConfig?.tokenEndpoint).toBe(
+          "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token",
+        );
+        expect(created.oidcConfig?.userInfoEndpoint).toBeUndefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     test("persists enterprise-managed credentials inside oidcConfig", async ({
       makeOrganization,
       makeUser,

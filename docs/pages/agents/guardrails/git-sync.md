@@ -3,7 +3,7 @@ title: Git Sync
 description: Keep the Guardrails policy in a GitHub or GitLab repository and review every change there
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-20
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+The App needs **Read & write** on Contents and Pull requests to sync and propose changes, on Checks to check pull requests, and on Administration to keep the branch rules. On GitHub Enterprise Server it also needs Workflows. Each job gets its own token, limited to the policy repository and to the permissions that job uses, and it expires within an hour. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
 
 ### GitLab
 
@@ -46,6 +46,59 @@ Before you connect, the dialog checks what the repository holds:
 - **Found appa.toml:** that file replaces your current policy.
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
+
+## Let Each Server's Team Own Its Rules
+
+The people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) can change its Guardrails rules themselves, through a pull request, without a Guardrails permission. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
+
+```toml
+include = [
+  "batteries/archestra/appa.toml",
+  "mcp/*.toml",
+]
+```
+
+Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below: OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+
+1. Open the server in the **MCP Registry**, click the **⋯** menu, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
+2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
+3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
+4. A reviewer merges it, and Git sync applies it at the next sync.
+
+What to know:
+
+- A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
+- A server file starts with `[policy]` and `version = 2`, like `appa.toml`, and holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. `<tool prefix>__*`, such as `payments_api__*`, covers each of the server's tools the file has no rule for, including tools it gains later. Git sync refuses a commit whose server file reaches further, such as `*`, another server's tool, or an annotator name a battery uses, whoever approved it.
+- A server file uses the organization's authorities and sanitizers but declares none of its own. To have a person approve a call, require an attention mark an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
+
+## Protect Each Server's File
+
+Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
+
+- **Code owners:** a pull request that adds each server's editors to `CODEOWNERS` as owners of its file, updated when editors change.
+- **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
+- **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
+
+People map to GitHub through the account they connected in Archestra. Map teams, roles, and anyone else in `code-owners.toml`, beside `appa.toml`:
+
+```toml
+[teams]
+Payments = "@example/payments"
+
+[roles]
+admin = "@example/guardrails-admins"
+
+[users]
+"dana@example.com" = "@dana"
+```
+
+**Settings → Guardrails** shows the code owners and the branch rules under **Repository protection**, with any editor who has no GitHub owner yet.
+
+What to know:
+
+- An App created before Archestra kept these needs the Checks and Administration permissions added in its settings on GitHub, and the change accepted on its installation. Until then, the parts it cannot do are reported as off.
+- To manage the branch yourself, turn the ruleset off on GitHub. Archestra leaves a disabled ruleset alone, and keeps any rule you make stricter.
+- Archestra only rewrites its own block in `CODEOWNERS`. Keep a fallback owner above it for files no server owns. GitLab repositories get the policy check as a commit status; protect their branch in GitLab.
 
 ## Validations in Git
 

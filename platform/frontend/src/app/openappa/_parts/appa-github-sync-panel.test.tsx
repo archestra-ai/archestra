@@ -169,6 +169,30 @@ test("shows the repository protection kept for server rules files, with bypass e
   ).toHaveTextContent("Payments API (team Payments)");
 });
 
+test("says when pull requests wait on a policy check the GitHub App cannot post", async () => {
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+          checkRule: "unposted",
+          detail:
+            "The GitHub App cannot post the Guardrails policy check: The GitHub App cannot act on example/policies with Pull requests (read) and Checks (read and write).",
+        },
+        codeOwners: { state: "up_to_date", unowned: [], mapErrors: [] },
+      }),
+    ),
+  );
+  show();
+  expect(
+    await screen.findByText(
+      "Pull requests wait on a Guardrails policy check the GitHub App cannot post",
+    ),
+  ).toBeVisible();
+  expect(screen.getByText(/Checks \(read and write\)/)).toBeVisible();
+});
+
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {
   server.use(
     http.patch(url, async ({ request }) => {

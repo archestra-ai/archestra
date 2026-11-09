@@ -1796,6 +1796,12 @@ export type RepositoryProtection = {
     detail?: string;
     /** Bypass entries an administrator added on GitHub: they skip these rules. */
     bypassActors?: number;
+    /**
+     * The policy check while the App cannot post it: left out of the rules
+     * until it can ("omitted"), or required by a rule it cannot satisfy, so
+     * pull requests wait on it ("unposted"). Absent while the check is posted.
+     */
+    checkRule?: "omitted" | "unposted";
   };
   /** The CODEOWNERS lines for server rules files. */
   codeOwners: {
@@ -1953,10 +1959,23 @@ async function githubBranchRules(
       ruleset.name === RULESET_NAME &&
       (ruleset.source_type ?? "Repository") === "Repository",
   );
+  // The check is required only while this App may post it: a required check
+  // nobody posts holds every pull request for good.
+  const check = await policyCheckAccess(source);
   const desired = desiredRuleset({
     branch,
     integrationId: await checkIntegrationId(source),
+    requireCheck: check.postable,
   });
+  const checkGap = (
+    rules: Rule[] | undefined,
+  ): Pick<RepositoryProtection["branchRules"], "checkRule" | "detail"> =>
+    check.postable
+      ? {}
+      : {
+          checkRule: requiresPolicyCheck(rules) ? "unposted" : "omitted",
+          detail: check.detail,
+        };
   const page = (id: number) => `${web}/${source.repo}/rules/${id}`;
   if (!ours) {
     if (!apply) return { state: "missing" };
@@ -1967,7 +1986,11 @@ async function githubBranchRules(
       body: desired,
     });
     if (!created.ok) return unavailable(created);
-    return { state: "active", url: page(created.body.id) };
+    return {
+      state: "active",
+      url: page(created.body.id),
+      ...checkGap(desired.rules),
+    };
   }
   const existing = await githubCall<Ruleset>({
     token,
@@ -1997,6 +2020,7 @@ async function githubBranchRules(
   const found = {
     url: page(ours.id),
     ...(bypassActors > 0 ? { bypassActors } : {}),
+    ...checkGap(existing.body.rules),
   };
   if (!strengthened) return { state: "active", ...found };
   if (!apply) return { state: "incomplete", ...found };
@@ -2011,6 +2035,44 @@ async function githubBranchRules(
 }
 
 /**
+ * Whether the source's credential may post the policy check: a token posts
+ * a commit status; a GitHub App needs Checks and Pull requests, and one not
+ * granted them says so.
+ */
+async function policyCheckAccess(
+  source: ConnectedSource,
+): Promise<{ postable: true } | { postable: false; detail: string }> {
+  if (!source.githubAppConfigId) return { postable: true };
+  try {
+    await resolveOpenAppaGithubAccess(source, {
+      pull_requests: "read",
+      checks: "write",
+    });
+    return { postable: true };
+  } catch (error) {
+    if (error instanceof MissingGithubPermission)
+      return {
+        postable: false,
+        detail: `The GitHub App cannot post the ${POLICY_CHECK_NAME} check: ${error.message}`,
+      };
+    throw error;
+  }
+}
+
+/** Whether a rule requires the policy check, under any App. */
+function requiresPolicyCheck(rules: Rule[] | undefined): boolean {
+  return (rules ?? []).some(
+    (rule) =>
+      rule.type === "required_status_checks" &&
+      (
+        (rule.parameters?.required_status_checks ?? []) as Array<{
+          context?: string;
+        }>
+      ).some((check) => check.context === POLICY_CHECK_NAME),
+  );
+}
+
+/**
  * The ruleset Archestra keeps: a pull request with a code owner's approval
  * of its latest push, the policy check on a branch that is up to date, and no
  * force push or deletion. Archestra adds no one who may bypass it, itself
@@ -2021,7 +2083,25 @@ async function githubBranchRules(
 function desiredRuleset(params: {
   branch: string;
   integrationId?: number;
+  /** Whether to require the policy check: only while the App may post it. */
+  requireCheck: boolean;
 }): Ruleset & { bypass_actors: unknown[]; rules: Rule[] } {
+  const checkRule: Rule = {
+    type: "required_status_checks",
+    parameters: {
+      strict_required_status_checks_policy: true,
+      required_status_checks: [
+        {
+          context: POLICY_CHECK_NAME,
+          // Only this App's check counts: no one posts a passing one
+          // with a token of their own.
+          ...(params.integrationId
+            ? { integration_id: params.integrationId }
+            : {}),
+        },
+      ],
+    },
+  };
   return {
     name: RULESET_NAME,
     target: "branch",
@@ -2043,22 +2123,7 @@ function desiredRuleset(params: {
           required_review_thread_resolution: false,
         },
       },
-      {
-        type: "required_status_checks",
-        parameters: {
-          strict_required_status_checks_policy: true,
-          required_status_checks: [
-            {
-              context: POLICY_CHECK_NAME,
-              // Only this App's check counts: no one posts a passing one
-              // with a token of their own.
-              ...(params.integrationId
-                ? { integration_id: params.integrationId }
-                : {}),
-            },
-          ],
-        },
-      },
+      ...(params.requireCheck ? [checkRule] : []),
     ],
   };
 }

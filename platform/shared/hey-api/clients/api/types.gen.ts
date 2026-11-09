@@ -121680,6 +121680,7 @@ export type GetAppaRepositoryProtectionResponses = {
             url?: string;
             detail?: string;
             bypassActors?: number;
+            checkRule?: 'omitted' | 'unposted';
         };
         codeOwners: {
             state: 'up_to_date' | 'pull_request' | 'out_of_date' | 'not_used' | 'needs_permission' | 'unsupported' | 'error';

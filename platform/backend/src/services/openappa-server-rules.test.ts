@@ -1660,6 +1660,112 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
   expect(written).toEqual([]);
 });
 
+test("the ruleset requires the policy check only while the App may post it, and says when a rule waits on a check it cannot post", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  // Administration, but no Checks: the App can keep rules, not post the check.
+  const refuse = ["checks"];
+  await connectApp({ organizationId: org.id, refuse });
+  serveRepository({
+    head: FIRST,
+    files: { [FIRST]: { "appa.toml": RULES } },
+  });
+  let existing: Record<string, unknown> | null = null;
+  const written: Array<{ method: string; body: Record<string, unknown> }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, () => HttpResponse.json([])),
+    http.get(`${REPO}/rulesets`, () =>
+      HttpResponse.json(
+        existing
+          ? [{ id: 5, name: "Guardrails policy", source_type: "Repository" }]
+          : [],
+      ),
+    ),
+    http.post(`${REPO}/rulesets`, async ({ request }) => {
+      written.push({ method: "POST", body: (await request.json()) as never });
+      return HttpResponse.json({ id: 5 }, { status: 201 });
+    }),
+    http.get(`${REPO}/rulesets/5`, () => HttpResponse.json(existing)),
+    http.put(`${REPO}/rulesets/5`, async ({ request }) => {
+      written.push({ method: "PUT", body: (await request.json()) as never });
+      return HttpResponse.json({ id: 5 });
+    }),
+  );
+
+  // Created without the check: a required check nobody posts would hold
+  // every pull request for good.
+  expect((await syncAndProtect(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+    checkRule: "omitted",
+    detail: expect.stringContaining("Checks (read and write)"),
+  });
+  expect(written).toHaveLength(1);
+  expect(
+    (written[0]?.body.rules as Array<{ type: string }>).map(
+      (rule) => rule.type,
+    ),
+  ).toEqual(["deletion", "non_fast_forward", "pull_request"]);
+
+  // A ruleset that already requires the check, from before the permission
+  // went: nothing is taken away, and Settings says pull requests wait on it.
+  const withCheck = {
+    ...(written[0]?.body as Record<string, unknown>),
+    id: 5,
+    source_type: "Repository",
+    rules: [
+      ...(written[0]?.body.rules as unknown[]),
+      {
+        type: "required_status_checks",
+        parameters: {
+          do_not_enforce_on_create: false,
+          strict_required_status_checks_policy: true,
+          required_status_checks: [
+            { context: "Guardrails policy", integration_id: 123 },
+          ],
+        },
+      },
+    ],
+  };
+  existing = withCheck;
+  written.length = 0;
+  expect((await syncAndProtect(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+    checkRule: "unposted",
+    detail: expect.stringContaining("Checks (read and write)"),
+  });
+  expect(written).toEqual([]);
+
+  // The permission granted: the ruleset without the check gains it.
+  refuse.length = 0;
+  existing = { ...withCheck, rules: withCheck.rules.slice(0, 3) };
+  expect((await syncAndProtect(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  });
+  expect(written).toEqual([
+    {
+      method: "PUT",
+      body: expect.objectContaining({
+        rules: expect.arrayContaining([
+          {
+            type: "required_status_checks",
+            parameters: {
+              strict_required_status_checks_policy: true,
+              required_status_checks: [
+                { context: "Guardrails policy", integration_id: 123 },
+              ],
+            },
+          },
+        ]),
+      }),
+    },
+  ]);
+});
+
 test("the code owners of each server's file follow who may edit the server, proposed in one pull request that is updated only when they change", async ({
   makeOrganization,
   makeUser,

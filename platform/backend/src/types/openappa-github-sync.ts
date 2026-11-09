@@ -126,6 +126,11 @@ export const AppaRepositoryProtectionSchema = z
       detail: z.string().optional(),
       /** Bypass entries an administrator added on GitHub; they skip the rules. */
       bypassActors: z.number().int().positive().optional(),
+      /**
+       * The policy check while the GitHub App cannot post it: left out of the
+       * rules until it can, or required by a rule it cannot satisfy.
+       */
+      checkRule: z.enum(["omitted", "unposted"]).optional(),
     }),
     codeOwners: z.object({
       state: z.enum([

@@ -409,21 +409,34 @@ function branchRulesView(
       ? "One bypass entry on GitHub can merge without these rules."
       : `${rules.bypassActors} bypass entries on GitHub can merge without these rules.`
     : undefined;
+  // The check the App cannot post: a rule that requires it holds every pull
+  // request, so that comes first; without the rule, merges go on without it.
+  const detail = [rules.detail, bypass].filter(Boolean).join(" ") || undefined;
+  if (rules.checkRule === "unposted")
+    return {
+      status:
+        "Pull requests wait on a Guardrails policy check the GitHub App cannot post",
+      tone: "problem",
+      link,
+      detail,
+    };
   switch (rules.state) {
     case "active":
       return {
         status:
-          "Merges need an up-to-date pull request, a code owner's approval and the Guardrails policy check",
+          rules.checkRule === "omitted"
+            ? `Merges need an up-to-date pull request and a code owner's approval; ${appName} adds the Guardrails policy check once the App may post it`
+            : "Merges need an up-to-date pull request, a code owner's approval and the Guardrails policy check",
         tone: "ok",
         link,
-        detail: bypass,
+        detail,
       };
     case "incomplete":
       return {
         status: `${appName} restores the missing rules at the next sync`,
         tone: "pending",
         link,
-        detail: bypass,
+        detail,
       };
     case "missing":
       return {

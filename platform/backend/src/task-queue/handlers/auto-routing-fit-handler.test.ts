@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import {
   activeFit,
   makeScorerVersion,
-  setOrganizationTrio,
+  setAutoRoutingTiers,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
@@ -376,7 +376,7 @@ async function configuredOrganization(
     await pricedModel("3.00", "15.00"),
     await pricedModel("15.00", "75.00"),
   ];
-  await setOrganizationTrio(organizationId, { fast, normal, smart });
+  await setAutoRoutingTiers(organizationId, { fast, normal, smart });
   await AutoRoutingSettingsModel.update(organizationId, {
     enabled: true,
     budgetUsdPerDay: "25.00",

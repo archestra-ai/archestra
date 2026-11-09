@@ -197,23 +197,20 @@ export async function resolveAutoModel(params: {
 type InternalAutoRoute = { model: Model; providerApiKeyId: string };
 
 /**
- * Routes a platform call on the organization default model on a native
- * provider route: the session's sticky tier, decided on first sight as for the
- * Unified Model API, on a key `userId` may use for it. The caller already checked
+ * Routes a platform call on `auto` on a native provider route: the session's
+ * sticky tier, decided on first sight as for the Unified Model API, on the
+ * tier's key (else one `userId` may use for it). The caller already checked
  * usage limits. Records the decision on `request` for the interaction write.
  *
- * Null when the call is not routed: auto routing is off, the call names
- * another model than the normal tier, a tier is out of the user's reach, or
- * `reachable` says the client's wire cannot get to a tier's provider. The call
- * then runs on the model it names, and no decision is stored that a later
- * call could not follow.
+ * Null when the call is not routed: auto routing is off, a tier is out of the
+ * user's reach, or `reachable` says the client's wire cannot get to a tier's
+ * provider. The call then runs on the model it names (the normal tier), and no
+ * decision is stored that a later call could not follow.
  */
 export async function routeInternalAutoSession(params: {
   request: FastifyRequest;
   organizationId: string;
   userId: string;
-  /** The model the call names; only a call on the normal tier is routed. */
-  named: { provider: Model["provider"]; modelId: string };
   /** The key the call names; a tier it serves is sent on it, not the user's ranked key. */
   callApiKeyId: string | null;
   sessionId: string | null;
@@ -236,13 +233,6 @@ export async function routeInternalAutoSession(params: {
     return unroutable(`no ${loaded.tier} tier model is configured`);
   }
   const { trio } = loaded;
-  const normal = trio[NORMAL_TIER];
-  if (
-    normal.provider !== params.named.provider ||
-    normal.modelId !== params.named.modelId
-  ) {
-    return null;
-  }
   const unreachable = trio.find((model) => !params.reachable(model.provider));
   if (unreachable) {
     return unroutable(
@@ -258,9 +248,23 @@ export async function routeInternalAutoSession(params: {
   const auth = await userModelRouterAuth({
     organizationId,
     userId: params.userId,
-    preferredApiKeyId: params.callApiKeyId,
+    preferredApiKeyIds: [
+      settings.fastApiKeyId,
+      settings.normalApiKeyId,
+      settings.smartApiKeyId,
+      params.callApiKeyId,
+    ],
   });
-  const eligibility = await checkTrio({ auth, endpoint: null, trio });
+  const eligibility = await checkTrio({
+    auth,
+    endpoint: null,
+    trio,
+    preferredTierKeyIds: [
+      settings.fastApiKeyId,
+      settings.normalApiKeyId,
+      settings.smartApiKeyId,
+    ],
+  });
   const ineligible = eligibility.find((tier) => !tier.eligible);
   if (ineligible && !ineligible.eligible) {
     return unroutable(
@@ -530,11 +534,26 @@ function checkTrio(params: {
   auth: ModelRouterAuth;
   endpoint: ModelRouterEndpoint | null;
   trio: Trio;
+  /** Internal Auto calls prefer each tier's configured key, not the first tier's key. */
+  preferredTierKeyIds?: readonly (string | null)[];
 }): Promise<TierEligibility[]> {
   return Promise.all(
-    params.trio.map((model) =>
+    params.trio.map((model, index) =>
       checkAutoTierEligibility({
-        auth: params.auth,
+        auth: params.preferredTierKeyIds
+          ? {
+              ...params.auth,
+              providerApiKeys: [...params.auth.providerApiKeys].sort(
+                (a, b) =>
+                  Number(
+                    b.providerApiKeyId === params.preferredTierKeyIds?.[index],
+                  ) -
+                  Number(
+                    a.providerApiKeyId === params.preferredTierKeyIds?.[index],
+                  ),
+              ),
+            }
+          : params.auth,
         endpoint: params.endpoint,
         model,
       }),

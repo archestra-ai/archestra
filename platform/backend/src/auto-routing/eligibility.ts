@@ -87,25 +87,29 @@ export async function checkAutoTierEligibility(params: {
 
 /**
  * `userId` as an OAuth user of the Unified Model API, with every key they may use.
- * `preferredApiKeyId`, when the user may use it, is tried first for any model
- * it serves.
+ * `preferredApiKeyIds`, those the user may use, are tried first, in order, for
+ * any model they serve.
  */
 export async function userModelRouterAuth(params: {
   organizationId: string;
   userId: string;
-  preferredApiKeyId?: string | null;
+  preferredApiKeyIds?: readonly (string | null)[];
 }): Promise<ModelRouterUserOAuthAuth> {
   const mappings = await userProviderKeyMappings(params);
-  const preferred = (mapping: { providerApiKeyId: string }) =>
-    mapping.providerApiKeyId === params.preferredApiKeyId;
+  const rank = (mapping: { providerApiKeyId: string }) => {
+    const index = (params.preferredApiKeyIds ?? []).indexOf(
+      mapping.providerApiKeyId,
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
   return {
     authMethod: "oauth_user",
     organizationId: params.organizationId,
     userId: params.userId,
-    providerApiKeys: [
-      ...mappings.filter(preferred),
-      ...mappings.filter((mapping) => !preferred(mapping)),
-    ],
+    providerApiKeys: mappings
+      .map((mapping, index) => ({ mapping, index }))
+      .sort((a, b) => rank(a.mapping) - rank(b.mapping) || a.index - b.index)
+      .map(({ mapping }) => mapping),
     oauthClient: null,
   };
 }

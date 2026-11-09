@@ -118,6 +118,7 @@ import {
   clearAllAppDiagnostics,
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
+import { AUTO_MODEL_CHOICE } from "@/lib/chat/auto-model";
 import {
   fetchAgentMcpTools,
   fetchConversationEnabledTools,
@@ -184,6 +185,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -543,6 +545,13 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
+  // Whether `auto` can be picked, and whether the organization default is
+  // `auto`, which a new chat on an agent without a model of its own starts on.
+  // While routing is off, a chat on `auto` shows the normal tier it runs on.
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
+  const organizationDefaultModel = useOrganizationDefaultModel({
+    enabled: autoRoutingEnabled,
+  });
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -559,9 +568,17 @@ export function ChatPageContent({
   const initialModelPoolId =
     initialModelPoolChoice !== undefined
       ? initialModelPoolChoice
-      : initialModelSource === "agent"
-        ? (initialRuntimeCandidate?.modelPoolId ?? null)
-        : null;
+      : initialModelSource !== "user" &&
+          organizationDefaultModel.auto &&
+          initialRuntimeCandidate?.runtime === null &&
+          (initialRuntimeCandidate.autoModel ||
+            (organizationDefaultModel.defaultAutoModel &&
+              initialModelSource !== "agent" &&
+              !initialRuntimeCandidate.modelPoolId))
+        ? AUTO_MODEL_CHOICE
+        : initialModelSource === "agent"
+          ? (initialRuntimeCandidate?.modelPoolId ?? null)
+          : null;
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1422,10 +1439,11 @@ export function ChatPageContent({
   const handleConversationModelPoolChange = useCallback(
     (modelPoolId: string | null) => {
       if (!conversation) return;
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        modelPoolId,
-      });
+      updateConversationMutateRef.current(
+        modelPoolId === AUTO_MODEL_CHOICE
+          ? { id: conversation.id, autoModel: true }
+          : { id: conversation.id, modelPoolId },
+      );
     },
     [conversation],
   );
@@ -3687,7 +3705,12 @@ export function ChatPageContent({
                               onThinkingEffortChange={
                                 handleThinkingEffortChange
                               }
-                              modelPoolId={conversation?.modelPoolId ?? null}
+                              modelPoolId={
+                                conversation?.autoModel &&
+                                organizationDefaultModel.auto
+                                  ? AUTO_MODEL_CHOICE
+                                  : (conversation?.modelPoolId ?? null)
+                              }
                               onModelPoolChange={
                                 handleConversationModelPoolChange
                               }

@@ -203,9 +203,16 @@ const organizationsTable = pgTable("organization", {
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
   /**
+   * Chats and agents on the organization default run on auto routing.
+   * `defaultModelId` stays what built-in tasks (titles, compaction) and
+   * forked subagents run on.
+   */
+  defaultAutoModel: boolean("default_auto_model").notNull().default(false),
+
+  /**
    * Optional `fast` / `smart` tiers of the default trio, on any provider.
    * With `defaultModelId` as the normal tier, the trio is what forked
-   * subagents pick tiers from and what auto routing routes across.
+   * subagents pick tiers from.
    */
   defaultFastModelId: uuid("default_fast_model_id").references(
     () => modelsTable.id,

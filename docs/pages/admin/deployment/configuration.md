@@ -248,6 +248,7 @@ To change any of these secrets, follow [Secret Rotation](/docs/admin/deployment/
 - **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset. To change it safely, see [Legacy Combined Secret](/docs/admin/deployment/secret-rotation#legacy-combined-secret).
   - Default: generated on first start. Helm stores it in the `<release>-auth` Secret; the Docker image saves it to `/app/data/.auth_secret`.
   - Set the two dedicated secrets instead, so you can rotate them separately.
+  - Once both are set, Archestra uses this secret only as [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) when that is unset.
 
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Turns on encryption at rest for LLM Logs, chat messages, and MCP tool call arguments and results. Requires an enterprise license.
   - Default: unset (content encryption off)

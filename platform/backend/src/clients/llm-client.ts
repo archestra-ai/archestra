@@ -97,6 +97,7 @@ import {
   defaultMaxOutputTokens,
   resolveModelOutputBudget,
 } from "@/utils/llm-resolution";
+import type { ProviderKeySelection } from "@/utils/provider-key-mappings";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -376,6 +377,8 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  /** Explicit current selection, checked against the acting user's usable keys. */
+  providerKeySelection?: ProviderKeySelection;
   /** The conversation's model pool; its turns go to the pool's members. */
   modelPoolId?: string | null;
   /** No pool or explicit tier: the call may be auto routed. */
@@ -435,6 +438,7 @@ export async function createLLMModelForAgent(params: {
     conversationId,
     agentLlmApiKeyId,
     modelName,
+    selection: params.providerKeySelection,
   });
 
   // Check if Gemini with Vertex AI (doesn't require API key)

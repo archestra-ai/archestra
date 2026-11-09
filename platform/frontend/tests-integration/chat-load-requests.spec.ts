@@ -241,7 +241,8 @@ test("a cold new-chat load renders a ready composer from the server's one read",
   mswControl,
 }) => {
   await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  // This warm-up only reads config; the composer fixture is installed below.
+  await expect(page.getByRole("main")).toBeVisible();
   const [config, publicConfig] = await page.evaluate(() =>
     Promise.all(
       ["/api/config", "/api/config/public"].map((url) =>
@@ -251,54 +252,67 @@ test("a cold new-chat load renders a ready composer from the server's one read",
   );
 
   const { key, agent, model } = composerFixture();
-  await mswControl.registerMany([
-    bootstrapOverride({ config, publicConfig, agent, model, key }),
-    {
-      method: "get",
-      url: "/api/bootstrap/new-chat",
-      body: {
-        roster: [agent],
-        apiKeys: [key],
-        availableApiKeys: [key],
-        models: [model],
-        agent: {
-          id: agent.id,
-          detail: agent,
-          delegations: [],
-          credentialReadiness: [],
-          browserTools: [],
-          defaultSuggestedPrompts: [],
-          keyModels: null,
+  for (const autoRoutingEnabled of [false, true]) {
+    await mswControl.registerMany([
+      bootstrapOverride({
+        config: {
+          ...config,
+          features: { ...config.features, autoRoutingEnabled },
+        },
+        publicConfig,
+        agent,
+        model,
+        key,
+      }),
+      {
+        method: "get",
+        url: "/api/bootstrap/new-chat",
+        body: {
+          roster: [agent],
+          apiKeys: [key],
+          availableApiKeys: [key],
+          models: [model],
+          agent: {
+            id: agent.id,
+            detail: agent,
+            delegations: [],
+            credentialReadiness: [],
+            browserTools: [],
+            defaultSuggestedPrompts: [],
+            keyModels: null,
+          },
         },
       },
-    },
-  ]);
-  await startColdLoad(page, agent.id);
-  const requests = countRequests(page);
+    ]);
+    await startColdLoad(page, agent.id);
+    const requests = countRequests(page);
 
-  await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeEditable();
-  await expect(
-    page.getByTestId(E2eTestId.ChatModelSelectorTrigger),
-  ).toContainText("Load model");
-  await page.waitForTimeout(1500);
+    await page.goto("/chat");
+    await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeEditable();
+    await expect(
+      page.getByTestId(E2eTestId.ChatModelSelectorTrigger),
+    ).toContainText("Load model");
+    await page.waitForTimeout(1500);
 
-  // Everything the composer needs to send came with the document.
-  for (const path of [
-    "/api/bootstrap/new-chat",
-    "/api/agents/chat-roster",
-    `/api/agents/${agent.id}`,
-    `/api/agents/${agent.id}/delegations`,
-    `/api/agents/${agent.id}/tools`,
-    `/api/agents/${agent.id}/default-suggested-prompts`,
-    "/api/agents/credential-readiness",
-    "/api/llm-provider-api-keys",
-    "/api/llm-provider-api-keys/available",
-    "/api/llm-models/available",
-    // Only the open model menu names the organization default.
-    "/api/organization/default-model",
-  ]) {
-    expect(requests.count(`GET ${path}`), path).toBe(0);
+    // Everything the composer needs to send came with the document.
+    for (const path of [
+      "/api/bootstrap/new-chat",
+      "/api/agents/chat-roster",
+      `/api/agents/${agent.id}`,
+      `/api/agents/${agent.id}/delegations`,
+      `/api/agents/${agent.id}/tools`,
+      `/api/agents/${agent.id}/default-suggested-prompts`,
+      "/api/agents/credential-readiness",
+      "/api/llm-provider-api-keys",
+      "/api/llm-provider-api-keys/available",
+      "/api/llm-models/available",
+    ]) {
+      expect(requests.count(`GET ${path}`), path).toBe(0);
+    }
+    // Auto needs its live tier summary; with the feature off it is menu-only.
+    expect(requests.count("GET /api/organization/default-model")).toBe(
+      autoRoutingEnabled ? 1 : 0,
+    );
   }
 });
 
@@ -307,7 +321,8 @@ test("a cold conversation load renders its end on the server and its history aft
   mswControl,
 }) => {
   await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  // This warm-up only reads config; the conversation fixture is installed below.
+  await expect(page.getByRole("main")).toBeVisible();
   const [config, publicConfig] = await page.evaluate(() =>
     Promise.all(
       ["/api/config", "/api/config/public"].map((url) =>

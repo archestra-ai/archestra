@@ -1424,6 +1424,34 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * The keys the organization at large may use, by id: what auto-routing
+   * tiers may run on, since every chat and agent on `auto` uses them.
+   */
+  static async findOrganizationWideKeyIds(
+    organizationId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.llmProviderApiKeysTable.id })
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId,
+            resource: "llmProviderApiKey",
+            scopeColumn: schema.llmProviderApiKeysTable.id,
+            action: "use",
+          }),
+          // SPDX-SnippetEnd
+        ),
+      );
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Store validation status without letting an older request overwrite a reconnect.
    */
   static async setRequiresReauthentication(params: {

@@ -33,16 +33,31 @@ export type AutoRoutingScorerState = z.infer<
   typeof AutoRoutingScorerStateSchema
 >;
 
+const AutoRoutingApiKeyRefSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+});
+
+/** A tier's model and the organization-wide key it runs on. */
+const AutoRoutingTierSettingResponseSchema = AutoRoutingTierModelSchema.extend({
+  apiKey: AutoRoutingApiKeyRefSchema,
+});
+
 export const AutoRoutingSettingsResponseSchema = z.object({
   enabled: z.boolean(),
   budgetUsdPerDay: z.number().nullable(),
   tiers: z.object({
-    fast: AutoRoutingTierModelSchema.nullable(),
-    normal: AutoRoutingTierModelSchema.nullable(),
-    smart: AutoRoutingTierModelSchema.nullable(),
+    fast: AutoRoutingTierSettingResponseSchema.nullable(),
+    normal: AutoRoutingTierSettingResponseSchema.nullable(),
+    smart: AutoRoutingTierSettingResponseSchema.nullable(),
   }),
-  /** Agents on the organization default, which routing applies to. */
-  routedAgentCount: z.number().int().nonnegative(),
+  /** The keys a tier may run on: those shared with the whole organization. */
+  eligibleApiKeyIds: z.array(z.string().uuid()),
+  /** Where `auto` is picked: agents set to it, and whether the organization default is. */
+  usage: z.object({
+    agentCount: z.number().int().nonnegative(),
+    organizationDefault: z.boolean(),
+  }),
   generation: z.number().int(),
   plannedGeneration: z.number().int(),
   status: z.object({
@@ -58,6 +73,8 @@ export const AutoRoutingSettingsResponseSchema = z.object({
     /** Error of the newest fit outcome, when it failed. */
     lastFitError: z.string().nullable(),
     scorer: AutoRoutingScorerStateSchema,
+    /** The organization-wide Jev key that scores sessions; null without one. */
+    scorerApiKey: AutoRoutingApiKeyRefSchema.nullable(),
   }),
 });
 export type AutoRoutingSettingsResponse = z.infer<
@@ -93,9 +110,22 @@ export type AutoRoutingSettingsChangeResponse = z.infer<
   typeof AutoRoutingSettingsChangeResponseSchema
 >;
 
+const AutoRoutingTierBodySchema = z.strictObject({
+  modelId: z.string().uuid(),
+  /** An organization-wide key serving the model. */
+  providerApiKeyId: z.string().uuid(),
+});
+
 export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
   enabled: z.boolean().optional(),
   budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
+  tiers: z
+    .strictObject({
+      fast: AutoRoutingTierBodySchema,
+      normal: AutoRoutingTierBodySchema,
+      smart: AutoRoutingTierBodySchema,
+    })
+    .optional(),
 });
 export type UpdateAutoRoutingSettingsBody = z.infer<
   typeof UpdateAutoRoutingSettingsBodySchema

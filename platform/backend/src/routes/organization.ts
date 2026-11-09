@@ -25,7 +25,6 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
 import { describeOrganizationDefaultModel } from "@/auto-routing/organization-default";
-import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
@@ -412,7 +411,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateAgentSettings,
         description:
-          "Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)",
+          "Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)",
         tags: ["Organization"],
         body: UpdateAgentSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -518,19 +517,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // The trio is also auto routing's tiers: a change must keep it routable
-      // and re-plans it, merged and checked against the row under the lock.
-      const trioPatch = {
-        ...(body.defaultFastModelId !== undefined && {
-          fastModelId: body.defaultFastModelId,
-        }),
-        ...(body.defaultModelId !== undefined && {
-          normalModelId: body.defaultModelId,
-        }),
-        ...(body.defaultSmartModelId !== undefined && {
-          smartModelId: body.defaultSmartModelId,
-        }),
-      };
       const write = async (tx: Transaction) => {
         await writeTierChanges?.(tx);
         return OrganizationModel.patchInTransaction({
@@ -539,20 +525,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
         });
       };
-      const organization =
-        Object.keys(trioPatch).length > 0
-          ? await writeOrganizationTrio({
-              organizationId,
-              patch: trioPatch,
-              write,
-            }).finally(() =>
-              OrganizationModel.invalidateSettingsCaches(organizationId),
-            )
-          : writeTierChanges
-            ? await withDbTransaction(write).finally(() =>
-                OrganizationModel.invalidateSettingsCaches(organizationId),
-              )
-            : await OrganizationModel.patch(organizationId, data);
+      const organization = writeTierChanges
+        ? await withDbTransaction(write).finally(() =>
+            OrganizationModel.invalidateSettingsCaches(organizationId),
+          )
+        : await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

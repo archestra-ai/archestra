@@ -196,6 +196,12 @@ describe("McpServerTable uninstall permission", () => {
     } as unknown as ReturnType<typeof useAppearanceSettings>);
     useMcpServersMock.mockReturnValue({ data: [personalInstall] });
     dismissMutateAsync.mockResolvedValue({ succeeded: [], failed: [] });
+    // clearAllMocks keeps return values: a viewer who may not edit, by default.
+    canModifyCatalogItem.mockReturnValue({
+      canModify: false,
+      isLoading: false,
+    });
+    serverRulesHref.mockReturnValue(null);
     grantAllExcept({});
   });
 
@@ -330,16 +336,63 @@ describe("McpServerTable uninstall permission", () => {
       />,
     );
 
+    // Four actions fit as four buttons: a "⋯" holding one would hide it for nothing.
+    expect(
+      screen.getByRole("link", {
+        name: "Edit Guardrails rules some-remote-server",
+      }),
+    ).toHaveAttribute("href", "/chat?agentId=keeper&user_prompt=rules");
+    expect(
+      screen.queryByRole("button", { name: "More actions some-remote-server" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("folds actions into the menu only when two or more would overflow", async () => {
+    const user = userEvent.setup();
+    canModifyCatalogItem.mockReturnValue({ canModify: true, isLoading: false });
+    serverRulesHref.mockReturnValue("/chat?agentId=keeper&user_prompt=rules");
+    const localItem = registryRow({
+      ...itemFields,
+      id: "cat-local",
+      serverType: "local",
+    });
+    const localInstall = {
+      ...personalInstall,
+      id: "srv-local",
+      catalogId: localItem.id,
+      serverType: "local",
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [localInstall] });
+
+    renderTable(
+      <McpServerTable
+        items={[localItem]}
+        getServerInfo={() => ({ installedServer: localInstall })}
+        envLabelByCatalog={new Map()}
+        issuesByCatalog={new Map()}
+        deploymentFeedState="ready"
+        deploymentStatuses={{}}
+        installingItemId={null}
+        onInstall={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    // Uninstall, Edit, Credentials, Guardrails rules and Logs: five actions.
+    expect(
+      screen.queryByRole("link", {
+        name: "Edit Guardrails rules some-remote-server",
+      }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "More actions some-remote-server" }),
     );
-    const rules = await screen.findByRole("menuitem", {
-      name: "Edit Guardrails rules",
-    });
-    expect(rules.closest("a")).toHaveAttribute(
-      "href",
-      "/chat?agentId=keeper&user_prompt=rules",
-    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Edit Guardrails rules" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "View logs" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps queue actions inline without triggering row navigation", async () => {
@@ -397,19 +450,13 @@ describe("McpServerTable uninstall permission", () => {
         name: "Re-authenticate some-remote-server",
       }),
     ).toBeInTheDocument();
+    // Re-authenticate, Uninstall, Credentials and the alert fit in four
+    // buttons, so nothing folds into a menu.
     expect(
-      screen.queryByRole("link", {
-        name: "Credentials some-remote-server",
-      }),
-    ).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", {
-        name: "More actions some-remote-server",
-      }),
-    );
-    expect(
-      screen.getByRole("menuitem", { name: "Credentials" }),
+      screen.getByRole("link", { name: "Credentials some-remote-server" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "More actions some-remote-server" }),
+    ).not.toBeInTheDocument();
   });
 });

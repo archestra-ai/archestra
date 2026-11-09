@@ -27,8 +27,8 @@ import {
 import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
-import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { TableRowAction } from "@/components/table-row-actions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -720,7 +720,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   // the APPA Keeper, so it sits with the edit actions and needs no Guardrails permission.
   if (canEditCatalog && !isBuiltin && serverRulesHref) {
     actions.push({
-      icon: <AppaKeeperIcon />,
+      icon: <OpenAppaIcon className="h-4 w-4" />,
       label: SERVER_RULES_LABEL,
       href: serverRulesHref,
     });
@@ -734,7 +734,13 @@ const McpServerRowActions = memo(function McpServerRowActions({
   }
   if (actions.length === 0 && alertActions.length === 0) return null;
 
-  const inlineActionCount = Math.max(0, 3 - alertActions.length);
+  // Three buttons stay inline. The "⋯" trigger takes a button's width of its
+  // own, so a menu that would hold one action hides it for nothing: a row
+  // that fits in four buttons shows all four.
+  const inlineActionCount =
+    actions.length + alertActions.length <= INLINE_ACTION_SLOTS + 1
+      ? actions.length
+      : Math.max(0, INLINE_ACTION_SLOTS - alertActions.length);
   const inlineActions = [
     ...actions.slice(0, inlineActionCount),
     ...alertActions,
@@ -830,3 +836,6 @@ function InstalledStatusCell() {
 // with a docs link; tooltips on table action buttons only take strings).
 const LOCAL_MCP_DISABLED_TOOLTIP =
   "Unable to connect to Kubernetes cluster. Ensure K8s is running and the orchestrator configuration is correct.";
+
+// Row actions shown as buttons before the rest fold into the "⋯" menu.
+const INLINE_ACTION_SLOTS = 3;

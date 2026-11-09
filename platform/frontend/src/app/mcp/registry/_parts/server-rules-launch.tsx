@@ -2,7 +2,7 @@
 
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import Link from "next/link";
-import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useChatAgentBootstrap } from "@/lib/agent.query";
@@ -30,7 +30,7 @@ export function ServerRulesMenuItem({
   return (
     <DropdownMenuItem asChild>
       <Link href={href}>
-        <AppaKeeperIcon />
+        <OpenAppaIcon />
         {SERVER_RULES_LABEL}
       </Link>
     </DropdownMenuItem>

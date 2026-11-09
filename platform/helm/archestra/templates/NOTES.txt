@@ -34,6 +34,15 @@ Using internal PostgreSQL database:
   Username: {{ .Values.postgresql.auth.username }}
 {{- end }}
 
+{{- if not .Values.archestra.authSecret.existingSecretName }}
+
+Authentication and encryption keys:
+  The chart generated them in Secret {{ include "archestra-platform.authSecretName" . }}. Back it up with your database.
+  Tools that render this chart with `helm template`, such as Argo CD, cannot read that
+  Secret and would replace the keys on every sync, leaving stored credentials unreadable.
+  With such a tool, create the Secret yourself and set archestra.authSecret.existingSecretName.
+{{- end }}
+
 {{- $legacyOverrides := list }}
 {{- range $name := list "ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY" "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE" "ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE" }}
 {{- $value := index $.Values.archestra.env $name | default "" }}

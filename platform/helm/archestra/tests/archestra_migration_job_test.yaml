@@ -551,3 +551,43 @@ tests:
           content:
             name: ARCHESTRA_DATABASE_AWS_REGION
             value: eu-west-1
+
+  - it: mounts no Kubernetes API token, since migrations only reach PostgreSQL
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: mounts the token for the Vault Kubernetes login
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: lets an operator override the migration token mount
+    set:
+      archestra.migrationJob.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: keeps the AWS web identity token when the API token is not mounted
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://app@db.example.com:5432/archestra
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+      archestra.database.iamAuth.roleArn: arn:aws:iam::123456789012:role/archestra-db
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: aws-iam-token
+            mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+            readOnly: true

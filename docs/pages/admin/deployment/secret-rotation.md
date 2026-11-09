@@ -9,7 +9,9 @@ Most of Archestra's secrets change with one restart and nobody notices. Two need
 
 ## Change a Platform Secret
 
-The Helm chart generates the session secret, the encryption key, the legacy combined secret, and the Guardrails signing key once. It keeps them in the `<release>-auth` Secret across upgrades. To change one, write a new value into that Secret, then restart the web and worker pods. Pods read secrets only at startup.
+A secret you set in the Helm values takes effect with `helm upgrade`: the chart rolls the web and worker pods when one changes. That covers values under `archestra.env`, `archestra.authSecret.extraData`, and the external database URL.
+
+The chart also generates the session secret, the encryption key, the legacy combined secret, and the Guardrails signing key once, and keeps them in the `<release>-auth` Secret across upgrades. To change one, write a new value into that Secret, then restart the pods. They read secrets only at startup:
 
 ```bash
 kubectl -n archestra patch secret archestra-platform-auth --type merge \
@@ -18,8 +20,8 @@ kubectl -n archestra rollout restart \
   deployment/archestra-platform deployment/archestra-platform-worker
 ```
 
-- The keys in that Secret are `session-secret`, `secrets-encryption-secret`, `auth-secret`, and `offer-signing-secret`. With `archestra.authSecret.existingSecretName`, edit your own Secret instead.
-- A secret you set under `archestra.env` overrides the generated one. Change it there and run `helm upgrade`, then restart the pods: the chart keeps the value in a Secret, so the upgrade does not restart them.
+- The generated keys are `session-secret`, `secrets-encryption-secret`, `auth-secret`, and `offer-signing-secret`. A value for the same secret under `archestra.env` overrides the generated one.
+- Secrets the chart does not manage need the same restart, or a controller that restarts pods when a Secret changes. These are `archestra.authSecret.existingSecretName`, Secrets loaded through `envFromSecrets` or `envWithValueFrom`, and Secrets synced from a cloud secret manager.
 - Outside Helm, change the environment variable and restart the container.
 
 ## Session Secret

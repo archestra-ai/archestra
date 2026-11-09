@@ -56,13 +56,27 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- /*
+      Migrations reach only PostgreSQL. The Vault Kubernetes login is the one
+      startup path here that reads the pod's API token.
+      */}}
+      {{- $automount := .Values.archestra.migrationJob.automountServiceAccountToken }}
+      {{- if kindIs "invalid" $automount }}
+      {{- $automount = .Values.archestra.initContainers.vaultSecrets.enabled | default false }}
+      {{- end }}
+      automountServiceAccountToken: {{ $automount }}
       restartPolicy: Never
+      {{- with .Values.archestra.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}-migrate
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           {{- include "archestra-platform.vaultSecretsCommand" "node ./scripts/migrate-with-lock.mjs" | nindent 10 }}

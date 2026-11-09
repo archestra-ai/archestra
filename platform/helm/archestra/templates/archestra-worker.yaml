@@ -40,6 +40,10 @@ spec:
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- with .Values.archestra.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
         {{- include "archestra-platform.waitForMigrationsInitContainer" . | nindent 8 }}
@@ -47,6 +51,7 @@ spec:
         - name: {{ .Chart.Name }}-worker
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           {{- include "archestra-platform.vaultSecretsCommand" "./scripts/start-production.sh" | nindent 10 }}

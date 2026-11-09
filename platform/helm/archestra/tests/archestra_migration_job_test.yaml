@@ -365,3 +365,25 @@ tests:
           path: spec.template.spec.volumes
       - notExists:
           path: spec.template.spec.containers[0].volumeMounts
+
+  - it: mounts no Kubernetes API token, since migrations only reach PostgreSQL
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: mounts the token for the Vault Kubernetes login
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: lets an operator override the migration token mount
+    set:
+      archestra.migrationJob.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true

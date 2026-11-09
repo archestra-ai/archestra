@@ -168,10 +168,7 @@ function RemedyStepCard({
     Object.keys(input).length > 0;
 
   return (
-    <Tool
-      className="cursor-pointer"
-      defaultOpen={part.state === "approval-requested"}
-    >
+    <Tool className="cursor-pointer">
       <ToolHeader
         type={`tool-${toolName}`}
         state={
@@ -187,10 +184,6 @@ function RemedyStepCard({
       />
       <ToolContent>
         {hasInput ? <ToolInput input={input} /> : null}
-        <ApprovalRow
-          part={part}
-          onToolApprovalResponse={onToolApprovalResponse}
-        />
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
         {output !== undefined ? (
           <ToolOutput
@@ -200,6 +193,10 @@ function RemedyStepCard({
           />
         ) : null}
       </ToolContent>
+      <ApprovalRow
+        part={part}
+        onToolApprovalResponse={onToolApprovalResponse}
+      />
     </Tool>
   );
 }

@@ -7,6 +7,7 @@ import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters
 import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
+  acceptedCoverage,
   consumeHitlRuling,
   getHitlAskUserArguments,
   getHitlReview,
@@ -1322,6 +1323,21 @@ test("a review that cannot be read fails the reader instead of reading as gone",
       offerIds: [lookup.offerId],
     }),
   ).rejects.toThrow("Not started");
+});
+
+describe("acceptedCoverage", () => {
+  const review = (coverage: string[]) =>
+    ["What this ruling would cover:", ...coverage, "", "Footer."].join("\n");
+
+  test("keeps what an approval accepts beyond the person's attention", () => {
+    expect(
+      acceptedCoverage(review(["  - attention: signoff", "  - first", "  - b"])),
+    ).toEqual(["first", "b"]);
+  });
+
+  test("reads nothing from coverage it does not recognize", () => {
+    expect(acceptedCoverage(review(["  - first", "free text"]))).toBeUndefined();
+  });
 });
 
 describe("an answer that ruled nothing", () => {

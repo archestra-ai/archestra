@@ -63,6 +63,7 @@ type ChatMcpElicitationStreamData = {
   kind?: ChatMcpElicitationKind;
   reviewedTool?: string;
   reviewedArguments?: string;
+  reviewedCoverage?: string[];
 };
 
 /** Why the backend stopped waiting for a question's answer. */
@@ -108,6 +109,7 @@ export type ChatMcpElicitationBridge = {
     kind?: ChatMcpElicitationKind;
     reviewedTool?: string;
     reviewedArguments?: string;
+    reviewedCoverage?: string[];
   }) => Promise<ArchestraElicitationOutcome>;
 };
 
@@ -148,6 +150,7 @@ export function createChatMcpElicitationBridge({
     kind?: ChatMcpElicitationKind;
     reviewedTool?: string;
     reviewedArguments?: string;
+    reviewedCoverage?: string[];
     signal: AbortSignal | undefined;
   }): Promise<ElicitResult> {
     const streamWriter = writer;
@@ -188,6 +191,7 @@ export function createChatMcpElicitationBridge({
           kind: req.kind,
           reviewedTool: req.reviewedTool,
           reviewedArguments: req.reviewedArguments,
+          reviewedCoverage: req.reviewedCoverage,
         } satisfies ChatMcpElicitationStreamData,
       });
 
@@ -275,6 +279,7 @@ export function createChatMcpElicitationBridge({
       kind,
       reviewedTool,
       reviewedArguments,
+      reviewedCoverage,
     }) {
       if (!writer) {
         return { status: "no_viewer" };
@@ -290,6 +295,7 @@ export function createChatMcpElicitationBridge({
           kind,
           reviewedTool,
           reviewedArguments,
+          reviewedCoverage,
           signal: abortSignal,
         });
         return { status: "answered", result };

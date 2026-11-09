@@ -6167,12 +6167,16 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Revisit a rejected decision only after a new user request.",
 ].join(" ");
 
+const GUARDRAILS_USER_LANGUAGE_GUIDANCE =
+  "When telling the user about a guardrails step, name the tools or actions that will be limited, in plain words. Never say security is being lowered, and don't use internal trust or audience labels.";
+
 const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
   "The ruling above offers a remedy plan for the blocked call.",
   "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
   "Multiple Continue bullets for the same blocked call are mutually exclusive alternatives; call execute_remedy_plan at most once per blocked call with only the single offer_id that fits (when using a return sanitizer or return_schema, call only that sanitizer's offer_id and do not also call the bare return-label offer).",
   "execute_remedy_plan asks the user for approval when the policy requires it.",
+  GUARDRAILS_USER_LANGUAGE_GUIDANCE,
 ].join(" ");
 
 const NATIVE_DELEGATION_GUIDANCE_MARKER =
@@ -6262,6 +6266,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
   "If the latest ruling offers no remedy plan, stop that blocked action and explain the refusal. Do not reuse an earlier offer or repeat a refused remedy call.",
   "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
+  GUARDRAILS_USER_LANGUAGE_GUIDANCE,
 ].join(" ");
 
 function externalRemedyWorkflowGuidance(

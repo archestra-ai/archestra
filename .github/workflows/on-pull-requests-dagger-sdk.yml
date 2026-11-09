@@ -105,17 +105,17 @@ jobs:
           trap 'exit 143' TERM
           mkdir -p "$fixture/bin" "$fixture/home" "$fixture/cache/dagger" "$fixture/tmp"
 
-          # Official v0.21.9 release checksums.txt and GitHub asset digest agree.
+          # Official v0.21.11 release checksums.txt and GitHub asset digest agree.
           # This is the stock CLI, not the production image's Go-patched build.
           curl --fail --silent --show-error --location --retry 3 --max-time 120 \
-            https://github.com/dagger/dagger/releases/download/v0.21.9/dagger_v0.21.9_linux_amd64.tar.gz \
+            https://github.com/dagger/dagger/releases/download/v0.21.11/dagger_v0.21.11_linux_amd64.tar.gz \
             --output "$fixture/cli.tar.gz"
           printf '%s  %s\n' \
-            33eea0b08d6be444bada18e64b2216459100d6070abcb4b5345cee40c9fff982 \
+            a2d3ef96e7305abc18663a3606d9c1c592278ba3c8f48e01d6be14eef72276ef \
             "$fixture/cli.tar.gz" | sha256sum -c --strict
           tar -xzf "$fixture/cli.tar.gz" -C "$fixture/bin" dagger
           test -x "$fixture/bin/dagger"
-          ln -s "$fixture/bin/dagger" "$fixture/cache/dagger/dagger-0.21.9"
+          ln -s "$fixture/bin/dagger" "$fixture/cache/dagger/dagger-0.21.11"
 
           # Same engine version/digest as .github/bench/dagger-job.yaml. No ports,
           # Docker socket, repository, HOME, or other host directories are mounted.
@@ -123,7 +123,7 @@ jobs:
           docker run --detach --privileged --name "$ENGINE_NAME" \
             --cpus 2 --memory 3g \
             --volume "$ENGINE_CACHE:/var/lib/dagger" \
-            registry.dagger.io/engine:v0.21.9@sha256:3c4e0cedaea400d7e30155e050f94910ea5f381b6f5942dd2172382657628cb4
+            registry.dagger.io/engine:v0.21.11@sha256:6b557cc8b5fdfee0e2e8c82d451ac922097a1255482143e1b96c0be3ff2a303c
           ready=false
           for attempt in {1..60}; do
             if timeout 5s docker exec "$ENGINE_NAME" buildctl debug workers >/dev/null 2>&1; then

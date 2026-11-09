@@ -17,11 +17,13 @@ import {
   threadUnsupportedBody,
   toolSkeletonOf,
 } from "@/openappa/thread-state";
-import { declaredToolEntries } from "@/openappa/wire";
+import { type AppaSessionIdentity, declaredToolEntries } from "@/openappa/wire";
 import type { OpenappaAdmission } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import type { OpenappaIngress } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
+  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaRetainedShape,
   type AppaTrustedContext,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
 import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
@@ -41,13 +43,21 @@ import { ApiError } from "@/types";
  * whole thread instead.
  */
 export async function prepareOpenappaRequest(
-  params: Parameters<typeof governedRequest>[0],
+  params: Omit<GovernedRequestParams, "admission"> & {
+    admission: Exclude<OpenappaAdmission, { kind: "ungoverned" }>;
+  },
 ): Promise<PreparedOpenappaRequest> {
-  if (!(await softBlocksAllowed()) || params.admission.kind !== "governed")
-    return governedRequest(params);
+  const { admission } = params;
+  if (admission.kind === "waived") {
+    retainWaivedRequestShape({ ...params, admission });
+    return { kind: "prepared" };
+  }
+  const governedParams = { ...params, admission };
+  if (!(await softBlocksAllowed()) || admission.kind !== "governed")
+    return governedRequest(governedParams);
   const original = structuredClone(params.body);
   try {
-    const result = await governedRequest(params);
+    const result = await governedRequest(governedParams);
     if (result.kind === "replay")
       await refuseSoftBlock("OpenAPPA could not continue the provider thread");
     return result;
@@ -55,29 +65,20 @@ export async function prepareOpenappaRequest(
     if (
       !(error instanceof Error) ||
       !(await waiveSoftBlock(
-        params.admission.session,
+        admission.session,
         "request_preparation",
         error.message,
       ))
     )
       throw error;
-    if (
-      params.body &&
-      typeof params.body === "object" &&
-      original &&
-      typeof original === "object"
-    ) {
-      for (const key of Object.keys(params.body))
-        delete (params.body as Record<string, unknown>)[key];
-      Object.assign(params.body, original);
-    }
+    restoreBody(params.body, original);
     params.context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
     return { kind: "prepared" };
   }
 }
 
-async function governedRequest(params: {
-  admission: Exclude<OpenappaAdmission, { kind: "ungoverned" }>;
+type GovernedRequestParams = {
+  admission: Exclude<OpenappaAdmission, { kind: "ungoverned" | "waived" }>;
   context: LlmProxyRequestContext;
   body: unknown;
   ingress: OpenappaIngress;
@@ -86,7 +87,11 @@ async function governedRequest(params: {
     declarations: readonly GatewayToolDeclaration[];
     clientBindings: GatewayClientBindings | undefined;
   };
-}): Promise<PreparedOpenappaRequest> {
+};
+
+async function governedRequest(
+  params: GovernedRequestParams,
+): Promise<PreparedOpenappaRequest> {
   const { admission, context, body, ingress, tools } = params;
   if (admission.kind === "observed") {
     context.resources.set(
@@ -222,23 +227,13 @@ async function governedRequest(params: {
         : {}),
     });
   }
-  const appaRequest = prepareAppaRequest({
+  const appaRequest = prepareBody({
     body,
-    interactionType: context.interactionType,
+    context,
+    ingress,
     session: admission.identity,
     identity: appaToolIdentity,
-    trustBarePlatformTools: isInternalChat,
-    ...(ingress.delegationMarkers
-      ? { delegationMarkers: ingress.delegationMarkers }
-      : {}),
-    ...(ingress.childReturns ? { childReturns: ingress.childReturns } : {}),
-    ...(ingress.releasedSpawnCalls
-      ? { releasedSpawnCalls: ingress.releasedSpawnCalls }
-      : {}),
-    ...(ingress.childTrajectoryReceipts
-      ? { childTrajectoryReceipts: ingress.childTrajectoryReceipts }
-      : {}),
-    ...(ingress.clientWire ? { clientWire: ingress.clientWire } : {}),
+    isInternalChat,
   });
   context.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
     session: admission.session,
@@ -252,6 +247,85 @@ async function governedRequest(params: {
     ...(threadRequest ? { thread: threadRequest.type } : {}),
   } satisfies AppaTrustedContext);
   return { kind: "prepared", ...(thread ? { thread } : {}) };
+}
+
+/**
+ * Changing the tools or the system prompt mid-session would invalidate the
+ * provider's prompt cache. This only rewrites the body: nothing is ruled on
+ * and the plugin binds no session. A body it cannot rewrite goes out as sent.
+ */
+function retainWaivedRequestShape(params: {
+  admission: Extract<OpenappaAdmission, { kind: "waived" }>;
+  context: LlmProxyRequestContext;
+  body: unknown;
+  ingress: OpenappaIngress;
+  tools: { identity: GatewayToolIdentity };
+}): void {
+  const { admission, context, body, ingress, tools } = params;
+  const original = structuredClone(body);
+  try {
+    // These carry a delta, which no governed request of the session reshaped.
+    if (
+      readThreadRequest(body)?.type === "continue" ||
+      (body as { previous_response_id?: unknown }).previous_response_id
+    )
+      return;
+    const isInternalChat = admission.facts.chatSource !== undefined;
+    const request = prepareBody({
+      body,
+      context,
+      ingress,
+      session: admission.identity,
+      identity: tools.identity,
+      isInternalChat,
+    });
+    if (ingress.clientCompaction && !isInternalChat) return;
+    context.resources.set(APPA_PLUGIN_RETAINED_SHAPE, {
+      adapter: admission.adapter,
+      identity: tools.identity,
+      request,
+    } satisfies AppaRetainedShape);
+  } catch (err) {
+    logger.debug({ err }, "OpenAPPA could not keep a waived request's shape");
+    restoreBody(body, original);
+  }
+}
+
+function prepareBody(params: {
+  body: unknown;
+  context: LlmProxyRequestContext;
+  ingress: OpenappaIngress;
+  session: AppaSessionIdentity;
+  identity: GatewayToolIdentity;
+  isInternalChat: boolean;
+}) {
+  const { ingress } = params;
+  return prepareAppaRequest({
+    body: params.body,
+    interactionType: params.context.interactionType,
+    session: params.session,
+    identity: params.identity,
+    trustBarePlatformTools: params.isInternalChat,
+    ...(ingress.delegationMarkers
+      ? { delegationMarkers: ingress.delegationMarkers }
+      : {}),
+    ...(ingress.childReturns ? { childReturns: ingress.childReturns } : {}),
+    ...(ingress.releasedSpawnCalls
+      ? { releasedSpawnCalls: ingress.releasedSpawnCalls }
+      : {}),
+    ...(ingress.childTrajectoryReceipts
+      ? { childTrajectoryReceipts: ingress.childTrajectoryReceipts }
+      : {}),
+    ...(ingress.clientWire ? { clientWire: ingress.clientWire } : {}),
+  });
+}
+
+function restoreBody(body: unknown, original: unknown): void {
+  if (!body || typeof body !== "object") return;
+  if (!original || typeof original !== "object") return;
+  for (const key of Object.keys(body))
+    delete (body as Record<string, unknown>)[key];
+  Object.assign(body, original);
 }
 
 // ===

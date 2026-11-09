@@ -68,6 +68,7 @@ import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
+  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
@@ -1623,6 +1624,73 @@ describe("asking through the client's own question tool", () => {
       expect(request.input).toContainEqual(developer);
     } finally {
       await plugin.onCleanup(context);
+    }
+  });
+
+  test("a waived Codex request keeps the developer messages of a governed one", async () => {
+    const adapter = new AppaCodexAdapter();
+    const preparedRequest: AppaTrustedContext["request"] = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: undefined,
+        platformToolNames: new Set<string>(),
+        namespaces: new Map(),
+      },
+      session: { provenance: "none" },
+      customTools: new Set<string>(),
+      declaredTools: [],
+    };
+    const providerRequest = () => ({
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+        { type: "message", role: "user", content: "Delegate this" },
+      ],
+    });
+    const contextFor = (sessionId: string) => {
+      const context = requestContext({ sessionId });
+      context.headers = { originator: "codex_cli_rs" };
+      context.interactionType = "openai:responses";
+      return context;
+    };
+
+    const plugin = new AppaPluginArchestra([adapter]);
+    const governedContext = contextFor("codex-governed-shape");
+    const trusted = governedContext.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = preparedRequest;
+    const governed = providerRequest();
+
+    const waivedContext = contextFor("codex-waived-shape");
+    waivedContext.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    waivedContext.resources.set(APPA_PLUGIN_RETAINED_SHAPE, {
+      adapter,
+      identity: trusted.toolIdentity,
+      request: preparedRequest,
+    });
+    const waived = providerRequest();
+    try {
+      await plugin.onSessionInit(governedContext);
+      await plugin.onBeforeModel({ ...governedContext, request: governed });
+      await plugin.onSessionInit(waivedContext);
+      await plugin.onBeforeModel({ ...waivedContext, request: waived });
+
+      expect(governed.input).toHaveLength(4);
+      expect(waived.input).toEqual(governed.input);
+    } finally {
+      await plugin.onCleanup(governedContext);
+      await plugin.onCleanup(waivedContext);
     }
   });
 
@@ -14002,7 +14070,7 @@ describe("soft-block emergency override", () => {
     }
   });
   for (const compaction of [false, true]) {
-    test(`a child context refusal releases the original request (compaction=${compaction})`, async ({
+    test(`a child context refusal releases the original messages in the session's shape (compaction=${compaction})`, async ({
       makeOrganization,
     }) => {
       const { context, trusted, plugin } = await setup(
@@ -14024,9 +14092,10 @@ describe("soft-block emergency override", () => {
         await expect(
           plugin.onBeforeModel({ ...context, request }),
         ).resolves.toBeUndefined();
-        expect(request).toEqual({
-          messages: [{ role: "user", content: "keep these original bytes" }],
-        });
+        expect(request.messages).toEqual([
+          { role: "user", content: "keep these original bytes" },
+        ]);
+        expect("system" in request).toBe(!compaction);
         expect(await isUnenforcedSession(trusted.session)).toBe(true);
       } finally {
         start.mockRestore();

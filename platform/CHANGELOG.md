@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.26](https://github.com/archestra-ai/archestra/compare/platform-v1.4.25...platform-v1.4.26) (2026-11-09)
+
+
+### Bug Fixes
+
+* **chat:** keep the thread visible next to an open app on mobile (backport release/1.4) ([#10515](https://github.com/archestra-ai/archestra/issues/10515)) ([1486ef1](https://github.com/archestra-ai/archestra/commit/1486ef18bfeb0142dd9d1e60fbe034475a4a2ec3))
+* coordinate Slack membership discovery (backport release/1.4) ([#10498](https://github.com/archestra-ai/archestra/issues/10498)) ([2232e0d](https://github.com/archestra-ai/archestra/commit/2232e0dd1e38b8e3cf4038f894d123b9a191b0ee))
+* **helm:** harden default pod security and keep secrets out of busybox (backport release/1.4) ([#10499](https://github.com/archestra-ai/archestra/issues/10499)) ([f6aecac](https://github.com/archestra-ai/archestra/commit/f6aecac52ef7ff3d28b6d24e9b20819d0be75067))
+* **helm:** restart pods when chart-managed secrets change (backport release/1.4) ([#10500](https://github.com/archestra-ai/archestra/issues/10500)) ([dad143c](https://github.com/archestra-ai/archestra/commit/dad143c82fd1f147b5847f79b344841309a5fe5a))
+* **security:** update rmcp to 3.8.0 and track two pending RustSec fixes (backport release/1.4) ([#10507](https://github.com/archestra-ai/archestra/issues/10507)) ([36060ef](https://github.com/archestra-ai/archestra/commit/36060ef519f2a505bd635d4fc183745883ee5509))
+* **test:** restore the worker's original fetch before each backend test file (release/1.4) ([#10508](https://github.com/archestra-ai/archestra/issues/10508)) ([b123d83](https://github.com/archestra-ai/archestra/commit/b123d835a191018732b64ce1dfcee268be0eee3f))
+
 ## [1.4.25](https://github.com/archestra-ai/archestra/compare/platform-v1.4.24...platform-v1.4.25) (2026-11-08)
 
 

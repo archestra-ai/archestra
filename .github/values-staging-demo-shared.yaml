@@ -7,8 +7,6 @@ archestra:
 
   orchestrator:
     kubernetes:
-      networkPolicy:
-        create: true
       rbac:
         # The CI deployer can only write the release namespaces (infra
         # gke/access-lockdown.tf), so it cannot create the kube-system Role.

@@ -2602,9 +2602,11 @@ function withOwnersBlock(
         const wanted = owners.get(path);
         if (wanted === undefined) return line;
         placed.add(path);
-        const after = `${pattern} ${wanted}`;
-        if (rest.join(" ") !== wanted)
-          updated.push({ before: line.trim(), after });
+        // The same owners in any order leave the line as its author wrote it.
+        if ([...rest].sort().join(" ") === wanted) return line;
+        // Otherwise only the owners change; the pattern and its spacing stay.
+        const after = line.replace(/^(\s*\S+\s+).*$/, `$1${wanted}`);
+        updated.push({ before: line.trim(), after: after.trim() });
         return after;
       })
       .join("\n");

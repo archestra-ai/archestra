@@ -122,9 +122,15 @@ spec:
         {{- with .Values.archestra.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.archestra.podAnnotations }}
+      {{- $authSecretChecksum := include "archestra-platform.authSecretChecksum" . }}
+      {{- if or .Values.archestra.podAnnotations $authSecretChecksum }}
       annotations:
+        {{- with .Values.archestra.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $authSecretChecksum }}
+        checksum/auth-secret: {{ . }}
+        {{- end }}
       {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}

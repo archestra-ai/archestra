@@ -496,8 +496,8 @@ jobs:
     # The platform Docker image references the MCP server base image tag via
     # ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var, but does NOT use it as a FROM base image.
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
-    # exist yet. Both images are built in parallel and the publish-github-release job gates on
-    # all artifacts being ready before un-drafting the release.
+    # exist yet. Both images are built in parallel; the release is handed to the publisher only
+    # after every artifact is ready, and release-finalize.yml un-drafts it after publication.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: $/.github/workflows/build-platform-release-image.yml
     needs:
@@ -666,8 +666,11 @@ jobs:
           PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
         run: bash .github/scripts/release-request.sh release-images.json
 
-  # Waits for the publisher, the release's approval included (RCs too), up to 360
-  # minutes (archestra-ai/.github release-publish.yml).
+  # Hands the request to release-publisher and ends once its run exists. The
+  # release waits for its approval (every release, RCs too) in the publisher,
+  # for up to GitHub's 30 days; release-finalize.yml publishes the GitHub
+  # release after the publisher run succeeds (dispatched by Release Gate, or
+  # its schedule).
   publish-release-images:
     name: Publish release images and chart
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
@@ -677,7 +680,7 @@ jobs:
     needs: [release-please, attest-release-images]
     permissions:
       actions: read # Download the saved chart.
-    uses: archestra-ai/.github/.github/workflows/release-publish.yml@add9951c121764e9d62f71591ab694b257c14077 # v1.21.0
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@eb4e01f03710d0a8fb50d169b45e8f7412d983bf # archestra-ai/.github#73 head; repin to its release tag
     with:
       # Holds the archestra-releaser App's key; main and release/* only.
       environment: releaser
@@ -686,91 +689,10 @@ jobs:
       images: ${{ needs.attest-release-images.outputs.images }}
       latest: ${{ needs.attest-release-images.outputs.latest }}
       chart-artifact: release-helm-chart
+      wait: false
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-
-  publish-github-release:
-    name: Publish release
-    # No failed or skipped build is acceptable. Publish after all builds and the
-    # approved image publication.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    runs-on: ubuntu-latest
-    concurrency:
-      # Serialize publication within each release channel.
-      group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
-      cancel-in-progress: false
-    needs:
-      - release-please
-      - build-and-push-mcp-server-docker-image
-      - build-and-push-agent-catalog-images
-      - build-and-push-p4-shim-docker-image
-      - build-and-push-sandbox-base-docker-image
-      - build-and-push-platform-docker-image
-      - publish-platform-helm-chart
-      - publish-release-images
-    permissions:
-      contents: write # Attach the saved chart and publish the release.
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      VERSION: ${{ needs.release-please.outputs.platform_version }}
-      TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Check publication is still allowed
-        id: publication-policy
-        shell: bash
-        env:
-          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
-        run: bash .github/scripts/release-publication-policy.sh
-
-      # Every registry write, :latest included, belongs to the release-publisher
-      # publisher (publish-release-images).
-      - name: Download saved chart
-        uses: $/.github/actions/github-download-artifact
-        with:
-          name: release-helm-chart
-
-      - name: Publish GitHub release
-        shell: bash
-        env:
-          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
-        run: |
-          # A retry may find an already published immutable release.
-          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
-          [ "$IS_DRAFT" = true ] || exit 0
-          gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
-          if [[ "$VERSION" == *-* ]]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
-          elif [ "$PRESERVE_LATEST" = true ]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest=false
-          else
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
-          fi
-
-  update-terraform-provider:
-    name: Start Terraform provider update
-    # Propose each release from main to the Terraform provider as soon as it is
-    # published, instead of at the updater's next daily run. A workflow_dispatch
-    # sent with GITHUB_TOKEN starts a run; the release event it caused does not.
-    if: ${{ github.ref == 'refs/heads/main' && needs.publish-github-release.result == 'success' }}
-    needs:
-      - publish-github-release
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write # Start the Update Terraform Provider workflow.
-    steps:
-      - name: Start Update Terraform Provider
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: gh workflow run update-terraform-provider.yml --ref main
 
   publisher-smoke:
     name: Publisher dry run

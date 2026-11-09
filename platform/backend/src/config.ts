@@ -3406,6 +3406,14 @@ const config = {
         .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
       15,
     ),
+    /**
+     * Secrets the platform pod reads that MCP servers may reference anyway.
+     * Every other Secret the platform pod uses is refused in MCP server
+     * deployment settings — see k8s/mcp-server-runtime/platform-credential-guard.
+     */
+    mcpAllowedPlatformSecrets: parseCommaSeparatedList(
+      process.env.ARCHESTRA_ORCHESTRATOR_MCP_ALLOWED_PLATFORM_SECRETS ?? "",
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

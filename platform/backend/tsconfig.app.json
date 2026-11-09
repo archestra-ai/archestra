@@ -479,6 +479,7 @@
     "src/clients/bedrock-credentials.ts",
     "src/clients/llm-upstream-dispatcher.ts",
     "src/clients/llm-upstream-fetch.ts",
+    "src/k8s/mcp-server-runtime/platform-credential-guard.ts",
     // The models projects' files (tsconfig.models.json,
     // tsconfig.models-agents.json, tsconfig.models-upper.json).
     "src/models/**",

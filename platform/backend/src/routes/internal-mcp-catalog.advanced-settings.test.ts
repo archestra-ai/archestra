@@ -8,6 +8,7 @@ import { type Mock, vi } from "vitest";
 import { z } from "zod";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, ServiceAccountModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -250,6 +251,104 @@ describe("internal MCP catalog deployment YAML permission", () => {
     expect(response.statusCode, response.body).toBe(200);
     const persisted = await InternalMcpCatalogModel.findById(catalog.id);
     expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
+  });
+
+  describe("platform credentials", () => {
+    const PLATFORM_SECRET_YAML = DEPLOYMENT_YAML.replace(
+      "          image: example.invalid/mcp-server:1.0\n",
+      `          image: example.invalid/mcp-server:1.0
+          envFrom:
+            - secretRef:
+                name: archestra-platform-auth
+`,
+    );
+
+    // The Kubernetes API is the boundary: stand in for the platform pod read.
+    let platformRead: { mockRestore: () => void };
+    beforeEach(() => {
+      platformRead = vi
+        .spyOn(mcpServerRuntimeManager, "getPlatformCredentials")
+        .mockResolvedValue({
+          serviceAccounts: new Set(["archestra-platform"]),
+          secrets: new Set(["archestra-platform-auth"]),
+          persistentVolumeClaims: new Set(),
+        });
+    });
+    afterEach(() => platformRead.mockRestore());
+
+    test("an admin cannot save YAML that reads the platform's Secret", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+        localConfig: { command: "node", arguments: ["server.js"] },
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { deploymentSpecYaml: PLATFORM_SECRET_YAML },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        'Secret "archestra-platform-auth"',
+      );
+      const persisted = await InternalMcpCatalogModel.findById(catalog.id);
+      expect(persisted?.deploymentSpecYaml).toBeNull();
+    });
+
+    test("an admin cannot create a server that runs as the platform's service account", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "Platform Identity",
+          serverType: "local",
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            serviceAccount: "archestra-platform",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        'Service account "archestra-platform"',
+      );
+      expect(
+        await InternalMcpCatalogModel.findRootByNameInOrg({
+          name: "Platform Identity",
+          organizationId,
+        }),
+      ).toBeFalsy();
+    });
+
+    test("an admin can still reference a Secret the platform does not use", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+        localConfig: { command: "node", arguments: ["server.js"] },
+      });
+      const yaml = PLATFORM_SECRET_YAML.replace(
+        "archestra-platform-auth",
+        "github-token",
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { deploymentSpecYaml: yaml },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const persisted = await InternalMcpCatalogModel.findById(catalog.id);
+      expect(persisted?.deploymentSpecYaml).toBe(yaml);
+    });
   });
 
   test("an editor cannot add, replace or remove Kubernetes Secret references", async ({

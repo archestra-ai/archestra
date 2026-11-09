@@ -7,6 +7,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { auth as betterAuth } from "@/auth/better-auth";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { InternalMcpCatalogModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
@@ -163,6 +164,36 @@ describe("internal MCP catalog deployment YAML routes", () => {
       const body = response.json();
       expect(body.valid).toBe(false);
       expect(body.errors).toContain('kind must be "Deployment"');
+    });
+
+    test("reports a reference to the platform's Secret as an error", async () => {
+      // The Kubernetes API is the boundary: stand in for the platform pod read.
+      vi.spyOn(
+        mcpServerRuntimeManager,
+        "getPlatformCredentials",
+      ).mockResolvedValue({
+        serviceAccounts: new Set(),
+        secrets: new Set(["archestra-platform-auth"]),
+        persistentVolumeClaims: new Set(),
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog/validate-deployment-yaml",
+        payload: {
+          yaml: `${VALID_DEPLOYMENT_YAML}      volumes:
+        - name: auth
+          secret:
+            secretName: archestra-platform-auth
+`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        valid: false,
+        errors: [expect.stringContaining('Secret "archestra-platform-auth"')],
+      });
     });
 
     test("rejects an empty yaml body with 400", async () => {

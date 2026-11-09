@@ -14,18 +14,24 @@
  * `globalThis`, so a test that resets the module registry keeps them.
  */
 import type { LocalMcpInstallationState } from "@archestra/shared";
+import type { PlatformCredentials } from "@/k8s/mcp-server-runtime/platform-credential-guard";
 import type {
   CommonMcpToolDefinition,
   ConnectorRun,
   InternalMcpCatalog,
 } from "@/types";
 
-/** Tears down an MCP server's Kubernetes deployment (k8s/mcp-server-runtime). */
+/**
+ * Tears down an MCP server's Kubernetes deployment, and reads the platform's
+ * own credentials that deployment settings may not reference
+ * (k8s/mcp-server-runtime).
+ */
 export interface McpServerRuntimePort {
   removeMcpServer: (
     mcpServerId: string,
     options?: { strictCleanup?: boolean; requirePlaywrightDisabled?: boolean },
   ) => Promise<void>;
+  getPlatformCredentials: () => Promise<PlatformCredentials | null>;
 }
 
 /** Connects to an installed MCP server and lists its tools (clients/mcp-client). */

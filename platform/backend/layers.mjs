@@ -60,6 +60,8 @@ const layerTable = [
       "src/clients/llm-upstream-dispatcher.ts",
       "src/clients/llm-upstream-fetch.ts",
       "src/routes/proxy/adapters/responses-usage.ts",
+      // The MCP deployment-spec credential check the registry write gate runs.
+      "src/k8s/mcp-server-runtime/platform-credential-guard.ts",
     ],
     project: "tsconfig.core.json",
   },

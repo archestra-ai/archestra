@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 7
-lastUpdated: 2026-11-07
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -850,6 +850,11 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `15`
   - Values: a whole number. `0` turns the check off.
   - Pin an image tag when a server must not change on its own.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_ALLOWED_PLATFORM_SECRETS`** - Kubernetes Secrets the Archestra platform pod reads that MCP servers may also reference.
+  - Default: empty. MCP servers cannot reference any Secret the platform pod reads.
+  - Values: a comma-separated list of Secret names.
+  - Use it for a Secret you share on purpose, such as a provider key both the platform and a server need. Never list the auth Secret.
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`** - How long an MCP server pod sits unused before it hibernates, in seconds.
   - Default: `1800` (30 minutes)

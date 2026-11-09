@@ -80,6 +80,11 @@ import {
   shouldUseCiliumNetworkPolicy,
   shouldUseGkeFqdnNetworkPolicy,
 } from "./network-policy";
+import {
+  findPlatformCredentialReferences,
+  type PlatformCredentials,
+  platformCredentialsFromPodSpec,
+} from "./platform-credential-guard";
 import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type { K8sDeploymentStatusSummary } from "./schemas";
 
@@ -472,6 +477,38 @@ async function fetchPlatformPodSpec(
 
 function resetPlatformPodSpecCache(): void {
   platformPodSpecCache = { fetched: false, spec: null };
+  platformCredentialsCache = undefined;
+}
+
+/** Undefined until fetched; null when the platform pod could not be read. */
+let platformCredentialsCache: PlatformCredentials | null | undefined;
+
+/**
+ * The service account, Secrets, and volume claims the platform pod runs with,
+ * which MCP server deployment settings must not reference. Shares the
+ * platform pod spec cache, so it costs no extra API call after startup.
+ */
+export async function fetchPlatformCredentials(
+  k8sApi: k8s.CoreV1Api,
+  namespace: string,
+): Promise<PlatformCredentials | null> {
+  if (platformCredentialsCache !== undefined) return platformCredentialsCache;
+  const spec = await fetchPlatformPodSpec(k8sApi, namespace);
+  platformCredentialsCache = spec
+    ? platformCredentialsFromPodSpec(spec, {
+        allowedSecrets: config.orchestrator.mcpAllowedPlatformSecrets,
+      })
+    : null;
+  if (!platformCredentialsCache) {
+    logger.warn(
+      "Archestra-platform pod not readable; MCP deployment settings are checked only against Archestra-managed Secret names",
+    );
+  }
+  return platformCredentialsCache;
+}
+
+function getCachedPlatformCredentials(): PlatformCredentials | null {
+  return platformCredentialsCache ?? null;
 }
 
 interface PlatformPodSpecFetcher<T> {
@@ -2176,7 +2213,55 @@ export default class K8sDeployment {
     return requested;
   }
 
+  /**
+   * Build the Deployment for this server. Throws
+   * {@link McpServerDeploymentFailedError} when the result would hand the pod
+   * one of the platform's own credentials (see platform-credential-guard). A
+   * stored spec saved before that check existed fails here rather than being
+   * rewritten: the server reports the error and keeps its stored settings
+   * until someone with deploy permission fixes them.
+   */
   generateDeploymentSpec(
+    dockerImage: string,
+    localConfig: z.infer<typeof LocalConfigSchema>,
+    needsHttp: boolean,
+    httpPort: number,
+    nodeSelector?: k8s.V1PodSpec["nodeSelector"] | null,
+    tolerations?: k8s.V1Toleration[] | null,
+    resolvedImagePullSecretNames?: Array<{ name: string }>,
+  ): k8s.V1Deployment {
+    const deployment = this.buildDeploymentSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+      nodeSelector,
+      tolerations,
+      resolvedImagePullSecretNames,
+    );
+    const violations = findPlatformCredentialReferences({
+      podSpec: deployment.spec?.template?.spec,
+      serviceAccountName: deployment.spec?.template?.spec?.serviceAccountName,
+      ownSecretName: this.getK8sSecretName(),
+      platform: getCachedPlatformCredentials(),
+    });
+    if (violations.length > 0) {
+      logger.error(
+        {
+          mcpServerId: this.mcpServer.id,
+          catalogId: this.mcpServer.catalogId,
+          violations,
+        },
+        "Refusing to deploy MCP server: its deployment settings reference Archestra platform credentials",
+      );
+      throw new McpServerDeploymentFailedError(
+        `Deployment ${this.deploymentName} failed: its deployment settings reference Archestra platform credentials. ${violations.join(" ")}`,
+      );
+    }
+    return deployment;
+  }
+
+  private buildDeploymentSpec(
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
     needsHttp: boolean,
@@ -3299,6 +3384,12 @@ export default class K8sDeployment {
       // This allows MCP servers to inherit the same scheduling constraints
       const platformNodeSelector = getCachedPlatformNodeSelector();
       const platformTolerations = getCachedPlatformTolerations();
+      // Read once per process (startup normally already did): the deployment
+      // spec is checked against the platform's own credentials.
+      await fetchPlatformCredentials(
+        this.k8sApi,
+        process.env.POD_NAMESPACE || this.namespace,
+      );
 
       // Create the pod's egress policy before the pod itself, so the pod is
       // confined the instant it starts. A pod that starts before its policy lands

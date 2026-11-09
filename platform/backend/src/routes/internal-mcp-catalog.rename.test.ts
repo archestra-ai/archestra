@@ -19,6 +19,7 @@ const { managerMock } = vi.hoisted(() => ({
     reinstallSharedDeployment: vi.fn(),
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
+    getPlatformCredentials: async () => null,
   },
 }));
 vi.mock("@/k8s/mcp-server-runtime/manager", () => ({ default: managerMock }));

@@ -113,6 +113,7 @@ export { default as McpOauthClientModel } from "./mcp-oauth-client";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerAlertMuteModel } from "./mcp-server-alert-mute";
 export { default as McpServerToolDescriptionModel } from "./mcp-server-tool-description";
+export { default as ToolSearchTextModel } from "./tool-search-text";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";

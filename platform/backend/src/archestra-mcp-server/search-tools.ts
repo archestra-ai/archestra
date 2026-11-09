@@ -27,6 +27,7 @@ import {
   ConversationEnabledToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  ToolSearchTextModel,
 } from "@/models";
 import {
   isAppaDelegatedRun,
@@ -62,6 +63,13 @@ import {
 } from "./helpers";
 import { isOpenappaTool, tools as openappaMcpTools } from "./openappa";
 import { filterToolNamesByPermission } from "./rbac";
+import {
+  hashToolDefinition,
+  normalizeSearchText as normalizeText,
+  tokenizeNormalizedText as tokenize,
+  tokenizeSearchText,
+} from "./search-text";
+import pregeneratedSearchTexts from "./search-texts.generated.json";
 import { getSkillDelegationTools } from "./skill-delegation";
 import { tools as runtimeMcpTools } from "./tasks";
 
@@ -232,12 +240,15 @@ type SearchCandidate = {
   catalogName: string | null;
   available: boolean;
   inputParameters: InputParameterSummary[];
+  // Keys the stored generated text; null when the candidate has none to look up.
+  definitionHash: string | null;
   searchText: {
     name: string;
     title: string;
     description: string;
     argNames: string;
     argDescriptions: string;
+    generated: string;
   };
 };
 
@@ -276,11 +287,9 @@ const registry = defineArchestraTools([
         matches = result.matches;
       } else {
         const preparedQuery = prepareSearchQuery(args.query);
-        matches = rankCandidatesByKeyword(searchableTools, preparedQuery);
-        unmatchedTerms = findUnmatchedQueryTerms(
-          searchableTools,
-          preparedQuery,
-        );
+        const candidates = await withStoredSearchTexts(searchableTools);
+        matches = rankCandidatesByKeyword(candidates, preparedQuery);
+        unmatchedTerms = findUnmatchedQueryTerms(candidates, preparedQuery);
       }
 
       const matchCount = matches.length;
@@ -371,6 +380,7 @@ export const __test = {
     title?: string | null;
     description?: string | null;
     parameters?: Record<string, unknown>;
+    generatedText?: string;
   }): SearchCandidate {
     return {
       toolName: input.toolName,
@@ -381,11 +391,13 @@ export const __test = {
       catalogName: null,
       available: true,
       inputParameters: [],
+      definitionHash: null,
       searchText: buildSearchText({
         name: input.toolName,
         title: input.title ?? "",
         description: input.description ?? null,
         schema: input.parameters ?? {},
+        generatedText: input.generatedText ?? null,
       }),
     };
   },
@@ -693,11 +705,17 @@ function toAssignedToolCandidate(params: {
     catalogName: source === "mcp" ? (catalog?.name ?? null) : null,
     available,
     inputParameters,
+    definitionHash:
+      source === "mcp" && tool.catalogId != null
+        ? hashToolDefinition({ name: tool.name, description, parameters })
+        : null,
     searchText: buildSearchText({
       name: tool.name,
       title: title ?? "",
       description,
       schema: parameters,
+      generatedText:
+        source === "archestra" ? pregeneratedText(tool.name) : null,
     }),
   };
 }
@@ -716,13 +734,80 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
     catalogName: null,
     available: true,
     inputParameters,
+    definitionHash: null,
     searchText: buildSearchText({
       name: tool.name,
       title: tool.title ?? "",
       description: tool.description ?? null,
       schema: tool.inputSchema as Record<string, unknown>,
+      generatedText: null,
     }),
   };
+}
+
+function pregeneratedText(toolName: string): string | null {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  const texts: Record<string, { searchText: string } | undefined> =
+    pregeneratedSearchTexts;
+  return (shortName ? texts[shortName]?.searchText : null) ?? null;
+}
+
+// Search never generates: a candidate with no stored text, or a failed lookup,
+// ranks on its source fields alone.
+async function withStoredSearchTexts(
+  candidates: SearchCandidate[],
+): Promise<SearchCandidate[]> {
+  const hashes = new Set(
+    candidates.flatMap(({ definitionHash }) =>
+      definitionHash ? [definitionHash] : [],
+    ),
+  );
+  let texts: Map<string, string>;
+  try {
+    texts = await ToolSearchTextModel.findTextsByHashes([...hashes]);
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Tool search text lookup failed; ranking on source fields",
+    );
+    return candidates;
+  }
+  return candidates.map((candidate) => {
+    const text = candidate.definitionHash
+      ? texts.get(candidate.definitionHash)
+      : undefined;
+    return text === undefined
+      ? candidate
+      : {
+          ...candidate,
+          searchText: {
+            ...candidate.searchText,
+            generated: novelGeneratedTokens(text, candidate.searchText),
+          },
+        };
+  });
+}
+
+// Generated terms a tool's own fields already contain only inflate those terms,
+// so the field carries just the new vocabulary, once each.
+function novelGeneratedTokens(
+  text: string,
+  source: {
+    name: string;
+    title: string;
+    description: string;
+    argNames: string;
+    argDescriptions: string;
+  },
+): string {
+  const sourceTokens = new Set(
+    tokenize(
+      `${source.name} ${source.title} ${source.description} ${source.argNames} ${source.argDescriptions}`,
+    ),
+  );
+  return [...new Set(tokenizeSearchText(text))]
+    .filter((token) => !sourceTokens.has(token))
+    .join(" ");
 }
 
 type SearchCatalogMeta = { name: string; serverType: string };
@@ -777,6 +862,7 @@ function buildSearchText(params: {
   title: string;
   description: string | null;
   schema: Record<string, unknown>;
+  generatedText: string | null;
 }) {
   const flattenedSchema = flattenSchemaText(params.schema);
   const name = normalizeText(params.name);
@@ -784,13 +870,13 @@ function buildSearchText(params: {
   const description = normalizeText(params.description ?? "");
   const argNames = normalizeText(flattenedSchema.names.join(" "));
   const argDescriptions = normalizeText(flattenedSchema.descriptions.join(" "));
+  const source = { name, title, description, argNames, argDescriptions };
 
   return {
-    name,
-    title,
-    description,
-    argNames,
-    argDescriptions,
+    ...source,
+    generated: params.generatedText
+      ? novelGeneratedTokens(params.generatedText, source)
+      : "",
   };
 }
 
@@ -1205,10 +1291,10 @@ function findUnmatchedQueryTerms(
   const corpusTokens = new Set<string>();
   let nameTitleText = "";
   for (const candidate of candidates) {
-    const { name, title, description, argNames, argDescriptions } =
+    const { name, title, description, argNames, argDescriptions, generated } =
       candidate.searchText;
     for (const token of tokenize(
-      `${name} ${title} ${description} ${argNames} ${argDescriptions}`,
+      `${name} ${title} ${description} ${argNames} ${argDescriptions} ${generated}`,
     )) {
       corpusTokens.add(token);
     }
@@ -1250,6 +1336,7 @@ const BM25F_FIELDS = [
   "description",
   "argNames",
   "argDescriptions",
+  "generated",
 ] as const;
 type Bm25Field = (typeof BM25F_FIELDS)[number];
 
@@ -1259,6 +1346,7 @@ const BM25F_FIELD_CONFIG: Record<Bm25Field, { weight: number; b: number }> = {
   description: { weight: 3, b: 0.75 },
   argNames: { weight: 2, b: 0.5 },
   argDescriptions: { weight: 1, b: 0.75 },
+  generated: { weight: 4, b: 0.75 },
 };
 const BM25F_K1 = 1.5;
 const EXACT_NAME_BOOST = 1000;
@@ -1293,6 +1381,7 @@ function rankCandidatesByKeyword(
       description: tokenize(candidate.searchText.description),
       argNames: tokenize(candidate.searchText.argNames),
       argDescriptions: tokenize(candidate.searchText.argDescriptions),
+      generated: tokenize(candidate.searchText.generated),
     },
   }));
 
@@ -1325,6 +1414,7 @@ function computeAvgFieldLength(
     description: 0,
     argNames: 0,
     argDescriptions: 0,
+    generated: 0,
   };
   for (const entry of indexed) {
     for (const field of BM25F_FIELDS) {
@@ -1532,16 +1622,4 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-// splits identifiers into word subtokens: `github__search_repositories` ->
-// ["github", "search", "repositories"]. `_`/`-` are separators (unlike the
-// stored names) so snake/kebab-case tool names rank under their parts. Keeps
-// duplicates — BM25 term frequency depends on them.
-function tokenize(value: string): string[] {
-  return value.split(/[^a-z0-9]+/).filter((token) => token.length > 0);
 }

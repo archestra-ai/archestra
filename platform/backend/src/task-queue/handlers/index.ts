@@ -9,6 +9,7 @@ import {
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
+import { reconcileToolSearchTexts } from "@/services/tool-search-text-reconcile";
 import type { TaskQueueService } from "../task-queue";
 import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
@@ -147,6 +148,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "mcp_tool_description_backfill",
     handleMcpToolDescriptionBackfill,
+  );
+  taskQueueService.registerHandler(
+    "tool_search_text_reconcile",
+    reconcileToolSearchTexts,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
   taskQueueService.registerHandler("auto_routing_dispatch", () =>

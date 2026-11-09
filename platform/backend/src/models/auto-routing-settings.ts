@@ -73,6 +73,7 @@ class AutoRoutingSettingsModel {
         .set({
           autoRoutingEnabled: update.enabled,
           autoRoutingBudgetUsdPerDay: update.budgetUsdPerDay,
+          autoRoutingBudgetPreset: update.budgetPreset,
           autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1`,
         })
         .where(organizationLlmProxy(organizationId))
@@ -187,6 +188,10 @@ export function mergeSettings(
       update.budgetUsdPerDay === undefined
         ? current.budgetUsdPerDay
         : update.budgetUsdPerDay,
+    budgetPreset:
+      update.budgetPreset === undefined
+        ? current.budgetPreset
+        : update.budgetPreset,
     ...(tiers && {
       fastModelId: tiers.fast.modelId,
       normalModelId: tiers.normal.modelId,
@@ -201,6 +206,7 @@ export function mergeSettings(
 const settingsColumns = {
   enabled: agents.autoRoutingEnabled,
   budgetUsdPerDay: agents.autoRoutingBudgetUsdPerDay,
+  budgetPreset: agents.autoRoutingBudgetPreset,
   scorerVersionId: agents.autoRoutingScorerVersionId,
   generation: agents.autoRoutingGeneration,
   plannedGeneration: agents.autoRoutingPlannedGeneration,

@@ -41,10 +41,11 @@ const routingPlansTable = pgTable(
     tiersFingerprint: jsonb("tiers_fingerprint")
       .$type<RouterDocument>()
       .notNull(),
+    /** Null when the fit was for a budget preset and resolved no budget (cold start, failure). */
     budgetUsdPerDay: numeric("budget_usd_per_day", {
       precision: 12,
       scale: 2,
-    }).notNull(),
+    }),
     scorerVersionId: uuid("scorer_version_id")
       .notNull()
       .references(() => routingScorerVersionsTable.id),

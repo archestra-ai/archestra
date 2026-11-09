@@ -4,16 +4,20 @@ import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils/format-currency";
+import { BUDGET_PRESET_LABELS, type BudgetPreset } from "./budget-presets";
 import type { PlanSummary } from "./plan-document";
 import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
 
 export function PlanSummaryView({
   summary,
   budgetUsdPerDay,
+  budgetPreset = null,
   tierModels,
 }: {
   summary: PlanSummary;
   budgetUsdPerDay: number;
+  /** Named next to the budget when the budget comes from it. */
+  budgetPreset?: BudgetPreset | null;
   tierModels: Record<TierName, string>;
 }) {
   return (
@@ -25,6 +29,9 @@ export function PlanSummaryView({
           </span>
           <span className="text-xs text-muted-foreground">
             of {formatCurrency(budgetUsdPerDay)} budget
+            {budgetPreset && (
+              <span> · {BUDGET_PRESET_LABELS[budgetPreset]}</span>
+            )}
           </span>
         </SummaryTile>
         <SummaryTile label="Quality vs all-smart">

@@ -64,6 +64,35 @@ describe("auto routing plan fit", () => {
     expect(refit?.trigger).toBe("nightly");
   });
 
+  test("a preset without a custom budget is dispatched and fitted on the budget it resolves", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+    await db
+      .update(schema.agentsTable)
+      .set({ autoRoutingBudgetUsdPerDay: null })
+      .where(eq(schema.agentsTable.organizationId, org.organizationId));
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetPreset: "intelligence",
+    });
+
+    await autoRoutingDispatcher.dispatch();
+    const [task] = await pendingFits(org.organizationId);
+    await handleAutoRoutingFit(task.payload);
+
+    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const summary = z
+      .object({
+        tier_session_share: z.tuple([z.number(), z.number(), z.number()]),
+      })
+      .passthrough()
+      .parse(active?.summary);
+    expect(Number(active?.budgetUsdPerDay)).toBeGreaterThan(0);
+    expect(summary.tier_session_share[2]).toBeGreaterThanOrEqual(2 / 3);
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
+
   test("names an unrequested fit by what moved: nothing yet, then a finished backfill", async ({
     makeOrganization,
   }) => {

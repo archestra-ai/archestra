@@ -176,11 +176,15 @@ function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {
     settings.tiers,
   );
   const summary = plan ? parsePlanSummary(plan.summary) : null;
-  if (!plan || !summary) return null;
+  if (!plan || !summary || plan.budgetUsdPerDay === null) return null;
   return (
     <PlanSummaryView
       summary={summary}
       budgetUsdPerDay={plan.budgetUsdPerDay}
+      // A plan fitted before the preset was picked keeps serving until a new one is.
+      budgetPreset={
+        plan.generation === settings.generation ? settings.budgetPreset : null
+      }
       tierModels={tierModels}
     />
   );

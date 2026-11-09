@@ -21,6 +21,7 @@ import RoutingUsageModel, {
 } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import {
+  type AutoRoutingBudgetPreset,
   type AutoRoutingSettings,
   type RouterDocument,
   RouterDocumentSchema,
@@ -51,10 +52,23 @@ type FitInputs = {
   generation: number;
   inputWatermark: Date;
   tiers: FitTiers;
-  budgetUsdPerDay: string;
+  budget: FitBudget;
   scorerVersionId: string;
   history: FitHistory;
 };
+
+/** The budget a fit plans for: the custom one, or a preset it resolves on the usage it read. */
+type FitBudget =
+  | { kind: "usd"; usdPerDay: string }
+  | { kind: "preset"; preset: AutoRoutingBudgetPreset };
+
+/**
+ * The share of sessions the end presets keep on their tier: Cost-efficient
+ * spends the most that still leaves this share on the fast tier, Intelligence
+ * the least that puts this share on the smart tier. Balanced spends halfway
+ * between the two.
+ */
+const BUDGET_PRESET_TIER_SHARE = 2 / 3;
 
 /** The trio as router-core prices it, or why it cannot be priced (recorded as a failed fit). */
 type FitTiers =
@@ -95,13 +109,18 @@ export async function prepareFit(
 export async function fitReadiness(
   settings: AutoRoutingSettings,
 ): Promise<
-  | { kind: "ready"; trio: Trio; budgetUsdPerDay: string }
+  | { kind: "ready"; trio: Trio; budget: FitBudget }
   | { kind: "blocked"; reason: string }
 > {
   if (!settings.enabled) {
     return { kind: "blocked", reason: "Auto routing is off." };
   }
-  if (settings.budgetUsdPerDay === null) {
+  const budget: FitBudget | null = settings.budgetPreset
+    ? { kind: "preset", preset: settings.budgetPreset }
+    : settings.budgetUsdPerDay !== null
+      ? { kind: "usd", usdPerDay: settings.budgetUsdPerDay }
+      : null;
+  if (!budget) {
     return { kind: "blocked", reason: "No daily budget is set." };
   }
   const loaded = await loadTrio(settings);
@@ -112,23 +131,21 @@ export async function fitReadiness(
         reason: `The ${loaded.tier} tier's model is no longer available.`,
       };
     case "ok":
-      return {
-        kind: "ready",
-        trio: loaded.trio,
-        budgetUsdPerDay: settings.budgetUsdPerDay,
-      };
+      return { kind: "ready", trio: loaded.trio, budget };
   }
 }
 
 /**
  * The cheapest routing's USD/day when `settings` cannot be met on the current
  * usage, from a fit that publishes nothing; null when they can be, or no fit
- * would run on them.
+ * would run on them. A preset is always met: it never resolves below the
+ * cheapest routing.
  */
 export async function infeasibleBudget(
   organizationId: string,
   settings: AutoRoutingSettings,
 ): Promise<number | null> {
+  if (settings.budgetPreset) return null;
   const inputs = await readFitInputs({
     organizationId,
     settings,
@@ -141,7 +158,8 @@ export async function infeasibleBudget(
 }
 
 /**
- * What a fit at `budgetUsdPerDay` would plan if the fitted usage window's
+ * What a fit at `budgetUsdPerDay`, or at the budget `budgetPreset` resolves
+ * to, would plan if the fitted usage window's
  * sessions and tokens per day were `volumeMultiplier` times what they were.
  * Runs regardless of the enabled switch and publishes nothing. Each one reads
  * and fits the whole usage window, so an organization runs one at a time and
@@ -149,7 +167,7 @@ export async function infeasibleBudget(
  */
 export function simulateFit(
   organizationId: string,
-  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+  params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
   return simulationAdmission(organizationId, () =>
     simulate(organizationId, params),
@@ -255,7 +273,6 @@ function publish(
       inputs.tiers.kind === "ok"
         ? inputs.tiers.tiers
         : inputs.tiers.fingerprint,
-    budgetUsdPerDay: inputs.budgetUsdPerDay,
     scorerVersionId: inputs.scorerVersionId,
     ...fitted,
   });
@@ -360,9 +377,14 @@ export async function fitNow(
 const MAX_SIMULATIONS = 4;
 const simulationAdmission = fitAdmission("simulation", MAX_SIMULATIONS);
 
+type SimulateParams = { volumeMultiplier: number } & (
+  | { budgetUsdPerDay: number; budgetPreset?: undefined }
+  | { budgetPreset: AutoRoutingBudgetPreset; budgetUsdPerDay?: undefined }
+);
+
 async function simulate(
   organizationId: string,
-  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+  params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
   const settings = await AutoRoutingSettingsModel.find(organizationId);
   const inputs =
@@ -372,7 +394,12 @@ async function simulate(
       settings: {
         ...settings,
         enabled: true,
-        budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+        ...(params.budgetPreset
+          ? { budgetPreset: params.budgetPreset }
+          : {
+              budgetPreset: null,
+              budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+            }),
       },
       scorerVersionId: (await activeSourceVersion()).id,
       requestedTrigger: "manual",
@@ -383,14 +410,18 @@ async function simulate(
       "Configure every tier model before simulating auto routing.",
     );
   }
-  const { outcome } = await fit(inputs, params.volumeMultiplier);
+  const { outcome, budgetUsdPerDay } = await fit(
+    inputs,
+    params.volumeMultiplier,
+  );
   switch (outcome.status) {
     case "active":
       if (!outcome.summary) throw new Error("An active fit has no summary");
-      if (inputs.tiers.kind !== "ok")
-        throw new Error("An active fit has unpriced tiers");
+      if (inputs.tiers.kind !== "ok" || budgetUsdPerDay === null)
+        throw new Error("An active fit has unpriced tiers or no budget");
       return {
         status: "feasible",
+        budgetUsdPerDay: Number(budgetUsdPerDay),
         summary: outcome.summary,
         tiersFingerprint: inputs.tiers.tiers,
         baseline: dailyVolume(inputs.history.volume),
@@ -478,7 +509,7 @@ async function readFitInputs(params: {
     generation: settings.generation,
     inputWatermark,
     tiers,
-    budgetUsdPerDay: readiness.budgetUsdPerDay,
+    budget: readiness.budget,
     scorerVersionId,
     history,
   };
@@ -590,6 +621,7 @@ async function prepareAndComplete(
     const published = await publish(inputs, {
       coreVersion: coreVersion(),
       planFormatVersion: planFormatVersion(),
+      budgetUsdPerDay: customBudget(inputs.budget),
       outcome: {
         status: "failed",
         error: "The plan fit failed unexpectedly.",
@@ -703,11 +735,14 @@ async function fit(
 ): Promise<{
   coreVersion: string;
   planFormatVersion: number;
+  /** The budget planned for; a preset's only once a plan resolved it. */
+  budgetUsdPerDay: string | null;
   outcome: RoutingFitOutcome;
 }> {
   const versions = {
     coreVersion: coreVersion(),
     planFormatVersion: planFormatVersion(),
+    budgetUsdPerDay: customBudget(inputs.budget),
   };
   if (inputs.tiers.kind === "invalid") {
     return {
@@ -733,23 +768,20 @@ async function fit(
     };
   }
   try {
-    const plan = RouterPlanSchema.parse(
-      JSON.parse(
-        await fitPlan(
-          JSON.stringify(
-            planInput(
-              inputs.history,
-              tiers,
-              Number(inputs.budgetUsdPerDay),
-              volumeMultiplier,
-            ),
-          ),
-        ),
-      ),
+    const planAt = routerPlanAt(
+      planInput(inputs.history, tiers, 0, volumeMultiplier),
     );
+    const { plan, budgetUsdPerDay } =
+      inputs.budget.kind === "usd"
+        ? {
+            plan: await planAt(Number(inputs.budget.usdPerDay)),
+            budgetUsdPerDay: inputs.budget.usdPerDay,
+          }
+        : await presetPlan(planAt, inputs.budget.preset);
     return {
       coreVersion: plan.versions.core_version,
       planFormatVersion: plan.versions.plan_format_version,
+      budgetUsdPerDay,
       outcome: {
         status: "active",
         plan,
@@ -776,6 +808,131 @@ async function fit(
       },
     };
   }
+}
+
+type RouterPlan = z.infer<typeof RouterPlanSchema>;
+type PlanAt = (budgetUsdPerDay: number) => Promise<RouterPlan>;
+
+/** Fits `input` at any budget; the history is serialized once for all of them. */
+function routerPlanAt(input: ReturnType<typeof planInput>): PlanAt {
+  const prefix = JSON.stringify({ ...input, budget: undefined }).slice(0, -1);
+  return async (budgetUsdPerDay) =>
+    RouterPlanSchema.parse(
+      JSON.parse(await fitPlan(`${prefix},"budget":${budgetUsdPerDay}}`)),
+    );
+}
+
+function customBudget(budget: FitBudget): string | null {
+  return budget.kind === "usd" ? budget.usdPerDay : null;
+}
+
+const PlanSharesSchema = z
+  .object({
+    expected_spend: z.number(),
+    tier_session_share: z.tuple([z.number(), z.number(), z.number()]),
+  })
+  .passthrough();
+
+/** Above every daily spend a plan can reach: the most a budget column holds. */
+const UNBOUNDED_BUDGET_USD_PER_DAY = 9_999_999_999.99;
+/** Shares are compared with this slack so float noise never flips a test. */
+const SHARE_TOLERANCE = 1e-9;
+
+/**
+ * The daily budget, in whole cents, `preset` resolves to on the fitted usage,
+ * and the plan at it. Raising the budget only moves sessions to bigger tiers,
+ * so the fast share falls and the smart share grows with it, between the
+ * cheapest routing's spend and the best routing's; a bisection finds where
+ * each crosses `BUDGET_PRESET_TIER_SHARE`, stopping within 0.5%.
+ */
+async function presetPlan(
+  fitAt: PlanAt,
+  preset: AutoRoutingBudgetPreset,
+): Promise<{ plan: RouterPlan; budgetUsdPerDay: string }> {
+  const plans = new Map<number, Promise<RouterPlan>>();
+  const planAt = (cents: number) => {
+    let plan = plans.get(cents);
+    if (!plan) {
+      plan = fitAt(cents / 100);
+      plans.set(cents, plan);
+    }
+    return plan;
+  };
+  const share = async (cents: number, tier: number) =>
+    PlanSharesSchema.parse((await planAt(cents)).summary).tier_session_share[
+      tier
+    ];
+  const best = PlanSharesSchema.parse(
+    (await fitAt(UNBOUNDED_BUDGET_USD_PER_DAY)).summary,
+  );
+  const cheapest = Math.max(1, Math.ceil((await cheapestSpend(fitAt)) * 100));
+  const highest = Math.max(cheapest, Math.ceil(best.expected_spend * 100));
+  const target = BUDGET_PRESET_TIER_SHARE - SHARE_TOLERANCE;
+  const costEfficient = async () =>
+    (
+      await crossing(
+        cheapest,
+        highest,
+        async (cents) => (await share(cents, 0)) >= target,
+      )
+    ).lastPassing;
+  const intelligence = async () =>
+    (
+      await crossing(
+        cheapest,
+        highest,
+        async (cents) => (await share(cents, 2)) < target,
+      )
+    ).firstFailing;
+  const cents =
+    preset === "cost_efficient"
+      ? await costEfficient()
+      : preset === "intelligence"
+        ? await intelligence()
+        : Math.round(((await costEfficient()) + (await intelligence())) / 2);
+  return {
+    plan: await planAt(cents),
+    budgetUsdPerDay: (cents / 100).toFixed(2),
+  };
+}
+
+/**
+ * Where a test that holds up to some budget and fails beyond it flips within
+ * [low, high] cents, bracketed to within 0.5%; both ends are `low` when it
+ * already fails there and `high` when it still holds there.
+ */
+async function crossing(
+  low: number,
+  high: number,
+  passes: (cents: number) => Promise<boolean>,
+): Promise<{ lastPassing: number; firstFailing: number }> {
+  if (!(await passes(low))) return { lastPassing: low, firstFailing: low };
+  if (await passes(high)) return { lastPassing: high, firstFailing: high };
+  while (high - low > Math.max(1, Math.floor(high / 200))) {
+    const middle = Math.floor((low + high) / 2);
+    if (await passes(middle)) low = middle;
+    else high = middle;
+  }
+  return { lastPassing: low, firstFailing: high };
+}
+
+/** The cheapest routing's USD/day, read from the infeasibility of a zero budget. */
+async function cheapestSpend(planAt: PlanAt): Promise<number> {
+  try {
+    await planAt(0);
+    return 0;
+  } catch (error) {
+    const cheapest = infeasibleError(error);
+    if (cheapest === null) throw error;
+    return cheapest;
+  }
+}
+
+function infeasibleError(error: unknown): number | null {
+  const coded = CodedErrorSchema.safeParse(error);
+  return coded.success
+    ? cheapestBudget(`${coded.data.code}: ${coded.data.message}`)
+    : null;
 }
 
 /**

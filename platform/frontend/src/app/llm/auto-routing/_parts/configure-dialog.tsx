@@ -20,24 +20,56 @@ import {
 } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
   type AutoRoutingSettings,
   type AutoRoutingSettingsUpdate,
+  useSimulateAutoRouting,
   useUpdateAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { formatCurrency } from "@/lib/utils/format-currency";
+import { cn } from "@/lib/utils/tailwind";
+import { BUDGET_PRESET_LABELS, type BudgetPreset } from "./budget-presets";
 import { MAX_BUDGET, MIN_BUDGET } from "./budget-scale";
+import { parsePlanSummary } from "./plan-document";
 import { TIER_LABELS, TIER_NAMES, type TierName } from "./tiers";
 
 type TierValue = { providerApiKeyId: string; modelId: string };
+type BudgetMode = BudgetPreset | "custom";
 type FormValues = {
   enabled: boolean;
+  budgetMode: BudgetMode;
   budgetUsdPerDay: string;
   tiers: Record<TierName, TierValue>;
 };
+
+const BUDGET_MODES: { value: BudgetMode; label: string; hint: string }[] = [
+  {
+    value: "cost_efficient",
+    label: BUDGET_PRESET_LABELS.cost_efficient,
+    hint: "Mostly the fast model",
+  },
+  {
+    value: "balanced",
+    label: BUDGET_PRESET_LABELS.balanced,
+    hint: "A mix, halfway in cost",
+  },
+  {
+    value: "intelligence",
+    label: BUDGET_PRESET_LABELS.intelligence,
+    hint: "Mostly the smart model",
+  },
+  { value: "custom", label: "Custom", hint: "Your own daily budget" },
+];
 
 const TIER_HINTS: Record<TierName, string> = {
   fast: "Short, simple sessions",
@@ -70,7 +102,10 @@ export function ConfigureAutoRoutingDialog({
   )
     .filter((id) => id && !options.eligible.has(id))
     .map((id) => options.keys.find((key) => key.id === id))[0];
-  const budgetError = validateBudget(values.budgetUsdPerDay, values.enabled);
+  const budgetError =
+    values.budgetMode === "custom"
+      ? validateBudget(values.budgetUsdPerDay, values.enabled)
+      : null;
   // The tiers are saved together, so an edited one needs the other two.
   const tiersEdited = !!form.formState.dirtyFields.tiers;
   const problem =
@@ -171,23 +206,12 @@ export function ConfigureAutoRoutingDialog({
               </InlineNotice>
             )}
           </section>
-          <section className="space-y-2">
-            <Label htmlFor="auto-routing-budget">Daily budget (USD)</Label>
-            <Input
-              id="auto-routing-budget"
-              type="number"
-              inputMode="decimal"
-              step="any"
-              className="w-40"
-              disabled={update.isPending}
-              aria-invalid={budgetError !== null}
-              {...form.register("budgetUsdPerDay")}
-            />
-            <p className="text-xs text-muted-foreground">
-              Auto spends up to this much a day, sending the sessions that
-              benefit most to the bigger models.
-            </p>
-          </section>
+          <BudgetSection
+            form={form}
+            settings={settings}
+            disabled={update.isPending}
+            budgetError={budgetError}
+          />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           {problem && isDirty ? (
@@ -212,6 +236,135 @@ export function ConfigureAutoRoutingDialog({
 // =============================================================================
 // Internal
 // =============================================================================
+
+/** A preset Auto re-derives from usage on every plan, or a custom daily budget. */
+function BudgetSection({
+  form,
+  settings,
+  disabled,
+  budgetError,
+}: {
+  form: UseFormReturn<FormValues>;
+  settings: AutoRoutingSettings;
+  disabled: boolean;
+  budgetError: string | null;
+}) {
+  const appName = useAppName();
+  const mode = form.watch("budgetMode");
+  return (
+    <section className="space-y-3">
+      <div className="space-y-0.5">
+        <h3 className="text-sm font-medium">Daily budget</h3>
+        <p className="text-xs text-muted-foreground">
+          {mode === "custom"
+            ? "Auto spends up to this much a day, sending the sessions that benefit most to the bigger models."
+            : `${appName} sets the budget from recent traffic and adjusts it every time the plan is refitted.`}
+        </p>
+      </div>
+      <Controller
+        control={form.control}
+        name="budgetMode"
+        render={({ field }) => (
+          <RadioGroup
+            value={field.value}
+            onValueChange={(value) => field.onChange(value as BudgetMode)}
+            disabled={disabled}
+            aria-label="Daily budget"
+            className="grid-cols-2 gap-2 sm:grid-cols-4"
+          >
+            {BUDGET_MODES.map((option) => (
+              <Label
+                key={option.value}
+                className={cn(
+                  radioCardClass(),
+                  "flex cursor-pointer items-start gap-2 rounded-lg p-3 font-normal",
+                )}
+              >
+                <RadioGroupItem value={option.value} className="mt-0.5" />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium">
+                    {option.label}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {option.hint}
+                  </span>
+                </span>
+              </Label>
+            ))}
+          </RadioGroup>
+        )}
+      />
+      {mode === "custom" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="auto-routing-budget">USD per day</Label>
+          <Input
+            id="auto-routing-budget"
+            type="number"
+            inputMode="decimal"
+            step="any"
+            className="w-40"
+            disabled={disabled}
+            aria-invalid={budgetError !== null}
+            {...form.register("budgetUsdPerDay")}
+          />
+        </div>
+      ) : (
+        <PresetEstimate
+          preset={mode}
+          settings={settings}
+          tiersEdited={!!form.formState.dirtyFields.tiers}
+        />
+      )}
+    </section>
+  );
+}
+
+/** What the preset resolves to on today's traffic, with the saved tiers. */
+function PresetEstimate({
+  preset,
+  settings,
+  tiersEdited,
+}: {
+  preset: BudgetPreset;
+  settings: AutoRoutingSettings;
+  tiersEdited: boolean;
+}) {
+  const tiersSaved = TIER_NAMES.every((tier) => settings.tiers[tier] !== null);
+  const { coldStart } = settings.status;
+  const canEstimate =
+    tiersSaved && !tiersEdited && coldStart.sessions >= coldStart.required;
+  const { data, isPending, isError } = useSimulateAutoRouting(
+    canEstimate ? { budgetPreset: preset, volumeMultiplier: 1 } : null,
+  );
+  const text = (() => {
+    if (!tiersSaved || tiersEdited) {
+      return "The budget is estimated once the models are saved.";
+    }
+    if (coldStart.sessions < coldStart.required) {
+      return `The budget is set once ${coldStart.required.toLocaleString("en-US")} sessions are scored (${coldStart.sessions.toLocaleString("en-US")} so far). Until then, Auto runs every session on the normal model.`;
+    }
+    if (isPending) return "Estimating at today's traffic…";
+    if (isError || data?.status !== "feasible") {
+      return "No estimate at today's traffic.";
+    }
+    const summary = parsePlanSummary(data.summary);
+    const shares = summary
+      ? TIER_NAMES.map(
+          (tier, i) =>
+            `${Math.round(summary.tier_session_share[i] * 100)}% ${tier}`,
+        ).join(", ")
+      : null;
+    return `At today's traffic: about ${formatCurrency(data.budgetUsdPerDay)}/day${shares ? ` (sessions: ${shares})` : ""}.`;
+  })();
+  return (
+    <p
+      className="text-xs text-muted-foreground"
+      data-testid="auto-routing-preset-estimate"
+    >
+      {text}
+    </p>
+  );
+}
 
 type TierOptions = ReturnType<typeof useTierOptions>;
 
@@ -325,6 +478,10 @@ function toFormValues(settings: AutoRoutingSettings): FormValues {
   });
   return {
     enabled: settings.enabled,
+    // Nothing chosen yet starts on Balanced.
+    budgetMode:
+      settings.budgetPreset ??
+      (settings.budgetUsdPerDay === null ? "balanced" : "custom"),
     budgetUsdPerDay: settings.budgetUsdPerDay?.toString() ?? "",
     tiers: { fast: tier("fast"), normal: tier("normal"), smart: tier("smart") },
   };
@@ -340,7 +497,11 @@ function validateBudget(value: string, enabled: boolean): string | null {
   return null;
 }
 
-/** Only edited fields go out; the tiers go together once all three are set. */
+/**
+ * Only edited fields go out; the tiers go together once all three are set. A
+ * preset goes out until one is saved, so turning routing on with the
+ * preselected one saves it.
+ */
 function changedFields(
   values: FormValues,
   settings: AutoRoutingSettings,
@@ -355,9 +516,20 @@ function changedFields(
   const tiersComplete = TIER_NAMES.every(
     (tier) => values.tiers[tier].providerApiKeyId && values.tiers[tier].modelId,
   );
+  const custom = values.budgetMode === "custom";
+  const savedMode =
+    settings.budgetPreset ??
+    (settings.budgetUsdPerDay === null ? null : "custom");
   return {
     ...(values.enabled !== saved.enabled ? { enabled: values.enabled } : {}),
-    ...(values.budgetUsdPerDay.trim() &&
+    ...(values.budgetMode !== savedMode
+      ? {
+          budgetPreset:
+            values.budgetMode === "custom" ? null : values.budgetMode,
+        }
+      : {}),
+    ...(custom &&
+    values.budgetUsdPerDay.trim() &&
     values.budgetUsdPerDay !== saved.budgetUsdPerDay
       ? { budgetUsdPerDay: Number(values.budgetUsdPerDay) }
       : {}),

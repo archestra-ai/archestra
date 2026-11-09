@@ -1066,7 +1066,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`** - RuntimeClass for unprivileged runtime pods, such as `gvisor`, so a run does not share the node's kernel.
   - Default: unset (the cluster's default runtime)
-  - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass, such as a GKE Sandbox node pool.
+  - Privileged runtime pods ignore it, because gVisor cannot run privileged containers. The cluster needs nodes that serve the RuntimeClass. See [Sandboxed Runtime](/docs/agents/runtime/setup#sandboxed-runtime).
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector for the platform's API pods. Runtime pods may send traffic only to pods that match.
   - Default: `archestra.io/platform-api=true` (set on API pods by the Helm chart)

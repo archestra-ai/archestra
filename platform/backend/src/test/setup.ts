@@ -309,8 +309,19 @@ beforeEach(async ({ task }) => {
  * undoes vi.useFakeTimers, and in a shared worker a leaked frozen clock
  * stalls every later setTimeout and makes DB timestamps collide across
  * unrelated files. useRealTimers is a no-op when timers are already real.
+ *
+ * The fetch restored here is the worker's original, captured once per worker
+ * on `globalThis` (this module is evaluated again for every file) and put
+ * back before each file's modules load. Capturing whatever fetch is current
+ * per file is not enough: after each file Vitest calls `vi.restoreAllMocks()`,
+ * which re-runs every `vi.spyOn` restore, so a spy made on `fetch` while an
+ * MSW server was listening puts the stale MSW interceptor back after the
+ * file's last test. The next file would capture that interceptor as its
+ * "real" fetch, and its loopback requests would fail as unhandled.
  */
-const realFetch = globalThis.fetch;
+const PRISTINE_FETCH = Symbol.for("archestra.test.pristineFetch");
+const realFetch = getPristineFetch();
+globalThis.fetch = realFetch;
 afterEach(({ task }) => {
   const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
   if (rollbackMode) {
@@ -509,4 +520,12 @@ function restoreConfig(
       live[key] = snapValue;
     }
   }
+}
+
+function getPristineFetch(): typeof fetch {
+  const store = globalThis as typeof globalThis & {
+    [PRISTINE_FETCH]?: typeof fetch;
+  };
+  store[PRISTINE_FETCH] ??= globalThis.fetch;
+  return store[PRISTINE_FETCH];
 }

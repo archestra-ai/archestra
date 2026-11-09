@@ -771,6 +771,35 @@ deploys no engine itself; this Role is what lets the backend create them. Shared
 by the release-namespace Role and the per-namespace Roles generated from
 rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 */}}
+{{/*
+Read-only rules of the Kubernetes MCP servers' Role (mcp-server-operator), also
+granted to the SRE agent in the release namespace when MCP servers run in
+another one (templates/sre-serviceaccount.yaml).
+*/}}
+{{- define "archestra-platform.mcpServerOperatorRules" -}}
+# Minimal read-only permissions for basic Kubernetes inspection
+# Pods - read access only
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+# Pod logs - essential for debugging
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+# Services - common resource to inspect
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+# Deployments and workloads - common resources to inspect
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+# Events - useful for debugging
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
+{{- end }}
+
 {{- define "archestra-platform.mcpManagerRules" -}}
 - apiGroups: [""]
   resources: ["pods"]

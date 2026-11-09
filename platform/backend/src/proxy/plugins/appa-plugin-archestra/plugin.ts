@@ -3252,11 +3252,17 @@ async function resolveRuntimeCalls(params: {
       AgentModel.findSpawnTargets(organizationId),
     ]);
     const ids = new Set(runtimeTargets.map((target) => target.id));
+    const runtimeNames = new Set(
+      runtimeTargets.map(
+        (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      ),
+    );
     // Delegating to one of the organization's own agents, in a runtime or in
     // this process, starts a child trajectory. Built-in subagents do not.
     const names = new Set([
       SELF_FORK_TOOL_NAME,
-      ...[...runtimeTargets, ...spawnTargets].map(
+      ...runtimeNames,
+      ...spawnTargets.map(
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
       ),
     ]);
@@ -3264,7 +3270,8 @@ async function resolveRuntimeCalls(params: {
       call.spawn =
         call.action === TOOL_START_AGENT_RUN_SHORT_NAME
           ? typeof call.args.agent_id === "string" &&
-            ids.has(call.args.agent_id)
+            (ids.has(call.args.agent_id) ||
+              runtimeNames.has(call.args.agent_id))
           : names.has(call.action);
     }
   }

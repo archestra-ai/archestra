@@ -10,6 +10,7 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RESTORE_APP_VERSION_SHORT_NAME,
@@ -255,6 +256,9 @@ export async function buildAgentSystemPrompt(params: {
           organizationId,
           userId,
           agentId,
+          canSearchCatalog:
+            archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME) in
+            mcpTools,
         })
       : null;
 
@@ -333,10 +337,12 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
   organizationId: string;
   userId?: string;
   agentId?: string;
+  canSearchCatalog: boolean;
 }) {
-  const candidates = await listAccessibleCatalogSkills(params);
-  const policyEvaluator = params.agentId
-    ? await agentActivationSkillPolicyService.getEvaluator(params.agentId)
+  const { canSearchCatalog, ...scope } = params;
+  const candidates = await listAccessibleCatalogSkills(scope);
+  const policyEvaluator = scope.agentId
+    ? await agentActivationSkillPolicyService.getEvaluator(scope.agentId)
     : null;
   const available = policyEvaluator
     ? candidates.filter((skill) =>
@@ -347,8 +353,9 @@ async function buildEffectiveNativeSkillCatalogPrompt(params: {
       )
     : candidates;
   return buildSkillCatalogPrompt({
-    ...params,
-    catalogSkills: selectEffectiveNativeSkills(available, params.userId),
+    ...scope,
+    catalogSkills: selectEffectiveNativeSkills(available, scope.userId),
+    promptBudget: { canSearchCatalog },
   });
 }
 

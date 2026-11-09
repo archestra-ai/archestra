@@ -1421,6 +1421,7 @@ describe("executeA2AMessage skill catalog", () => {
       userId: actor.id,
       agentId: agent.id,
       catalogSkills: [],
+      promptBudget: { canSearchCatalog: false },
     });
     const system = mockStreamText.mock.calls[0]?.[0].system;
     expect(system).toContain("Handle the task.");

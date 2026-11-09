@@ -73,6 +73,7 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: unset (no extra port)
   - Values: `1`–`65535`. Any other value disables the extra port and logs a warning.
   - The main API port keeps serving these endpoints. In Helm, set `archestra.publicEndpointsPort`, which also exposes the port on the Service.
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 - **`ARCHESTRA_TRUST_PROXY`** - Trusts the `X-Forwarded-*` headers of a reverse proxy or load balancer. Rate limits and audit logs then see each client's IP.
   - Default: `false`
@@ -1302,6 +1303,7 @@ These variables connect an Outlook mailbox so people can [email agents](/docs/ag
 - **`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`** - Public URL that receives new-mail notifications. When set, Archestra creates the subscription on startup.
   - Default: unset (create the subscription in **Settings → Messaging Channels → Email**)
   - Values: a URL ending in `/api/webhooks/incoming-email`, for example `https://archestra.example.com/api/webhooks/incoming-email`
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 ## ChatOps
 
@@ -1311,6 +1313,7 @@ The Microsoft Teams, Slack, and Telegram variables apply only on first startup, 
   - Default: the ngrok tunnel URL, or the frontend URL when no tunnel is active.
   - Values: an HTTP(S) base URL, for example `https://hooks.example.com`.
   - Used when creating or retargeting Slack apps. Existing app URLs require a separate update. Browser OAuth redirects keep using the frontend or tunnel URL.
+  - See [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints).
 
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Sends a welcome message to users who are created automatically when they first message an agent.
   - Default: `true`
@@ -1387,7 +1390,7 @@ See [Telegram](/docs/agents/triggers-and-channels/telegram) for setup. Telegram 
 
 ### Public URL
 
-Microsoft Teams and Slack webhook mode need Archestra reachable from the internet. These variables open an [ngrok](https://ngrok.com) tunnel to Archestra on startup.
+These variables open an [ngrok](https://ngrok.com) tunnel to Archestra on startup, for a local instance. [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints) lists what must be reachable from the internet.
 
 - **`ARCHESTRA_NGROK_AUTH_TOKEN`** - ngrok auth token.
   - Default: unset (no tunnel)

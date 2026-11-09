@@ -307,6 +307,7 @@ const layerTable = [
       "src/knowledge-base/connectors/pdf-utils.ts",
 
       "src/archestra-mcp-server/run-tool-target.ts",
+      "src/archestra-mcp-server/search-text.ts",
       "src/archestra-mcp-server/tool-attestation.ts",
       "src/clients/realtime-audio.ts",
       "src/openappa/child-trajectory-receipt.ts",

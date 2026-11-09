@@ -13,7 +13,9 @@
  * because it cannot accept a second answer in its place.
  */
 import { createHash } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { SupportedProvider } from "@archestra/shared";
+import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -90,6 +92,8 @@ export interface PlannedMember {
   providerApiKeyId: string;
   provider: SupportedProvider;
   modelId: string;
+  /** Overrides the pool retry settings for this deployment. */
+  retrySettings?: ModelPoolRetrySettings | null;
 }
 
 export interface ModelPoolPlan {
@@ -103,6 +107,9 @@ export interface ModelPoolPlan {
   timeoutMs?: number;
   /** The pool's own cooldown; unset keeps the default. */
   cooldownMs?: number;
+  retrySettings?: ModelPoolRetrySettings | null;
+  /** Explicit request retry count, taking precedence over class overrides. */
+  requestNumRetries?: number;
 }
 
 /** Who is calling, as far as pool access goes. */
@@ -160,6 +167,7 @@ export async function planModelPool(params: {
   /** Set when the Unified Model API already let this caller use the pool. */
   grantedPoolId?: string;
   sessionId?: string | null;
+  retryCountHeader?: string | string[];
 }): Promise<ModelPoolPlan | null> {
   if (!config.llmProxy.modelPoolsEnabled) return null;
   const pool = params.poolId
@@ -209,6 +217,8 @@ export async function planModelPool(params: {
     streamTimeoutMs: toMs(pool.streamTimeoutSeconds),
     timeoutMs: toMs(pool.timeoutSeconds),
     cooldownMs: toMs(pool.cooldownSeconds),
+    retrySettings: pool.retrySettings ?? undefined,
+    requestNumRetries: parseRetryCountHeader(params.retryCountHeader),
     members: orderPoolMembers({
       members: reachable,
       benchedUntil,
@@ -220,6 +230,7 @@ export async function planModelPool(params: {
         providerApiKeyId: member.providerApiKeyId,
         provider: member.provider,
         modelId: member.modelId,
+        retrySettings: member.retrySettings ?? undefined,
       };
     }),
   };
@@ -317,6 +328,8 @@ export async function openThroughModelPool<T>(params: {
   memberTimeoutMs?: number;
   isRetryable: (error: unknown) => boolean;
   shouldContinue: () => boolean;
+  /** Releases backoff immediately when the downstream client leaves. */
+  signal?: AbortSignal;
   onRetry?: (event: {
     attempt: number;
     delayMs: number;
@@ -354,7 +367,16 @@ export async function openThroughModelPool<T>(params: {
   let hiddenError: ApiError | undefined;
   let attempted = 0;
   let creditCoolingDown = false;
-  for (const [index, member] of plan.members.entries()) {
+  // Queue only the next retry, rather than pre-expanding every member's budget.
+  // Every dispatched retry rechecks visibility and spend, gets a fresh abort
+  // signal, and settles its preceding attempt before admission.
+  const members = [...plan.members];
+  const retries = new Map<string, number>();
+  for (const [index, member] of members.entries()) {
+    if (params.signal?.aborted || !params.shouldContinue()) {
+      if (lastFailure) break;
+      throw new DOMException("The proxy client disconnected", "AbortError");
+    }
     // Another request may have exhausted this member after this plan was built.
     const bench = await cacheManager.get<Bench>(
       benchKey(plan.poolId, member.memberId, "credit"),
@@ -401,7 +423,8 @@ export async function openThroughModelPool<T>(params: {
     // before each member is attempted, so hidden trailing members do not
     // extend an earlier member's timeout or enable its connection retries.
     // Keep that bounded timing even if every remaining member is later hidden.
-    const isLast = index === plan.members.length - 1;
+    const isLast = index === members.length - 1;
+    const retrySettings = resolveRetrySettings(plan, member);
     const abort = new AbortController();
     let retryFailure: unknown;
     try {
@@ -415,7 +438,10 @@ export async function openThroughModelPool<T>(params: {
         open: () => withTimeout(params.open(transport), timeoutMs, abort),
         // With a sibling left, a dropped connection moves on at once rather
         // than retrying a member that may be down.
-        isRetryable: isLast ? params.isRetryable : () => false,
+        isRetryable:
+          retrySettings === undefined && isLast
+            ? params.isRetryable
+            : () => false,
         shouldContinue: params.shouldContinue,
         onRetry: (event) => {
           retryFailure = event.error;
@@ -453,26 +479,39 @@ export async function openThroughModelPool<T>(params: {
       // the row's response.
       attempt.failureReason = failover?.reason ?? "error";
       if (!failover) throw error;
-      await benchMember({
-        poolId: plan.poolId,
-        memberId: member.memberId,
-        reason: failover.reason,
-        retryAfterMs: failover.retryAfterMs,
-        cooldownMs: plan.cooldownMs,
-      });
-      if (isLast || !params.shouldContinue()) {
+      const retryCount = retries.get(member.memberId) ?? 0;
+      const delayMs = retrySettings
+        ? retryDelayMs({
+            settings: retrySettings,
+            requestNumRetries: plan.requestNumRetries,
+            retryCount,
+            failover,
+            connectionRetryable: params.isRetryable(error),
+          })
+        : undefined;
+      if (delayMs === undefined)
+        await benchMember({
+          poolId: plan.poolId,
+          memberId: member.memberId,
+          reason: failover.reason,
+          retryAfterMs: failover.retryAfterMs,
+          cooldownMs: plan.cooldownMs,
+        });
+      if ((isLast && delayMs === undefined) || !params.shouldContinue()) {
         throw error instanceof MemberUnavailableError ? error.cause : error;
       }
-      logger.warn(
-        {
-          poolId: plan.poolId,
-          providerApiKeyId: member.providerApiKeyId,
-          provider: member.provider,
-          attempt: index + 1,
-          reason: failover.reason,
-        },
-        "Model pool member failed before answering; trying the next member",
-      );
+      if (delayMs === undefined) {
+        logger.warn(
+          {
+            poolId: plan.poolId,
+            providerApiKeyId: member.providerApiKeyId,
+            provider: member.provider,
+            attempt: attempted,
+            reason: failover.reason,
+          },
+          "Model pool member failed before answering; trying the next member",
+        );
+      }
       lastFailure = {
         error: error instanceof MemberUnavailableError ? error.cause : error,
         attempt: { ...attempt },
@@ -486,6 +525,17 @@ export async function openThroughModelPool<T>(params: {
           { err: recordError, poolId: plan.poolId },
           "Failed to prepare a failed model pool attempt",
         );
+      }
+      if (delayMs !== undefined) {
+        retries.set(member.memberId, retryCount + 1);
+        members.splice(index + 1, 0, member);
+        params.onRetry?.({ attempt: retryCount + 1, delayMs, error });
+        try {
+          await sleep(delayMs, undefined, { signal: params.signal });
+        } catch (error) {
+          if (params.signal?.aborted) break;
+          throw error;
+        }
       }
     }
   }
@@ -505,6 +555,83 @@ export async function openThroughModelPool<T>(params: {
 }
 
 // === Internal helpers ===
+
+/** Request overrides are pool-only, bounded, and never forwarded upstream. */
+function parseRetryCountHeader(value: string | string[] | undefined) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^(?:[0-9]|10)$/.test(value)) {
+    throw new ApiError(
+      400,
+      "x-archestra-num-retries must be an integer from 0 to 10",
+    );
+  }
+  return Number(value);
+}
+
+function resolveRetrySettings(
+  plan: ModelPoolPlan,
+  member: PlannedMember,
+): ModelPoolRetrySettings | undefined {
+  if (
+    !plan.retrySettings &&
+    !member.retrySettings &&
+    plan.requestNumRetries === undefined
+  )
+    return undefined;
+  return {
+    ...plan.retrySettings,
+    ...member.retrySettings,
+    retryPolicy: {
+      ...plan.retrySettings?.retryPolicy,
+      ...member.retrySettings?.retryPolicy,
+    },
+  };
+}
+
+/** Fail over for permanent failures; retry only transient pre-output failures. */
+function retryDelayMs(params: {
+  settings: ModelPoolRetrySettings;
+  requestNumRetries?: number;
+  retryCount: number;
+  failover: { reason: string; status?: number; retryAfterMs?: number };
+  connectionRetryable: boolean;
+}): number | undefined {
+  const { settings, failover, retryCount } = params;
+  const errorClass = failover.reason.startsWith("unreachable")
+    ? params.connectionRetryable
+      ? "connectionError"
+      : undefined
+    : failover.reason.startsWith("timeout")
+      ? "timeoutError"
+      : failover.reason.startsWith("rate_limited")
+        ? "rateLimitError"
+        : failover.reason.startsWith("server_error")
+          ? "internalServerError"
+          : undefined;
+  if (!errorClass) return undefined;
+  const limit =
+    params.requestNumRetries ??
+    settings.retryPolicy?.[errorClass] ??
+    settings.numRetries ??
+    2;
+  if (retryCount >= limit) return undefined;
+  const max = settings.maxDelayMs ?? 8_000;
+  const retryAfter = failover.retryAfterMs;
+  // A reset hours away should fail over, never turn into a busy retry loop.
+  if (
+    retryAfter !== undefined &&
+    Number.isFinite(retryAfter) &&
+    retryAfter > 0
+  ) {
+    return retryAfter <= max ? Math.ceil(retryAfter) : undefined;
+  }
+  const exponential = Math.min(
+    max,
+    (settings.initialDelayMs ?? 500) * 2 ** retryCount,
+  );
+  // Downward jitter matches common SDK semantics and stays within the cap.
+  return Math.max(1, Math.ceil(exponential * (0.75 + Math.random() * 0.25)));
+}
 
 /** A member that didn't answer in time. Its 408 makes it fail over. */
 class MemberTimeoutError extends Error {

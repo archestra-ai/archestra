@@ -25,6 +25,7 @@ import {
   type PoolOptions,
   type SavedMember,
 } from "./pool-form";
+import { RetryFields } from "./retry-fields";
 import type { OrderMember } from "./use-order-buckets";
 
 // Handle, key, model, weight, traffic, on, remove.
@@ -234,6 +235,9 @@ export function MemberRow({
       >
         <X />
       </Button>
+      <div className="col-span-full">
+        <RetryFields form={form} disabled={disabled} memberIndex={index} />
+      </div>
     </li>
   );
 }

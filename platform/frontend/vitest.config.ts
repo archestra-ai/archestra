@@ -80,6 +80,10 @@ export default defineConfig({
         __dirname,
         "../shared/interactions/client.ts",
       ),
+      "@archestra/shared/model-pool-retries": path.resolve(
+        __dirname,
+        "../shared/model-pool-retries.ts",
+      ),
       "@archestra/shared/model-price": path.resolve(
         __dirname,
         "../shared/model-price.ts",

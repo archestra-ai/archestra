@@ -46,7 +46,7 @@ For example, a `gpt-6.1-sol` pool with an OpenAI key of weight 3 and an Azure AI
 
 ## When a Member Fails
 
-A request moves to the next member when a member fails before it starts to answer. The client sees an error only when the last member fails, or when the request itself is at fault.
+A request moves to the next member when a member fails before it starts to answer, after any [configured retries](#retries). The client sees an error only when the last member fails, or when the request itself is at fault.
 
 | When the member | What happens |
 | --- | --- |
@@ -59,11 +59,23 @@ A request moves to the next member when a member fails before it starts to answe
 
 A member with a transient failure cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
 
-- The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
+- The last member has nowhere to move to, so the pool does not time it out. Without configured retries, only connection failures on that member are retried, at most twice.
 - Members cooling down after transient failures remain fallback candidates, the one back soonest first. Credit-exhausted members stay excluded; if all eligible members are credit-exhausted, the request fails with `503` without contacting a provider.
 - A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
 
-### Timeouts and Cooldown
+### Retries
+
+Turn on **Configure retries** when editing a pool to retry temporary failures on the same member before trying its backup.
+
+- **Default retries:** additional attempts after the first, from 0 to 10. The default is 2. Set 0 to move straight to the next member for errors without an override.
+- **Error overrides:** give connection errors, timeouts, rate limits, or server errors their own retry count. Blank fields use the default count. Invalid requests, rejected credentials, missing models and exhausted credit are never retried on the same member.
+- **Backoff:** starts at 500 ms, doubles up to 8000 ms, and uses 75–100% of that delay to spread retries. A provider's positive `Retry-After` replaces the delay when within the maximum; longer waits move to the next member instead.
+
+Use **Override retries for this member** for a deployment-specific policy. Blank member fields inherit the pool's values, including error overrides. A request can override every retry count with `x-archestra-num-retries: 0` through `10`; it cannot enable retries for permanent failures or after streaming output starts.
+
+Retries can add latency and provider charges, particularly after a timeout. Each configured attempt appears in proxy logs and counts toward `x-archestra-attempts`. Leaving retries unconfigured preserves the pool's existing failover behavior.
+
+## Timeouts and Cooldown
 
 Set these under **Timeouts and cooldown** when you create or edit a pool. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
 

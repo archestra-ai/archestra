@@ -25,6 +25,7 @@ import {
   usePoolOptions,
   usePoolProblem,
 } from "./pool-form";
+import { RetryFields } from "./retry-fields";
 
 export type PoolDialogSection = "pool" | "connect";
 
@@ -99,6 +100,7 @@ export function PoolDialog({
         savedMembers={live?.members ?? []}
       />
       <TimeoutFields form={form} disabled={disabled} />
+      <RetryFields form={form} disabled={disabled} />
     </>
   );
   const saveButton = (

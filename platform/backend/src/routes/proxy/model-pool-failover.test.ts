@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import config from "@/config";
 import { ModelPoolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -471,6 +472,143 @@ describe("openThroughModelPool", () => {
       if (error) throw error;
       return `answer from ${key}`;
     },
+  });
+
+  test("configured retry backoff doubles with jitter and caps each wait", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const delays: number[] = [];
+    let calls = 0;
+    try {
+      await expect(
+        openThroughModelPool({
+          plan: {
+            ...plan,
+            members: [plan.members[0]],
+            retrySettings: {
+              numRetries: 4,
+              initialDelayMs: 100,
+              maxDelayMs: 250,
+            },
+          },
+          attempt: {},
+          transportFor: async (m) => transport(m.providerApiKeyId),
+          open: async () => {
+            calls++;
+            throw httpError(503);
+          },
+          isRetryable: () => false,
+          shouldContinue: () => true,
+          onRetry: ({ delayMs }) => delays.push(delayMs),
+          prepareFailedAttempt: async () => async () => {},
+        }),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(delays).toEqual([88, 175, 219, 219]);
+      expect(calls).toBe(5);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  test("configured retries stop after a disconnect during backoff", async () => {
+    const abort = new AbortController();
+    let dispatched = 0;
+    const recorded: UpstreamAttempt[] = [];
+    const attempt: UpstreamAttempt = {};
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: {
+            numRetries: 2,
+            initialDelayMs: 8000,
+            maxDelayMs: 60000,
+          },
+        },
+        attempt,
+        transportFor: async (m) => transport(m.providerApiKeyId),
+        open: async () => {
+          dispatched++;
+          throw httpError(429);
+        },
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        signal: abort.signal,
+        onRetry: () => {
+          abort.abort();
+        },
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(dispatched).toBe(1);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].attemptOutcome).toBe("failed");
+    expect(attempt.interactionRecorded).toBe(true);
+  });
+
+  test("hiding a member during configured backoff prevents its next dispatch", async () => {
+    let hidden = false;
+    const opened: string[] = [];
+    const recorded: UpstreamAttempt[] = [];
+    const result = await openThroughModelPool({
+      plan: { ...plan, retrySettings: { numRetries: 2, initialDelayMs: 100 } },
+      attempt: {},
+      prepareAttempt: async (m) => {
+        if (hidden && m.providerApiKeyId === keyA)
+          throw new ApiError(403, "hidden", "model_hidden");
+      },
+      transportFor: async (m) => transport(m.providerApiKeyId),
+      open: async (t) => {
+        const key = (await t.execute({})) as string;
+        opened.push(key);
+        if (key === keyA) throw httpError(503);
+        return "answer";
+      },
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      onRetry: () => {
+        hidden = true;
+      },
+      prepareFailedAttempt: async (failed) => async (outcome) => {
+        recorded.push({ ...failed, attemptOutcome: outcome });
+      },
+    });
+    expect(result).toBe("answer");
+    expect(opened).toEqual([keyA, keyB]);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].attemptOutcome).toBe("failed_over");
+  });
+
+  test("a configured retry rechecks admission after settling its failed attempt", async () => {
+    const events: string[] = [];
+    let dispatched = 0;
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: { numRetries: 2, initialDelayMs: 100 },
+        },
+        attempt: {},
+        beforeAttempt: async () => {
+          events.push("admit");
+          if (dispatched) throw new ApiError(402, "Budget exhausted");
+        },
+        transportFor: async (m) => transport(m.providerApiKeyId),
+        open: async () => {
+          dispatched++;
+          throw httpError(503);
+        },
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => {
+          events.push("settle");
+          return async () => {};
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 402 });
+    expect(dispatched).toBe(1);
+    expect(events).toEqual(["admit", "settle", "admit"]);
   });
 
   test("a hide between selection and dispatch skips the member without recording an outage", async () => {

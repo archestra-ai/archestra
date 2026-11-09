@@ -6,6 +6,7 @@
  * latency routing (AC-Q1, AC-O1, AC-L1, AC-M1, AC-M2) are left out.
  */
 
+import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
@@ -45,7 +46,13 @@ setupTestCacheManager();
 
 type Mode =
   | { kind: "ok" }
-  | { kind: "status"; status: number; retryAfter?: string }
+  | {
+      kind: "status";
+      status: number;
+      retryAfter?: string;
+      recoverAfter?: number;
+      code?: string;
+    }
   | { kind: "refused" }
   | { kind: "black-hole" }
   | { kind: "slow"; ms: number }
@@ -62,9 +69,18 @@ interface Deployment {
 const labTest = test.extend<{
   lab: {
     deploy: (
-      members: Array<{ priority: number; weight?: number }>,
+      members: Array<{
+        priority: number;
+        weight?: number;
+        retrySettings?: ModelPoolRetrySettings;
+      }>,
+      retrySettings?: ModelPoolRetrySettings,
     ) => Promise<Deployment[]>;
-    ask: (options?: { stream?: boolean; maxTokens?: number }) => Promise<{
+    ask: (options?: {
+      stream?: boolean;
+      maxTokens?: number;
+      retryHeader?: string;
+    }) => Promise<{
       status: number;
       body: string;
       attempts?: string;
@@ -87,7 +103,12 @@ const labTest = test.extend<{
     let token = "";
 
     const deploy = async (
-      members: Array<{ priority: number; weight?: number }>,
+      members: Array<{
+        priority: number;
+        weight?: number;
+        retrySettings?: ModelPoolRetrySettings;
+      }>,
+      retrySettings?: ModelPoolRetrySettings,
     ) => {
       const deployments: Deployment[] = [];
       for (const [index] of members.entries()) {
@@ -116,12 +137,14 @@ const labTest = test.extend<{
         organizationId: org.id,
         input: {
           name: "lab-model",
+          retrySettings,
           members: members.map((member, index) => ({
             providerApiKeyId: deployments[index].keyId,
             modelId: "lab-model",
             priority: member.priority,
             weight: member.weight ?? 1,
             enabled: true,
+            retrySettings: member.retrySettings,
           })),
         },
       });
@@ -144,15 +167,22 @@ const labTest = test.extend<{
     const ask = async ({
       stream = false,
       maxTokens,
+      retryHeader,
     }: {
       stream?: boolean;
       maxTokens?: number;
+      retryHeader?: string;
     } = {}) => {
       const started = Date.now();
       const response = await app.inject({
         method: "POST",
         url: `/v1/model-router/${agent.id}/chat/completions`,
-        headers: { authorization: `Bearer ${token}` },
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(retryHeader !== undefined
+            ? { "x-archestra-num-retries": retryHeader }
+            : {}),
+        },
         payload: {
           model: "lab-model",
           stream,
@@ -176,6 +206,203 @@ const labTest = test.extend<{
     }
   },
 });
+
+labTest.for([false, true])(
+  "configured retries recover on the same member before output (stream=%s)",
+  async (stream, { lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 2, initialDelayMs: 100, maxDelayMs: 100 },
+    );
+    first.mode = { kind: "status", status: 503, recoverAfter: 2 };
+    const answer = await lab.ask({ stream });
+    expect(answer.status, answer.body).toBe(200);
+    expect(answer.providerKey).toBe(first.keyId);
+    expect(answer.attempts).toBe("3");
+    expect([first.hits, second.hits]).toEqual([3, 0]);
+    const rows = await db
+      .select()
+      .from(schema.interactionsTable)
+      .orderBy(schema.interactionsTable.createdAt);
+    expect(rows.map((row) => row.attemptOutcome)).toEqual([
+      "failed_over",
+      "failed_over",
+      "answered",
+    ]);
+  },
+);
+
+labTest(
+  "configured connection errors retry on the same member before failover",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      {
+        numRetries: 0,
+        retryPolicy: { connectionError: 1 },
+        initialDelayMs: 100,
+      },
+    );
+    first.mode = { kind: "refused" };
+    const answer = await lab.ask();
+    expect(answer.status, answer.body).toBe(200);
+    expect([first.hits, second.hits]).toEqual([2, 1]);
+  },
+);
+
+labTest(
+  "a bounded Retry-After is honored before retrying the same member",
+  async ({ lab }) => {
+    const [only] = await lab.deploy([{ priority: 1 }], {
+      numRetries: 1,
+      initialDelayMs: 100,
+      maxDelayMs: 1500,
+    });
+    only.mode = {
+      kind: "status",
+      status: 429,
+      retryAfter: "1",
+      recoverAfter: 1,
+    };
+    const answer = await lab.ask();
+    expect(answer.status, answer.body).toBe(200);
+    expect(only.hits).toBe(2);
+    expect(answer.ms).toBeGreaterThanOrEqual(1000);
+  },
+);
+
+labTest(
+  "a member default count still inherits pool error overrides",
+  async ({ lab }) => {
+    const [only] = await lab.deploy(
+      [{ priority: 1, retrySettings: { numRetries: 0 } }],
+      {
+        numRetries: 0,
+        retryPolicy: { rateLimitError: 1 },
+        initialDelayMs: 100,
+      },
+    );
+    only.mode = { kind: "status", status: 429, recoverAfter: 1 };
+    const answer = await lab.ask();
+    expect(answer.status, answer.body).toBe(200);
+    expect(only.hits).toBe(2);
+  },
+);
+
+labTest(
+  "member and error-class settings override pool retry counts",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [
+        { priority: 1, retrySettings: { retryPolicy: { rateLimitError: 0 } } },
+        { priority: 2, retrySettings: { numRetries: 1 } },
+      ],
+      { numRetries: 3, initialDelayMs: 100, maxDelayMs: 100 },
+    );
+    first.mode = { kind: "status", status: 429 };
+    second.mode = { kind: "status", status: 503 };
+    const answer = await lab.ask();
+    expect(answer.status).toBe(503);
+    expect(answer.attempts).toBe("3");
+    expect([first.hits, second.hits]).toEqual([1, 2]);
+  },
+);
+
+labTest.for(["0", "2"])(
+  "request retry header %s overrides an error-class budget",
+  async (retryHeader, { lab }) => {
+    const [only] = await lab.deploy([{ priority: 1 }], {
+      numRetries: 1,
+      retryPolicy: { rateLimitError: 4 },
+      initialDelayMs: 100,
+      maxDelayMs: 100,
+    });
+    only.mode = { kind: "status", status: 429 };
+    const answer = await lab.ask({ retryHeader });
+    expect(answer.status).toBe(429);
+    expect(only.hits).toBe(Number(retryHeader) + 1);
+  },
+);
+
+labTest.for(["-1", "11", "1.5", "two"])(
+  "invalid retry header %s is rejected before dispatch",
+  async (retryHeader, { lab }) => {
+    const [only] = await lab.deploy([{ priority: 1 }]);
+    const answer = await lab.ask({ retryHeader });
+    expect(answer.status, answer.body).toBe(400);
+    expect(only.hits).toBe(0);
+  },
+);
+
+labTest.for([
+  { status: 400, code: undefined, backup: 0 },
+  { status: 401, code: undefined, backup: 1 },
+  { status: 429, code: "insufficient_quota", backup: 1 },
+])(
+  "configured retries never replay permanent failures ($status, $code)",
+  async ({ status, code, backup }, { lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 3 },
+    );
+    first.mode = { kind: "status", status, code };
+    await lab.ask();
+    expect([first.hits, second.hits]).toEqual([1, backup]);
+  },
+);
+
+labTest(
+  "Retry-After longer than the backoff cap fails over without waiting",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 2, initialDelayMs: 100, maxDelayMs: 100 },
+    );
+    first.mode = { kind: "status", status: 429, retryAfter: "3600" };
+    const answer = await lab.ask();
+    expect(answer.status, answer.body).toBe(200);
+    expect([first.hits, second.hits]).toEqual([1, 1]);
+  },
+);
+
+labTest(
+  "configured timeout retries reopen with a fresh signal and account for every cut-off",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 1, initialDelayMs: 100, maxDelayMs: 100 },
+    );
+    first.mode = { kind: "black-hole" };
+    const answer = await lab.ask({ stream: true });
+    expect(answer.status, answer.body).toBe(200);
+    expect([first.hits, second.hits]).toEqual([2, 1]);
+    const rows = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.attemptOutcome, "failed_over"));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.failureReason).toBe("timeout (408)");
+      expect(row.inputTokensEstimated).toBe(true);
+      expect(row.inputTokens).toBeGreaterThan(0);
+    }
+  },
+);
+
+labTest(
+  "configured retries never replay a stream after its first chunk",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 3 },
+    );
+    first.mode = { kind: "cut-after-first-chunk" };
+    const answer = await lab.ask({ stream: true });
+    expect(answer.body).toContain('"content":"Hal"');
+    expect(answer.body).not.toContain("[DONE]");
+    expect([first.hits, second.hits]).toEqual([1, 0]);
+  },
+);
 
 labTest("AC-P1 priority hold: priority 2 gets no traffic", async ({ lab }) => {
   const [first, second] = await lab.deploy([{ priority: 1 }, { priority: 2 }]);
@@ -879,8 +1106,19 @@ async function respond(
   const mode = deployment.mode;
   switch (mode.kind) {
     case "status":
+      if (
+        mode.recoverAfter !== undefined &&
+        deployment.hits > mode.recoverAfter
+      )
+        return okResponse(stream);
       return HttpResponse.json(
-        { error: { message: `fake ${mode.status}`, type: "fake" } },
+        {
+          error: {
+            message: `fake ${mode.status}`,
+            type: "fake",
+            code: mode.code,
+          },
+        },
         {
           status: mode.status,
           headers: mode.retryAfter ? { "retry-after": mode.retryAfter } : {},

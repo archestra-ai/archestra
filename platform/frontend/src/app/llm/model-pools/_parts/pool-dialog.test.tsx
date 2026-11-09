@@ -47,6 +47,7 @@ function pool(benchedUntil: string | null): ModelPool {
     streamTimeoutSeconds: null,
     timeoutSeconds: null,
     cooldownSeconds: null,
+    retrySettings: null,
     createdAt: new Date(NOW).toISOString(),
     updatedAt: new Date(NOW).toISOString(),
     virtualApiKeyIds: [],
@@ -60,6 +61,7 @@ function pool(benchedUntil: string | null): ModelPool {
       priority: 1,
       weight: 1,
       enabled: true,
+      retrySettings: null,
       createdAt: new Date(NOW).toISOString(),
       benchedUntil: modelId === "glm-5" ? benchedUntil : null,
       benchReason:
@@ -79,6 +81,27 @@ describe("PoolDialog", () => {
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
+  });
+
+  it("validates retry ranges and restores legacy settings when switched off", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    await user.click(screen.getByRole("switch", { name: "Configure retries" }));
+    const retries = screen.getByRole("spinbutton", { name: "Default retries" });
+    await user.type(retries, "11");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await user.clear(retries);
+    await user.type(retries, "0");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    await user.click(screen.getByRole("switch", { name: "Configure retries" }));
+    expect(
+      screen.queryByRole("spinbutton", { name: "Default retries" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
   it("keeps edits in progress when the list refetches with new status", async () => {

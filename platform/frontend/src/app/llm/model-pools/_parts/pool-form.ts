@@ -1,6 +1,10 @@
 "use client";
 
 import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
+import {
+  type ModelPoolRetrySettings,
+  ModelPoolRetrySettingsSchema,
+} from "@archestra/shared/model-pool-retries";
 import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
@@ -18,6 +22,7 @@ import { isPoolableModel, poolModelName } from "./model-name";
  */
 export type PoolFormValues = {
   name: string;
+  retrySettings?: ModelPoolRetrySettings | null;
   members: PoolFormMember[];
 } & Record<PoolTiming, string>;
 
@@ -49,6 +54,7 @@ export type PoolFormMember = {
   priority: number;
   weight: number;
   enabled: boolean;
+  retrySettings?: ModelPoolRetrySettings | null;
 };
 
 export type PoolForm = UseFormReturn<PoolFormValues>;
@@ -77,6 +83,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
   const priorities = denseOrders(members);
   return {
     name: pool?.name ?? "",
+    retrySettings: pool?.retrySettings ?? null,
     streamTimeoutSeconds: String(pool?.streamTimeoutSeconds ?? ""),
     timeoutSeconds: String(pool?.timeoutSeconds ?? ""),
     cooldownSeconds: String(pool?.cooldownSeconds ?? ""),
@@ -86,6 +93,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
       priority: priorities[index] ?? 1,
       weight: member.weight,
       enabled: member.enabled,
+      retrySettings: member.retrySettings ?? null,
     })),
   };
 }
@@ -93,6 +101,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
   return {
     name: values.name.trim(),
+    retrySettings: values.retrySettings ?? null,
     streamTimeoutSeconds: toSeconds(values.streamTimeoutSeconds),
     timeoutSeconds: toSeconds(values.timeoutSeconds),
     cooldownSeconds: toSeconds(values.cooldownSeconds),
@@ -102,6 +111,7 @@ export function toPoolInput(values: PoolFormValues): ModelPoolInput {
       priority: member.priority,
       weight: member.weight,
       enabled: member.enabled,
+      retrySettings: member.retrySettings ?? null,
     })),
   };
 }
@@ -220,10 +230,19 @@ export type PoolOptions = ReturnType<typeof usePoolOptions>;
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,
-): "name" | "taken" | "members" | "numbers" | "repeated" | "timing" | null {
+):
+  | "name"
+  | "taken"
+  | "members"
+  | "numbers"
+  | "repeated"
+  | "timing"
+  | "retries"
+  | null {
   const name = form.watch("name").trim();
   const members = form.watch("members");
   const timing = form.watch(TIMINGS);
+  const retrySettings = form.watch("retrySettings");
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   if (!name) return "name";
   if (pools.some((other) => other.id !== poolId && other.name === name))
@@ -237,6 +256,14 @@ export function usePoolProblem(
   if (hasRepeatedMember(members)) return "repeated";
   if (TIMINGS.some((key, index) => !isValidSeconds(key, timing[index] ?? "")))
     return "timing";
+  if (
+    [retrySettings, ...members.map((member) => member.retrySettings)].some(
+      (settings) =>
+        settings != null &&
+        !ModelPoolRetrySettingsSchema.safeParse(settings).success,
+    )
+  )
+    return "retries";
   return null;
 }
 

@@ -151,9 +151,6 @@ archestra:
     - name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
       secretName: archestra-platform-runtime
       secretKey: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
-    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
-      secretName: archestra-platform-runtime
-      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   diagnostics:
     enabled: true

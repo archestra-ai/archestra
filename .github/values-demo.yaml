@@ -75,9 +75,6 @@ archestra:
     - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
       secretName: archestra-demo-runtime
       secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD
-    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
-      secretName: archestra-demo-runtime
-      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   gkeBackendConfig:
     enabled: true

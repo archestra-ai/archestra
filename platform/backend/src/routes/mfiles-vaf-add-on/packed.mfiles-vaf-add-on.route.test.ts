@@ -29,9 +29,8 @@ const PACKED_DIR = vi.hoisted(
   () => `/tmp/archestra-vaf-add-on-packed-test-${process.pid}`,
 );
 
-// No source-ref override: distribution should come from the package compiled
-// into the image (this directory stands in for the image's
-// /app/mfiles-vaf-add-on).
+// Distribution should come from the package compiled into the image (this
+// directory stands in for the image's /app/mfiles-vaf-add-on).
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
     kb: {

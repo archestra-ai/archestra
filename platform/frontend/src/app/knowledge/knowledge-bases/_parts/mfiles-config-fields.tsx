@@ -268,7 +268,7 @@ function MFilesVafAddOnSection() {
   const command = `irm '${origin}/api/mfiles-vaf-add-on/script' | iex`;
 
   // Probed on form open; the server verifies the package actually exists
-  // (release asset or dev CI build) so this is never a dead link. Null just
+  // (bundled in the image, or a release asset) so this is never a dead link. Null just
   // means no pre-built package — the command then compiles from source and
   // no link is offered.
   const { data: distribution } = useMfilesVafAddOnDistribution();

@@ -1135,10 +1135,6 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
-  orgTrioPendingNormalTierTable: {
-    audited: false,
-    reason: "migration-written normal tiers the startup check consumes once",
-  },
   interactionUserActivityTable: {
     audited: false,
     reason: "derived log user activity counts",
@@ -1198,6 +1194,11 @@ export const AUDIT_DECISIONS = {
   routingUsageTable: {
     audited: false,
     reason: "auto-routing usage written with each interaction",
+  },
+  autoRoutingTiersTable: {
+    audited: false,
+    reason:
+      "child of the auto-routing settings on the organization's LLM Proxy row",
   },
   routingPlansTable: {
     audited: false,

@@ -57,7 +57,6 @@ import {
 } from "@/archestra-mcp-server";
 import { repairEnvelopedToolArgs } from "@/archestra-mcp-server/run-tool";
 import { repairStringifiedToolCallArgs } from "@/archestra-mcp-server/tool-args-repair";
-import { followsOrganizationRouting } from "@/auto-routing/organization-default";
 import {
   assertNotAutoOnNativeRoute,
   routeInternalAutoSession,
@@ -1550,18 +1549,19 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A user's chat or agent call on the organization default model, from an
-    // agent with no model of its own, is routed across the organization trio.
-    // The router picks the session's tier and key, which the call is sent with
-    // the way a pool member is, even when the tier is the default model
-    // itself: the call's own key when it serves the tier, else the user's
-    // ranked one. A call the router cannot route runs on the model it names.
-    // A pooled call is accounted for by its pool; it is never also routed.
+    // A user's chat or agent call on `auto` (marked by the in-process caller,
+    // which resolved the chat or agent to it) is routed across the auto-routing
+    // tiers. The router picks the session's tier and key, which the call is
+    // sent with the way a pool member is, even when the tier is the model the
+    // call names: the tier's key first, else one the user may use. A call the
+    // router cannot route runs on the model it names (the normal tier). Agent
+    // Runtime agents are never routed. A pooled call is accounted for by its
+    // pool; it is never also routed.
     const autoRouteWire =
       internalCall &&
       config.autoRouting.enabled &&
       headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
-      followsOrganizationRouting(resolvedAgent) &&
+      resolvedAgent.runtime === null &&
       !modelPoolPlan
         ? poolWire
         : null;
@@ -1663,7 +1663,6 @@ async function handleObservedLLMProxy<
             request,
             organizationId: resolvedAgent.organizationId,
             userId: autoRouteUser.id,
-            named: { provider: providerName, modelId: requestedModel },
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),

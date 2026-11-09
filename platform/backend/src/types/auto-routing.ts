@@ -127,17 +127,29 @@ export const SelectRoutingPlanSchema = createSelectSchema(
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
 
-/** The tiers auto routing chooses between: the organization's default model trio. */
+/** The model of each tier auto routing chooses between, and the key it runs on. */
 const AutoRoutingTrioSchema = z.object({
   fastModelId: z.string().uuid().nullable(),
   normalModelId: z.string().uuid().nullable(),
   smartModelId: z.string().uuid().nullable(),
+  fastApiKeyId: z.string().uuid().nullable(),
+  normalApiKeyId: z.string().uuid().nullable(),
+  smartApiKeyId: z.string().uuid().nullable(),
 });
 export type AutoRoutingTrio = z.infer<typeof AutoRoutingTrioSchema>;
 
+/** A tier as it is set: a model and an organization-wide key serving it. */
+export const AutoRoutingTierSettingSchema = z.object({
+  modelId: z.string().uuid(),
+  providerApiKeyId: z.string().uuid(),
+});
+export type AutoRoutingTierSetting = z.infer<
+  typeof AutoRoutingTierSettingSchema
+>;
+
 /**
- * Auto-routing settings of an organization, stored on its LLM Proxy row. The
- * tiers are read from the organization's default model trio.
+ * Auto-routing settings of an organization, stored on its LLM Proxy row; its
+ * tiers are rows of `auto_routing_tiers`.
  */
 export const AutoRoutingSettingsSchema = AutoRoutingTrioSchema.extend({
   enabled: z.boolean(),
@@ -153,7 +165,15 @@ export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
 export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.pick({
   enabled: true,
   budgetUsdPerDay: true,
-}).partial();
+})
+  .extend({
+    tiers: z.object({
+      fast: AutoRoutingTierSettingSchema,
+      normal: AutoRoutingTierSettingSchema,
+      smart: AutoRoutingTierSettingSchema,
+    }),
+  })
+  .partial();
 export type UpdateAutoRoutingSettings = z.infer<
   typeof UpdateAutoRoutingSettingsSchema
 >;

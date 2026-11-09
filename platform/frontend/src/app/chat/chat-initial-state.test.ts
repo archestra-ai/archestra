@@ -335,6 +335,17 @@ describe("resolvePreferredModelForProvider", () => {
 });
 
 describe("buildCreateConversationInput", () => {
+  test("sends auto in place of the key and model", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "uuid-gpt",
+        chatApiKeyId: "key-1",
+        modelPoolId: "auto",
+      }),
+    ).toEqual({ agentId: "agent-1", autoModel: true });
+  });
+
   test("builds the payload from the selected initial chat state", () => {
     expect(
       buildCreateConversationInput({

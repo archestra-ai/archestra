@@ -41,7 +41,7 @@ import RoutingScorerVersionModel from "@/models/routing-scorer-version";
 import { secretManager } from "@/secrets-manager";
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
-import { setOrganizationTrio } from "@/test/auto-routing";
+import { setAutoRoutingTiers } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
 import { ApiError, type Model } from "@/types";
@@ -1062,7 +1062,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(copilotKey.id, [
         copilotModel.id,
       ]);
-      await setOrganizationTrio(org.organizationId, { smart: copilotModel });
+      await setAutoRoutingTiers(org.organizationId, { smart: copilotModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -1095,7 +1095,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(nativeKey.id, [
         nativeModel.id,
       ]);
-      await setOrganizationTrio(org.organizationId, { normal: nativeModel });
+      await setAutoRoutingTiers(org.organizationId, { normal: nativeModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -1280,7 +1280,7 @@ describe("Model Router auto model", () => {
       return user.id;
     }
 
-    test("a pinned Fireworks normal alias still routes and checks only the selected tier's budget", async ({
+    test("a call naming a Fireworks alias still routes and checks only the selected tier's budget", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -1313,7 +1313,7 @@ describe("Model Router auto model", () => {
         { input: "15.00", output: "75.00" },
       );
       const org = { ...baseOrg, trio: [fast, normal, smart] as const };
-      await setOrganizationTrio(org.organizationId, { fast, normal, smart });
+      await setAutoRoutingTiers(org.organizationId, { fast, normal, smart });
       const key = await makeLlmProviderApiKey(
         org.organizationId,
         (await makeSecret({ secret: { apiKey: "synthetic-routed-fireworks" } }))
@@ -1324,6 +1324,12 @@ describe("Model Router auto model", () => {
         ...org.trio.map((model) => model.id),
         pinned.id,
       ]);
+      await db
+        .update(schema.autoRoutingTiersTable)
+        .set({ providerApiKeyId: key.id })
+        .where(
+          eq(schema.autoRoutingTiersTable.organizationId, org.organizationId),
+        );
       await publishPlan(org);
       const userId = await member(org, makeUser, makeMember);
       await LimitModel.create({
@@ -1386,7 +1392,7 @@ describe("Model Router auto model", () => {
       expect(await usage(decision.id)).toHaveLength(1);
     });
 
-    for (const fallback of ["routing-disabled", "different-model"] as const) {
+    for (const fallback of ["routing-disabled"] as const) {
       test.for([
         "none",
         "budget",
@@ -1442,9 +1448,8 @@ describe("Model Router auto model", () => {
           }),
         );
 
-        // Valid internal proof and a member establish an auto-routing user.
-        // The real router declines the call either because routing is off or
-        // because this opaque alias differs from the organization's normal tier.
+        // Valid internal proof and a member establish an auto-routing user;
+        // with routing off the call runs on the alias it names.
         const response = await sendPlatformCall(org, {
           userId,
           callKeyId: key.id,
@@ -1514,7 +1519,7 @@ describe("Model Router auto model", () => {
           ...base,
           trio: [base.trio[0], base.trio[1], gemini] as const,
         };
-        await setOrganizationTrio(org.organizationId, { smart: gemini });
+        await setAutoRoutingTiers(org.organizationId, { smart: gemini });
         await publishPlan(org);
         config.llm.gemini.vertexAi.enabled = false;
         let hits = 0;
@@ -1573,6 +1578,75 @@ describe("Model Router auto model", () => {
         expect(decision).toMatchObject({ tierIndex: 2, modelId: gemini.id });
       });
     }
+
+    test.for([
+      false,
+      true,
+    ])("uses the configured tier key with overlapping catalogs (planned=%s)", async (planned, {
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const keys = [];
+      for (const tier of ["fast", "normal", "smart"] as const) {
+        const key = await makeLlmProviderApiKey(
+          org.organizationId,
+          (await makeSecret({ secret: { apiKey: `synthetic-${tier}` } })).id,
+          { provider: "openai", baseUrl: UPSTREAM },
+        );
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          key.id,
+          org.trio.map((model) => model.id),
+        );
+        await db
+          .update(schema.autoRoutingTiersTable)
+          .set({ providerApiKeyId: key.id })
+          .where(
+            and(
+              eq(
+                schema.autoRoutingTiersTable.organizationId,
+                org.organizationId,
+              ),
+              eq(schema.autoRoutingTiersTable.tier, tier),
+            ),
+          );
+        keys.push(key);
+      }
+      if (planned) await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      const authorizations: (string | null)[] = [];
+      server.use(
+        http.post(`${UPSTREAM}/chat/completions`, async ({ request }) => {
+          authorizations.push(request.headers.get("authorization"));
+          const body = (await request.json()) as { model: string };
+          return HttpResponse.json(chatCompletion(body.model));
+        }),
+      );
+      for (let turn = 0; turn < 2; turn++) {
+        const response = await sendPlatformCall(org, {
+          userId,
+          callKeyId: keys[1].id,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const tier = planned ? 2 : 1;
+      expect(authorizations).toEqual(
+        Array(2).fill(`Bearer synthetic-${planned ? "smart" : "normal"}`),
+      );
+      expect(await platformCalls(org.agentId)).toEqual(
+        Array(2).fill({
+          model: org.trio[tier].modelId,
+          providerApiKeyId: keys[tier].id,
+        }),
+      );
+    });
 
     test("an agent inheriting the default runs on the session's routed tier while routing is on", async ({
       makeOrganization,
@@ -1681,7 +1755,7 @@ describe("Model Router auto model", () => {
       expect(await decisions(org.organizationId)).toEqual([]);
     });
 
-    test("an agent with its own model, pool or runtime is never routed", async ({
+    test("an Agent Runtime agent is never routed, though marked routable", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -1696,65 +1770,35 @@ describe("Model Router auto model", () => {
       });
       await publishPlan(org);
       const userId = await member(org, makeUser, makeMember);
-      const pool = await ModelPoolModel.create({
+      const runtimeAgent = await makeAgent({
         organizationId: org.organizationId,
-        input: {
-          name: `pool-${crypto.randomUUID().slice(0, 8)}`,
-          members: [
-            {
-              providerApiKeyId: org.providerApiKeyId,
-              modelId: org.trio[1].modelId,
-              priority: 1,
-              weight: 1,
-              enabled: true,
-            },
-          ],
+        agentType: "agent",
+        runtime: {
+          image: "test:local",
+          command: null,
+          inferenceProtocol: "openai_responses",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          environment: null,
+          credentials: null,
+          ttlHours: 24,
+          idleTimeoutMinutes: 5,
         },
       });
-      const agents = await Promise.all([
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          llmApiKeyId: org.providerApiKeyId,
-          modelId: org.trio[1].id,
-        }),
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          modelPoolId: pool.id,
-        }),
-        makeAgent({
-          organizationId: org.organizationId,
-          agentType: "agent",
-          runtime: {
-            image: "test:local",
-            command: null,
-            inferenceProtocol: "openai_responses",
-            backend: "kubernetes",
-            steerMode: "pipe",
-            privileged: false,
-            environment: null,
-            credentials: null,
-            ttlHours: 24,
-            idleTimeoutMinutes: 5,
-          },
-        }),
-      ]);
 
-      for (const agent of agents) {
-        const response = await sendPlatformCall(org, {
-          userId,
-          agentId: agent.id,
-        });
-        expect(response.statusCode, response.body).toBe(200);
-      }
+      const response = await sendPlatformCall(org, {
+        userId,
+        agentId: runtimeAgent.id,
+      });
 
-      expect(upstreamModels).toEqual(agents.map(() => org.trio[1].modelId));
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
       expect(jevCalls).toBe(0);
       expect(await decisions(org.organizationId)).toEqual([]);
     });
 
-    test("an explicit tier, another model, or a call without the internal proof runs on the model it names", async ({
+    test("a call not marked routable, or without the internal proof, runs on the model it names", async ({
       makeOrganization,
       makeSecret,
       makeLlmProviderApiKey,
@@ -1775,20 +1819,12 @@ describe("Model Router auto model", () => {
         model: org.trio[0].modelId,
         routable: false,
       });
-      const otherModel = await sendPlatformCall(org, {
-        userId,
-        model: org.trio[2].modelId,
-      });
       // Without the internal proof the header means nothing; the call goes to
       // the provider's own endpoint, which this test does not serve.
       await sendPlatformCall(org, { userId, internal: false });
 
       expect(explicitTier.statusCode, explicitTier.body).toBe(200);
-      expect(otherModel.statusCode, otherModel.body).toBe(200);
-      expect(upstreamModels).toEqual([
-        org.trio[0].modelId,
-        org.trio[2].modelId,
-      ]);
+      expect(upstreamModels).toEqual([org.trio[0].modelId]);
       expect(jevCalls).toBe(0);
       expect(await decisions(org.organizationId)).toEqual([]);
     });
@@ -1990,7 +2026,7 @@ describe("Model Router auto model", () => {
         org.providerApiKeyId,
         [replacement.id],
       );
-      await setOrganizationTrio(org.organizationId, { smart: replacement });
+      await setAutoRoutingTiers(org.organizationId, { smart: replacement });
       await unlink(org, org.trio[2]);
       const replay = await sendPlatformCall(org, { userId });
 
@@ -2087,7 +2123,7 @@ describe("Model Router auto model", () => {
         });
         await publishPlan(org);
         const userId = await member(org, makeUser, makeMember);
-        await setOrganizationTrio(org.organizationId, {
+        await setAutoRoutingTiers(org.organizationId, {
           smart: await createModel(tier, `smart-${crypto.randomUUID()}`),
         });
 
@@ -2184,7 +2220,7 @@ async function setupOrganization(params: {
     providerApiKey.id,
     trio.map((model) => model.id),
   );
-  await setOrganizationTrio(organizationId, {
+  await setAutoRoutingTiers(organizationId, {
     fast: trio[0],
     normal: trio[1],
     smart: trio[2],

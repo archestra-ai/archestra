@@ -1,6 +1,12 @@
 import config from "@/config";
 import type { Transaction } from "@/database";
-import { AgentModel, ModelModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import AutoRoutingSettingsModel, {
   mergeSettings,
 } from "@/models/auto-routing-settings";
@@ -8,7 +14,7 @@ import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
 import type {
   AutoRoutingSettings,
-  AutoRoutingTrio,
+  AutoRoutingTierSetting,
   RoutingPlanRecord,
   RoutingPlanTrigger,
 } from "@/types/auto-routing";
@@ -37,6 +43,12 @@ const TIER_FIELDS = {
   smart: "smartModelId",
 } as const;
 
+const TIER_KEY_FIELDS = {
+  fast: "fastApiKeyId",
+  normal: "normalApiKeyId",
+  smart: "smartApiKeyId",
+} as const;
+
 export async function getAutoRoutingSettings(
   organizationId: string,
 ): Promise<AutoRoutingSettingsResponse> {
@@ -55,9 +67,11 @@ export async function updateAutoRoutingSettings(
   body: UpdateAutoRoutingSettingsBody,
 ): Promise<AutoRoutingSettingsChangeResponse> {
   await AgentModel.getOrgLlmProxy(organizationId);
+  if (body.tiers) await assertValidTiers(organizationId, body.tiers);
   const update = {
     enabled: body.enabled,
     budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+    tiers: body.tiers,
   };
   // The feasibility fit runs outside the routing-plan lock; the write then
   // applies only over the settings it checked, retrying when they moved.
@@ -85,41 +99,6 @@ export async function updateAutoRoutingSettings(
   }
   if (updated.enabled) await scanOnFirstEnable(organizationId);
   return fitAndDescribe(organizationId, "settings");
-}
-
-/**
- * Writes a change of the organization's model trio with `write`. While auto
- * routing is on, the trio must stay routable: every tier set, one long-context
- * threshold, and a budget the new tiers can meet. The plan is then re-fitted.
- */
-export async function writeOrganizationTrio<T>(params: {
-  organizationId: string;
-  /** The tiers the write sets, merged over the current row under the lock. */
-  patch: Partial<AutoRoutingTrio>;
-  write: (tx: Transaction) => Promise<T>;
-}): Promise<T> {
-  const { organizationId, patch, write } = params;
-  const checked = await AutoRoutingSettingsModel.find(organizationId);
-  // With the deployment's auto routing off, an organization's enabled flag
-  // routes nothing and cannot be turned off, so it constrains no trio.
-  const routed = config.autoRouting.enabled;
-  if (routed && checked?.enabled) {
-    await assertFeasibleBudget(organizationId, { ...checked, ...patch });
-  }
-  return AutoRoutingSettingsModel.updateTrio({
-    organizationId,
-    patch,
-    write,
-    validate: async (next, tx, current) => {
-      if (current.generation !== checked?.generation) {
-        throw new ApiError(
-          409,
-          "Auto routing settings changed concurrently; try again.",
-        );
-      }
-      if (routed) await assertValidSettings(next, tx);
-    },
-  });
 }
 
 /** Fits a new plan at the current settings, unless the active plan was fitted on exactly what a fit would read now. */
@@ -238,11 +217,53 @@ async function assertValidSettings(
   if (missing) {
     throw new ApiError(
       400,
-      `Set the organization's default ${missing} model before enabling auto routing.`,
+      `Choose a ${missing} model before turning auto routing on.`,
     );
   }
   if (next.budgetUsdPerDay === null) {
     throw new ApiError(400, "Set a daily budget before enabling auto routing.");
+  }
+}
+
+/**
+ * Each tier's key belongs to the organization, is shared with all of it (every
+ * chat and agent on `auto` runs on it) and serves the tier's model.
+ */
+async function assertValidTiers(
+  organizationId: string,
+  tiers: Record<(typeof TIER_NAMES)[number], AutoRoutingTierSetting>,
+): Promise<void> {
+  const settings = TIER_NAMES.map((tier) => ({ tier, ...tiers[tier] }));
+  const [keys, models, organizationWide] = await Promise.all([
+    LlmProviderApiKeyModel.findByIds(settings.map((t) => t.providerApiKeyId)),
+    ModelModel.findByIds(settings.map((t) => t.modelId)),
+    LlmProviderApiKeyModel.findOrganizationWideKeyIds(organizationId),
+  ]);
+  for (const { tier, providerApiKeyId, modelId } of settings) {
+    const key = keys.find((candidate) => candidate.id === providerApiKeyId);
+    const model = models.find((candidate) => candidate.id === modelId);
+    if (!key || key.organizationId !== organizationId) {
+      throw new ApiError(400, `The ${tier} tier's key was not found.`);
+    }
+    if (!model) {
+      throw new ApiError(400, `The ${tier} tier's model was not found.`);
+    }
+    if (!organizationWide.includes(key.id)) {
+      throw new ApiError(
+        400,
+        `The ${tier} tier's key "${key.name}" is not shared with the whole organization. Auto routing runs every chat and agent on its tiers' keys.`,
+      );
+    }
+    const linked = await LlmProviderApiKeyModelLinkModel.filterLinkedModelIds({
+      apiKeyIds: [key.id],
+      modelIds: [model.id],
+    });
+    if (!linked.has(model.id)) {
+      throw new ApiError(
+        400,
+        `The key "${key.name}" does not serve "${model.provider}/${model.modelId}" (${tier} tier).`,
+      );
+    }
   }
 }
 
@@ -268,23 +289,47 @@ async function describe(
   fitted: FitSessions | null = null,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, latest, scorerVersion, scorer, routedAgentCount] =
-    await Promise.all([
-      ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
-      RoutingPlanModel.findActive(organizationId),
-      RoutingPlanModel.findLatestOutcome(organizationId),
-      activeSourceVersion(),
-      scorerState(organizationId),
-      AgentModel.countFollowingOrganizationRouting(organizationId),
-    ]);
-  const byId = new Map(models.map((model) => [model.id, model]));
-  const tierModel = (id: string | null) => {
-    const model = id ? byId.get(id) : undefined;
-    return model
-      ? { id: model.id, provider: model.provider, modelId: model.modelId }
+  const tierKeyIds = TIER_NAMES.map((tier) => settings[TIER_KEY_FIELDS[tier]]);
+  const [
+    models,
+    keys,
+    active,
+    latest,
+    scorerVersion,
+    scorer,
+    scorerKey,
+    agentCount,
+    organization,
+    eligibleApiKeyIds,
+  ] = await Promise.all([
+    ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
+    LlmProviderApiKeyModel.findByIds(
+      tierKeyIds.filter((id): id is string => id !== null),
+    ),
+    RoutingPlanModel.findActive(organizationId),
+    RoutingPlanModel.findLatestOutcome(organizationId),
+    activeSourceVersion(),
+    scorerState(organizationId),
+    LlmProviderApiKeyModel.findOrganizationWideKey(organizationId, "jev"),
+    AgentModel.countOnAutoModel(organizationId),
+    OrganizationModel.getById(organizationId),
+    LlmProviderApiKeyModel.findOrganizationWideKeyIds(organizationId),
+  ]);
+  const tierSetting = (index: number) => {
+    const model = models.find((candidate) => candidate.id === tierIds[index]);
+    const key = keys.find((candidate) => candidate.id === tierKeyIds[index]);
+    return model && key
+      ? {
+          id: model.id,
+          provider: model.provider,
+          modelId: model.modelId,
+          apiKey: { id: key.id, name: key.name },
+        }
       : null;
   };
-  const [fast, normal, smart] = tierIds.map(tierModel);
+  const [fast, normal, smart] = TIER_NAMES.map((_, index) =>
+    tierSetting(index),
+  );
   return {
     enabled: settings.enabled,
     budgetUsdPerDay:
@@ -292,7 +337,11 @@ async function describe(
         ? null
         : Number(settings.budgetUsdPerDay),
     tiers: { fast, normal, smart },
-    routedAgentCount,
+    eligibleApiKeyIds,
+    usage: {
+      agentCount,
+      organizationDefault: organization?.defaultAutoModel ?? false,
+    },
     generation: settings.generation,
     plannedGeneration: settings.plannedGeneration,
     status: {
@@ -315,6 +364,9 @@ async function describe(
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
       scorer,
+      scorerApiKey: scorerKey
+        ? { id: scorerKey.id, name: scorerKey.name }
+        : null,
     },
   };
 }

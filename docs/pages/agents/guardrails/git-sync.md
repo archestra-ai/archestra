@@ -75,7 +75,7 @@ What to know:
 
 Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
 
-- **Code owners:** a pull request that adds each server's editors to `CODEOWNERS` as owners of its file, updated when editors change.
+- **Code owners:** a pull request that makes each server's editors the owners of its file in `CODEOWNERS`, updated when editors change. A line that already names the file is rewritten where it stands; a file without one gets a line in Archestra's block.
 - **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
 - **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
@@ -98,7 +98,7 @@ What to know:
 
 - An App created before Archestra kept these needs the Checks and Administration permissions added in its settings on GitHub, and the change accepted on its installation. Until then, the parts it cannot do are reported as off.
 - To manage the branch yourself, turn the ruleset off on GitHub. Archestra leaves a disabled ruleset alone, and keeps any rule you make stricter.
-- Archestra only rewrites its own block in `CODEOWNERS`. Keep a fallback owner above it for files no server owns. GitLab repositories get the policy check as a commit status; protect their branch in GitLab.
+- In `CODEOWNERS`, Archestra rewrites its own block and the lines that name a server's file, nothing else. Keep a fallback owner above the block for files no server owns. GitLab repositories get the policy check as a commit status; protect their branch in GitLab.
 
 ## Validations in Git
 

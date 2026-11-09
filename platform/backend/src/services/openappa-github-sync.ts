@@ -2319,7 +2319,10 @@ async function githubCodeOwners(
   }
   lines.sort();
   const current = await currentCodeOwners(source);
-  const next = withOwnersBlock(current?.content ?? null, lines);
+  const { content: next, updated } = withOwnersBlock(
+    current?.content ?? null,
+    lines,
+  );
   const base = `${api}/repos/${source.repo}`;
   const open = await openOwnersPull({ token, base, repo: source.repo });
   const result = { unowned, mapErrors: map.errors };
@@ -2349,6 +2352,7 @@ async function githubCodeOwners(
     content: next,
     open,
     lines,
+    updated,
     unowned,
     mapErrors: map.errors,
   });
@@ -2564,26 +2568,69 @@ async function currentCodeOwners(
   return null;
 }
 
-/** CODEOWNERS with Archestra's block replaced, or appended once there are lines. */
+/**
+ * CODEOWNERS with each server file's owners in place: a line that already names
+ * the file, anywhere in the file, is rewritten with the editors' owners where
+ * it stands; a file with no line of its own gets one in the block, which is
+ * replaced as a whole. Nothing is added twice: GitHub takes a path's last
+ * matching line, so a second line would either be dead or override the first
+ * without a word. Patterns such as `*` or `/mcp/*` stay as written.
+ */
 function withOwnersBlock(
   current: string | null,
   lines: string[],
-): string | null {
+): {
+  content: string | null;
+  updated: Array<{ before: string; after: string }>;
+} {
+  const owners = new Map(
+    lines.map((line) => {
+      const space = line.indexOf(" ");
+      return [line.slice(0, space).replace(/^\//, ""), line.slice(space + 1)];
+    }),
+  );
+  const updated: Array<{ before: string; after: string }> = [];
+  const placed = new Set<string>();
+  // A line outside the block that names a managed file, rewritten in place.
+  const outside = (text: string) =>
+    text
+      .split("\n")
+      .map((line) => {
+        const [pattern = "", ...rest] = line.trim().split(/\s+/);
+        if (!pattern || pattern.startsWith("#")) return line;
+        const path = pattern.replace(/^\//, "");
+        const wanted = owners.get(path);
+        if (wanted === undefined) return line;
+        placed.add(path);
+        const after = `${pattern} ${wanted}`;
+        if (rest.join(" ") !== wanted)
+          updated.push({ before: line.trim(), after });
+        return after;
+      })
+      .join("\n");
+  const start = current?.indexOf(OWNERS_BEGIN) ?? -1;
+  const end = current && start >= 0 ? current.indexOf(OWNERS_END, start) : -1;
+  const hasBlock = current !== null && start >= 0 && end > start;
+  const before = hasBlock
+    ? outside(current.slice(0, start))
+    : outside(current ?? "");
+  const after = hasBlock ? outside(current.slice(end + OWNERS_END.length)) : "";
+  const added = lines.filter(
+    (line) => !placed.has(line.slice(0, line.indexOf(" ")).replace(/^\//, "")),
+  );
   const block = [
     OWNERS_BEGIN,
     `# Written from who may edit each MCP server in ${archestraMcpBranding.appName} and ${OWNERS_MAP_FILE}.`,
     `# Change those, not these lines: ${archestraMcpBranding.appName} rewrites them.`,
-    ...lines,
+    ...added,
     OWNERS_END,
   ].join("\n");
-  const start = current?.indexOf(OWNERS_BEGIN) ?? -1;
-  const end = current && start >= 0 ? current.indexOf(OWNERS_END, start) : -1;
-  if (current !== null && start >= 0 && end > start)
-    return `${current.slice(0, start)}${block}${current.slice(end + OWNERS_END.length)}`;
-  if (lines.length === 0) return current;
-  return current === null || current.trim() === ""
-    ? `${block}\n`
-    : `${current.replace(/\n*$/, "\n\n")}${block}\n`;
+  if (hasBlock) return { content: `${before}${block}${after}`, updated };
+  if (added.length === 0)
+    return { content: current === null ? null : before, updated };
+  if (current === null || current.trim() === "")
+    return { content: `${block}\n`, updated };
+  return { content: `${before.replace(/\n*$/, "\n\n")}${block}\n`, updated };
 }
 
 async function openOwnersPull(params: {
@@ -2641,6 +2688,7 @@ async function proposeOwners(params: {
   content: string | null;
   open: { number: number; url: string } | null;
   lines: string[];
+  updated: Array<{ before: string; after: string }>;
   unowned: RepositoryProtection["codeOwners"]["unowned"];
   mapErrors: string[];
 }): Promise<{ url: string }> {
@@ -2738,16 +2786,21 @@ async function proposeOwners(params: {
 function ownersPullBody(params: {
   file: string;
   lines: string[];
+  updated: Array<{ before: string; after: string }>;
   unowned: RepositoryProtection["codeOwners"]["unowned"];
   mapErrors: string[];
   githubErrors: Array<{ line?: number; kind?: string; message?: string }>;
 }): string {
   const sections = [
-    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in ${archestraMcpBranding.appName} or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
+    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry, and rewrites a line elsewhere in the file that names a server's file instead of adding a second one. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in ${archestraMcpBranding.appName} or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
     params.lines.length > 0
       ? `### Owners\n\n${params.lines.map((line) => `- \`${line}\``).join("\n")}`
       : "### Owners\n\nNo server's editors have a GitHub owner yet.",
   ];
+  if (params.updated.length > 0)
+    sections.push(
+      `### Lines updated where they stand\n\nThese lines already named a server's file; their owners now follow the registry:\n\n${params.updated.map(({ before, after }) => `- \`${before}\` → \`${after}\``).join("\n")}`,
+    );
   if (params.unowned.length > 0)
     sections.push(
       `### Editors without a GitHub owner\n\nAdd them to \`${OWNERS_MAP_FILE}\`, or ask them to connect GitHub in ${archestraMcpBranding.appName}:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,

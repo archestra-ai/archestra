@@ -1710,7 +1710,9 @@ test("the code owners of each server's file follow who may edit the server, prop
     "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
     "mcp/payments_api.toml": REFUNDS,
     "code-owners.toml": `[teams]\nPayments = "@acme/payments"\n\n[users]\n"Dana@Example.com" = "@dana-acme"\n`,
-    ".github/CODEOWNERS": "* @acme/admins\n",
+    // One server's file already has a line, with yesterday's owner.
+    ".github/CODEOWNERS":
+      "* @acme/admins\n# Payments wrote this one by hand.\n/mcp/payments_api.toml @acme/legacy\n",
   };
   const proposedHead = "a".repeat(40);
   const state = {
@@ -1771,13 +1773,15 @@ test("the code owners of each server's file follow who may edit the server, prop
   );
 
   await syncAppaGithubPolicy(org.id);
+  // The existing line is rewritten where it stands, not repeated in the block.
   const proposed = `* @acme/admins
+# Payments wrote this one by hand.
+/mcp/payments_api.toml @acme/payments
 
 # BEGIN Guardrails: MCP server rules owners
 # Written from who may edit each MCP server in Archestra and code-owners.toml.
 # Change those, not these lines: Archestra rewrites them.
 /mcp/helpdesk.toml @dana-acme
-/mcp/payments_api.toml @acme/payments
 # END Guardrails: MCP server rules owners
 `;
   expect(trees).toEqual([
@@ -1801,6 +1805,9 @@ test("the code owners of each server's file follow who may edit the server, prop
     }),
   ]);
   expect(pulls[0]?.body).toContain("- data_warehouse: team Data");
+  expect(pulls[0]?.body).toContain(
+    "- `/mcp/payments_api.toml @acme/legacy` → `/mcp/payments_api.toml @acme/payments`",
+  );
   expect(pulls[0]?.body).toContain("line 6: Unknown owner on line 6");
   expect((await getRepositoryProtection(org.id))?.codeOwners).toEqual({
     state: "pull_request",

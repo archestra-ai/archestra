@@ -68,6 +68,7 @@
     "codegen:appa-guide": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-appa-guide.ts",
     "codegen:access-control-docs": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:archestra-mcp-server-docs": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
+    "codegen:tool-search-texts": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-tool-search-texts.ts",
     "codegen:openapi": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/codegen-openapi.ts",
     "codegen": "pnpm codegen:appa-guide && pnpm codegen:openapi && pnpm codegen:access-control-docs && pnpm codegen:archestra-mcp-server-docs",
     "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli --url https://de.sentry.io/ sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli --url https://de.sentry.io/ sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"

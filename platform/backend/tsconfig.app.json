@@ -49,6 +49,7 @@
   "include": [
     "src/**/*.ts",
     "src/playwright-mcp-image.json",
+    "src/archestra-mcp-server/search-texts.generated.json",
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
@@ -73,6 +74,7 @@
     "src/standalone-scripts/codegen-appa-guide.ts",
     "src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "src/standalone-scripts/codegen-openapi.ts",
+    "src/standalone-scripts/codegen-tool-search-texts.ts",
     "src/standalone-scripts/costs-bench/backfill.ts",
     "src/standalone-scripts/costs-bench/run-bench.ts",
     "src/standalone-scripts/count-openappa-legacy.ts",
@@ -329,6 +331,7 @@
 
 
     "src/archestra-mcp-server/run-tool-target.ts",
+    "src/archestra-mcp-server/search-text.ts",
     "src/archestra-mcp-server/tool-attestation.ts",
     "src/clients/realtime-audio.ts",
     "src/openappa/child-trajectory-receipt.ts",

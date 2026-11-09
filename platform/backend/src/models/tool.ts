@@ -2300,6 +2300,46 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /**
+   * Live third-party tools of an organization that background search text
+   * generation covers. App catalogs are left out: search derives an app launch
+   * tool's description from the catalog name, so its stored text would not match.
+   */
+  static async findSearchTextDefinitions(organizationId: string): Promise<
+    Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+    }>
+  > {
+    const rows = await db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          ne(schema.internalMcpCatalogTable.serverType, "app"),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+          isNull(schema.toolsTable.deletedAt),
+          isNull(schema.toolsTable.delegateToAgentId),
+          isNull(schema.toolsTable.delegateToA2aConnectionId),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+        ),
+      );
+    return rows.map((row) => ({ ...row, parameters: row.parameters ?? {} }));
+  }
+
   /** A catalog's live tool rows, with the upstream name each was synced from. */
   static async findSyncedByCatalogId(catalogId: string): Promise<
     Array<{

@@ -1224,6 +1224,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "worker-written scorer readings of past sessions",
   },
+  toolSearchTextsTable: {
+    audited: false,
+    reason: "worker-written search vocabulary derived from tool definitions",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

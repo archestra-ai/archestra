@@ -156,6 +156,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 1800,
     payload: {},
   },
+  {
+    taskType: "tool_search_text_reconcile",
+    intervalSeconds: 600,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

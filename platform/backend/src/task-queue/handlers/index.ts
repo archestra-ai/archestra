@@ -39,6 +39,7 @@ import { handlePluginGithubSync } from "./plugin-github-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
+import { reconcileToolSearchTexts } from "./tool-search-text-reconcile-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);
@@ -147,6 +148,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "mcp_tool_description_backfill",
     handleMcpToolDescriptionBackfill,
+  );
+  taskQueueService.registerHandler(
+    "tool_search_text_reconcile",
+    reconcileToolSearchTexts,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
   taskQueueService.registerHandler("auto_routing_dispatch", () =>

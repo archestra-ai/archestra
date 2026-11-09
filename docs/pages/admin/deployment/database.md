@@ -2,7 +2,7 @@
 title: PostgreSQL
 description: Choose, size, and connect the PostgreSQL database that holds Archestra's state
 order: 4
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-09
 ---
 
 <span id="large-log-histories"></span><span id="docker-persistence"></span>
@@ -71,7 +71,95 @@ Azure Database for PostgreSQL flexible server fits every size. Use the General P
 
 ## Connect a Database
 
-Connect the application and migration Job to the same PostgreSQL database. Archestra migrations require the pgvector extension. The migration user must be able to create the extension, or a database administrator must install it first.
+On AWS and Google Cloud, Archestra's pods sign in to the database with their cloud identity, so no database password exists to leak or rotate. On every cloud, keep the database on a private network with no public endpoint, connect as a user that owns only the Archestra database, and verify TLS.
+
+:::tabs
+@tab AWS
+Use IAM database authentication: each new connection signs a 15-minute token with the pod's IAM role. Set it up with [Amazon RDS IAM Authentication](#amazon-rds-iam-authentication).
+
+- **Network:** set **Public access** to **No**, put the instance in private subnets, and allow port 5432 in its security group only from the cluster.
+- **TLS:** IAM authentication always verifies the server certificate. The platform image ships the RDS CA bundle.
+@tab Google Cloud
+Run the Cloud SQL Auth Proxy beside Archestra. The chart adds it to the web, worker, and migration pods. It reaches the instance over private IP, encrypts the connection, and signs in as a Google service account through Workload Identity.
+
+Before you start, give the instance a private IP in the cluster's VPC, turn on its `cloudsql.iam_authentication` flag, and turn on Workload Identity in the GKE cluster. AlloyDB does not work with this proxy; connect it [with a password](#connect-with-a-password).
+
+1. Create a Google service account that can connect to Cloud SQL and sign in to it:
+
+   ```bash
+   gcloud iam service-accounts create archestra-db --project=PROJECT_ID
+   for role in roles/cloudsql.client roles/cloudsql.instanceUser; do
+     gcloud projects add-iam-policy-binding PROJECT_ID \
+       --member="serviceAccount:archestra-db@PROJECT_ID.iam.gserviceaccount.com" \
+       --role="$role"
+   done
+   ```
+
+2. Let Archestra's Kubernetes ServiceAccount use it. In the [installation example](/docs/admin/deployment/helm), that is `archestra-platform` in the `archestra` namespace:
+
+   ```bash
+   gcloud iam service-accounts add-iam-policy-binding \
+     archestra-db@PROJECT_ID.iam.gserviceaccount.com \
+     --role="roles/iam.workloadIdentityUser" \
+     --member="serviceAccount:PROJECT_ID.svc.id.goog[archestra/archestra-platform]"
+   ```
+
+3. Add the service account as a database user:
+
+   ```bash
+   gcloud sql users create archestra-db@PROJECT_ID.iam \
+     --instance=INSTANCE --type=cloud_iam_service_account
+   ```
+
+4. Connect to the `archestra` database as the `postgres` user, create the extensions, and grant the new user access:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   GRANT ALL PRIVILEGES ON DATABASE archestra TO "archestra-db@PROJECT_ID.iam";
+   GRANT ALL ON SCHEMA public TO "archestra-db@PROJECT_ID.iam";
+   ```
+
+   If Archestra's tables already exist under another user, such as `archestra`, also run `GRANT archestra TO "archestra-db@PROJECT_ID.iam";` so migrations can still change them.
+
+5. Turn on the proxy and point Archestra at it:
+
+   ```yaml
+   postgresql:
+     enabled: false
+     external_database_url: "postgresql://archestra-db%40PROJECT_ID.iam@127.0.0.1:5432/archestra?sslmode=disable"
+   archestra:
+     database:
+       cloudSqlProxy:
+         enabled: true
+         instanceConnectionName: PROJECT_ID:REGION:INSTANCE
+     orchestrator:
+       kubernetes:
+         serviceAccount:
+           annotations:
+             iam.gke.io/gcp-service-account: archestra-db@PROJECT_ID.iam.gserviceaccount.com
+   ```
+
+   The URL names the IAM user and holds no secret. `sslmode=disable` covers only the hop inside the pod; the proxy encrypts the connection to Cloud SQL.
+
+6. Run the Helm upgrade. It worked when the migration Job completes and the web pods turn ready.
+
+- **Migration Job cannot connect:** run `kubectl logs <pod> -c cloud-sql-proxy` on its pod. A 403 means the service account lacks `roles/cloudsql.client` or the Workload Identity binding.
+- **`Cloud SQL IAM service account authentication failed`:** the service account lacks `roles/cloudsql.instanceUser`, the database user is missing, or the `cloudsql.iam_authentication` flag is off.
+- **`permission denied for schema public`:** run the grants as the `postgres` user.
+@tab Azure
+Archestra signs in to Azure Database for PostgreSQL flexible server with a password; it does not support Microsoft Entra ID sign-in. Keep the password in a Kubernetes Secret, and keep the server off the internet:
+
+- **Network:** create the server with private access (VNet integration), or turn off public access and add a private endpoint in the cluster's VNet.
+- **User:** as the server admin, create the extensions in the `archestra` database, then create a dedicated user that owns that database. Do not connect Archestra as the server admin.
+- **TLS:** add `sslmode=verify-full` to the URL. Azure's certificates chain to roots Archestra already trusts, so no CA bundle is needed.
+
+Then follow [Connect with a Password](#connect-with-a-password).
+:::
+
+### Connect with a Password
+
+Use a password for Azure, AlloyDB, and any other PostgreSQL. The application and the migration Job read the same URL.
 
 1. In the Helm release namespace (`archestra` in the installation example), create a Kubernetes Secret named `archestra-database` with the complete connection URL in its `url` key.
 2. Reference it in the shared application settings:

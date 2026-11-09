@@ -2,7 +2,7 @@
 title: Production
 description: Prepare database recovery, public access, and cluster capacity before serving traffic
 order: 2
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-09
 ---
 
 Before sending production traffic through Archestra, make sure you can restore its database and keys, reach its public endpoints, and run its workloads safely.
@@ -13,6 +13,7 @@ Test an exact release in staging before applying it to production.
 
 - Read the release's migration and compatibility notes before a [Helm upgrade](/docs/admin/deployment/helm#upgrade).
 - Use [PostgreSQL](/docs/admin/deployment/database) with backups and availability suited to your recovery requirements. The chart's bundled database has one replica.
+- [Connect it](/docs/admin/deployment/database#connect-a-database) over a private network, with your cloud's identity instead of a password where your cloud supports it.
 - Back up PostgreSQL together with authentication, credential-encryption, and [content-encryption keys](/docs/admin/content-encryption). Test restoring them together; losing an encryption key can make saved data unreadable.
 
 ## Public Access

@@ -1432,12 +1432,14 @@ function interceptLockedCache(
   vi.spyOn(cacheManager, "withLock").mockImplementation(
     <T>(
       scope: AllowedCacheKey,
-      callback: (cache: LockedCache) => Promise<T>,
+      callback: (
+        ...args: Parameters<Parameters<typeof cacheManager.withLock>[1]>
+      ) => Promise<T>,
     ) => {
       entered();
-      return lock(scope, async (cache) => {
+      return lock(scope, async (cache, tx) => {
         intercept(cache);
-        return callback(cache);
+        return callback(cache, tx);
       });
     },
   );

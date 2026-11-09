@@ -548,7 +548,10 @@ export function ChatPageContent({
   // Whether `auto` can be picked, and whether the organization default is
   // `auto`, which a new chat on an agent without a model of its own starts on.
   // While routing is off, a chat on `auto` shows the normal tier it runs on.
-  const organizationDefaultModel = useOrganizationDefaultModel();
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
+  const organizationDefaultModel = useOrganizationDefaultModel({
+    enabled: autoRoutingEnabled,
+  });
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;

@@ -29,6 +29,7 @@ import {
 import { AUTO_MODEL_CHOICE } from "@/lib/chat/auto-model";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
+import { useFeature } from "@/lib/config/config.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -273,8 +274,9 @@ export function useChatSetupOptions(params: {
     enabled: !!params.onModelPoolChange,
   });
   // ---- auto: picked in place of a key like a pool, while auto routing is on
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
   const organizationDefault = useOrganizationDefaultModel({
-    enabled: !!params.onModelPoolChange,
+    enabled: !!params.onModelPoolChange && autoRoutingEnabled,
   });
   const autoSelected = params.modelPoolId === AUTO_MODEL_CHOICE;
   const auto =

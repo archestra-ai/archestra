@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import { ChatSetupMenu, type ChatSetupMenuProps } from "./chat-setup-menu";
@@ -139,6 +140,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 }));
 
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
@@ -159,6 +161,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.mocked(useFeature).mockReturnValue(true);
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
   navigate.mockClear();

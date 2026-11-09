@@ -203,6 +203,75 @@ const poolTest = test.extend<{
   },
 });
 
+poolTest(
+  "distinguishes incompatible input from a compatible member's credit cooldown",
+  async ({ pool }) => {
+    await ModelModel.create({
+      provider: "gemini",
+      modelId: "gemini-2.5-flash",
+      externalId: "gemini/gemini-2.5-flash",
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+    });
+    const hits: string[] = [];
+    let depleted = false;
+    server.use(
+      http.post(`${origin}/v1beta/models/:model`, ({ params }) => {
+        const model = String(params.model);
+        hits.push(model);
+        return depleted && model.startsWith("gemini-2.5-flash:")
+          ? HttpResponse.json(
+              { error: { code: 402, message: "Synthetic credit exhaustion" } },
+              { status: 402 },
+            )
+          : HttpResponse.json(answer());
+      }),
+    );
+    const image = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,AA==" },
+            },
+          ],
+        },
+      ],
+    };
+    const accepted = await pool.ask(image);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(hits.splice(0)).toEqual(["gemini-2.5-flash:generateContent"]);
+
+    depleted = true;
+    expect((await pool.ask(image)).statusCode).toBe(402);
+    expect(hits.splice(0)).toEqual(["gemini-2.5-flash:generateContent"]);
+    const cooling = await pool.ask(image);
+    expect(cooling.statusCode, cooling.body).toBe(503);
+    expect(hits).toEqual([]);
+
+    const text = await pool.ask();
+    expect(text.statusCode, text.body).toBe(200);
+    expect(hits.splice(0)).toEqual(["gemini-3.1-flash-lite:generateContent"]);
+    const incompatible = await pool.ask({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: { data: "AA==", format: "wav" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(incompatible.statusCode, incompatible.body).toBe(400);
+    expect(hits).toEqual([]);
+  },
+);
+
 for (const wire of ["openai", "anthropic", "xai"] as const) {
   for (const stream of [false, true]) {
     poolTest(
@@ -2316,7 +2385,7 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
         async ({ pool, makeSecret, makeLlmProviderApiKey }) => {
           const model = {
             gemini: "gemini-3.8-flash",
-            openai: "o3-mini",
+            openai: "gpt-4o-mini",
             anthropic: "claude-sonnet-4-5",
           };
           if (target !== "gemini")
@@ -2324,7 +2393,7 @@ for (const inbound of ["gemini", "openai", "anthropic"] as const) {
               provider: target,
               modelId: model[target],
               externalId: `${target}/${model[target]}`,
-              inputModalities: ["text"],
+              inputModalities: ["text", "image"],
               outputModalities: ["text"],
               customPricePerMillionInput: "1",
               customPricePerMillionOutput: "2",

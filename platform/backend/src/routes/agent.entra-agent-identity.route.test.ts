@@ -8,7 +8,7 @@ import {
 import type { User } from "@/types";
 import agentRoutes from "./agent";
 
-const AGENT_IDENTITY = "da6ea4f9-7512-4341-bbc5-ce4298a97a31";
+const AGENT_IDENTITY = "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0";
 
 describe("Entra agent identity binding on agents", () => {
   let app: FastifyInstanceWithZod;

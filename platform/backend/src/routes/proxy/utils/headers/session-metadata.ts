@@ -12,6 +12,7 @@ import {
   detectClaudeClientId,
   detectCodexClientId,
   detectCursorClientId,
+  detectGrokClientId,
   detectKiloClientId,
   detectKimiCodeClientId,
   detectOpenCodeClientId,
@@ -49,7 +50,7 @@ export interface AutoRoutingSessionMetadata extends SessionInfo {
  * desktop request becomes ChatGPT's; otherwise auto-discover a known client app
  * (Claude from the body; ChatGPT from the desktop app's originator or
  * User-Agent; Codex from client_metadata or its originator/User-Agent;
- * OpenCode, Kilo Code, Kimi Code and Cursor from their identity headers).
+ * OpenCode, Kilo Code, Kimi Code, Grok and Cursor from their identity headers).
  */
 export function detectClientApp(
   headers: Headers,
@@ -69,6 +70,7 @@ export function detectClientApp(
     detectOpenCodeClientId(headers) ??
     detectKiloClientId(headers) ??
     detectKimiCodeClientId(headers) ??
+    detectGrokClientId(headers) ??
     detectCursorClientId(headers)
   );
 }

@@ -56,6 +56,7 @@ import {
   ToolModel,
 } from "@/models";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import AutoRouterModel from "@/models/auto-router";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   assertRuntimeAgentsSupportOrganizationDefault,
@@ -508,6 +509,16 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.defaultSmartModelId !== undefined
       ) {
         await assertModelTrioTiers(merged);
+      }
+
+      if (
+        body.defaultAutoRouterId &&
+        !(await AutoRouterModel.findInOrganization(
+          organizationId,
+          body.defaultAutoRouterId,
+        ))
+      ) {
+        throw new ApiError(400, "The selected auto router no longer exists.");
       }
 
       if (body.defaultAgentId) {

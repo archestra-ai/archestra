@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,8 +23,7 @@ You need an Azure subscription where you can create an Azure Bot, and a Teams te
 
 What to know:
 
-- Teams must reach Archestra. A local instance can use the wizard's **Configure ngrok** step instead.
-- To expose only the webhook, set [`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`](/docs/admin/deployment/configuration#ARCHESTRA_PUBLIC_ENDPOINTS_PORT). The rest of the API can then stay internal.
+- Teams must reach Archestra from the internet. [Public Webhook Endpoints](/docs/admin/deployment/networking#public-webhook-endpoints) shows how to expose only its webhook. A local instance can use the wizard's **Configure ngrok** step instead.
 - To configure Teams with environment variables, see the [Configuration reference](/docs/admin/deployment/configuration#chatops).
 
 <span id="dedicated-webhook-port"></span><span id="usage"></span><span id="first-message"></span><span id="default-agent"></span><span id="direct-messages"></span>

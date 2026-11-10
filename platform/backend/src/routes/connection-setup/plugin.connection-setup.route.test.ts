@@ -57,6 +57,22 @@ describe("POST /api/connection-setups with plugins", () => {
     await app.close();
   });
 
+  test("Grok refuses explicit plugin delivery without creating a setup", async () => {
+    const plugin = await seedPlugin("claude-code");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "grok-build",
+        platform: "windows",
+        baseUrl: "http://localhost:9000/v1",
+        pluginIds: [plugin.id],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("native skills only");
+  });
+
   test("freezes reviewed plugins into a plugin-only setup", async () => {
     const plugin = await seedPlugin("claude-code");
     const response = await app.inject({

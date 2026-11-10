@@ -498,12 +498,45 @@ export async function peekHitlDecision(params: {
 export async function getHitlAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];
+  /** Some MCP form renderers discard every line break in the message. */
+  presentation?: "form";
 }): Promise<HitlAskUserArguments | undefined> {
   if (params.offerIds.length !== 1) return undefined;
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
-  return buildHitlAskUserCard(review);
+  const card = buildHitlAskUserCard(review);
+  if (params.presentation !== "form" || !review.tool) return card;
+  const shown = displayedReview(review);
+  const args = parseReviewedArguments(shown.arguments);
+  const accepted = acceptedCoverage(shown.text);
+  // Grok's MCP form removes line breaks and renders Markdown literally.
+  // Flow YAML keeps complete typed values (including multiline strings) on a
+  // single logical line, while the client wraps to the actual terminal width.
+  return {
+    ...card,
+    question: [
+      card.shortQuestion ?? "Approve this call?",
+      ...(args
+        ? [
+            `Arguments: ${dumpYaml(withoutProxyCopies(shown.tool ?? "", args), { flowLevel: 0, lineWidth: -1, noRefs: true }).trimEnd()}`,
+          ]
+        : shown.arguments
+          ? [`Arguments (unparsed): ${JSON.stringify(shown.arguments)}`]
+          : []),
+      ...(accepted
+        ? accepted.map((line) => `Also accepts: ${JSON.stringify(line)}`)
+        : [
+            `Policy review: ${JSON.stringify(formatReviewQuestion(shown.text))}`,
+          ]),
+      ...(shown.summary
+        ? [
+            `Generated summary (may omit details): ${JSON.stringify(shown.summary)}`,
+          ]
+        : []),
+      "Approve allows only this exact call. Deny keeps it blocked.",
+    ].join("  •  "),
+  };
 }
 
 /**
@@ -565,6 +598,19 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
     callPreview: previewText({ preview, accepted, summary: review.summary }),
+    // Grok's preview is plain text and wraps to the actual terminal width.
+    // Generate it from the reviewed data; stripping Markdown from the other
+    // preview would also strip literal payload characters and retain its wraps.
+    plainCallPreview: [
+      ...(accepted
+        ? acceptedBlock(accepted)
+        : [formatReviewQuestion(review.text)]),
+      ...summaryBlock(review.summary),
+      Object.keys(args).length
+        ? `Full arguments (YAML, not summarized):\n${dumpYaml(args, { lineWidth: -1, noRefs: true })}`
+        : "This call has no arguments.",
+      "Approve lets this exact call run. Deny keeps it blocked.",
+    ].join("\n\n"),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -1123,7 +1169,7 @@ function approvalQuestion(params: {
  * What an approval accepts besides the person's attention, or undefined when
  * the review text's coverage is not in the shape read here.
  */
-function acceptedCoverage(text: string): string[] | undefined {
+export function acceptedCoverage(text: string): string[] | undefined {
   return reviewCoverage(text)?.filter(
     (line) => !line.startsWith("attention: "),
   );

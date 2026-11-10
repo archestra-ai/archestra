@@ -64,7 +64,10 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
-import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
+import type {
+  ToolNameCanonicalizer,
+  ToolNameResolution,
+} from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
   isGuardrailsV2Active,
@@ -220,16 +223,23 @@ type ProcessedToolResult = {
   content: string;
   diagnostic?: string;
   outputSource: OutputSource;
-  /** A native refusal, distinct from a successful authoritative replacement. */
-  refused?: true;
   reason?: RuntimeReason;
   code?: string;
-  /** The runtime denied this call, so `content` is its ruling, not an output. */
-  denied?: true;
   /** Current denial metadata; omitted offers are unknown, not an empty list. */
   offers?: string[];
   review?: Array<{ offer_id: string; text: string }>;
-};
+} & (
+  | {
+      /** The call never ran; retain its ruling as history, never waive its result. */
+      denied: true;
+      refused?: never;
+    }
+  | {
+      denied?: never;
+      /** A result admission refused actual output, not a prior call's ruling. */
+      refused?: true;
+    }
+);
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
   | {
@@ -945,17 +955,24 @@ export async function startRuntimeChild(params: {
 }
 
 /** Refreshes a registered child's inherited label before new bytes arrive. */
-export async function addressRuntimeChild(params: {
-  session: OpenAppaSession;
-  childSessionId: string;
-  operationId: string;
-}): Promise<void> {
-  const decision = await dispatch(params.session, {
-    event: "child_address",
-    operation_id: params.operationId,
-    spawned_id: params.childSessionId,
-    output: "",
-  });
+export async function addressRuntimeChild(
+  params: {
+    session: OpenAppaSession;
+    childSessionId: string;
+    operationId: string;
+  },
+  policy?: DispatchPolicy,
+): Promise<void> {
+  const decision = await dispatch(
+    params.session,
+    {
+      event: "child_address",
+      operation_id: params.operationId,
+      spawned_id: params.childSessionId,
+      output: "",
+    },
+    policy,
+  );
   if (
     decision.decision !== "ack" &&
     !(await waiveSoftBlock(
@@ -1035,6 +1052,20 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  if (decision.decision === "deny_call") {
+    // ToolResult replays a denied/cancelled call's authoritative receipt.
+    // There are no executed bytes to release. A new attempt is evaluated by
+    // ToolCall, where the operator's current waiver setting applies.
+    return {
+      content,
+      outputSource,
+      ...(reason ? { reason } : {}),
+      ...(code ? { code } : {}),
+      denied: true,
+      offers: decision.offers?.map((offer) => offer.offer_id),
+      review: decision.review,
+    };
+  }
   // Old native receipts for fabricated/unknown offers remain authoritative
   // errors, not evidence of a soft policy refusal that can disable a session.
   const unknownControl =
@@ -1045,8 +1076,7 @@ async function approveToolResult(params: {
     content,
     outputSource,
     ...((!unknownControl || isHardBlock(content)) &&
-    (decision.decision === "deny_call" ||
-      decision.decision === "block" ||
+    (decision.decision === "block" ||
       decision.decision === "refuse" ||
       decision.decision === "replace_output" ||
       (decision.decision === "mcp_result" && decision.result?.isError === true))
@@ -1054,13 +1084,6 @@ async function approveToolResult(params: {
       : {}),
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call"
-      ? {
-          denied: true as const,
-          offers: decision.offers?.map((offer) => offer.offer_id),
-          review: decision.review,
-        }
-      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -1371,6 +1394,7 @@ export async function evaluateToolCalls(
   }>,
   options: {
     canonicalize: ToolNameCanonicalizer;
+    nativeDispatch?: ToolNameResolution["nativeDispatch"];
     isUserQuestion?: (name: string, namespace?: string) => boolean;
     /** Compat only: recognize a `run_tool` wrapper behind any client label. */
     looseRunToolDispatch?: boolean;
@@ -1381,7 +1405,7 @@ export async function evaluateToolCalls(
     notice?: DeclaredToolSpelling;
     noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
-    isSpawn?: (name: string, namespace?: string) => boolean;
+    isSpawn?: (name: string, namespace?: string, args?: unknown) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
     spawnCallIds?: ReadonlySet<string>;
     /** Whether this client can carry child-return declarations. */
@@ -1416,6 +1440,7 @@ export async function evaluateToolCalls(
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
     canonicalize: options.canonicalize,
+    nativeDispatch: options.nativeDispatch,
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
   const admitted: string[] = [];
@@ -1471,7 +1496,7 @@ export async function evaluateToolCalls(
       const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
         options.spawnCallIds?.has(call.id) === true ||
-        options.isSpawn?.(call.name, call.namespace) === true;
+        options.isSpawn?.(call.name, call.namespace, call.arguments) === true;
       // An agent__<slug> spawn starts a subagent like the host's own Agent
       // tool, so it is ruled as one unless the policy rules it by name. The
       // model keeps its own spelling.
@@ -1498,7 +1523,9 @@ export async function evaluateToolCalls(
         operation_id: `call:${call.id}`,
         tool,
         ...(spelling ? { spelling } : {}),
-        ...(target.isRunToolDispatchTarget ? { dispatch: call.name } : {}),
+        ...(target.isRunToolDispatchTarget || target.isNativeDispatchTarget
+          ? { dispatch: call.name }
+          : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1797,6 +1824,24 @@ export async function endTurn(
   operationId: string,
 ): Promise<void> {
   await dispatch(session, { event: "turn_end", operation_id: operationId });
+}
+
+/** Finish an empty child reply under the runtime's recorded return contract. */
+export async function endChildTurn(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  spawnCallId: string;
+  childNativeId?: string;
+}): Promise<void> {
+  const decision = await dispatch(params.session, {
+    event: "child_turn_end",
+    operation_id: params.operationId,
+    spawn_call_id: params.spawnCallId,
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
+  });
+  if (decision.decision !== "ack") {
+    throw openappaFailure(new Error(decisionMessage(decision)));
+  }
 }
 
 /**
@@ -2219,6 +2264,22 @@ export async function loadChildReturns(params: {
       { err: error, parentSessionId: params.parentSessionId },
       "OpenAPPA could not load child returns",
     );
+    throw openappaFailure(error);
+  }
+}
+
+/** Rejections are host status, not child crossings; never pass them to approveSpawnReturn. */
+export async function loadChildRejections(params: {
+  organizationId: string;
+  parentSessionId: string;
+}) {
+  try {
+    const module = await binding();
+    return await module.loadChildRejections(
+      params.organizationId,
+      params.parentSessionId,
+    );
+  } catch (error) {
     throw openappaFailure(error);
   }
 }

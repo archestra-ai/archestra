@@ -4,19 +4,30 @@ import type {
   RoutingSessionFeatures,
 } from "@/types/auto-routing";
 import { type JevSessionReading, JevSessionSource } from "./jev-session";
-import { type ScorerSpec, specHash } from "./spec";
+import { JEV_SESSION_SPEC, type ScorerSpec, specHash } from "./spec";
 import type { PreRunInput } from "./types";
 
-/** The one pre-run signal source today; plans and history are keyed on its version. */
-export const preRunSource = new JevSessionSource();
+/** The decision model a new auto router starts with. */
+export const DEFAULT_SCORER_MODEL = JEV_SESSION_SPEC.model;
 
 /**
- * The source version of the running spec. Upserted by spec hash, so every
- * replica converges on one row; read per new session rather than memoized,
- * as the row is what each decision references.
+ * The pre-run signal source asked with `scorerModel`. A router picks its
+ * decision model, so plans and history are keyed on the version of the spec
+ * with that model.
  */
-export function activeSourceVersion() {
-  const spec: ScorerSpec = preRunSource.spec;
+export function preRunSource(scorerModel: string = DEFAULT_SCORER_MODEL) {
+  return new JevSessionSource({ ...JEV_SESSION_SPEC, model: scorerModel });
+}
+
+const SOURCE_ID = preRunSource().id;
+
+/**
+ * The source version of the running spec asked with `scorerModel`. Upserted
+ * by spec hash, so every replica converges on one row; read per new session
+ * rather than memoized, as the row is what each decision references.
+ */
+export function activeSourceVersion(scorerModel?: string) {
+  const spec: ScorerSpec = preRunSource(scorerModel).spec;
   return RoutingScorerVersionModel.upsert({
     name: spec.name,
     model: spec.model,
@@ -32,7 +43,7 @@ export function decisionFeatures(params: {
 }): RoutingDecisionFeatures {
   return {
     signals: {
-      [preRunSource.id]: {
+      [SOURCE_ID]: {
         version: params.version,
         tier_needed: params.reading.tierNeeded,
         p_long: params.reading.pLong,
@@ -50,6 +61,6 @@ export function decisionFeatures(params: {
 export function routerFeatures(
   features: RoutingDecisionFeatures,
 ): RoutingSessionFeatures {
-  const { tier_needed, p_long } = features.signals[preRunSource.id];
+  const { tier_needed, p_long } = features.signals[SOURCE_ID];
   return { tier_needed, p_long, source: features.client };
 }

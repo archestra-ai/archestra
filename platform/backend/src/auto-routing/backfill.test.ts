@@ -13,7 +13,7 @@ vi.mock("@/logging");
 import config from "@/config";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel from "@/models/routing-history";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -21,9 +21,12 @@ import { autoRoutingDispatcher } from "@/task-queue/handlers/auto-routing-dispat
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { beforeEach, describe, expect, type TestFixtures, test } from "@/test";
 import {
+  autoRouterId,
   configureAutoRouting,
+  ensureAutoRouter,
   makeScorerVersion,
   plannedDecision,
+  setAutoRoutingEnabled,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
@@ -36,8 +39,17 @@ import {
   startBackfillScan,
   startBackfillScoring,
 } from "./backfill";
-import { completeFit, prepareFit, readFitWindow, runFit } from "./fit";
-import { updateAutoRoutingSettings } from "./settings";
+import {
+  completeFit,
+  prepareFit,
+  readFitHistory,
+  readFitWindow,
+  runFit,
+} from "./fit";
+import {
+  setAutoRoutingEnabled as setAutoRoutingEnabledViaService,
+  updateAutoRouter,
+} from "./settings";
 import { activeSourceVersion } from "./signals";
 
 const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -61,6 +73,7 @@ type MakeInteraction = TestFixtures["makeInteraction"];
 describe("auto routing backfill", () => {
   const server = useMswServer();
   let organizationId: string;
+  let routerId: string;
   let userId: string;
   let profileId: string;
   let makeInteraction: MakeInteraction;
@@ -78,6 +91,7 @@ describe("auto routing backfill", () => {
       organizationId = (await makeOrganization()).id;
       userId = (await makeUser()).id;
       await configureAutoRouting(organizationId);
+      routerId = await autoRouterId(organizationId);
       profileId = (await AgentModel.getOrgLlmProxy(organizationId)).id;
       const secret = await makeSecret({ secret: { apiKey: "sk-typesafe" } });
       await makeLlmProviderApiKey(organizationId, secret.id, {
@@ -88,6 +102,13 @@ describe("auto routing backfill", () => {
       answerJev();
     },
   );
+
+  /** The `auto` router as it is now; a fit reads only its id, organization and past-sessions flag. */
+  async function liveRouter() {
+    const router = await AutoRouterModel.find(routerId);
+    if (!router) throw new Error("auto router does not exist");
+    return router;
+  }
 
   function answerJev(
     options: { respond?: () => Promise<void>; costUsd?: number } = {},
@@ -503,9 +524,12 @@ describe("auto routing backfill", () => {
 
   test("the first enable scans for free; a later save does not scan again", async () => {
     await sessions(2);
-    await updateAutoRoutingSettings(organizationId, { budgetUsdPerDay: 40 });
+    await setAutoRoutingEnabled(organizationId, false);
+    await setAutoRoutingEnabledViaService(organizationId, true);
     await runBackfill();
-    await updateAutoRoutingSettings(organizationId, { budgetUsdPerDay: 45 });
+    await setAutoRoutingEnabledViaService(organizationId, false);
+    await setAutoRoutingEnabledViaService(organizationId, true);
+    await updateAutoRouter(organizationId, routerId, { budgetUsdPerDay: 45 });
 
     const rows = await db
       .select()
@@ -629,7 +653,7 @@ describe("auto routing backfill", () => {
 
   test("stops at the cost ceiling and still lets the next fit read what it scored", async () => {
     await sessions(6);
-    const before = await AutoRoutingSettingsModel.find(organizationId);
+    const before = await AutoRouterModel.find(routerId);
 
     await scanAndScore({ maxSessions: 6, maxCostUsd: 0.002 });
 
@@ -641,9 +665,9 @@ describe("auto routing backfill", () => {
       spentCostUsd: 0.002,
       progress: { scored: 2 },
     });
-    expect(
-      (await AutoRoutingSettingsModel.find(organizationId))?.generation,
-    ).toBeGreaterThan(before?.generation ?? 0);
+    expect((await AutoRouterModel.find(routerId))?.generation).toBeGreaterThan(
+      before?.generation ?? 0,
+    );
   });
 
   test("a scorer change supersedes the run; a re-score reads the same sessions again", async () => {
@@ -697,9 +721,9 @@ describe("auto routing backfill", () => {
     expect(prompts).toHaveLength(4);
     expect((await describeBackfill(organizationId)).scoreOffer).toBeNull();
     const running = (await activeSourceVersion()).id;
-    const window = (scorerVersionId: string) =>
+    const window = async (scorerVersionId: string) =>
       readFitWindow({
-        organizationId,
+        router: await liveRouter(),
         scorerVersionId,
         inputWatermark: new Date(),
       });
@@ -711,12 +735,13 @@ describe("auto routing backfill", () => {
     const [seen] = await sessions(2);
     await scanAndScore({});
     const scorerVersionId = (await activeSourceVersion()).id;
-    const trio = await AutoRoutingSettingsModel.find(organizationId);
+    const trio = await AutoRouterModel.find(routerId);
     const [decision] = await db
       .insert(schema.routingDecisionsTable)
       .values({
         ...plannedDecision({
           organizationId,
+          routerId,
           sessionKey: RoutingSessionKeySchema.parse(seen),
           modelId: trio?.normalModelId ?? "",
           scorerVersionId,
@@ -737,7 +762,7 @@ describe("auto routing backfill", () => {
     });
 
     const window = await readFitWindow({
-      organizationId,
+      router: await liveRouter(),
       scorerVersionId,
       inputWatermark: new Date(),
     });
@@ -745,12 +770,52 @@ describe("auto routing backfill", () => {
     expect(window).toMatchObject({ sessions: 2, pastSessions: 1 });
   });
 
+  test("a router that does not use past sessions ignores the scanned backfill; the one that does reads it", async () => {
+    await sessions(3);
+    await scanAndScore({});
+    const scorerVersionId = (await activeSourceVersion()).id;
+    const cold = await ensureAutoRouter(organizationId, "auto:cold");
+    const reading = async (router: Awaited<ReturnType<typeof liveRouter>>) => ({
+      window: await readFitWindow({
+        router,
+        scorerVersionId,
+        inputWatermark: new Date(),
+      }),
+      history: await readFitHistory({
+        router,
+        scorerVersionId,
+        inputWatermark: new Date(),
+        longContextThreshold: null,
+      }),
+    });
+
+    const own = await reading(await liveRouter());
+    const other = await reading(cold);
+
+    expect(cold.usesPastSessions).toBe(false);
+    expect(own.window).toMatchObject({ sessions: 3, pastSessions: 3 });
+    expect(own.history.sample).toHaveLength(3);
+    expect(other.window).toMatchObject({ sessions: 0, pastSessions: 0 });
+    expect(other.history.sample).toHaveLength(0);
+  });
+
+  test("a scan is refused while no router learns from past sessions", async () => {
+    await db
+      .update(schema.autoRoutersTable)
+      .set({ usesPastSessions: false })
+      .where(eq(schema.autoRoutersTable.id, routerId));
+
+    await expect(
+      startBackfillScan(organizationId, userId),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   test("a fit after the backfill learns from it at the population's volume; one started before cannot publish", async () => {
     config.autoRouting.minSessions = 3;
     await sessions(6);
     await scan();
     await startScoring({ maxSessions: 3 });
-    const before = await prepareFit(organizationId);
+    const before = await prepareFit(routerId);
 
     await runBackfill();
 
@@ -759,7 +824,7 @@ describe("auto routing backfill", () => {
       kind: "rejected",
       reason: "stale_generation",
     });
-    const run = await runFit(organizationId);
+    const run = await runFit(routerId);
     expect(run?.published.plan).toMatchObject({
       status: "active",
       diagnostics: {
@@ -774,9 +839,9 @@ describe("auto routing backfill", () => {
     await sessions(3);
     await scanAndScore({});
     const scorerVersionId = (await activeSourceVersion()).id;
-    const window = () =>
+    const window = async () =>
       readFitWindow({
-        organizationId,
+        router: await liveRouter(),
         scorerVersionId,
         inputWatermark: new Date(),
       });
@@ -785,9 +850,10 @@ describe("auto routing backfill", () => {
       volumeSource: "history",
     });
 
-    const settings = await AutoRoutingSettingsModel.find(organizationId);
+    const settings = await AutoRouterModel.find(routerId);
     await seedFitHistory({
       organizationId,
+      routerId,
       modelId: settings?.normalModelId ?? "",
       scorerVersionId,
       sessions: 10,
@@ -876,22 +942,22 @@ describe("auto routing backfill", () => {
     await sessions(2);
     await scan();
     await startScoring();
-    const before = await AutoRoutingSettingsModel.find(organizationId);
+    const before = await AutoRouterModel.find(routerId);
     await db.execute(sql`
       create function fail_generation() returns trigger language plpgsql
       as $$ begin raise exception 'generation bump failed'; end $$`);
     await db.execute(sql`
-      create trigger fail_generation before update of auto_routing_generation on agents
+      create trigger fail_generation before update of generation on auto_routers
       for each row execute function fail_generation()`);
 
     await runBackfill();
     expect((await describeBackfill(organizationId)).backfill?.status).toBe(
       "running",
     );
-    await db.execute(sql`drop trigger fail_generation on agents`);
+    await db.execute(sql`drop trigger fail_generation on auto_routers`);
     await runBackfill();
 
-    const after = await AutoRoutingSettingsModel.find(organizationId);
+    const after = await AutoRouterModel.find(routerId);
     expect(after?.generation).toBe((before?.generation ?? 0) + 1);
     expect((await describeBackfill(organizationId)).backfill).toMatchObject({
       status: "done",
@@ -907,7 +973,7 @@ describe("auto routing backfill", () => {
       .from(schema.tasksTable)
       .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
     expect(fits).toHaveLength(1);
-    await runFit(organizationId);
+    await runFit(routerId);
     expect((await describeBackfill(organizationId)).backfill?.awaitingFit).toBe(
       false,
     );
@@ -996,7 +1062,7 @@ describe("auto routing backfill", () => {
       order by s.sample_rank, s.id`);
     const gap = ranked.rows.findIndex((row) => !row.attempted);
     const prefix = gap === -1 ? ranked.rows.length : gap;
-    const inputs = await prepareFit(organizationId);
+    const inputs = await prepareFit(routerId);
     const weights = inputs?.history.sample.map((row) => row.weight) ?? [];
     expect(weights).toHaveLength(prefix);
     expect(weights.reduce((total, weight) => total + weight, 0)).toBeCloseTo(
@@ -1008,15 +1074,16 @@ describe("auto routing backfill", () => {
   test("a capped live sample and the past sample each stand for their whole window", async () => {
     await sessions(6);
     await scanAndScore({ maxSessions: 3 });
-    const settings = await AutoRoutingSettingsModel.find(organizationId);
+    const settings = await AutoRouterModel.find(routerId);
     await seedFitHistory({
       organizationId,
+      routerId,
       modelId: settings?.normalModelId ?? "",
       scorerVersionId: (await activeSourceVersion()).id,
       sessions: 10,
     });
 
-    const inputs = await prepareFit(organizationId, undefined, 5);
+    const inputs = await prepareFit(routerId, undefined, 5);
 
     const weights = inputs?.history.sample.map((row) => row.weight) ?? [];
     expect(weights).toHaveLength(8);
@@ -1100,7 +1167,6 @@ describe("auto routing backfill", () => {
 
   test("score cleanup retains current, organization and active-backfill scorers across batches", async ({
     makeOrganization,
-    makeAgent,
   }) => {
     await sessions(1);
     await scanAndScore({});
@@ -1108,18 +1174,15 @@ describe("auto routing backfill", () => {
     const [own, foreign, unused, anotherUnused, active] = await Promise.all(
       Array.from({ length: 5 }, () => makeScorerVersion()),
     );
-    const ownAgent = await makeAgent({ organizationId });
-    const foreignAgent = await makeAgent({
-      organizationId: (await makeOrganization()).id,
-    });
-    for (const [agent, scorer] of [
-      [ownAgent, own],
-      [foreignAgent, foreign],
+    const foreignRouter = await ensureAutoRouter((await makeOrganization()).id);
+    for (const [router, scorer] of [
+      [{ id: routerId }, own],
+      [foreignRouter, foreign],
     ]) {
       await db
-        .update(schema.agentsTable)
-        .set({ autoRoutingScorerVersionId: scorer.id })
-        .where(eq(schema.agentsTable.id, agent.id));
+        .update(schema.autoRoutersTable)
+        .set({ scorerVersionId: scorer.id })
+        .where(eq(schema.autoRoutersTable.id, router.id));
     }
     const [session] = await db
       .select()
@@ -1275,38 +1338,38 @@ describe("auto routing backfill", () => {
     };
 
     test("as blocked once auto routing is off", async () => {
-      await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
-      await handleAutoRoutingFit({ organizationId });
+      await setAutoRoutingEnabled(organizationId, false);
+      await handleAutoRoutingFit({ routerId });
       expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
     });
 
     test("as blocked without a daily budget", async () => {
-      await AutoRoutingSettingsModel.update(organizationId, {
+      await AutoRouterModel.update(routerId, {
         budgetUsdPerDay: null,
       });
-      await handleAutoRoutingFit({ organizationId });
+      await handleAutoRoutingFit({ routerId });
       expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
     });
 
     test("as blocked when a tier's model is gone", async () => {
-      const settings = await AutoRoutingSettingsModel.find(organizationId);
+      const settings = await AutoRouterModel.find(routerId);
       await db
         .delete(schema.modelsTable)
         .where(eq(schema.modelsTable.id, settings?.fastModelId ?? ""));
-      await handleAutoRoutingFit({ organizationId });
+      await handleAutoRoutingFit({ routerId });
       expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
     });
 
     test("as planned after a rejected fit, by the refit", async () => {
-      const stale = await prepareFit(organizationId);
+      const stale = await prepareFit(routerId);
       if (!stale) throw new Error("Auto routing is not configured");
-      await AutoRoutingSettingsModel.update(organizationId, {
+      await AutoRouterModel.update(routerId, {
         budgetUsdPerDay: "45.00",
       });
       expect(await completeFit(stale)).toMatchObject({ kind: "rejected" });
       expect(await fitState()).toEqual({ awaitingFit: true, blocked: false });
 
-      await handleAutoRoutingFit({ organizationId });
+      await handleAutoRoutingFit({ routerId });
       expect(await fitState()).toEqual({ awaitingFit: false, blocked: false });
     });
 
@@ -1318,13 +1381,13 @@ describe("auto routing backfill", () => {
         create trigger fail_plan before insert on routing_plans
         for each row when (new.status <> 'failed') execute function fail_plan()`);
       try {
-        await handleAutoRoutingFit({ organizationId });
+        await handleAutoRoutingFit({ routerId });
       } finally {
         await db.execute(sql`drop trigger fail_plan on routing_plans`);
       }
 
       expect(await fitState()).toEqual({ awaitingFit: false, blocked: false });
-      const [plan] = await RoutingPlanModel.findHistory(organizationId, 1);
+      const [plan] = await RoutingPlanModel.findHistory(routerId, 1);
       expect(plan.plan.status).toBe("failed");
     });
   });

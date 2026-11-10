@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_AGENT_RUN_SHORT_NAME,
   TOOL_STEER_AGENT_RUN_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
@@ -73,14 +74,21 @@ async function movesOf(params: {
   organizationId: string;
   ownUserId?: string;
   originSessionId: string;
-  runs: { runId: string }[];
+  runs: { runId: string; startedAt: Date }[];
 }): Promise<SessionHandoffs["moves"]> {
   if (params.runs.length === 0) return [];
+  const firstStart = Math.min(
+    ...params.runs.map((run) => run.startedAt.getTime()),
+  );
   const calls = await McpToolCallModel.findArchestraCallsBySession({
     organizationId: params.organizationId,
     sessionId: params.originSessionId,
-    toolNames: Object.keys(MOVE_TOOLS),
+    // A client on a search-and-run gateway reaches the run tools through
+    // run_tool; which tool it ran is only readable once the row is.
+    toolNames: [...Object.keys(MOVE_TOOLS), TOOL_RUN_TOOL_FULL_NAME],
     userId: params.ownUserId,
+    // No call before the first run's start can move its work.
+    since: new Date(firstStart - START_CALL_SLACK_MS),
     limit: MAX_CALLS,
   });
   return movesFromCalls({
@@ -89,6 +97,8 @@ async function movesOf(params: {
   });
 }
 const MAX_CALLS = 500;
+/** How long before its run's recorded start a start call may have been made. */
+const START_CALL_SLACK_MS = 10 * 60_000;
 
 type MoveKind = SessionHandoffs["moves"][number]["kind"];
 type Call = Awaited<
@@ -116,10 +126,16 @@ function movesFromCalls(params: {
   const remote = new Map<string, boolean>();
   const moves: SessionHandoffs["moves"] = [];
   for (const call of params.calls) {
-    if (call.isError || !call.toolName) continue;
-    const kind = MOVE_TOOLS[call.toolName];
+    if (call.isError) continue;
+    const dispatched = dispatchedCall(call);
+    if (!dispatched) continue;
+    const kind = MOVE_TOOLS[dispatched.toolName];
     if (!kind) continue;
-    const runId = runIdOf({ call, kind, runIds: params.runIds });
+    const runId = runIdOf({
+      call: { ...dispatched, toolResult: call.toolResult },
+      kind,
+      runIds: params.runIds,
+    });
     if (!runId) continue;
     const toRemote = kind !== "pull";
     const holds = remote.get(runId);
@@ -143,7 +159,7 @@ function movesFromCalls(params: {
  * as `run_id`, and a file transfer only pulls when it downloads.
  */
 function runIdOf(params: {
-  call: Call;
+  call: DispatchedCall & { toolResult: unknown };
   kind: MoveKind;
   runIds: Set<string>;
 }): string | null {
@@ -154,7 +170,7 @@ function runIdOf(params: {
     }
     return null;
   }
-  const args = argumentsOf(params.call.toolCall);
+  const args = params.call.args;
   if (!args) return null;
   const runId = typeof args.run_id === "string" ? args.run_id : null;
   if (!runId || !params.runIds.has(runId)) return null;
@@ -165,6 +181,30 @@ function runIdOf(params: {
     return null;
   }
   return runId;
+}
+
+type DispatchedCall = {
+  toolName: string;
+  args: Record<string, unknown> | null;
+};
+
+/**
+ * The tool a call ran and its arguments: a `run_tool` call's are the ones it
+ * dispatched, named with or without the Archestra prefix.
+ */
+function dispatchedCall(call: Call): DispatchedCall | null {
+  if (!call.toolName) return null;
+  const args = argumentsOf(call.toolCall);
+  if (call.toolName !== TOOL_RUN_TOOL_FULL_NAME)
+    return { toolName: call.toolName, args };
+  const target = args?.tool_name;
+  if (typeof target !== "string") return null;
+  return {
+    toolName: target.startsWith(ARCHESTRA_TOOL_PREFIX)
+      ? target
+      : `${ARCHESTRA_TOOL_PREFIX}${target}`,
+    args: isRecord(args?.tool_args) ? args.tool_args : null,
+  };
 }
 
 function argumentsOf(toolCall: unknown): Record<string, unknown> | null {

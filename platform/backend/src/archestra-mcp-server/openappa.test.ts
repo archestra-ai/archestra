@@ -902,7 +902,7 @@ describe("OpenAPPA tool execution", () => {
     expect(elicitSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-        message: "Approve this email?",
+        message: expect.stringContaining("Approve this email?"),
         kind: "openappa_review",
         reviewedTool: "archestra__todo_write",
         reviewedArguments: VALID_TODO,

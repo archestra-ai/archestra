@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import ModelModel from "@/models/model";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel, {
@@ -21,7 +21,8 @@ import RoutingUsageModel, {
 } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import {
-  type AutoRoutingSettings,
+  type AutoRouter,
+  type AutoRoutingBudgetPreset,
   type RouterDocument,
   RouterDocumentSchema,
   type RoutingFitOutcome,
@@ -47,14 +48,28 @@ import {
 /** Everything a fit is computed from, read without the routing-plan lock. */
 type FitInputs = {
   organizationId: string;
+  routerId: string;
   trigger: RoutingPlanTrigger;
   generation: number;
   inputWatermark: Date;
   tiers: FitTiers;
-  budgetUsdPerDay: string;
+  budget: FitBudget;
   scorerVersionId: string;
   history: FitHistory;
 };
+
+/** The budget a fit plans for: the custom one, or a preset it resolves on the usage it read. */
+type FitBudget =
+  | { kind: "usd"; usdPerDay: string }
+  | { kind: "preset"; preset: AutoRoutingBudgetPreset };
+
+/**
+ * The share of sessions the end presets keep on their tier: Cost-efficient
+ * spends the most that still leaves this share on the fast tier, Intelligence
+ * the least that puts this share on the smart tier. Balanced spends halfway
+ * between the two.
+ */
+const BUDGET_PRESET_TIER_SHARE = 2 / 3;
 
 /** The trio as router-core prices it, or why it cannot be priced (recorded as a failed fit). */
 type FitTiers =
@@ -63,26 +78,24 @@ type FitTiers =
 
 /**
  * Reads a fit's inputs, first making this process's scorer version the
- * organization's (a change bumps the generation). Nothing else is locked:
+ * router's (a change bumps the generation). Nothing else is locked:
  * publication rejects the fit when settings moved on meanwhile. Null when
- * auto routing is not (or no longer) fully configured for the organization.
+ * the router is gone or not (or no longer) fully configured.
  * @public — `runFit` runs it; exported so tests can interleave fits
  */
 export async function prepareFit(
-  organizationId: string,
+  routerId: string,
   requestedTrigger?: RoutingPlanTrigger,
   maxSessions?: number,
 ): Promise<FitInputs | null> {
-  const scorerVersion = await activeSourceVersion();
-  await AutoRoutingSettingsModel.activateScorerVersion(
-    organizationId,
-    scorerVersion.id,
-  );
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const router = await AutoRouterModel.find(routerId);
+  if (!router) return null;
+  const scorerVersion = await activeSourceVersion(router.scorerModel);
+  await AutoRouterModel.activateScorerVersion(routerId, scorerVersion.id);
+  const settings = await AutoRouterModel.find(routerId);
   return (
     settings &&
     readFitInputs({
-      organizationId,
       settings,
       scorerVersionId: scorerVersion.id,
       requestedTrigger,
@@ -93,15 +106,20 @@ export async function prepareFit(
 
 /** Whether a fit would run on `settings`, or why none would. */
 export async function fitReadiness(
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<
-  | { kind: "ready"; trio: Trio; budgetUsdPerDay: string }
+  | { kind: "ready"; trio: Trio; budget: FitBudget }
   | { kind: "blocked"; reason: string }
 > {
   if (!settings.enabled) {
     return { kind: "blocked", reason: "Auto routing is off." };
   }
-  if (settings.budgetUsdPerDay === null) {
+  const budget: FitBudget | null = settings.budgetPreset
+    ? { kind: "preset", preset: settings.budgetPreset }
+    : settings.budgetUsdPerDay !== null
+      ? { kind: "usd", usdPerDay: settings.budgetUsdPerDay }
+      : null;
+  if (!budget) {
     return { kind: "blocked", reason: "No daily budget is set." };
   }
   const loaded = await loadTrio(settings);
@@ -112,27 +130,23 @@ export async function fitReadiness(
         reason: `The ${loaded.tier} tier's model is no longer available.`,
       };
     case "ok":
-      return {
-        kind: "ready",
-        trio: loaded.trio,
-        budgetUsdPerDay: settings.budgetUsdPerDay,
-      };
+      return { kind: "ready", trio: loaded.trio, budget };
   }
 }
 
 /**
  * The cheapest routing's USD/day when `settings` cannot be met on the current
  * usage, from a fit that publishes nothing; null when they can be, or no fit
- * would run on them.
+ * would run on them. A preset is always met: it never resolves below the
+ * cheapest routing.
  */
 export async function infeasibleBudget(
-  organizationId: string,
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<number | null> {
+  if (settings.budgetPreset) return null;
   const inputs = await readFitInputs({
-    organizationId,
     settings,
-    scorerVersionId: (await activeSourceVersion()).id,
+    scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
     requestedTrigger: "settings",
   });
   if (!inputs) return null;
@@ -141,43 +155,42 @@ export async function infeasibleBudget(
 }
 
 /**
- * What a fit at `budgetUsdPerDay` would plan if the fitted usage window's
+ * What a fit at `budgetUsdPerDay`, or at the budget `budgetPreset` resolves
+ * to, would plan if the fitted usage window's
  * sessions and tokens per day were `volumeMultiplier` times what they were.
  * Runs regardless of the enabled switch and publishes nothing. Each one reads
- * and fits the whole usage window, so an organization runs one at a time and
+ * and fits the whole usage window, so a router runs one at a time and
  * the process at most `MAX_SIMULATIONS`; excess calls are refused with a 429.
  */
 export function simulateFit(
-  organizationId: string,
-  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+  routerId: string,
+  params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
-  return simulationAdmission(organizationId, () =>
-    simulate(organizationId, params),
-  );
+  return simulationAdmission(routerId, () => simulate(routerId, params));
 }
 
 /**
  * A pool admitting unpublished `kind` runs over the whole usage window: one
- * per organization and `maxInFlight` per process; excess calls are refused
+ * per router and `maxInFlight` per process; excess calls are refused
  * with a 429.
  */
 export function fitAdmission(kind: string, maxInFlight: number) {
   const inFlight = new Set<string>();
-  return async <T>(organizationId: string, work: () => Promise<T>) => {
-    if (inFlight.has(organizationId)) {
+  return async <T>(routerId: string, work: () => Promise<T>) => {
+    if (inFlight.has(routerId)) {
       throw new ApiError(
         429,
-        `A ${kind} is already running for this organization; retry when it finishes.`,
+        `A ${kind} is already running for this auto router; retry when it finishes.`,
       );
     }
     if (inFlight.size >= maxInFlight) {
       throw new ApiError(429, `Too many ${kind}s are running; retry shortly.`);
     }
-    inFlight.add(organizationId);
+    inFlight.add(routerId);
     try {
       return await work();
     } finally {
-      inFlight.delete(organizationId);
+      inFlight.delete(routerId);
     }
   };
 }
@@ -188,11 +201,10 @@ export function fitAdmission(kind: string, maxInFlight: number) {
  * the same usage window.
  */
 export async function fitInputsUnchanged(
-  organizationId: string,
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
   plan: RoutingPlan,
 ): Promise<boolean> {
-  const scorerVersion = await activeSourceVersion();
+  const scorerVersion = await activeSourceVersion(settings.scorerModel);
   if (
     plan.planFormatVersion !== planFormatVersion() ||
     plan.generation !== settings.generation ||
@@ -209,7 +221,7 @@ export async function fitInputsUnchanged(
     return false;
   }
   const window = await readFitWindow({
-    organizationId,
+    router: settings,
     scorerVersionId: scorerVersion.id,
     inputWatermark: new Date(),
   });
@@ -221,12 +233,12 @@ export async function fitInputsUnchanged(
  * sessions: the cold-start progress, and what a refit would change.
  */
 export async function readFitWindow(params: {
-  organizationId: string;
+  router: FitScope;
   scorerVersionId: string;
   inputWatermark: Date;
 }): Promise<FitWindowSummary> {
   const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitVolume(params),
+    RoutingUsageModel.findFitVolume({ ...params, routerId: params.router.id }),
     readPastSessions({ ...params, longContextThreshold: null }, false),
   ]);
   return summarizeWindow(live, past);
@@ -248,6 +260,7 @@ function publish(
 ): Promise<RoutingPublishResult> {
   return RoutingPlanModel.publish({
     organizationId: inputs.organizationId,
+    routerId: inputs.routerId,
     trigger: inputs.trigger,
     generation: inputs.generation,
     inputWatermark: inputs.inputWatermark,
@@ -255,7 +268,6 @@ function publish(
       inputs.tiers.kind === "ok"
         ? inputs.tiers.tiers
         : inputs.tiers.fingerprint,
-    budgetUsdPerDay: inputs.budgetUsdPerDay,
     scorerVersionId: inputs.scorerVersionId,
     ...fitted,
   });
@@ -281,29 +293,28 @@ type FitWindowSummary = {
 export type FitSessions = { scorerVersionId: string; sessions: number };
 
 /**
- * Prepares, fits and publishes; one fit at a time per organization in this
+ * Prepares, fits and publishes; one fit at a time per router in this
  * process. A caller arriving while a fit runs waits for it and takes its run
  * when it read the caller's generation or a newer one; otherwise it runs the
- * next fit, which every caller still waiting shares. Null when auto routing
- * is not fully configured.
+ * next fit, which every caller still waiting shares. Null when the router is
+ * not fully configured.
  * @public — `fitNow` runs it; exported so tests can fit without its retries
  */
 export async function runFit(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<FitRun | null> {
   let generation: number | undefined;
   for (;;) {
-    const running = fitsInFlight.get(organizationId);
+    const running = fitsInFlight.get(routerId);
     if (!running) {
-      const flight = prepareAndComplete(organizationId, trigger).finally(() =>
-        fitsInFlight.delete(organizationId),
+      const flight = prepareAndComplete(routerId, trigger).finally(() =>
+        fitsInFlight.delete(routerId),
       );
-      fitsInFlight.set(organizationId, flight);
+      fitsInFlight.set(routerId, flight);
       return flight;
     }
-    generation ??=
-      (await AutoRoutingSettingsModel.find(organizationId))?.generation ?? 0;
+    generation ??= (await AutoRouterModel.find(routerId))?.generation ?? 0;
     const done = await running.catch(() => null);
     if (done && done.inputs.generation >= generation) return done;
   }
@@ -315,10 +326,10 @@ export async function runFit(
  * for older usage than an accepted fit reports that fit, the newest outcome.
  * An error that left no outcome recorded is reported as a failure without a
  * plan; the generation stays unplanned, so the dispatcher retries it. Null
- * when auto routing is not fully configured.
+ * when the router is not fully configured.
  */
 export async function fitNow(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<{
   fit: AutoRoutingFitResult;
@@ -327,23 +338,20 @@ export async function fitNow(
   let sessions: FitSessions | null = null;
   try {
     for (let attempt = 0; attempt < INLINE_FIT_ATTEMPTS; attempt++) {
-      const run = await runFit(organizationId, trigger);
+      const run = await runFit(routerId, trigger);
       if (!run) return null;
       sessions = fitSessions(run.inputs);
       if (run.published.kind === "recorded")
         return { fit: fitResult(run.published.plan), sessions };
       if (run.published.reason === "stale_watermark") break;
     }
-    const latest = await RoutingPlanModel.findLatestOutcome(organizationId);
+    const latest = await RoutingPlanModel.findLatestOutcome(routerId);
     return {
       fit: latest ? fitResult(latest) : { status: "cold_start", planId: null },
       sessions,
     };
   } catch (error) {
-    logger.error(
-      { err: error, organizationId },
-      "[AutoRouting] Plan fit threw",
-    );
+    logger.error({ err: error, routerId }, "[AutoRouting] Plan fit threw");
     return {
       fit: {
         status: "failed",
@@ -360,21 +368,30 @@ export async function fitNow(
 const MAX_SIMULATIONS = 4;
 const simulationAdmission = fitAdmission("simulation", MAX_SIMULATIONS);
 
+type SimulateParams = { volumeMultiplier: number } & (
+  | { budgetUsdPerDay: number; budgetPreset?: undefined }
+  | { budgetPreset: AutoRoutingBudgetPreset; budgetUsdPerDay?: undefined }
+);
+
 async function simulate(
-  organizationId: string,
-  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+  routerId: string,
+  params: SimulateParams,
 ): Promise<AutoRoutingSimulateResponse> {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const settings = await AutoRouterModel.find(routerId);
   const inputs =
     settings &&
     (await readFitInputs({
-      organizationId,
       settings: {
         ...settings,
         enabled: true,
-        budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+        ...(params.budgetPreset
+          ? { budgetPreset: params.budgetPreset }
+          : {
+              budgetPreset: null,
+              budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+            }),
       },
-      scorerVersionId: (await activeSourceVersion()).id,
+      scorerVersionId: (await activeSourceVersion(settings.scorerModel)).id,
       requestedTrigger: "manual",
     }));
   if (!inputs) {
@@ -383,14 +400,18 @@ async function simulate(
       "Configure every tier model before simulating auto routing.",
     );
   }
-  const { outcome } = await fit(inputs, params.volumeMultiplier);
+  const { outcome, budgetUsdPerDay } = await fit(
+    inputs,
+    params.volumeMultiplier,
+  );
   switch (outcome.status) {
     case "active":
       if (!outcome.summary) throw new Error("An active fit has no summary");
-      if (inputs.tiers.kind !== "ok")
-        throw new Error("An active fit has unpriced tiers");
+      if (inputs.tiers.kind !== "ok" || budgetUsdPerDay === null)
+        throw new Error("An active fit has unpriced tiers or no budget");
       return {
         status: "feasible",
+        budgetUsdPerDay: Number(budgetUsdPerDay),
         summary: outcome.summary,
         tiersFingerprint: inputs.tiers.tiers,
         baseline: dailyVolume(inputs.history.volume),
@@ -413,10 +434,9 @@ async function simulate(
   }
 }
 
-/** Why a fit nobody requested runs: what moved since the organization's last fit outcome. */
+/** Why a fit nobody requested runs: what moved since the router's last fit outcome. */
 async function scheduledTrigger(params: {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   scorerVersionId: string;
   latestScorerVersionId: string | null;
 }): Promise<RoutingPlanTrigger> {
@@ -429,8 +449,9 @@ async function scheduledTrigger(params: {
   const unplanned = settings.generation > settings.plannedGeneration;
   if (
     unplanned &&
+    settings.usesPastSessions &&
     (await RoutingBackfillModel.bumpedGeneration(
-      params.organizationId,
+      settings.organizationId,
       settings.generation,
     ))
   )
@@ -440,23 +461,22 @@ async function scheduledTrigger(params: {
 }
 
 async function readFitInputs(params: {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   scorerVersionId: string;
   requestedTrigger?: RoutingPlanTrigger;
   maxSessions?: number;
 }): Promise<FitInputs | null> {
-  const { organizationId, settings, scorerVersionId } = params;
+  const { settings, scorerVersionId } = params;
   const readiness = await fitReadiness(settings);
   if (readiness.kind !== "ready") return null;
   const tiers = fitTiers(readiness.trio);
-  const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
+  const [latest] = await RoutingPlanModel.findHistory(settings.id, 1);
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
       ? await readFitHistory(
           {
-            organizationId,
+            router: settings,
             scorerVersionId,
             inputWatermark,
             longContextThreshold: tiers.tiers.long_context_threshold,
@@ -467,18 +487,18 @@ async function readFitInputs(params: {
   const trigger =
     params.requestedTrigger ??
     (await scheduledTrigger({
-      organizationId,
       settings,
       scorerVersionId,
       latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
     }));
   return {
-    organizationId,
+    organizationId: settings.organizationId,
+    routerId: settings.id,
     trigger,
     generation: settings.generation,
     inputWatermark,
     tiers,
-    budgetUsdPerDay: readiness.budgetUsdPerDay,
+    budget: readiness.budget,
     scorerVersionId,
     history,
   };
@@ -498,12 +518,13 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
 }
 
 /**
- * Live auto sessions and scored past sessions, each weighted by how many
- * sessions of its window it stands for.
+ * The router's live sessions and, for the router that uses them, the
+ * organization's scored past sessions, each weighted by how many sessions of
+ * its window it stands for.
  */
 export async function readFitHistory(
   params: {
-    organizationId: string;
+    router: FitScope;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
@@ -511,7 +532,10 @@ export async function readFitHistory(
   maxSessions?: number,
 ): Promise<FitHistory> {
   const [live, past] = await Promise.all([
-    RoutingUsageModel.findFitHistory(params, maxSessions),
+    RoutingUsageModel.findFitHistory(
+      { ...params, routerId: params.router.id },
+      maxSessions,
+    ),
     readPastSessions(params, true),
   ]);
   // The live sample is capped while its volume counts the whole window.
@@ -526,22 +550,28 @@ export async function readFitHistory(
   };
 }
 
+/** Which sessions a fit reads: the router's own, plus the organization's past ones when it uses them. */
+type FitScope = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+
+/** A router created after its organization could have several starts cold: it reads no past sessions. */
 async function readPastSessions(
   params: {
-    organizationId: string;
+    router: FitScope;
     scorerVersionId: string;
     inputWatermark: Date;
     longContextThreshold: number | null;
   },
   withSample: boolean,
 ): Promise<PastWindow & { sample: HistoryFitRow[] }> {
-  const frame = await RoutingBackfillModel.findLatestScanned(
-    params.organizationId,
-  );
-  if (!frame)
-    return { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
+  const none = { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
+  if (!params.router.usesPastSessions) return none;
+  const { organizationId } = params.router;
+  const frame = await RoutingBackfillModel.findLatestScanned(organizationId);
+  if (!frame) return none;
   return RoutingHistoryModel.findFitSnapshot({
-    ...params,
+    organizationId,
+    scorerVersionId: params.scorerVersionId,
+    longContextThreshold: params.longContextThreshold,
     frame,
     windowStart: new Date(params.inputWatermark.getTime() - HISTORY_MS),
     withSample,
@@ -574,22 +604,23 @@ export function cheapestBudget(error: string): number | null {
 const fitsInFlight = new Map<string, Promise<FitRun | null>>();
 
 async function prepareAndComplete(
-  organizationId: string,
+  routerId: string,
   trigger?: RoutingPlanTrigger,
 ): Promise<FitRun | null> {
-  const inputs = await prepareFit(organizationId, trigger);
+  const inputs = await prepareFit(routerId, trigger);
   if (!inputs) return null;
   try {
     return { inputs, published: await completeFit(inputs) };
   } catch (error) {
     // Recorded, so the generation it read is planned rather than pending forever.
     logger.error(
-      { err: error, organizationId },
+      { err: error, routerId },
       "[AutoRouting] Plan fit failed unexpectedly",
     );
     const published = await publish(inputs, {
       coreVersion: coreVersion(),
       planFormatVersion: planFormatVersion(),
+      budgetUsdPerDay: customBudget(inputs.budget),
       outcome: {
         status: "failed",
         error: "The plan fit failed unexpectedly.",
@@ -703,11 +734,14 @@ async function fit(
 ): Promise<{
   coreVersion: string;
   planFormatVersion: number;
+  /** The budget planned for; a preset's only once a plan resolved it. */
+  budgetUsdPerDay: string | null;
   outcome: RoutingFitOutcome;
 }> {
   const versions = {
     coreVersion: coreVersion(),
     planFormatVersion: planFormatVersion(),
+    budgetUsdPerDay: customBudget(inputs.budget),
   };
   if (inputs.tiers.kind === "invalid") {
     return {
@@ -733,23 +767,20 @@ async function fit(
     };
   }
   try {
-    const plan = RouterPlanSchema.parse(
-      JSON.parse(
-        await fitPlan(
-          JSON.stringify(
-            planInput(
-              inputs.history,
-              tiers,
-              Number(inputs.budgetUsdPerDay),
-              volumeMultiplier,
-            ),
-          ),
-        ),
-      ),
+    const planAt = routerPlanAt(
+      planInput(inputs.history, tiers, 0, volumeMultiplier),
     );
+    const { plan, budgetUsdPerDay } =
+      inputs.budget.kind === "usd"
+        ? {
+            plan: await planAt(Number(inputs.budget.usdPerDay)),
+            budgetUsdPerDay: inputs.budget.usdPerDay,
+          }
+        : await presetPlan(planAt, inputs.budget.preset);
     return {
       coreVersion: plan.versions.core_version,
       planFormatVersion: plan.versions.plan_format_version,
+      budgetUsdPerDay,
       outcome: {
         status: "active",
         plan,
@@ -764,7 +795,7 @@ async function fit(
     const coded = CodedErrorSchema.safeParse(error);
     if (!coded.success) throw error;
     const expected = RouterFailureSchema.safeParse(error).success;
-    const log = { organizationId: inputs.organizationId, ...coded.data };
+    const log = { routerId: inputs.routerId, ...coded.data };
     if (expected) logger.warn(log, "[AutoRouting] Plan fit failed");
     else logger.error(log, "[AutoRouting] Plan fit failed unexpectedly");
     return {
@@ -776,6 +807,131 @@ async function fit(
       },
     };
   }
+}
+
+type RouterPlan = z.infer<typeof RouterPlanSchema>;
+type PlanAt = (budgetUsdPerDay: number) => Promise<RouterPlan>;
+
+/** Fits `input` at any budget; the history is serialized once for all of them. */
+function routerPlanAt(input: ReturnType<typeof planInput>): PlanAt {
+  const prefix = JSON.stringify({ ...input, budget: undefined }).slice(0, -1);
+  return async (budgetUsdPerDay) =>
+    RouterPlanSchema.parse(
+      JSON.parse(await fitPlan(`${prefix},"budget":${budgetUsdPerDay}}`)),
+    );
+}
+
+function customBudget(budget: FitBudget): string | null {
+  return budget.kind === "usd" ? budget.usdPerDay : null;
+}
+
+const PlanSharesSchema = z
+  .object({
+    expected_spend: z.number(),
+    tier_session_share: z.tuple([z.number(), z.number(), z.number()]),
+  })
+  .passthrough();
+
+/** Above every daily spend a plan can reach: the most a budget column holds. */
+const UNBOUNDED_BUDGET_USD_PER_DAY = 9_999_999_999.99;
+/** Shares are compared with this slack so float noise never flips a test. */
+const SHARE_TOLERANCE = 1e-9;
+
+/**
+ * The daily budget, in whole cents, `preset` resolves to on the fitted usage,
+ * and the plan at it. Raising the budget only moves sessions to bigger tiers,
+ * so the fast share falls and the smart share grows with it, between the
+ * cheapest routing's spend and the best routing's; a bisection finds where
+ * each crosses `BUDGET_PRESET_TIER_SHARE`, stopping within 0.5%.
+ */
+async function presetPlan(
+  fitAt: PlanAt,
+  preset: AutoRoutingBudgetPreset,
+): Promise<{ plan: RouterPlan; budgetUsdPerDay: string }> {
+  const plans = new Map<number, Promise<RouterPlan>>();
+  const planAt = (cents: number) => {
+    let plan = plans.get(cents);
+    if (!plan) {
+      plan = fitAt(cents / 100);
+      plans.set(cents, plan);
+    }
+    return plan;
+  };
+  const share = async (cents: number, tier: number) =>
+    PlanSharesSchema.parse((await planAt(cents)).summary).tier_session_share[
+      tier
+    ];
+  const best = PlanSharesSchema.parse(
+    (await fitAt(UNBOUNDED_BUDGET_USD_PER_DAY)).summary,
+  );
+  const cheapest = Math.max(1, Math.ceil((await cheapestSpend(fitAt)) * 100));
+  const highest = Math.max(cheapest, Math.ceil(best.expected_spend * 100));
+  const target = BUDGET_PRESET_TIER_SHARE - SHARE_TOLERANCE;
+  const costEfficient = async () =>
+    (
+      await crossing(
+        cheapest,
+        highest,
+        async (cents) => (await share(cents, 0)) >= target,
+      )
+    ).lastPassing;
+  const intelligence = async () =>
+    (
+      await crossing(
+        cheapest,
+        highest,
+        async (cents) => (await share(cents, 2)) < target,
+      )
+    ).firstFailing;
+  const cents =
+    preset === "cost_efficient"
+      ? await costEfficient()
+      : preset === "intelligence"
+        ? await intelligence()
+        : Math.round(((await costEfficient()) + (await intelligence())) / 2);
+  return {
+    plan: await planAt(cents),
+    budgetUsdPerDay: (cents / 100).toFixed(2),
+  };
+}
+
+/**
+ * Where a test that holds up to some budget and fails beyond it flips within
+ * [low, high] cents, bracketed to within 0.5%; both ends are `low` when it
+ * already fails there and `high` when it still holds there.
+ */
+async function crossing(
+  low: number,
+  high: number,
+  passes: (cents: number) => Promise<boolean>,
+): Promise<{ lastPassing: number; firstFailing: number }> {
+  if (!(await passes(low))) return { lastPassing: low, firstFailing: low };
+  if (await passes(high)) return { lastPassing: high, firstFailing: high };
+  while (high - low > Math.max(1, Math.floor(high / 200))) {
+    const middle = Math.floor((low + high) / 2);
+    if (await passes(middle)) low = middle;
+    else high = middle;
+  }
+  return { lastPassing: low, firstFailing: high };
+}
+
+/** The cheapest routing's USD/day, read from the infeasibility of a zero budget. */
+async function cheapestSpend(planAt: PlanAt): Promise<number> {
+  try {
+    await planAt(0);
+    return 0;
+  } catch (error) {
+    const cheapest = infeasibleError(error);
+    if (cheapest === null) throw error;
+    return cheapest;
+  }
+}
+
+function infeasibleError(error: unknown): number | null {
+  const coded = CodedErrorSchema.safeParse(error);
+  return coded.success
+    ? cheapestBudget(`${coded.data.code}: ${coded.data.message}`)
+    : null;
 }
 
 /**

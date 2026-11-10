@@ -95,6 +95,8 @@ export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
+export { default as autoRoutersTable } from "./auto-router";
+export { default as autoRouterVirtualApiKeysTable } from "./auto-router-virtual-api-key";
 export { default as autoRoutingTiersTable } from "./auto-routing-tier";
 export { default as browserStorageStatesTable } from "./browser-storage-state";
 export { default as browserTabStatesTable } from "./browser-tab-state";

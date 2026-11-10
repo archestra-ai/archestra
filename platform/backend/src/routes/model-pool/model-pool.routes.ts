@@ -3,11 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AUTO_MODEL, isAutoModel } from "@/auto-routing/router";
 import config from "@/config";
-import {
-  LlmProviderApiKeyModel,
-  ModelPoolModel,
-  VirtualApiKeyModel,
-} from "@/models";
+import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
 import { listChatModelPools } from "@/services/chat-model-pools";
 import {
   ApiError,
@@ -149,12 +145,12 @@ function assertModelPoolsEnabled(): void {
   }
 }
 
-/** "auto" names the Unified Model API's auto routing alias, which a pool must not shadow. */
+/** "auto" and "auto:<name>" name auto routers, which a pool must not shadow. */
 function assertNameNotReserved(input: ModelPoolInput): void {
   if (isAutoModel(input.name)) {
     throw new ApiError(
       400,
-      `"${AUTO_MODEL}" is reserved for auto routing. Pick another pool name.`,
+      `"${AUTO_MODEL}" and names starting with "${AUTO_MODEL}:" are reserved for auto routers. Pick another pool name.`,
     );
   }
 }

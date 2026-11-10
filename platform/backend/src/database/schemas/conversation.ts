@@ -13,6 +13,7 @@ import type {
   EncryptedChatEscrowBlob,
 } from "@/types/conversation";
 import agentsTable from "./agent";
+import autoRoutersTable from "./auto-router";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import modelPoolsTable from "./model-pool";
@@ -58,11 +59,14 @@ const conversationsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
-     * The chat runs on auto routing. `modelId` on `chatApiKeyId` then hold the
-     * normal tier, for everything that needs a single model (context size,
-     * attachments, titles), and what the turns run on while auto routing is off.
+     * The auto router the chat runs on. `modelId` on `chatApiKeyId` then hold
+     * its normal tier, for everything that needs a single model (context size,
+     * attachments, titles), and what the turns run on while auto routing is
+     * off. ON DELETE SET NULL.
      */
-    autoModel: boolean("auto_model").notNull().default(false),
+    autoRouterId: uuid("auto_router_id").references(() => autoRoutersTable.id, {
+      onDelete: "set null",
+    }),
     /**
      * How hard the model should reason before answering. Each provider decides
      * what the three levels mean for a given model, and a model with no such

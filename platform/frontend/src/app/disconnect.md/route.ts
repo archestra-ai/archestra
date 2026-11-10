@@ -114,6 +114,15 @@ interface GuardClient {
 }
 
 const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
+  "grok-build": {
+    binary: "grok",
+    inventory:
+      "- The managed model, MCP and native skills in ~/.archestra/grok/native/.\n- Private ownership metadata in ~/.archestra/grok/connection.json. Never print its contents because it includes credentials. Other profiles and login caches are preserved.",
+    manual:
+      "- Run node ~/.archestra/grok/disconnect.cjs after the user approves. It removes only the exact managed block.\n- If managed settings were edited, stop and reconcile those edits; do not delete unrelated models, MCP servers, credentials or sessions.",
+    finish:
+      "Start a new Grok Build session and select another model. This setup does not change Grok Bot desktop configuration.",
+  },
   pi: {
     binary: "arcpi",
     inventory: `- Inspect the presence of ~/.archestra/pi/install-state.json without printing its contents: it can contain private recovery data.

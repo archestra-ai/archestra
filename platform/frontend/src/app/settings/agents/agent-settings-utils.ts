@@ -13,7 +13,7 @@ interface OrganizationData {
   defaultLlmApiKeyId?: string | null;
   defaultFastModelId?: string | null;
   defaultSmartModelId?: string | null;
-  defaultAutoModel?: boolean;
+  defaultAutoRouterId?: string | null;
   defaultAgentId?: string | null;
 }
 
@@ -23,10 +23,10 @@ export interface AgentSettingsState {
   defaultModel: string;
   tiers: ModelTierSelection;
   /**
-   * Chats and agents on the default use `auto`. The default model and key stay
-   * what built-in agents (titles, compaction) run on.
+   * The auto router chats and agents on the default use, or null. The default
+   * model and key stay what built-in agents (titles, compaction) run on.
    */
-  defaultAutoModel: boolean;
+  defaultAutoRouterId: string | null;
   defaultAgentId: string;
 }
 
@@ -52,7 +52,7 @@ export function resolveInitialState(
       fast: organization.defaultFastModelId ?? null,
       smart: organization.defaultSmartModelId ?? null,
     },
-    defaultAutoModel: organization.defaultAutoModel ?? false,
+    defaultAutoRouterId: organization.defaultAutoRouterId ?? null,
     defaultAgentId: organization.defaultAgentId ?? "",
   };
 }
@@ -73,7 +73,7 @@ export function detectChanges(
   const hasApiKeyChanges =
     localState.selectedApiKeyId !== savedState.selectedApiKeyId;
   const hasAutoChanges =
-    localState.defaultAutoModel !== savedState.defaultAutoModel;
+    localState.defaultAutoRouterId !== savedState.defaultAutoRouterId;
   const hasAgentChanges =
     localState.defaultAgentId !== savedState.defaultAgentId;
 
@@ -108,7 +108,7 @@ export function buildSavePayload(
   }
 
   if (hasAutoChanges) {
-    payload.defaultAutoModel = localState.defaultAutoModel;
+    payload.defaultAutoRouterId = localState.defaultAutoRouterId;
   }
 
   if (hasAgentChanges) {

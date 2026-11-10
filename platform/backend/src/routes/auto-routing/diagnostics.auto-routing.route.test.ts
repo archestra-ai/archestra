@@ -5,7 +5,11 @@ import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, plannedDecision } from "@/test/auto-routing";
+import {
+  autoRouterId,
+  configureAutoRouting,
+  plannedDecision,
+} from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
@@ -31,17 +35,17 @@ function session(i: number, client = i % 3 === 0 ? "codex" : "claude-code") {
   };
 }
 
-describe("GET /api/auto-routing/diagnostics", () => {
+describe("GET /api/auto-routing/routers/:id/diagnostics", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 
-  const diagnostics = (budgetUsdPerDay?: number) =>
+  const diagnostics = async (budgetUsdPerDay?: number) =>
     ctx.app.inject({
       method: "GET",
-      url: "/api/auto-routing/diagnostics",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/diagnostics`,
       query:
         budgetUsdPerDay === undefined
           ? {}
@@ -61,6 +65,7 @@ describe("GET /api/auto-routing/diagnostics", () => {
     const scorerVersionId = (await activeSourceVersion()).id;
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
       modelId: trio[2].id,
       scorerVersionId,
       sessions: SESSIONS,
@@ -83,7 +88,7 @@ describe("GET /api/auto-routing/diagnostics", () => {
     });
     const replanned = await ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/replan",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/replan`,
     });
     expect(replanned.json().fit.status, replanned.body).toBe("active");
   }
@@ -176,7 +181,7 @@ describe("GET /api/auto-routing/diagnostics", () => {
     expect(body.sessions.every((s) => s.predictedTokens === null)).toBe(true);
   });
 
-  test("a budget change reuses the history and holdout fit until the organization records usage", async ({
+  test("a budget change reuses the history and holdout fit until the router records usage", async ({
     makeOrganization,
   }) => {
     await withActivePlan();
@@ -184,10 +189,8 @@ describe("GET /api/auto-routing/diagnostics", () => {
       body.sessions.map((s) => [s.pLong, s.predictedTokens]);
     const first = await ready();
     const budget = first.budgetUsdPerDay * 2;
-    const own = eq(
-      schema.routingDecisionsTable.organizationId,
-      ctx.organizationId,
-    );
+    const routerId = await autoRouterId(ctx.organizationId);
+    const own = eq(schema.routingDecisionsTable.routerId, routerId);
     const [decision] = await db
       .select()
       .from(schema.routingDecisionsTable)
@@ -217,6 +220,7 @@ describe("GET /api/auto-routing/diagnostics", () => {
       .values(
         plannedDecision({
           organizationId: other.id,
+          routerId: await autoRouterId(other.id),
           sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
           modelId: decision.modelId,
           scorerVersionId: (await activeSourceVersion()).id,
@@ -235,7 +239,10 @@ describe("GET /api/auto-routing/diagnostics", () => {
   test("without history drift the saved budget reproduces the active plan's shares", async () => {
     await withActivePlan();
     const plans = (
-      await ctx.app.inject({ method: "GET", url: "/api/auto-routing/plans" })
+      await ctx.app.inject({
+        method: "GET",
+        url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/plans`,
+      })
     ).json();
 
     const body = await ready();
@@ -253,7 +260,7 @@ describe("GET /api/auto-routing/diagnostics", () => {
     expect(response.json()).toEqual({ status: "cold_start" });
   });
 
-  test("runs one per organization at a time and is not found while the feature is off", async () => {
+  test("runs one per router at a time and is not found while the feature is off", async () => {
     await withActivePlan();
 
     const statuses = (await Promise.all([diagnostics(), diagnostics()])).map(
@@ -266,12 +273,14 @@ describe("GET /api/auto-routing/diagnostics", () => {
   });
 
   test("refuses runs beyond the process-wide limit", async () => {
-    const organizations = Array.from({ length: 5 }, () => crypto.randomUUID());
+    const routers = Array.from({ length: 5 }, () => ({
+      id: crypto.randomUUID(),
+      organizationId: crypto.randomUUID(),
+      usesPastSessions: false,
+    }));
 
     const results = await Promise.allSettled(
-      organizations.map((organizationId) =>
-        diagnoseAutoRouting(organizationId, undefined),
-      ),
+      routers.map((router) => diagnoseAutoRouting(router, undefined)),
     );
 
     expect(
@@ -284,11 +293,13 @@ describe("GET /api/auto-routing/diagnostics", () => {
 
     const [diagnosed, simulated] = await Promise.all([
       diagnostics(),
-      ctx.app.inject({
-        method: "POST",
-        url: "/api/auto-routing/simulate",
-        payload: { budgetUsdPerDay: 50, volumeMultiplier: 1 },
-      }),
+      autoRouterId(ctx.organizationId).then((routerId) =>
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/auto-routing/routers/${routerId}/simulate`,
+          payload: { budgetUsdPerDay: 50, volumeMultiplier: 1 },
+        }),
+      ),
     ]);
 
     expect([diagnosed.statusCode, simulated.statusCode]).toEqual([200, 200]);

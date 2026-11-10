@@ -1608,20 +1608,30 @@ class AgentModel {
       );
   }
 
-  /** Agents set to `auto` themselves (not through the organization default). */
-  static async countOnAutoModel(organizationId: string): Promise<number> {
-    const [row] = await db
-      .select({ total: count() })
+  /** How many agents are set to each auto router themselves (not through the organization default), by router id. */
+  static async countOnAutoRouters(
+    organizationId: string,
+  ): Promise<Map<string, number>> {
+    const rows = await db
+      .select({
+        routerId: schema.agentsTable.autoRouterId,
+        total: count(),
+      })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.autoModel, true),
+          isNotNull(schema.agentsTable.autoRouterId),
           isNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
         ),
-      );
-    return row?.total ?? 0;
+      )
+      .groupBy(schema.agentsTable.autoRouterId);
+    return new Map(
+      rows.flatMap((row) =>
+        row.routerId ? [[row.routerId, row.total] as const] : [],
+      ),
+    );
   }
 
   static async findRuntimeTargets(organizationId: string) {
@@ -1631,7 +1641,10 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          isNotNull(schema.agentsTable.runtime),
+          or(
+            isNotNull(schema.agentsTable.runtime),
+            sql`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
+          ),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -3191,6 +3204,37 @@ class AgentModel {
     return result ?? null;
   }
 
+  /** The Microsoft Entra agent identity the agent acts as, if it is bound to one. */
+  static async findEntraAgentIdentityId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ entraAgentIdentityId: schema.agentsTable.entraAgentIdentityId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.entraAgentIdentityId ?? null;
+  }
+
+  /** The agent bound to a Microsoft Entra agent identity, if any. */
+  static async findIdByEntraAgentIdentityId(params: {
+    organizationId: string;
+    entraAgentIdentityId: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          sql`lower(${schema.agentsTable.entraAgentIdentityId}) = ${params.entraAgentIdentityId.toLowerCase()}`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return result?.id ?? null;
+  }
+
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })
@@ -4084,7 +4128,7 @@ class AgentModel {
   ): Promise<{
     llmApiKeyId: string | null;
     modelId: string | null;
-    autoModel: boolean;
+    autoRouterId: string | null;
     runtime: Agent["runtime"];
   } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
@@ -4095,7 +4139,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        autoModel: schema.agentsTable.autoModel,
+        autoRouterId: schema.agentsTable.autoRouterId,
         runtime: schema.agentsTable.runtime,
       })
       .from(schema.agentsTable)
@@ -5778,6 +5822,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      entraAgentIdentityId: row.entraAgentIdentityId ?? null,
       subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
@@ -6778,7 +6823,7 @@ const CHAT_ROSTER_COLUMNS = {
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
   modelPoolId: schema.agentsTable.modelPoolId,
-  autoModel: schema.agentsTable.autoModel,
+  autoRouterId: schema.agentsTable.autoRouterId,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

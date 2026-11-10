@@ -26,6 +26,7 @@ export interface SetupScriptMcpSection {
   legacyServerNames?: string[];
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
+  oauthIssuer?: string;
 }
 
 export interface SetupScriptProxySection {
@@ -120,6 +121,7 @@ export interface SetupScriptProxySection {
 
 export interface SetupScriptSkillsSection {
   cloneUrl: string;
+  organizationId?: string;
   marketplaceName: string;
   /** Existing skills plugin is present. Defaults true for older callers/tests. */
   hasSkills?: boolean;
@@ -176,6 +178,12 @@ export interface AgentEnding {
    * `howTo` is printed otherwise, or when the command fails.
    */
   signIn?: { command: string[] | null; howTo: string } | null;
+  /** A provider login separate from gateway OAuth, offered before launch. */
+  providerSignIn?: {
+    label: string;
+    command: string[];
+    howTo: string;
+  };
   /** Starts the agent with a first prompt. Null when it has no CLI to start. */
   launch?: string[] | null;
   /** Anything else the person still has to do or should know. */
@@ -209,6 +217,12 @@ export interface SetupEnding {
     /** The gateway as the client lists it, e.g. in Claude Code's /mcp. */
     gatewayName: string;
   } | null;
+  providerSignIn?: {
+    label: string;
+    command: string[];
+    text: string;
+    howTo: string;
+  };
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];

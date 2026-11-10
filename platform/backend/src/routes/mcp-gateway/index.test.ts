@@ -39,6 +39,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import {
   afterEach,
   beforeEach,
@@ -1434,6 +1435,83 @@ describe("MCP Gateway (stateless mode)", () => {
       sessionId: null,
       llmToolCallId: null,
     });
+  });
+
+  test("links a Claude Code tool call to the LLM session the proxy handed it out in, for that user only", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const [owner, other] = [await makeUser(), await makeUser()];
+    for (const user of [owner, other])
+      await makeMember(user.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    // What the proxy leaves when it hands Claude Code a response: one MCP
+    // call through the gateway and one built-in call that never reaches it.
+    await llmToolCallSessions.remember({
+      organizationId: org.id,
+      userId: owner.id,
+      sessionId: "claude-session",
+      toolCalls: [
+        { id: "toolu_gateway", name: "mcp__archestra__archestra__whoami" },
+        { id: "toolu_builtin", name: "Bash" },
+      ],
+    });
+    const tokens = new Map([
+      [owner.id, (await UserTokenModel.create(owner.id, org.id)).value],
+      [other.id, (await UserTokenModel.create(other.id, org.id)).value],
+    ]);
+    const callWhoami = async (params: {
+      userId: string;
+      toolUseId: string;
+    }) => {
+      const token = mustExist(tokens.get(params.userId));
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token),
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__whoami",
+            arguments: {},
+            _meta: { "claudecode/toolUseId": params.toolUseId },
+          },
+          id: 2,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const page = await McpToolCallModel.findAllCursorPaginated(
+        { limit: 1 },
+        undefined,
+        undefined,
+        { agentId: agent.id },
+      );
+      return mustExist(page.data[0]);
+    };
+
+    expect(
+      await callWhoami({ userId: owner.id, toolUseId: "toolu_gateway" }),
+    ).toMatchObject({
+      sessionId: "claude-session",
+      llmToolCallId: "toolu_gateway",
+    });
+    // A call id the proxy never handed out, or one claimed by another user,
+    // names no session.
+    expect(
+      await callWhoami({ userId: owner.id, toolUseId: "toolu_builtin" }),
+    ).toMatchObject({ sessionId: null });
+    expect(
+      await callWhoami({ userId: other.id, toolUseId: "toolu_gateway" }),
+    ).toMatchObject({ sessionId: null });
   });
 
   test("refuses a direct call to a tool the gateway does not have, without running it", async ({

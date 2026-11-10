@@ -1,20 +1,21 @@
-import { pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import autoRoutersTable from "./auto-router";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
-import organizationsTable from "./organization";
 
 /**
- * The model auto routing sends a tier's sessions to, and the provider key it
- * is sent with, like a model pool member. The key is shared with the whole
- * organization, so every chat and agent on `auto` may use it. Deleting the key
- * or the model removes the tier, and auto routing stops until it is set again.
+ * The model an auto router sends a tier's sessions to, and the provider key
+ * it is sent with, like a model pool member. The key is shared with the whole
+ * organization, so every chat and agent on the router may use it. Deleting
+ * the key or the model removes the tier, and the router stops routing until
+ * it is set again.
  */
 const autoRoutingTiersTable = pgTable(
   "auto_routing_tiers",
   {
-    organizationId: text("organization_id")
+    routerId: uuid("router_id")
       .notNull()
-      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+      .references(() => autoRoutersTable.id, { onDelete: "cascade" }),
     tier: text("tier", { enum: ["fast", "normal", "smart"] }).notNull(),
     providerApiKeyId: uuid("provider_api_key_id")
       .notNull()
@@ -23,7 +24,14 @@ const autoRoutingTiersTable = pgTable(
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
   },
-  (table) => [primaryKey({ columns: [table.organizationId, table.tier] })],
+  (table) => [
+    primaryKey({ columns: [table.routerId, table.tier] }),
+    // Back the cascades from provider keys and models.
+    index("auto_routing_tiers_provider_api_key_id_idx").on(
+      table.providerApiKeyId,
+    ),
+    index("auto_routing_tiers_model_id_idx").on(table.modelId),
+  ],
 );
 
 export default autoRoutingTiersTable;

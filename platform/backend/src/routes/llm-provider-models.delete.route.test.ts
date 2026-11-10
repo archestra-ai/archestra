@@ -14,6 +14,7 @@ import {
   authenticatedRouteApp,
   USER_HEADER,
 } from "@/test/authenticated-route-app";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import routes from "./llm-provider-models";
 
@@ -213,8 +214,10 @@ describe("DELETE /api/llm-models/:id", () => {
     const model = await createModel();
     await OrganizationModel.patch(organizationId, { defaultModelId: model.id });
     const sessionKey = RoutingSessionKeySchema.parse("cleanup-pinned-session");
+    const router = await ensureAutoRouter(organizationId);
     const { decision } = await RoutingDecisionModel.insertOrGet({
       organizationId,
+      routerId: router.id,
       sessionKey,
       modelId: model.id,
       tierIndex: 1,
@@ -254,7 +257,7 @@ describe("DELETE /api/llm-models/:id", () => {
     expect(response.json().error.message).toContain("a routing decision");
     expect(await ModelModel.findById(model.id)).not.toBeNull();
     expect(
-      await RoutingDecisionModel.find({ organizationId, sessionKey }),
+      await RoutingDecisionModel.find({ routerId: router.id, sessionKey }),
     ).toEqual(decision);
     expect(await RoutingDecisionModel.findForInteraction(historyKey)).toEqual(
       before,

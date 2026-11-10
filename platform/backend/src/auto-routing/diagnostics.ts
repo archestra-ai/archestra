@@ -4,7 +4,7 @@ import logger from "@/logging";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel from "@/models/routing-usage";
-import type { RoutingPlan } from "@/types/auto-routing";
+import type { AutoRouter, RoutingPlan } from "@/types/auto-routing";
 import type {
   AutoRoutingDiagnostics,
   AutoRoutingSizeFit,
@@ -27,11 +27,11 @@ import { type RouterTierSet, TIER_NAMES } from "./tiers";
  * apart from simulations so browsing budgets never starves them.
  */
 export function diagnoseAutoRouting(
-  organizationId: string,
+  router: FitRouter,
   budgetUsdPerDay: number | undefined,
 ): Promise<AutoRoutingDiagnostics> {
-  return diagnosticsAdmission(organizationId, () =>
-    diagnose(organizationId, budgetUsdPerDay),
+  return diagnosticsAdmission(router.id, () =>
+    diagnose(router, budgetUsdPerDay),
   );
 }
 
@@ -109,22 +109,27 @@ type Holdout =
   | { status: "ok"; predictions: (number | null)[] }
   | { status: "no_holdout" | "failed" };
 
-/** Per organization, least recently used first. */
+type FitRouter = Pick<AutoRouter, "id" | "organizationId" | "usesPastSessions">;
+
+/** Per router, least recently used first. */
 const bases = new Map<
   string,
   { identity: string; usageSince: Date; expiresAt: number; basis: Basis }
 >();
 
 async function diagnose(
-  organizationId: string,
+  router: FitRouter,
   requestedBudget: number | undefined,
 ): Promise<AutoRoutingDiagnostics> {
-  const active = await RoutingPlanModel.findActive(organizationId);
+  const active = await RoutingPlanModel.findActive(router.id);
   if (!active) return { status: "cold_start" };
   const tiers = StoredTierSetSchema.parse(active.tiersFingerprint);
-  const basis = await cachedBasis(active, tiers);
+  const basis = await cachedBasis(router, active, tiers);
   if (basis.history.sample.length === 0) return { status: "cold_start" };
 
+  if (active.budgetUsdPerDay === null) {
+    throw new Error("The active routing plan has no budget");
+  }
   const savedBudgetUsdPerDay = Number(active.budgetUsdPerDay);
   const budgetUsdPerDay = requestedBudget ?? savedBudgetUsdPerDay;
   const solved = await solve(basis.history, tiers, budgetUsdPerDay);
@@ -164,27 +169,27 @@ async function diagnose(
 
 /** The basis of the active plan, rebuilt once its history may have changed or its entry expired. */
 async function cachedBasis(
+  router: FitRouter,
   active: RoutingPlan,
   tiers: RouterTierSet,
 ): Promise<Basis> {
-  const { organizationId } = active;
   const now = Date.now();
-  const cached = bases.get(organizationId);
-  bases.delete(organizationId);
+  const cached = bases.get(router.id);
+  bases.delete(router.id);
   let entry = cached && cached.expiresAt > now ? cached : undefined;
   if (
     !entry ||
-    (await basisIdentity(active, entry.usageSince)) !== entry.identity
+    (await basisIdentity(router, active, entry.usageSince)) !== entry.identity
   ) {
     const usageSince = new Date(now - USAGE_COMMIT_SLACK_MS);
     entry = {
-      identity: await basisIdentity(active, usageSince),
+      identity: await basisIdentity(router, active, usageSince),
       usageSince,
       expiresAt: now + BASIS_TTL_MS,
-      basis: await buildBasis(active, tiers),
+      basis: await buildBasis(router, active, tiers),
     };
   }
-  bases.set(organizationId, entry);
+  bases.set(router.id, entry);
   for (const key of bases.keys()) {
     if (bases.size <= MAX_BASES) break;
     bases.delete(key);
@@ -192,14 +197,17 @@ async function cachedBasis(
   return entry.basis;
 }
 
-/** What a basis was built from: the plan, the organization's usage since `usageSince`, and its latest backfill. */
+/** What a basis was built from: the plan, the router's usage since `usageSince`, and the latest backfill it reads. */
 async function basisIdentity(
+  router: FitRouter,
   active: RoutingPlan,
   usageSince: Date,
 ): Promise<string> {
   const [usageAt, backfill] = await Promise.all([
-    RoutingUsageModel.findLatestCreatedAt(active.organizationId, usageSince),
-    RoutingBackfillModel.findLatest(active.organizationId),
+    RoutingUsageModel.findLatestCreatedAt(router.id, usageSince),
+    router.usesPastSessions
+      ? RoutingBackfillModel.findLatest(router.organizationId)
+      : null,
   ]);
   return JSON.stringify([
     active.id,
@@ -211,11 +219,12 @@ async function basisIdentity(
 }
 
 async function buildBasis(
+  router: FitRouter,
   active: RoutingPlan,
   tiers: RouterTierSet,
 ): Promise<Basis> {
   const history = await readFitHistory({
-    organizationId: active.organizationId,
+    router,
     scorerVersionId: active.scorerVersionId,
     inputWatermark: active.inputWatermark,
     longContextThreshold: tiers.long_context_threshold,

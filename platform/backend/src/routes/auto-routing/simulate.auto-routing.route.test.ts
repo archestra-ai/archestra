@@ -2,13 +2,15 @@ import { simulateFit } from "@/auto-routing/fit";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import { autoRouterId, configureAutoRouting } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
+
+type Shares = { tier_session_share: [number, number, number] };
 
 type Summary = {
   expected_spend: number;
@@ -17,17 +19,17 @@ type Summary = {
   sessions_per_day: number;
 };
 
-describe("POST /api/auto-routing/simulate", () => {
+describe("POST /api/auto-routing/routers/:id/simulate", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 
-  const simulate = (budgetUsdPerDay: number, volumeMultiplier = 1) =>
+  const simulate = async (budgetUsdPerDay: number, volumeMultiplier = 1) =>
     ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/simulate",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/simulate`,
       payload: { budgetUsdPerDay, volumeMultiplier },
     });
 
@@ -57,6 +59,7 @@ describe("POST /api/auto-routing/simulate", () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
       modelId: trio[2].id,
       scorerVersionId: (await activeSourceVersion()).id,
       sessions,
@@ -125,11 +128,11 @@ describe("POST /api/auto-routing/simulate", () => {
   });
 
   test("refuses simulations beyond the process-wide limit", async () => {
-    const organizations = Array.from({ length: 5 }, () => crypto.randomUUID());
+    const routerIds = Array.from({ length: 5 }, () => crypto.randomUUID());
 
     const results = await Promise.allSettled(
-      organizations.map((organizationId) =>
-        simulateFit(organizationId, {
+      routerIds.map((routerId) =>
+        simulateFit(routerId, {
           budgetUsdPerDay: 50,
           volumeMultiplier: 1,
         }),
@@ -141,7 +144,7 @@ describe("POST /api/auto-routing/simulate", () => {
     );
     expect(statuses).toEqual([400, 400, 400, 400, 429]);
     await expect(
-      simulateFit(organizations[4], {
+      simulateFit(routerIds[4], {
         budgetUsdPerDay: 50,
         volumeMultiplier: 1,
       }),
@@ -161,21 +164,99 @@ describe("POST /api/auto-routing/simulate", () => {
 
   test("at the saved budget and current volume it matches the plan a re-plan publishes, without publishing", async () => {
     await withHistory();
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await AutoRouterModel.find(
+      await autoRouterId(ctx.organizationId),
+    );
 
     const simulated = await feasible(50);
 
     expect(await db.$count(schema.routingPlansTable)).toBe(0);
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(
+      await AutoRouterModel.find(await autoRouterId(ctx.organizationId)),
+    ).toEqual(before);
     const replanned = await ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/replan",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/replan`,
     });
     expect(replanned.statusCode, replanned.body).toBe(200);
-    const active = await RoutingPlanModel.findActive(ctx.organizationId);
+    const active = await RoutingPlanModel.findActive(
+      await autoRouterId(ctx.organizationId),
+    );
     expect(active?.summary).toEqual(simulated);
+  });
+
+  test("presets keep two thirds of sessions on fast (Cost-efficient) or smart (Intelligence), and Balanced spends halfway", async () => {
+    // Sessions needing each tier, at a volume that spends dollars rather than cents.
+    const needs = [
+      [0.8, 0.15, 0.05],
+      [0.6, 0.3, 0.1],
+      [0.3, 0.5, 0.2],
+      [0.1, 0.4, 0.5],
+      [0.05, 0.15, 0.8],
+    ] as const;
+    const trio = await configureAutoRouting(ctx.organizationId);
+    const scorerVersionId = (await activeSourceVersion()).id;
+    await seedFitHistory({
+      organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
+      modelId: trio[2].id,
+      scorerVersionId,
+      sessions: 40,
+      session: (i) => ({
+        createdAt: new Date(Date.now() - (2 + (i % 30)) * 86_400_000),
+        features: {
+          signals: {
+            "jev-session": {
+              version: scorerVersionId,
+              tier_needed: [...needs[i % needs.length]],
+              p_long: 0,
+            },
+          },
+          client: "claude-code",
+        },
+      }),
+    });
+    const volume = 100;
+    const cheapest = await minBudget(volume);
+    const best = (await feasible(1_000_000, volume)).expected_spend;
+    const atPreset = async (budgetPreset: string) => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/simulate`,
+        payload: { budgetPreset, volumeMultiplier: volume },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe("feasible");
+      return body as { budgetUsdPerDay: number; summary: Shares };
+    };
+    const shares = async (budget: number) =>
+      (await feasible(budget, volume)) as unknown as Shares;
+
+    const cost = await atPreset("cost_efficient");
+    const balanced = await atPreset("balanced");
+    const intelligence = await atPreset("intelligence");
+
+    expect(cheapest).toBeLessThan(cost.budgetUsdPerDay);
+    expect(cost.budgetUsdPerDay).toBeLessThan(balanced.budgetUsdPerDay);
+    expect(balanced.budgetUsdPerDay).toBeLessThan(intelligence.budgetUsdPerDay);
+    expect(intelligence.budgetUsdPerDay).toBeLessThan(best);
+    // The most it can spend with two thirds on fast, to within the 0.5% stop.
+    expect(cost.summary.tier_session_share[0]).toBeGreaterThanOrEqual(2 / 3);
+    expect(
+      (await shares(cost.budgetUsdPerDay * 1.01)).tier_session_share[0],
+    ).toBeLessThan(2 / 3);
+    // The least it needs for two thirds on smart.
+    expect(intelligence.summary.tier_session_share[2]).toBeGreaterThanOrEqual(
+      2 / 3,
+    );
+    expect(
+      (await shares(intelligence.budgetUsdPerDay * 0.99)).tier_session_share[2],
+    ).toBeLessThan(2 / 3);
+    expect(balanced.budgetUsdPerDay).toBeCloseTo(
+      (cost.budgetUsdPerDay + intelligence.budgetUsdPerDay) / 2,
+      1,
+    );
   });
 
   test("below the session minimum it reports the cold-start progress", async () => {

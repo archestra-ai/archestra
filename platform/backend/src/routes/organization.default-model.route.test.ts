@@ -6,12 +6,16 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import OrganizationModel from "@/models/organization";
 import autoRoutingRoutes from "@/routes/auto-routing/auto-routing.routes";
 import organizationRoutes from "@/routes/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, makeRoutingModel } from "@/test/auto-routing";
+import {
+  autoRouterId,
+  configureAutoRouting,
+  makeRoutingModel,
+  setAutoRoutingEnabled,
+} from "@/test/auto-routing";
 
 describe("GET /api/organization/default-model", () => {
   let app: FastifyInstanceWithZod;
@@ -29,7 +33,7 @@ describe("GET /api/organization/default-model", () => {
       config.autoRouting.enabled = true;
       organizationId = (await makeOrganization()).id;
       const user = await makeUser();
-      // A member who may use agents but not read the auto-routing settings.
+      // A member who may use agents but not read the auto routers.
       const { role } = await makeCustomRole(organizationId, {
         permission: { agent: ["read"] },
       });
@@ -58,29 +62,35 @@ describe("GET /api/organization/default-model", () => {
 
   test("names the routed tiers to a member without llmProxy:read", async () => {
     const [fast, normal, smart] = await configureAutoRouting(organizationId);
-    await OrganizationModel.patch(organizationId, { defaultAutoModel: true });
+    const routerId = await autoRouterId(organizationId);
+    await OrganizationModel.patch(organizationId, {
+      defaultAutoRouterId: routerId,
+    });
     const ref = (model: typeof fast) => ({
       id: model.id,
       provider: model.provider,
       displayName: model.modelId,
     });
 
-    const settings = await get("/api/auto-routing/settings");
+    const settings = await get("/api/auto-routing/routers");
     const response = await get("/api/organization/default-model");
 
     expect(settings.statusCode).toBe(403);
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toEqual({
       model: ref(normal),
-      defaultAutoModel: true,
-      autoRouting: {
-        active: true,
-        tiers: { fast: ref(fast), normal: ref(normal), smart: ref(smart) },
-      },
+      defaultAutoRouterId: routerId,
+      autoRouters: [
+        {
+          id: routerId,
+          name: "auto",
+          tiers: { fast: ref(fast), normal: ref(normal), smart: ref(smart) },
+        },
+      ],
     });
   });
 
-  test("names the organization's default model, and offers auto, while the default is not auto", async () => {
+  test("names the organization's default model, and offers the auto routers, while the default is not a router", async () => {
     const [fast, normal, smart] = await configureAutoRouting(organizationId);
     const ref = (tier: typeof fast) => ({
       id: tier.id,
@@ -98,18 +108,23 @@ describe("GET /api/organization/default-model", () => {
         provider: model.provider,
         displayName: model.description || model.modelId,
       },
-      defaultAutoModel: false,
-      autoRouting: {
-        active: true,
-        tiers: { fast: ref(fast), normal: ref(normal), smart: ref(smart) },
-      },
+      defaultAutoRouterId: null,
+      autoRouters: [
+        {
+          id: await autoRouterId(organizationId),
+          name: "auto",
+          tiers: { fast: ref(fast), normal: ref(normal), smart: ref(smart) },
+        },
+      ],
     });
   });
 
   test("names the normal tier, which an auto default runs on, while routing is off", async () => {
     const [, normal] = await configureAutoRouting(organizationId);
-    await OrganizationModel.patch(organizationId, { defaultAutoModel: true });
-    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+    await OrganizationModel.patch(organizationId, {
+      defaultAutoRouterId: await autoRouterId(organizationId),
+    });
+    await setAutoRoutingEnabled(organizationId, false);
 
     const response = await get("/api/organization/default-model");
 
@@ -120,8 +135,8 @@ describe("GET /api/organization/default-model", () => {
         provider: normal.provider,
         displayName: normal.modelId,
       },
-      defaultAutoModel: true,
-      autoRouting: { active: false },
+      defaultAutoRouterId: await autoRouterId(organizationId),
+      autoRouters: [],
     });
   });
 });

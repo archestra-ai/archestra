@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-09
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -110,12 +110,12 @@ Point a client at any of these endpoints and ask for the pool's name as the mode
 | --- | --- | --- |
 | **Unified Model API** | `https://<archestra-host>/v1/unified-model` | Any OpenAI-compatible client. `/models` lists the pool under its plain name. |
 | **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
-| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions |
+| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions or Responses |
 
 Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-6.1-sol`.
 
 - **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
-- **Members on another API:** Claude Code and OpenAI clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
+- **Members on another API:** Claude Code and OpenAI Chat Completions clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
 
 ## See Which Member Answered
 
@@ -129,7 +129,7 @@ Each attempt is priced as the member that made it, with that member's provider a
 
 ## Limits
 
-- Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Unified Model API.
+- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI or Azure AI Foundry; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
 - Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
 - Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
 - Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

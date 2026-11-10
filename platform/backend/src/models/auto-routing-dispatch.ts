@@ -1,65 +1,60 @@
 import { and, eq, gt, gte, isNotNull, notExists, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
-const agents = schema.agentsTable;
+const routers = schema.autoRoutersTable;
+const organizations = schema.organizationsTable;
 const tiers = schema.autoRoutingTiersTable;
 const plans = schema.routingPlansTable;
 const tasks = schema.tasksTable;
 
 class AutoRoutingDispatchModel {
   /**
-   * Organizations with auto routing fully configured whose plan is due: a
-   * plan-relevant write since the last fit outcome, or no outcome since
-   * `staleBefore`.
+   * Fully configured routers, in organizations with auto routing on, whose
+   * plan is due: a plan-relevant write since the last fit outcome, or no
+   * outcome since `staleBefore`.
    */
-  static async findDueOrganizations(staleBefore: Date): Promise<string[]> {
+  static async findDueRouters(staleBefore: Date): Promise<string[]> {
     const recentFit = db
       .select({ id: plans.id })
       .from(plans)
       .where(
-        and(
-          eq(plans.organizationId, agents.organizationId),
-          gte(plans.createdAt, staleBefore),
-        ),
+        and(eq(plans.routerId, routers.id), gte(plans.createdAt, staleBefore)),
       );
     const tierCount = db
       .select({ total: sql<number>`count(*)` })
       .from(tiers)
-      .where(eq(tiers.organizationId, agents.organizationId));
+      .where(eq(tiers.routerId, routers.id));
     const rows = await db
-      .select({ organizationId: agents.organizationId })
-      .from(agents)
+      .select({ id: routers.id })
+      .from(routers)
+      .innerJoin(organizations, eq(organizations.id, routers.organizationId))
       .where(
         and(
-          eq(agents.agentType, "llm_proxy"),
-          eq(agents.isDefault, true),
-          notDeleted(agents),
-          eq(agents.autoRoutingEnabled, true),
-          isNotNull(agents.autoRoutingBudgetUsdPerDay),
+          eq(organizations.autoRoutingEnabled, true),
+          or(
+            isNotNull(routers.budgetUsdPerDay),
+            isNotNull(routers.budgetPreset),
+          ),
           // Every tier is set.
           sql`(${tierCount}) = 3`,
           or(
-            gt(
-              agents.autoRoutingGeneration,
-              agents.autoRoutingPlannedGeneration,
-            ),
+            gt(routers.generation, routers.plannedGeneration),
             notExists(recentFit),
           ),
         ),
       );
-    return rows.map((row) => row.organizationId);
+    return rows.map((row) => row.id);
   }
 
-  /** One `auto_routing_fit` per organization at a time; the partial unique index drops duplicates. */
-  static async enqueueFits(organizationIds: string[]): Promise<number> {
-    if (organizationIds.length === 0) return 0;
+  /** One `auto_routing_fit` per router at a time; the partial unique index drops duplicates. */
+  static async enqueueFits(routerIds: string[]): Promise<number> {
+    if (routerIds.length === 0) return 0;
     const inserted = await db
       .insert(tasks)
       .values(
-        organizationIds.map((organizationId) => ({
+        routerIds.map((routerId) => ({
           taskType: "auto_routing_fit" as const,
-          payload: { organizationId },
+          payload: { routerId },
           maxAttempts: 1,
         })),
       )

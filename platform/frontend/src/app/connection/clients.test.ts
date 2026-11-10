@@ -23,6 +23,44 @@ import {
 } from "./clients";
 import { SKILL_MARKETPLACE_CLIENTS } from "./skills-marketplace-clients";
 
+describe("shared Grok client connection", () => {
+  it("configures the native proxy route and session-correlated MCP instead of duplicating the placeholder", () => {
+    const candidates = CONNECT_CLIENTS.filter(
+      (client) => client.id === "grok-build",
+    );
+    expect(candidates).toHaveLength(1);
+    const client = candidates[0];
+    if (
+      client.proxy.kind !== "custom" ||
+      client.mcp.kind !== "custom" ||
+      !client.mcp.buildConfig
+    )
+      throw new Error("Grok configuration missing");
+    const proxy = client.proxy.build({
+      provider: "xai",
+      providerLabel: "xAI",
+      proxyName: "proxy",
+      url: "https://proxy.example/v1/xai/proxy",
+      tokenPlaceholder: "synthetic-key",
+      appName: "Test Platform",
+    });
+    expect(proxy.kind).toBe("snippet");
+    if (proxy.kind !== "snippet") throw new Error("Expected TOML");
+    expect(proxy.code).toContain(
+      'base_url = "https://proxy.example/v1/xai/proxy"',
+    );
+    expect(proxy.code).toContain('"X-Archestra-Agent-Id" = "grok-build"');
+    expect(proxy.code).not.toContain("{{session_id}}");
+    const mcp = client.mcp.buildConfig({
+      url: "https://proxy.example/v1/mcp/gateway",
+      token: "synthetic-token",
+      serverName: "gateway",
+    });
+    expect(mcp).toContain('"x-appa-session-id" = "{{session_id}}"');
+    expect(mcp).toContain('"Authorization" = "Bearer synthetic-token"');
+  });
+});
+
 describe("Cursor connection instructions", () => {
   it("installs shared skills in Cursor's discovered skills folder", () => {
     const client = SKILL_MARKETPLACE_CLIENTS.find(

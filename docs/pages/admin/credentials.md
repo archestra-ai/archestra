@@ -2,7 +2,7 @@
 title: Credentials
 description: Save and share credentials across integrations
 order: 5
-lastUpdated: 2026-10-22
+lastUpdated: 2026-11-09
 ---
 
 Save a credential once and reuse it in agents, MCP servers, skills, and Knowledge connectors. Each integration can use your personal account or an organization identity.
@@ -70,7 +70,7 @@ Expiring GitHub credentials renew automatically while authorization remains vali
 
 ## Secrets Storage
 
-Values are encrypted in PostgreSQL by default. Operators configure Vault storage and encryption-key rotation in [Secret Storage](/docs/admin/deployment/secret-storage).
+Values are encrypted in PostgreSQL by default. Operators configure Vault storage and encryption-key rotation in [Secret Storage](/docs/admin/deployment/secret-storage). [Secret Rotation](/docs/admin/deployment/secret-rotation) covers every other secret.
 
 
 

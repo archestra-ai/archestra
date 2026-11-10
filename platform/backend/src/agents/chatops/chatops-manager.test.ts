@@ -31,6 +31,7 @@ import {
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import {
   A2AContextModel,
@@ -6845,4 +6846,432 @@ describe("ChatOpsManager with a Microsoft Teams group chat", () => {
     expect(executeSpy.mock.calls[2][0].messages).toEqual([]);
     expect(replies[3]?.footer).toContain(`conversation started by ${bob.name}`);
   });
+});
+
+describe("ChatOpsManager Slack discovery snapshots", () => {
+  setupTestCacheManager();
+  const leaseKey =
+    `${CacheKey.ChannelDiscoveryLease}-slack-all` as AllowedCacheKey;
+  const freshnessKey =
+    `${CacheKey.ChannelDiscovery}-slack-all` as AllowedCacheKey;
+
+  function channel(channelId: string, workspaceId = "TONE") {
+    return {
+      channelId,
+      workspaceId,
+      channelName: channelId,
+      workspaceName: workspaceId,
+    };
+  }
+
+  const configs = new WeakMap<
+    SlackProvider,
+    ConstructorParameters<typeof SlackProvider>[0]
+  >();
+  let nextBotId = 0;
+  function provider(workspaceId = "TONE") {
+    const botId = `UBOT${++nextBotId}`;
+    const config = {
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "synthetic",
+      appId: `A${botId}`,
+    };
+    const result = new SlackProvider(config);
+    configs.set(result, config);
+    vi.spyOn(result, "getWorkspaceId").mockReturnValue(workspaceId);
+    vi.spyOn(result, "getBotUserId").mockReturnValue(botId);
+    vi.spyOn(result, "discoverChannels").mockResolvedValue([]);
+    return result;
+  }
+
+  function configFor(provider: SlackProvider) {
+    const config = configs.get(provider);
+    if (!config) throw new Error("Missing synthetic bot config");
+    return config;
+  }
+
+  async function managerFor(...providers: SlackProvider[]) {
+    await ChatOpsConfigModel.saveSlackConfig(configFor(providers[0]));
+    for (const [index, bot] of providers.slice(1).entries())
+      await ChatOpsConfigModel.saveSlackAgentBot({
+        ...configFor(bot),
+        agentId: `bot-${index}`,
+      });
+    const manager = new ChatOpsManager();
+    const internal = manager as unknown as {
+      slackProvider: SlackProvider;
+      slackAgentBots: Map<string, SlackProvider>;
+    };
+    internal.slackProvider = providers[0];
+    for (const [index, bot] of providers.slice(1).entries())
+      internal.slackAgentBots.set(`bot-${index}`, bot);
+    return manager;
+  }
+
+  function scan(manager: ChatOpsManager, bot: SlackProvider) {
+    return manager.discoverChannels({
+      provider: bot,
+      context: null,
+      workspaceId: bot.getWorkspaceId() ?? "TONE",
+    });
+  }
+
+  function read(channelId: string, workspaceId = "TONE") {
+    return ChatOpsChannelBindingModel.findByChannel({
+      provider: "slack",
+      channelId,
+      workspaceId,
+    });
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+
+  test("coalesces two managers and manual refresh while a complete snapshot is in flight", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const bot = provider();
+    const started = deferred<void>();
+    const listing = deferred<ReturnType<typeof channel>[]>();
+    vi.mocked(bot.discoverChannels).mockImplementation(async () => {
+      started.resolve();
+      return listing.promise;
+    });
+    const first = scan(await managerFor(bot), bot);
+    await started.promise;
+    await cacheManager.deleteByPrefix(`${CacheKey.ChannelDiscovery}-slack`);
+    await scan(await managerFor(bot), bot);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(1);
+    listing.resolve([channel("CACTIVE")]);
+    await first;
+    expect(await read("CACTIVE")).not.toBeNull();
+    await scan(await managerFor(bot), bot);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(1);
+    expect(await cacheManager.get(leaseKey)).toBeUndefined();
+  });
+
+  test("discovers a newly configured bot even while the previous snapshot is fresh", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const original = provider();
+    vi.mocked(original.discoverChannels).mockResolvedValue([
+      channel("CORIGINAL"),
+    ]);
+    await scan(await managerFor(original), original);
+    const added = provider();
+    vi.mocked(added.discoverChannels).mockResolvedValue([channel("CADDED")]);
+    const updated = await managerFor(original, added);
+    await scan(updated, original);
+    expect(original.discoverChannels).toHaveBeenCalledTimes(2);
+    expect(added.discoverChannels).toHaveBeenCalledTimes(1);
+    expect(await read("CORIGINAL")).not.toBeNull();
+    expect(await read("CADDED")).not.toBeNull();
+    await scan(updated, added);
+    expect(added.discoverChannels).toHaveBeenCalledTimes(1);
+  });
+
+  test("an old replica cannot replace a newer bot snapshot after refresh", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const original = provider();
+    vi.mocked(original.discoverChannels).mockResolvedValue([
+      channel("CORIGINAL"),
+    ]);
+    const old = await managerFor(original);
+    await scan(old, original);
+    const added = provider();
+    vi.mocked(added.discoverChannels).mockResolvedValue([channel("CADDED")]);
+    const current = await managerFor(original, added);
+    await scan(current, original);
+    await cacheManager.delete(freshnessKey);
+    await scan(old, original);
+    expect(await read("CADDED")).not.toBeNull();
+    expect(original.discoverChannels).toHaveBeenCalledTimes(2);
+    expect(await cacheManager.get(leaseKey)).toBeUndefined();
+  });
+
+  test("a settings change during a scan prevents publication", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const original = provider();
+    const manager = await managerFor(original);
+    const started = deferred<void>();
+    const listing = deferred<ReturnType<typeof channel>[]>();
+    vi.mocked(original.discoverChannels).mockImplementation(async () => {
+      started.resolve();
+      return listing.promise;
+    });
+    const pending = scan(manager, original);
+    await started.promise;
+    await ChatOpsConfigModel.saveSlackAgentBot({
+      ...configFor(provider()),
+      agentId: "new-bot",
+    });
+    listing.resolve([channel("CSTALE")]);
+    await pending;
+    expect(await read("CSTALE")).toBeNull();
+    expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+    expect(await cacheManager.get(leaseKey)).toBeUndefined();
+  });
+
+  for (const disabledPosition of ["main", "agent"] as const) {
+    test(`ignores disabled ${disabledPosition} configuration while discovering the enabled bot`, async ({
+      makeOrganization,
+    }) => {
+      await makeOrganization();
+      const disabled = provider();
+      const disabledConfig = {
+        ...configFor(disabled),
+        enabled: false,
+        botToken: "",
+      };
+      const inactive = new SlackProvider(disabledConfig);
+      configs.set(inactive, disabledConfig);
+      const active = provider();
+      vi.mocked(active.discoverChannels).mockResolvedValue([
+        channel("CACTIVE"),
+      ]);
+      const manager =
+        disabledPosition === "main"
+          ? await managerFor(inactive, active)
+          : await managerFor(active, inactive);
+      await scan(manager, active);
+      expect(await read("CACTIVE")).not.toBeNull();
+    });
+  }
+
+  test("an enabled bot that failed initialization prevents an incomplete snapshot", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "COLD",
+      workspaceId: "TONE",
+    });
+    const active = provider();
+    const failed = provider();
+    vi.mocked(failed.getWorkspaceId).mockReturnValue(null);
+    const manager = await managerFor(active, failed);
+    await scan(manager, active);
+    expect(await read("COLD")).not.toBeNull();
+    expect(active.discoverChannels).not.toHaveBeenCalled();
+    expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+  });
+
+  test("retains all bindings when one bot fails and respects Retry-After even after manual refresh", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "COLD",
+      workspaceId: "TONE",
+    });
+    const good = provider();
+    const bad = provider();
+    vi.mocked(good.discoverChannels).mockResolvedValue([channel("CNEW")]);
+    vi.mocked(bad.discoverChannels).mockRejectedValue(
+      Object.assign(new Error("ratelimited"), { retryAfter: 90 }),
+    );
+    const manager = await managerFor(good, bad);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      await scan(manager, good);
+      expect((await read("COLD"))?.id).toBe(binding.id);
+      expect(await read("CNEW")).toBeNull();
+      expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+      await cacheManager.deleteByPrefix(`${CacheKey.ChannelDiscovery}-slack`);
+      clock.mockReturnValue(now + 89_000);
+      await scan(manager, good);
+      expect(good.discoverChannels).toHaveBeenCalledTimes(1);
+      clock.mockReturnValue(now + 90_001);
+      vi.mocked(bad.discoverChannels).mockResolvedValue([]);
+      await scan(manager, good);
+      expect(good.discoverChannels).toHaveBeenCalledTimes(2);
+      expect(await read("COLD")).toBeNull();
+      expect(await read("CNEW")).not.toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test("reconciles an empty snapshot without caching it, so the next trigger discovers a first invitation", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "COLD",
+      workspaceId: "TONE",
+    });
+    const dm = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "DKEEP",
+      workspaceId: "TONE",
+      isDm: true,
+    });
+    const bot = provider();
+    const manager = await managerFor(bot);
+    await scan(manager, bot);
+    expect(await read("COLD")).toBeNull();
+    expect((await read("DKEEP"))?.id).toBe(dm.id);
+    expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+    expect(await cacheManager.get(leaseKey)).toBeUndefined();
+    vi.mocked(bot.discoverChannels).mockResolvedValue([channel("CINVITED")]);
+    await scan(manager, bot);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(2);
+    expect(await read("CINVITED")).not.toBeNull();
+    expect((await read("DKEEP"))?.id).toBe(dm.id);
+    // Nonempty snapshots still suppress repeated scans.
+    await scan(manager, bot);
+    expect(bot.discoverChannels).toHaveBeenCalledTimes(2);
+  });
+
+  test("reconciles each authenticated workspace without collapsing shared channel IDs", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    for (const workspaceId of ["TONE", "TTWO", "TOTHER"]) {
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "COLD",
+        workspaceId,
+      });
+    }
+    const one = provider("TONE");
+    const two = provider("TTWO");
+    vi.mocked(one.discoverChannels).mockResolvedValue([
+      channel("CSHARED", "TONE"),
+    ]);
+    vi.mocked(two.discoverChannels).mockResolvedValue([
+      channel("CSHARED", "TTWO"),
+    ]);
+    await scan(await managerFor(one, two), one);
+    expect(await read("CSHARED", "TONE")).not.toBeNull();
+    expect(await read("CSHARED", "TTWO")).not.toBeNull();
+    expect(await read("COLD", "TONE")).toBeNull();
+    expect(await read("COLD", "TTWO")).toBeNull();
+    expect(await read("COLD", "TOTHER")).not.toBeNull();
+  });
+
+  test("a stale owner cannot publish or release a replacement lease", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "COLD",
+      workspaceId: "TONE",
+    });
+    const bot = provider();
+    const started = deferred<void>();
+    const listing = deferred<ReturnType<typeof channel>[]>();
+    vi.mocked(bot.discoverChannels).mockImplementation(async () => {
+      started.resolve();
+      return listing.promise;
+    });
+    const pending = scan(await managerFor(bot), bot);
+    await started.promise;
+    // Simulate a replacement admission after the original process lost its lease.
+    await cacheManager.withLock(leaseKey, async (cache) => {
+      await cache.set(leaseKey, { owner: "replacement" }, 180_000);
+    });
+    listing.resolve([channel("CSTALE")]);
+    await pending;
+    expect(await read("CSTALE")).toBeNull();
+    expect(await read("COLD")).not.toBeNull();
+    expect(await cacheManager.get(leaseKey)).toEqual({ owner: "replacement" });
+    expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+  });
+
+  for (const change of ["shutdown", "replacement"] as const) {
+    test(`rolls back publication after ${change} during binding writes`, async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "slack",
+        channelId: "COLD",
+        workspaceId: "TONE",
+      });
+      const bot = provider();
+      vi.mocked(bot.discoverChannels).mockResolvedValue([channel("CSTALE")]);
+      const manager = await managerFor(bot);
+      const written = deferred<void>();
+      const resume = deferred<void>();
+      const ensure = ChatOpsChannelBindingModel.ensureChannelsExist.bind(
+        ChatOpsChannelBindingModel,
+      );
+      const pause = vi
+        .spyOn(ChatOpsChannelBindingModel, "ensureChannelsExist")
+        .mockImplementation(async (...args) => {
+          await ensure(...args);
+          written.resolve();
+          await resume.promise;
+        });
+      try {
+        const pending = scan(manager, bot);
+        await written.promise;
+        if (change === "shutdown") await manager.beginShutdown();
+        else
+          (
+            manager as unknown as { slackProvider: SlackProvider }
+          ).slackProvider = provider();
+        resume.resolve();
+        await pending;
+        expect(await read("CSTALE")).toBeNull();
+        expect(await read("COLD")).not.toBeNull();
+        expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+      } finally {
+        resume.resolve();
+        pause.mockRestore();
+      }
+    });
+  }
+
+  for (const change of ["shutdown", "replacement"] as const) {
+    test(`discards a snapshot after provider ${change}`, async ({
+      makeOrganization,
+    }) => {
+      await makeOrganization();
+      const bot = provider();
+      const started = deferred<void>();
+      const listing = deferred<ReturnType<typeof channel>[]>();
+      vi.mocked(bot.discoverChannels).mockImplementation(async () => {
+        started.resolve();
+        return listing.promise;
+      });
+      const manager = await managerFor(bot);
+      const pending = scan(manager, bot);
+      await started.promise;
+      if (change === "shutdown") await manager.beginShutdown();
+      else
+        (manager as unknown as { slackProvider: SlackProvider }).slackProvider =
+          provider();
+      listing.resolve([channel("CSTALE")]);
+      await pending;
+      expect(await read("CSTALE")).toBeNull();
+      expect(await cacheManager.get(freshnessKey)).toBeUndefined();
+      expect(await cacheManager.get(leaseKey)).toBeUndefined();
+    });
+  }
 });

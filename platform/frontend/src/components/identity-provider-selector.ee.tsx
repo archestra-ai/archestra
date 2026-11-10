@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
+import { IdentityProviderIcon } from "@/components/identity-provider-icons";
 import { Button } from "@/components/ui/button";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { recordSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";

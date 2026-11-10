@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   BUILT_IN_AGENT_IDS,
   getArchestraToolFullName,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
@@ -16,6 +16,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -123,7 +124,10 @@ describe("app llm completion", () => {
     });
     const { organizationId } = context;
     if (!organizationId) throw new Error("context has no organization");
-    await OrganizationModel.patch(organizationId, { defaultAutoModel: true });
+    const router = await ensureAutoRouter(organizationId);
+    await OrganizationModel.patch(organizationId, {
+      defaultAutoRouterId: router.id,
+    });
     const { generateText: realGenerateText } =
       await vi.importActual<typeof import("ai")>("ai");
     vi.mocked(generateText).mockImplementation(realGenerateText);
@@ -139,7 +143,7 @@ describe("app llm completion", () => {
     await executeArchestraTool(llmTool, { prompt: "summarize this" }, context);
 
     expect(sent.length).toBeGreaterThan(0);
-    expect(sent[0].get(AUTO_ROUTABLE_HEADER)).toBe("true");
+    expect(sent[0].get(AUTO_ROUTER_ID_HEADER)).toBe(router.id);
   });
 
   test("jsonMode steers the model with a JSON directive", async () => {

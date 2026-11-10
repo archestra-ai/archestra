@@ -8,6 +8,10 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
+  AutoRoutersField,
+  useCanSetAutoRouters,
+} from "@/components/credential-billing/auto-routers-field";
+import {
   BudgetFields,
   UsersPayNotice,
 } from "@/components/credential-billing/budget-fields";
@@ -291,6 +295,7 @@ export function oauthClientFormBody(
       : {
           providerApiKeys: values.providerApiKeys,
           modelPoolIds: values.modelPoolIds,
+          autoRouterIds: values.autoRouterIds,
           billingTeamId: values.billingTeamId,
           serviceAccountId: values.serviceAccountId,
         }),
@@ -369,6 +374,7 @@ function OAuthClientProviderAccessFields({
   const llm = values.scopes.includes("llm:proxy");
   const { data: capabilities } = useScopedCapabilities(!userMode && llm);
   const canSetModelPools = useCanSetModelPools();
+  const canSetAutoRouters = useCanSetAutoRouters();
   const includeFutureProviders = values.includeFutureProviders ?? false;
   const canIncludeFutureProviders =
     capabilities?.some(
@@ -432,6 +438,14 @@ function OAuthClientProviderAccessFields({
           value={values.modelPoolIds ?? []}
           onChange={(value) =>
             form.setValue("modelPoolIds", value, { shouldDirty: true })
+          }
+        />
+      )}
+      {canSetAutoRouters && (
+        <AutoRoutersField
+          value={values.autoRouterIds ?? []}
+          onChange={(value) =>
+            form.setValue("autoRouterIds", value, { shouldDirty: true })
           }
         />
       )}

@@ -24,6 +24,8 @@ export type HitlReviewCard = {
   question: string;
   shortQuestion?: string;
   callPreview?: string;
+  /** Complete, unwrapped review for native panes that render plain text. */
+  plainCallPreview?: string;
   header: string;
   /** An option's own `preview` replaces `callPreview` for that option. */
   options: Array<{ label: string; description: string; preview?: string }>;

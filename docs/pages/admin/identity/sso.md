@@ -2,7 +2,7 @@
 title: Single Sign-On
 description: Add workplace sign-in and map directory claims to access
 order: 1
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-09
 ---
 
 Let people sign in with their workplace accounts. Test one sign-in before requiring SSO for everyone. This is an [Enterprise feature](/docs/get-started/pricing-model).
@@ -95,5 +95,5 @@ Keep **User ID Claim** unchanged when changing **Email Claim**. Archestra ties e
 | `account not linked` | Mismatched or unverified email | Confirm the user signs in with the email address registered on Archestra, and verify the email in the IdP. |
 | "Account Belongs to Someone Else" | The identity provider gave this email to a different person, such as a new hire who inherited a former employee's address | Someone with [`member:delete`](/docs/reference/permissions#member:delete) removes the previous account in **Settings → Users** with **Remove**. The person then signs in again and gets a new, empty account. |
 | `account_not_found` (SAML) | Missing user attributes | Configure your SAML IdP to include `NameID` in `emailAddress` format, plus `email`, `firstName`, and `lastName`. |
-| `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. |
+| `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. See [Identity Provider Secrets](/docs/admin/deployment/secret-rotation#identity-provider-secrets). |
 | User missing team membership | Group claim omitted or identifier typo | Confirm the IdP sends the group claim in the ID token and that the group name in **Settings → Teams** matches verbatim. |

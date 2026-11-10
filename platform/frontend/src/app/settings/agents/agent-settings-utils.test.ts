@@ -31,7 +31,7 @@ describe("resolveInitialState", () => {
       defaultModelId: "model-uuid-1",
       defaultLlmApiKeyId: "key-1",
       defaultAgentId: "agent-1",
-      defaultAutoModel: false,
+      defaultAutoRouterId: null,
     };
     const state = resolveInitialState(org, apiKeys);
     expect(state).toEqual({
@@ -39,7 +39,7 @@ describe("resolveInitialState", () => {
       defaultModel: "model-uuid-1",
       tiers: { fast: null, smart: null },
       defaultAgentId: "agent-1",
-      defaultAutoModel: false,
+      defaultAutoRouterId: null,
     });
   });
 
@@ -61,7 +61,7 @@ describe("resolveInitialState", () => {
       defaultModelId: null,
       defaultLlmApiKeyId: null,
       defaultAgentId: null,
-      defaultAutoModel: false,
+      defaultAutoRouterId: null,
     };
     const state = resolveInitialState(org, apiKeys);
     expect(state).toEqual({
@@ -69,7 +69,7 @@ describe("resolveInitialState", () => {
       defaultModel: "",
       tiers: { fast: null, smart: null },
       defaultAgentId: "",
-      defaultAutoModel: false,
+      defaultAutoRouterId: null,
     });
   });
 
@@ -78,7 +78,7 @@ describe("resolveInitialState", () => {
       defaultModelId: "model-uuid-1",
       defaultLlmApiKeyId: "deleted-key",
       defaultAgentId: null,
-      defaultAutoModel: false,
+      defaultAutoRouterId: null,
     };
     const state = resolveInitialState(org, apiKeys);
     expect(state.selectedApiKeyId).toBe("");
@@ -100,7 +100,7 @@ describe("detectChanges", () => {
     defaultModel: "model-uuid-a",
     tiers: NO_TIERS,
     defaultAgentId: "agent-1",
-    defaultAutoModel: false,
+    defaultAutoRouterId: null,
   };
 
   it("detects no changes when state matches saved", () => {
@@ -155,7 +155,7 @@ describe("detectChanges", () => {
         defaultModel: "model-uuid-b",
         tiers: NO_TIERS,
         defaultAgentId: "agent-2",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
       saved,
     );
@@ -174,14 +174,14 @@ describe("detectChanges", () => {
         defaultModel: "",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
       {
         selectedApiKeyId: "key-1",
         defaultModel: "model-uuid-a",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
     );
     expect(result.hasModelChanges).toBe(true);
@@ -204,15 +204,34 @@ describe("buildSavePayload", () => {
     defaultModel: "model-uuid-a",
     tiers: NO_TIERS,
     defaultAgentId: "agent-1",
-    defaultAutoModel: false,
+    defaultAutoRouterId: null,
   };
 
-  it("sends only the auto flag when the default becomes auto, keeping the model built-in agents run on", () => {
+  it("sends only the router id when the default becomes an auto router, keeping the model built-in agents run on", () => {
     const payload = buildSavePayload(
-      { ...saved, defaultAutoModel: true },
+      { ...saved, defaultAutoRouterId: "router-a" },
       saved,
     );
-    expect(payload).toEqual({ defaultAutoModel: true });
+    expect(payload).toEqual({ defaultAutoRouterId: "router-a" });
+  });
+
+  it("sends the other router's id when the default moves between routers", () => {
+    const onRouterA = { ...saved, defaultAutoRouterId: "router-a" };
+    expect(
+      detectChanges({ ...saved, defaultAutoRouterId: "router-b" }, onRouterA),
+    ).toMatchObject({ hasAutoChanges: true, hasModelChanges: false });
+    expect(
+      buildSavePayload(
+        { ...saved, defaultAutoRouterId: "router-b" },
+        onRouterA,
+      ),
+    ).toEqual({ defaultAutoRouterId: "router-b" });
+  });
+
+  it("sends null to leave auto", () => {
+    expect(
+      buildSavePayload(saved, { ...saved, defaultAutoRouterId: "router-a" }),
+    ).toEqual({ defaultAutoRouterId: null });
   });
 
   it("sends the model and key together on a model change", () => {
@@ -276,7 +295,7 @@ describe("buildSavePayload", () => {
         defaultModel: "model-uuid-b",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
       saved,
     );
@@ -301,14 +320,14 @@ describe("buildSavePayload", () => {
         defaultModel: "",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
       {
         selectedApiKeyId: "key-1",
         defaultModel: "model-uuid-a",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
     );
     expect(payload).toEqual({
@@ -326,14 +345,14 @@ describe("buildSavePayload", () => {
         defaultModel: "",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
       {
         selectedApiKeyId: "key-1",
         defaultModel: "model-uuid-a",
         tiers: NO_TIERS,
         defaultAgentId: "",
-        defaultAutoModel: false,
+        defaultAutoRouterId: null,
       },
     );
     expect(payload).toEqual({

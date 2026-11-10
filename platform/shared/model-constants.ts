@@ -113,12 +113,12 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
- * Providers whose shared keys can be model pool members. Per-user providers
- * (Copilot) and subscription-only ones are left out: their credential belongs
- * to one user. Cohere has no translator to or from the wires pooled clients
- * speak.
+ * Providers whose credentials can be model pool members. Personal credentials
+ * remain restricted to their owner when a request selects pool members. Cohere
+ * and Microsoft 365 Copilot have no translator for pooled request formats.
  */
 export const MODEL_POOL_PROVIDERS = [
+  "github-copilot",
   "anthropic",
   "bedrock",
   "openai",

@@ -70,9 +70,12 @@ export function MemberRow({
     transition,
   } = useSortable({ id: row.id, disabled: !canDrag });
   const [keyOpen, setKeyOpen] = useState(false);
-  const { sharedKeys, keysById, modelIdsByKey, modelIdsByProvider } = options;
+  const { availableKeys, keysById, modelIdsByKey, modelIdsByProvider } =
+    options;
   const poolName = form.watch("name").trim();
-  const provider = keysById.get(member.providerApiKeyId)?.provider;
+  const retainedOnly = !!row.saved && !keysById.has(member.providerApiKeyId);
+  const provider =
+    keysById.get(member.providerApiKeyId)?.provider ?? row.saved?.provider;
   const modelOptions = toModelOptions({
     provider,
     keyModels: modelIdsByKey.get(member.providerApiKeyId) ?? [],
@@ -116,30 +119,39 @@ export function MemberRow({
       </div>
       <div className="grid min-w-0 gap-2 @3xl:contents">
         <div className={cn("min-w-0 space-y-1", repeated && INVALID_FIELD)}>
-          <LlmProviderApiKeyDropdown
-            availableKeys={sharedKeys}
-            selectedApiKeyId={member.providerApiKeyId || null}
-            open={keyOpen}
-            onOpenChange={setKeyOpen}
-            disabled={disabled}
-            onSelectKey={(keyId) => {
-              form.setValue(`members.${index}.providerApiKeyId`, keyId, {
-                shouldDirty: true,
-              });
-              form.setValue(
-                `members.${index}.modelId`,
-                suggestModelId(
-                  poolName,
-                  keysById.get(keyId)?.provider,
-                  modelIdsByKey.get(keyId),
-                ),
-                { shouldDirty: true },
-              );
-            }}
-            triggerVariant="select"
-            triggerClassName="w-full"
-            triggerAriaLabel="Provider key"
-          />
+          {retainedOnly ? (
+            <Input
+              aria-label="Provider key"
+              value={row.saved?.providerApiKeyName ?? "Personal connection"}
+              readOnly
+              title="Only the owner can change this connection or its model."
+            />
+          ) : (
+            <LlmProviderApiKeyDropdown
+              availableKeys={availableKeys}
+              selectedApiKeyId={member.providerApiKeyId || null}
+              open={keyOpen}
+              onOpenChange={setKeyOpen}
+              disabled={disabled}
+              onSelectKey={(keyId) => {
+                form.setValue(`members.${index}.providerApiKeyId`, keyId, {
+                  shouldDirty: true,
+                });
+                form.setValue(
+                  `members.${index}.modelId`,
+                  suggestModelId(
+                    poolName,
+                    keysById.get(keyId)?.provider,
+                    modelIdsByKey.get(keyId),
+                  ),
+                  { shouldDirty: true },
+                );
+              }}
+              triggerVariant="select"
+              triggerClassName="w-full"
+              triggerAriaLabel="Provider key"
+            />
+          )}
           <MemberCooldown saved={row.saved} />
         </div>
         <div className="min-w-0 space-y-1">
@@ -152,7 +164,9 @@ export function MemberRow({
                   options={modelOptions}
                   value={field.value}
                   onValueChange={field.onChange}
-                  disabled={disabled || !member.providerApiKeyId}
+                  disabled={
+                    disabled || retainedOnly || !member.providerApiKeyId
+                  }
                   allowCustom
                   placeholder="Choose or type a model ID"
                   searchPlaceholder="Search or type a model ID"

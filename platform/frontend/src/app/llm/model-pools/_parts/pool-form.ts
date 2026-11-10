@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared/model-pool-retries";
 import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -153,24 +154,26 @@ export function orderShare(
  */
 export function usePoolOptions() {
   const { data: allKeys = [] } = useLlmProviderApiKeys();
-  // Personal keys belong to one user, so only shared keys on providers a pool
-  // can send to can be members.
-  const sharedKeys = useMemo(
+  const { data: session } = useSession();
+  // Personal members are available only to their owner at request time.
+  const availableKeys = useMemo(
     () =>
       allKeys
         .filter(
-          (key) => key.userId === null && isModelPoolProvider(key.provider),
+          (key) =>
+            (key.userId === null || key.userId === session?.user.id) &&
+            isModelPoolProvider(key.provider),
         )
         .sort(
           (a, b) =>
             a.provider.localeCompare(b.provider) ||
             a.name.localeCompare(b.name),
         ),
-    [allKeys],
+    [allKeys, session?.user.id],
   );
   const keysById = useMemo(
-    () => new Map(sharedKeys.map((key) => [key.id, key])),
-    [sharedKeys],
+    () => new Map(availableKeys.map((key) => [key.id, key])),
+    [availableKeys],
   );
 
   const { data: models = [] } = useModelsWithApiKeys({
@@ -213,7 +216,7 @@ export function usePoolOptions() {
   );
 
   return {
-    sharedKeys,
+    availableKeys,
     keysById,
     modelIdsByKey,
     modelIdsByProvider,

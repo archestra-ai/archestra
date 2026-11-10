@@ -940,3 +940,154 @@ responsesPoolTest(
     expect(pooled.headers["x-archestra-provider-key"]).toBe(native.secondKeyId);
   },
 );
+
+test("Copilot pool uses the owner's subscription on both APIs without sharing it through pool grants", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser();
+  const other = await makeUser();
+  await makeMember(owner.id, org.id);
+  await makeMember(other.id, org.id);
+  const agent = await makeAgent({ organizationId: org.id, agentType: "agent" });
+  const githubToken = `gho_${crypto.randomUUID()}`;
+  const key = await makeLlmProviderApiKey(
+    org.id,
+    (await makeSecret({ secret: { apiKey: githubToken } })).id,
+    { provider: "github-copilot", userId: owner.id },
+  );
+  const pool = await ModelPoolModel.create({
+    organizationId: org.id,
+    input: {
+      name: "copilot-pool",
+      members: [
+        {
+          providerApiKeyId: key.id,
+          modelId: "gpt-4.1",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  let exchanges = 0;
+  let completions = 0;
+  let responses = 0;
+  const upstream = "https://copilot-pool.example.test";
+  server.use(
+    http.get(config.llm["github-copilot"].tokenExchangeUrl, ({ request }) => {
+      expect(request.headers.get("authorization")).toBe(`token ${githubToken}`);
+      exchanges++;
+      return HttpResponse.json({
+        token: "copilot-session",
+        expires_at: Math.floor(Date.now() / 1000) + 1800,
+        endpoints: { api: upstream },
+      });
+    }),
+    http.post(`${upstream}/chat/completions`, async ({ request }) => {
+      expect(request.headers.get("authorization")).toBe(
+        "Bearer copilot-session",
+      );
+      expect(await request.json()).toMatchObject({ model: "gpt-4.1" });
+      completions++;
+      return HttpResponse.json({
+        id: "completion",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4.1",
+        choices: [
+          {
+            message: { role: "assistant", content: "OK" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+      });
+    }),
+    http.post(`${upstream}/responses`, async ({ request }) => {
+      expect(request.headers.get("authorization")).toBe(
+        "Bearer copilot-session",
+      );
+      expect(await request.json()).toMatchObject({ model: "gpt-4.1" });
+      responses++;
+      return HttpResponse.json({
+        id: "response",
+        object: "response",
+        created_at: 1,
+        status: "completed",
+        model: "gpt-4.1",
+        output: [
+          {
+            type: "message",
+            id: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "OK", annotations: [] }],
+          },
+        ],
+        usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 },
+      });
+    }),
+  );
+  const app = createFastifyInstance();
+  await app.register(modelRouterRoutes);
+  try {
+    for (const authorId of [owner.id, other.id, null]) {
+      const virtual = await VirtualApiKeyModel.create({
+        organizationId: org.id,
+        name: "Pool caller",
+        scope: authorId ? "personal" : "org",
+        authorId,
+        includeFutureProviders: true,
+      });
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: org.id,
+        virtualApiKeyId: virtual.virtualKey.id,
+        poolIds: [pool.id],
+      });
+      for (const endpoint of ["chat/completions", "responses"]) {
+        const result = await app.inject({
+          method: "POST",
+          url: `/v1/model-router/${agent.id}/${endpoint}`,
+          headers: {
+            authorization: `Bearer ${virtual.value}`,
+            "x-archestra-user-id": owner.id,
+          },
+          payload: {
+            model: pool.name,
+            ...(endpoint === "responses"
+              ? {
+                  input: [{ role: "user", content: "Hello" }],
+                  max_output_tokens: 16,
+                }
+              : {
+                  messages: [{ role: "user", content: "Hello" }],
+                  max_tokens: 16,
+                }),
+          },
+        });
+        expect(result.statusCode, result.body).toBe(
+          authorId === owner.id ? 200 : 403,
+        );
+        if (authorId === owner.id) {
+          expect(result.headers["x-archestra-pool"]).toBe(pool.name);
+          expect(result.headers["x-archestra-provider-key"]).toBe(key.id);
+          expect(result.body).toContain("OK");
+          if (endpoint === "chat/completions")
+            expect(result.json().choices[0].index).toBe(0);
+        }
+      }
+    }
+    expect(exchanges).toBe(1);
+    expect(completions).toBe(1);
+    expect(responses).toBe(1);
+  } finally {
+    await app.close();
+  }
+});

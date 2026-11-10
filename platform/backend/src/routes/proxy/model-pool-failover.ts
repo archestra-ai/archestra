@@ -24,7 +24,7 @@ import {
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelPoolModel } from "@/models";
+import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
 import {
   ApiError,
   type ModelPool,
@@ -120,6 +120,8 @@ export interface ModelPoolPlan {
 
 /** Who is calling, as far as pool access goes. */
 export interface ModelPoolCaller {
+  /** Proven user identity, never the caller-supplied attribution header. */
+  userId?: string;
   /** The virtual key the request authenticated with, if any. */
   virtualKeyId?: string;
   /** Provider keys the caller may already use. */
@@ -197,9 +199,31 @@ export async function planModelPool(params: {
   ) {
     return null;
   }
-  const enabled = pool.members.filter((member) => member.enabled);
-  if (enabled.length === 0)
+  const allEnabled = pool.members.filter((member) => member.enabled);
+  if (allEnabled.length === 0)
     throw new ApiError(400, "The selected model pool has no enabled members");
+  // A pool grant authorizes shared members, not somebody else's subscription.
+  // Read current ownership rather than caching it with the pool definition.
+  const keys = await LlmProviderApiKeyModel.findByIds([
+    ...new Set(allEnabled.map((member) => member.providerApiKeyId)),
+  ]);
+  const usableKeys = new Set(
+    keys
+      .filter(
+        (key) =>
+          key.organizationId === params.organizationId &&
+          (key.userId === null || key.userId === params.caller.userId),
+      )
+      .map((key) => key.id),
+  );
+  const enabled = allEnabled.filter((member) =>
+    usableKeys.has(member.providerApiKeyId),
+  );
+  if (enabled.length === 0)
+    throw new ApiError(
+      403,
+      "No model pool members are available to this caller. Personal connections can only be used by their owner.",
+    );
   const reachable = enabled.filter((member) =>
     canReachMember(params.inbound, member.provider),
   );

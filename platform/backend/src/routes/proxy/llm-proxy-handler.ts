@@ -1383,6 +1383,7 @@ async function handleObservedLLMProxy<
           poolId: chatModelPoolId,
           inbound: poolWire,
           caller: {
+            userId: authenticatedUserId,
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
             // An app OAuth client's own pools were checked at sign-in and come
@@ -2212,6 +2213,16 @@ async function handleObservedLLMProxy<
       );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
+      }
+      if (
+        modelPoolPlan &&
+        (row.organizationId !== resolvedAgent.organizationId ||
+          (row.userId !== null && row.userId !== authenticatedUserId))
+      ) {
+        throw new ApiError(
+          403,
+          "This model pool member belongs to another user.",
+        );
       }
       const apiKey = row.secretId
         ? await getSecretValueForLlmProviderApiKey(row.secretId)

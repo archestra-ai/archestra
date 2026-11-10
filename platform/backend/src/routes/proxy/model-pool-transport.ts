@@ -41,6 +41,8 @@ import {
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   geminiAdapterFactory,
+  githubCopilotAdapterFactory,
+  githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -115,7 +117,8 @@ export function inboundPoolWire(
 ): PoolWire | null {
   if (
     interactionType === "openai:responses" ||
-    interactionType === "azure:responses"
+    interactionType === "azure:responses" ||
+    interactionType === "github-copilot:responses"
   )
     return "openai-responses";
   if (interactionType === "anthropic:messages") return "anthropic";
@@ -137,7 +140,11 @@ export function canReachMember(
   provider: SupportedProvider,
 ): boolean {
   if (inbound === "openai-responses")
-    return provider === "openai" || provider === "azure";
+    return (
+      provider === "openai" ||
+      provider === "azure" ||
+      provider === "github-copilot"
+    );
   const target = wireOf(provider);
   if (!target) return false;
   return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
@@ -569,7 +576,9 @@ export function memberAdapter(
         ? openAiResponsesAdapterFactory
         : provider === "azure"
           ? azureResponsesAdapterFactory
-          : null
+          : provider === "github-copilot"
+            ? githubCopilotResponsesAdapterFactory
+            : null
       : MEMBER_ADAPTERS[provider];
   return adapter as LLMProvider<unknown, unknown, unknown, unknown, unknown>;
 }
@@ -585,6 +594,7 @@ const MEMBER_ADAPTERS: Record<ModelPoolProvider, unknown> = {
   cerebras: cerebrasAdapterFactory,
   deepseek: deepseekAdapterFactory,
   gemini: geminiAdapterFactory,
+  "github-copilot": githubCopilotAdapterFactory,
   groq: groqAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,

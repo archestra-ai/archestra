@@ -2715,9 +2715,10 @@ function refPatternMatches(
 }
 
 /** The App whose check the ruleset requires, or none for a token. */
-async function checkIntegrationId(
-  source: ConnectedSource,
-): Promise<number | undefined> {
+async function checkIntegrationId(source: {
+  organizationId: string;
+  githubAppConfigId: string | null;
+}): Promise<number | undefined> {
   if (!source.githubAppConfigId) return undefined;
   const definition = await RuntimeCredentialDefinitionModel.findById({
     id: source.githubAppConfigId,

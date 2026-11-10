@@ -1225,7 +1225,13 @@ async function handleObservedLLMProxy<
   // first-party clients a machine-readable signal (mirrors
   // ChatErrorCode.ProviderAuthRequired); the connect URL is in the message so
   // generic OpenAI/Anthropic clients surface something actionable too.
-  if (providerRequiresPerUserCredential(providerName) && !apiKey) {
+  // Pool-only credentials resolve their member's key after planning. The pool
+  // grant does not bypass the planner's or dispatcher's ownership checks.
+  if (
+    providerRequiresPerUserCredential(providerName) &&
+    !apiKey &&
+    !(authOverride?.modelPoolId ?? grantedPoolId)
+  ) {
     const providerLabel = providerDisplayNames[providerName];
     const connectUrl = `${config.frontendBaseUrl}/settings`;
     logger.info(

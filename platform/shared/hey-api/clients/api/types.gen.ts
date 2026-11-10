@@ -121489,6 +121489,8 @@ export type UpdateAppaGithubSyncData = {
     } | {
         action: 'disconnect';
     } | {
+        action: 'require-check';
+    } | {
         action: 'schedule';
         interval: '15m' | '1h' | '1d';
     };
@@ -121804,6 +121806,7 @@ export type GetAppaRepositoryProtectionResponses = {
             detail?: string;
             bypassActors?: number;
             checkRule?: 'omitted' | 'unposted';
+            scope?: 'full' | 'check';
         };
     } | null;
 };

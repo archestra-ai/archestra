@@ -270,6 +270,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         request.auditBefore = { syncRequested: false };
         request.auditAfter = { syncRequested: true };
       }
+      if (request.body.action === "require-check") {
+        request.auditBefore = { policyCheckRequired: false };
+        request.auditAfter = { policyCheckRequired: true };
+      }
       return reply.send(
         await updateAppaGithubSync({
           organizationId: request.organizationId,

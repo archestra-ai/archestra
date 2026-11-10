@@ -152,6 +152,8 @@ export const AppaRepositoryProtectionSchema = z
        * rules until it can, or required by a rule it cannot satisfy.
        */
       checkRule: z.enum(["omitted", "unposted"]).optional(),
+      /** The rules kept: every rule, or the required check alone (a shared repository). */
+      scope: z.enum(["full", "check"]).optional(),
     }),
   })
   .nullable();
@@ -169,6 +171,8 @@ export const AppaGithubSyncStatusSchema = z.object({
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),
   z.object({ action: z.literal("disconnect") }).strict(),
+  /** Require the policy check on the synced branch of a shared repository. */
+  z.object({ action: z.literal("require-check") }).strict(),
   z
     .object({ action: z.literal("schedule"), interval: AppaSyncIntervalSchema })
     .strict(),

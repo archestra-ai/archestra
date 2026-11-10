@@ -22,6 +22,7 @@ import {
   checkDueAppaGithubSyncs,
   getRepositoryProtection,
   syncAppaGithubPolicy,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -1960,19 +1961,6 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
     http.get("https://api.github.com/app", () =>
       HttpResponse.json({ slug: "acme-guardrails" }),
     ),
-    // The ruleset requires the check: an unrelated request gets it as skipped.
-    http.get(`${REPO}/rules/branches/main`, () =>
-      HttpResponse.json([
-        {
-          type: "required_status_checks",
-          parameters: {
-            required_status_checks: [
-              { context: "Guardrails Policy Admission" },
-            ],
-          },
-        },
-      ]),
-    ),
     http.get(`${REPO}/pulls`, () =>
       HttpResponse.json(
         Object.entries(pulls).map(([number, pull]) => ({
@@ -2033,7 +2021,7 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   expect(runs).toHaveLength(6);
 });
 
-test("a policy in a folder of a shared repository gets no ruleset, and a pull request that changes no policy file gets no check until a ruleset requires it", async ({
+test("a policy in a folder of a shared repository gets no ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({
   makeOrganization,
 }) => {
   config.openappa.enabled = true;
@@ -2041,7 +2029,6 @@ test("a policy in a folder of a shared repository gets no ruleset, and a pull re
   await connectApp({ organizationId: org.id, path: "guardrails/appa.toml" });
   const rulesetWrites: string[] = [];
   const runs: Array<{ head_sha: string; conclusion: string }> = [];
-  let branchRules: unknown[] = [];
   const head = "a".repeat(40);
   server.use(
     http.get("https://api.github.com/app", () =>
@@ -2066,9 +2053,6 @@ test("a policy in a folder of a shared repository gets no ruleset, and a pull re
       rulesetWrites.push("POST");
       return HttpResponse.json({ id: 5 }, { status: 201 });
     }),
-    http.get(`${REPO}/rules/branches/main`, () =>
-      HttpResponse.json(branchRules),
-    ),
     http.get(`${REPO}/pulls`, () =>
       HttpResponse.json([
         {
@@ -2097,29 +2081,44 @@ test("a policy in a folder of a shared repository gets no ruleset, and a pull re
     state: "not_managed",
     detail: expect.stringContaining("guardrails/ of a repository"),
   });
-  // A product pull request: nothing posted while no ruleset asks for the check.
+  // A product pull request: the check is posted as skipped, once, and no
+  // policy is read for it.
   await checkDueAppaGithubSyncs();
   await checkDueAppaGithubSyncs();
-  expect(runs).toEqual([]);
-  // The repository requires the check in a ruleset of its own: the request
-  // gets it as skipped, once, so it is not held.
-  branchRules = [
-    {
-      type: "required_status_checks",
-      parameters: {
-        required_status_checks: [{ context: "Guardrails Policy Admission" }],
-      },
-    },
-  ];
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  vi.setSystemTime(Date.now() + 11 * 60_000);
-  try {
-    await checkDueAppaGithubSyncs();
-    await checkDueAppaGithubSyncs();
-  } finally {
-    vi.useRealTimers();
-  }
   expect(runs).toEqual([
     expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
   ]);
+  // Asked for, the ruleset holds the required check alone, not strict.
+  const written: unknown[] = [];
+  server.use(
+    http.post(`${REPO}/rulesets`, async ({ request }) => {
+      written.push(await request.json());
+      return HttpResponse.json({ id: 9 }, { status: 201 });
+    }),
+  );
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "require-check",
+  });
+  expect(written).toEqual([
+    expect.objectContaining({
+      name: "Guardrails Policy Admission",
+      rules: [
+        {
+          type: "required_status_checks",
+          parameters: {
+            strict_required_status_checks_policy: false,
+            required_status_checks: [
+              { context: "Guardrails Policy Admission", integration_id: 123 },
+            ],
+          },
+        },
+      ],
+    }),
+  ]);
+  expect((await getRepositoryProtection(org.id))?.branchRules).toMatchObject({
+    state: "active",
+    scope: "check",
+    url: "https://github.com/example/policies/rules/9",
+  });
 });

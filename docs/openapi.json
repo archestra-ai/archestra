@@ -472848,6 +472848,21 @@
                       "action": {
                         "type": "string",
                         "enum": [
+                          "require-check"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "action"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
                           "schedule"
                         ]
                       },
@@ -473347,6 +473362,13 @@
                           "enum": [
                             "omitted",
                             "unposted"
+                          ]
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "check"
                           ]
                         }
                       },

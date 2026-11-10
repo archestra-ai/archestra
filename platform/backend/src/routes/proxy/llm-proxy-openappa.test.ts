@@ -516,7 +516,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       native.dispatchHook.mockImplementation(async (raw: string) =>
         JSON.parse(raw).event === "tool_result"
           ? JSON.stringify({
-              decision: "deny_call",
+              decision: "replace_output",
               feedback: refusal,
               approved_output: refusal,
               output_source: "runtime",

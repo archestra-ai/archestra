@@ -8,7 +8,7 @@ import { createLogger } from "./create-logger";
  * Builds a production-configured logger writing into an in-memory sink so
  * tests can assert on the exact records that would reach any logger stream.
  */
-function createCapturingLogger() {
+function createCapturingLogger(contentMode: "full" | "metadata_only" = "full") {
   const records: Record<string, unknown>[] = [];
   const sink = new Writable({
     write(chunk: Buffer, _encoding, callback) {
@@ -19,6 +19,7 @@ function createCapturingLogger() {
   const logger = createLogger({
     streams: [{ stream: sink }],
     level: "info",
+    contentMode,
   });
   return { logger, records };
 }
@@ -260,4 +261,96 @@ describe("bounded error serialization", () => {
 
     expect(records[0].error).toBe("plain failure message");
   });
+});
+
+describe("metadata-only application errors", () => {
+  test("withholds provider text, stacks and raw diagnostics before fan-out without mutating errors", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const marker = "synthetic-private-provider-echo";
+    const error = new APICallError({
+      message: marker,
+      url: `https://provider.example/?prompt=${marker}`,
+      requestBodyValues: { prompt: marker },
+      statusCode: 503,
+      responseBody: marker,
+    });
+    const retry = new RetryError({
+      message: marker,
+      reason: "maxRetriesExceeded",
+      errors: [error, error],
+    });
+    logger.error(error);
+    logger.error({ err: error });
+    logger.error(
+      { error: retry, conversationId: "synthetic-id" },
+      "Chat stream failed",
+    );
+    logger.info(
+      {
+        parsedError: { message: marker },
+        errorMessage: marker,
+        rawErrorJson: marker,
+        statusCode: 503,
+      },
+      "Mapped provider error",
+    );
+    logger.error(
+      { errorBody: marker, upstreamError: marker, statusCode: 503 },
+      "Provider failed",
+    );
+    logger.warn({ error: marker }, "Helper failed");
+    expect(JSON.stringify(records)).not.toContain(marker);
+    expect(records[2]).toMatchObject({
+      conversationId: "synthetic-id",
+      error: {
+        reason: "maxRetriesExceeded",
+        lastError: { statusCode: 503, isRetryable: true },
+        errors: [{ statusCode: 503 }, { statusCode: 503 }],
+      },
+    });
+    expect(records[3].statusCode).toBe(503);
+    expect(error.message).toBe(marker);
+    expect(error.responseBody).toBe(marker);
+  });
+
+  test("handles plain error objects, cycles and unrecognized attached content", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const error = {
+      name: "ProviderError",
+      status: 400,
+      message: "private-prompt",
+      custom: { prompt: "private-prompt" },
+      cause: null as unknown,
+    };
+    error.cause = error;
+    logger.error({ error }, "Provider failed");
+    expect(records[0]).toMatchObject({
+      error: { status: 400 },
+    });
+    expect(JSON.stringify(records)).not.toContain("private-prompt");
+  });
+});
+
+test("metadata-only withholds separate stack and provider-controlled code fields", () => {
+  const { logger, records } = createCapturingLogger("metadata_only");
+  const marker = "SYNTHETIC_PRIVATE_PROMPT";
+  const error = Object.assign(new Error(marker), {
+    name: marker,
+    type: marker,
+    code: marker,
+    reason: marker,
+  });
+  logger.error({ err: error }, "Provider failed");
+  logger.error(
+    {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      statusCode: 500,
+    },
+    "HTTP 50x request error occurred",
+  );
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({ err: { type: "Error" } });
+  expect(records[1].statusCode).toBe(500);
 });

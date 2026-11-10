@@ -89,6 +89,36 @@ export function serializeErrorBounded(value: unknown): unknown {
   return serializeError(value, new WeakSet());
 }
 
+/** Provider-controlled text can echo prompts even in a short message or stack. */
+export function serializeErrorMetadata(value: unknown): unknown {
+  return errorMetadata({ value, ancestors: new WeakSet(), depth: 0 });
+}
+
+/** Separate raw diagnostic fields bypass the Error serializers. */
+export function withholdErrorContent(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...record };
+  for (const key of [
+    "stack",
+    "rawErrorJson",
+    "parsedError",
+    "errorBody",
+    "upstreamError",
+    "errorMessage",
+    "responseBody",
+    "requestBody",
+    "requestBodyValues",
+  ]) {
+    if (key in result) result[key] = "[not stored: log content mode]";
+  }
+  // SDK error codes can be provider-controlled free text too. Numeric protocol
+  // codes are safe; local classifications use mappedCode instead.
+  if (typeof result.code === "string")
+    result.code = "[not stored: log content mode]";
+  return result;
+}
+
 // === Internal ===
 
 function serializeError(value: unknown, ancestors: WeakSet<Error>): unknown {
@@ -144,3 +174,52 @@ function serializeError(value: unknown, ancestors: WeakSet<Error>): unknown {
  * failure, but an unbounded body can echo whole requests.
  */
 const MAX_SERIALIZED_ERROR_FIELD_LENGTH = 2_000;
+
+function errorMetadata({
+  value,
+  ancestors,
+  depth,
+}: {
+  value: unknown;
+  ancestors: WeakSet<object>;
+  depth: number;
+}): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== "object") return "[not stored: log content mode]";
+  if (ancestors.has(value) || depth > 5) return "[Circular or nested error]";
+  ancestors.add(value);
+  const error = value as Record<string, unknown>;
+  const metadata: Record<string, unknown> = {};
+  // Constructor identity comes from code, whereas SDK name/type/code fields
+  // can be populated directly from the provider's response.
+  if (value instanceof Error) metadata.type = value.constructor.name;
+  if (
+    error.reason === "maxRetriesExceeded" ||
+    error.reason === "errorNotRetryable" ||
+    error.reason === "abort"
+  ) {
+    metadata.reason = error.reason;
+  }
+  for (const key of ["status", "statusCode", "isRetryable"]) {
+    const field = error[key];
+    if (typeof field === "number" || typeof field === "boolean")
+      metadata[key] = field;
+  }
+  for (const key of ["cause", "lastError"]) {
+    if (error[key] !== undefined)
+      metadata[key] = errorMetadata({
+        value: error[key],
+        ancestors,
+        depth: depth + 1,
+      });
+  }
+  if (Array.isArray(error.errors)) {
+    metadata.errors = error.errors
+      .slice(0, 10)
+      .map((child) =>
+        errorMetadata({ value: child, ancestors, depth: depth + 1 }),
+      );
+  }
+  ancestors.delete(value);
+  return metadata;
+}

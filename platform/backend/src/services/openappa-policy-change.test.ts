@@ -285,13 +285,13 @@ for (const scenario of [
           ],
         },
       ]);
+      // The commit names who asked in its message; it sets no author, which
+      // would leave it unsigned.
       expect(commitWrites).toEqual([
         {
-          message: params.title,
+          message: `${params.title}\n\nRequested-by: ${user.email}`,
           tree: newTreeSha,
           parents: [baseSha],
-          // The person who asked is the commit's author.
-          author: { name: user.name || user.email, email: user.email },
         },
       ]);
       expect(refWrites).toEqual([
@@ -462,16 +462,17 @@ for (const credential of ["app", "pat"] as const) {
             branch: string;
             sha: string;
             content: string;
-            author?: { name: string; email: string };
+            message: string;
+            author?: unknown;
           };
           expect(body.branch).toBe(head);
           expect(body.sha).toBe(fileSha);
           expect(Buffer.from(body.content, "base64").toString()).toBe(changed);
-          // The person who asked is the commit's author, on this path too.
-          expect(body.author).toEqual({
-            name: user.name || user.email,
-            email: user.email,
-          });
+          // Who asked is in the message on this path too, and no author is set.
+          expect(body.message).toMatch(
+            new RegExp(`\\n\\nRequested-by: ${user.email}$`),
+          );
+          expect(body.author).toBeUndefined();
           return HttpResponse.json({ content: { sha: fileSha } });
         },
       ),

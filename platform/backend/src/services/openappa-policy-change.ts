@@ -9,6 +9,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { withRequester } from "@/openappa/policy-text";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
@@ -171,12 +172,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "GitHub has changed since the last policy sync. Sync the policy, then review the new revision.",
     );
 
-  // The commit's author is the person who asked: GitHub signs the commit
-  // for Archestra's credential, so the policy check can trust that name.
+  // The commit names the person who asked, in a trailer GitHub's signature
+  // for the App covers; an author of its own would leave the commit unsigned.
   const requester = await UserModel.getById(params.userId);
-  const author = requester
-    ? { name: requester.name || requester.email, email: requester.email }
-    : undefined;
+  const message = requester
+    ? withRequester(params.title, requester.email)
+    : params.title;
   let head: string;
   if (params.validationChanges) {
     await assertValidationSource(params);
@@ -234,10 +235,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       token,
       errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
-        ...(author ? { author } : {}),
       },
     });
     const commitSha = checkedSha(commitResult.sha);
@@ -278,12 +278,10 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       token,
       errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
-        // The same author on this path: the policy check reads it.
-        ...(author ? { author } : {}),
       },
     });
   }

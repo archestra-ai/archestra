@@ -613,9 +613,10 @@ test("each open pull request carries the checks a pull would make on its merge r
         {
           sha: goodHead,
           commit: {
-            author: { email: admin.email },
+            message: `Payments rules\n\nRequested-by: ${admin.email}`,
             verification: { verified: true, reason: "valid" },
           },
+          author: { login: "acme-guardrails[bot]", type: "Bot" },
           committer: { login: "acme-guardrails[bot]", type: "Bot" },
         },
       ]),
@@ -1187,6 +1188,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(preview.rootChange).toContain('+include = ["mcp/*.toml"]');
 
   const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const commits: Array<{ message: string; author?: unknown }> = [];
   const refs: Array<{ ref: string }> = [];
   const pulls: Array<{ body: string; head: string; base: string }> = [];
   server.use(
@@ -1197,9 +1199,10 @@ test("a server's editors propose its rules as a pull request; readers and outsid
       trees.push((await request.json()) as (typeof trees)[number]);
       return HttpResponse.json({ sha: "4".repeat(40) });
     }),
-    http.post(`${REPO}/git/commits`, () =>
-      HttpResponse.json({ sha: "5".repeat(40) }),
-    ),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
     http.post(`${REPO}/git/refs`, async ({ request }) => {
       refs.push((await request.json()) as (typeof refs)[number]);
       return HttpResponse.json({});
@@ -1241,6 +1244,12 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   expect(refs[0]?.ref).toMatch(
     /^refs\/heads\/archestra\/openappa-server-payments_api-/,
   );
+  // The commit names who asked in its message, which GitHub's signature for
+  // the App covers, and sets no author of its own, which would leave it unsigned.
+  expect(commits[0]?.message).toMatch(
+    new RegExp(`^\\S.*\\n\\nRequested-by: ${pat.email}$`),
+  );
+  expect(commits[0]).not.toHaveProperty("author");
   expect(pulls[0]).toMatchObject({ base: "main" });
   expect(pulls[0]?.body).toContain("Requested in Archestra by Pat");
 
@@ -1972,13 +1981,19 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   await syncAppaGithubPolicy(org.id);
 
   const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
-  const signed = (email: string, sha: string) => ({
+  // A commit the App made through its API: GitHub signed it, the App is its
+  // author, and the committer is the App or GitHub's web-flow (Contents API).
+  const signed = (email: string, sha: string, committer = bot.login) => ({
     sha,
     commit: {
-      author: { email },
+      message: `Guardrails rules for Payments API\n\nRequested-by: ${email}`,
       verification: { verified: true, reason: "valid" },
     },
-    committer: { login: "acme-guardrails[bot]", type: "Bot" },
+    author: bot,
+    committer: {
+      login: committer,
+      type: committer === bot.login ? "Bot" : "User",
+    },
   });
   const pulls: Record<
     number,
@@ -1988,7 +2003,7 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
     1: {
       user: bot,
       files: ["mcp/payments_api.toml"],
-      commits: [signed(pat.email, results[1] as string)],
+      commits: [signed(pat.email, results[1] as string, "web-flow")],
     },
     // Opened by the App for Sam, who may not edit Payments API.
     2: {
@@ -2005,9 +2020,10 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
         {
           sha: results[3],
           commit: {
-            author: { email: pat.email },
+            message: `Also mine\n\nRequested-by: ${pat.email}`,
             verification: { verified: false, reason: "unsigned" },
           },
+          author: { login: "mallory", type: "User" },
           committer: { login: "mallory", type: "User" },
         },
       ],

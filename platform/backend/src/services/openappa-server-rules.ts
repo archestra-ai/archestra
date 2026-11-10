@@ -16,6 +16,7 @@ import {
   parsePolicyToml,
   SERVER_RULES_INCLUDE,
   serverRulesPath,
+  withRequester,
 } from "@/openappa/policy-text";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { policyDiff } from "@/services/guardrails-policy-proposal";
@@ -201,18 +202,15 @@ export async function proposeServerRulesChange(
       : []),
   ];
   const head = `${BRANCH_PREFIX}${change.server.prefix}-${randomUUID().slice(0, 8)}`;
-  // The commit's author is the person who asked: GitHub signs the commit for
-  // Archestra's credential, so the policy check can trust that name.
-  const author = requester
-    ? { name: requester.name || requester.email, email: requester.email }
-    : undefined;
+  // The commit names the person who asked, in a trailer GitHub's signature
+  // for the App covers: the policy check reads it from there.
   const opened = await openGithubPull({
     ...change,
     title,
+    message: requester ? withRequester(title, requester.email) : title,
     body,
     files,
     head,
-    author,
   });
   return {
     stage: "proposed" as const,
@@ -509,10 +507,11 @@ type ChangedFile = { path: string; content: string };
 async function openGithubPull(params: {
   source: Source;
   title: string;
+  /** The commit message: the title, and who asked. */
+  message: string;
   body: string;
   files: ChangedFile[];
   head: string;
-  author?: { name: string; email: string };
 }) {
   const { source } = params;
   const { token, api } = await githubWriter(source);
@@ -543,11 +542,11 @@ async function openGithubPull(params: {
     token,
     url: `${base}/git/commits`,
     method: "POST",
+    // No author or committer: GitHub signs the commit for the App only then.
     body: {
-      message: params.title,
+      message: params.message,
       tree: checkedSha(tree.sha),
       parents: [source.sourceCommit],
-      ...(params.author ? { author: params.author } : {}),
     },
   });
   await github({

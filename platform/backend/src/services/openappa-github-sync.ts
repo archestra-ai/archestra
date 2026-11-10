@@ -39,6 +39,7 @@ import {
   asRecord,
   isServerRulesFile,
   repositoryIncludePaths,
+  requesterOf,
   serverRulesPrefix,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
@@ -1494,9 +1495,11 @@ function governedFiles(
 
 /**
  * The member who asked for a pull request Archestra's App opened, read from
- * its commits: every one must be signed by GitHub for the App, and their
- * author, which Archestra set when it opened the request, names the member.
- * Otherwise why that cannot be told; null for a read that failed for now.
+ * its commits: every one must be signed by GitHub for the App, which signs a
+ * commit the App makes through its API as its author (the committer is the
+ * App, or GitHub's own web-flow on the Contents API), and the trailer
+ * Archestra wrote into each message names the member. Otherwise why that
+ * cannot be told; null for a read that failed for now.
  */
 async function archestraPullRequester(params: {
   source: PolicySource;
@@ -1513,18 +1516,21 @@ async function archestraPullRequester(params: {
   const commits = await pagedGithub<{
     sha?: string;
     commit?: {
-      author?: { email?: string };
+      message?: string;
       verification?: { verified?: boolean };
     };
+    author?: { login?: string } | null;
     committer?: { login?: string } | null;
   }>({ token, url: `${base}/pulls/${number}/commits`, max: MAX_PULL_COMMITS });
   if (commits === null) return null;
+  const ours = (login: string | undefined) =>
+    login?.toLowerCase() === own.login.toLowerCase();
   const foreign =
     commits === "over" ||
     commits.some(
       (entry) =>
         entry.commit?.verification?.verified !== true ||
-        entry.committer?.login?.toLowerCase() !== own.login.toLowerCase(),
+        !(ours(entry.author?.login) || ours(entry.committer?.login)),
     );
   if (foreign)
     return {
@@ -1535,7 +1541,7 @@ async function archestraPullRequester(params: {
       },
     };
   const emails = new Set(
-    commits.map((entry) => entry.commit?.author?.email?.toLowerCase()),
+    commits.map((entry) => requesterOf(entry.commit?.message)),
   );
   const [email] = [...emails];
   const member =

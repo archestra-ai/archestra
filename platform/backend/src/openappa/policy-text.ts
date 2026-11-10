@@ -794,3 +794,31 @@ function unquote(key: string): string {
 const TABLE_HEADER = /^\s*\[(?!\[)\s*([^\]]+?)\s*\](?!\])/;
 const ARRAY_HEADER = /^\s*\[\[\s*([^\]]+?)\s*\]\]/;
 const KEY_SEGMENT = /"[^"]*"|'[^']*'|[A-Za-z0-9_-]+/g;
+
+// =============================================================================
+// Who asked: the trailer Archestra writes into the commits it makes
+// =============================================================================
+
+/**
+ * The trailer a commit Archestra makes for a person carries. GitHub signs a
+ * commit the App makes through its API only while the App is its author and
+ * committer, so the person who asked is named in the message, which the
+ * signature covers, and never as the git author.
+ */
+export const REQUESTED_BY_TRAILER = "Requested-by";
+
+/** A commit message with the requester's trailer. */
+export function withRequester(message: string, email: string): string {
+  return `${message.trimEnd()}\n\n${REQUESTED_BY_TRAILER}: ${email}`;
+}
+
+/** The one requester a commit message names, lowercased; null for none or several. */
+export function requesterOf(message: string | undefined | null): string | null {
+  const emails = new Set<string>();
+  for (const line of (message ?? "").split("\n")) {
+    const match = /^Requested-by:\s*(\S+@\S+)\s*$/i.exec(line.trim());
+    if (match?.[1]) emails.add(match[1].toLowerCase());
+  }
+  const [email] = [...emails];
+  return emails.size === 1 && email ? email : null;
+}

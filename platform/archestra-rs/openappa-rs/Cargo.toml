@@ -50,10 +50,10 @@ crate-type = ["cdylib"]
 # lower-trust return floor (#803), and recorders in place of the runtime file
 # ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
 # v0.40.1 and the LLM log tools labeled in the archestra battery (#852).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "39c2db23d45b074f1b56dfa1cbf058b872575537" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

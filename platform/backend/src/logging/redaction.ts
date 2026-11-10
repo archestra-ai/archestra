@@ -148,6 +148,8 @@ export function withholdErrorContent(
     "result",
     "toolArguments",
     "toolResult",
+    // Raw SDK usage objects can hold malformed provider text in token fields.
+    "usage",
     "incompleteReason",
     "rawFinishReason",
     "responseBody",

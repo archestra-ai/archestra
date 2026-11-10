@@ -230,6 +230,8 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
     logger.warn(
       {
         status: marker,
+        usage: { prompt_tokens: marker, completion_tokens: 7 },
+        usagePresent: true,
         incompleteReason: marker,
         errorCode: marker,
         errorMessage: marker,

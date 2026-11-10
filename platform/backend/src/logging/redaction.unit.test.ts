@@ -471,3 +471,32 @@ test("metadata-only withholds raw stream and payload diagnostics while full mode
   );
   expect(JSON.stringify(full.records)).toContain(marker);
 });
+
+test("metadata-only withholds raw provider usage without mutating accounting input", () => {
+  const marker = "synthetic-private-malformed-usage";
+  const usage = {
+    prompt_tokens: marker,
+    completion_tokens: 7,
+    total_tokens: marker,
+  };
+  const { logger, records } = createCapturingLogger("metadata_only");
+  logger.warn(
+    {
+      usage,
+      usagePresent: true,
+      status: "failed",
+      incompleteReason: "unknown",
+    },
+    "Codex subscription response ended without completing",
+  );
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({ usagePresent: true, status: "failed" });
+  expect(usage).toEqual({
+    prompt_tokens: marker,
+    completion_tokens: 7,
+    total_tokens: marker,
+  });
+  const full = createCapturingLogger("full");
+  full.logger.warn({ usage }, "Provider failed");
+  expect(JSON.stringify(full.records)).toContain(marker);
+});

@@ -132,6 +132,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::UnrenderablePolicy { .. }
         | ConfigError::InvalidPolicyVersion
         | ConfigError::AbsoluteInclude { .. }
+        | ConfigError::GlobInclude { .. }
         | ConfigError::TraversingInclude { .. }
         | ConfigError::DuplicateInclude { .. }
         | ConfigError::TargetPolicyIncluded { .. }
@@ -619,6 +620,16 @@ mod tests {
             compiled("[policy]\nversion = \"two\"\n"),
             Err(Failure::Binding(BindingFailure::PolicyRefused))
         );
+        let glob = Config::hosted_included_deferred(
+            "include = [\"policies/*.toml\"]\n[policy]\nversion = 2\n",
+            defaults(),
+            |_| panic!("a hosted glob must be refused before resolving files"),
+        )
+        .unwrap_err();
+        let glob = open_fault(OpenError::Config(glob));
+        assert_eq!(glob.kind, Failure::Binding(BindingFailure::PolicyRefused));
+        assert!(glob.message.contains("policies/*.toml"));
+        assert!(glob.message.contains("a hosted policy has no files"));
         let unset = ConfigError::MissingSecret {
             section: "annotators",
             name: "check".into(),

@@ -88,6 +88,12 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
   if (!match) return null;
   const [, annotator, reason, status] = match;
   const name = JSON.stringify(summarize(annotator, MAX_NAME));
+  if (
+    annotator === "archestra.llm-annotator" &&
+    reason === "non_success" &&
+    status === "409"
+  )
+    return `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`;
   // A helper error without a status may pass; one more attempt costs little,
   // and the notice stops the model after it fails the same way.
   const transient =

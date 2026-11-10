@@ -20,6 +20,7 @@ import {
   wrapCompactionItem,
   wrapCompactionResponse,
 } from "@/openappa/compaction-carrier";
+import { appaWireFamily } from "@/openappa/wire";
 import {
   decodeOpenAiCodexCredential,
   isOpenAiCodexCredential,
@@ -235,11 +236,10 @@ export const openAiResponsesAdapterFactory: LLMProvider<
     // Custom clients may return a lazy iterator before sending any HTTP request.
     if (typeof pending.asResponse === "function") onAccepted?.();
     // Spread-factory aliases keep their own transport contracts. Native compact
-    // requests have a separate executeStream implementation below.
-    if (
-      this.provider !== "openai" ||
-      this.interactionType !== "openai:responses"
-    ) {
+    // requests have a separate executeStream implementation below. The guard is
+    // the Responses wire family, not a provider allowlist: Copilot and native
+    // Grok both spread this factory and must fail a clean EOF the same way.
+    if (appaWireFamily(this.interactionType) !== "openai:responses") {
       return stream;
     }
     return {

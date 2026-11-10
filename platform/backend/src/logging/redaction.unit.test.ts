@@ -22,6 +22,19 @@ function createCapturingLogger() {
 }
 
 describe("log redaction", () => {
+  test("censors native Grok session authentication metadata", () => {
+    const { logger, records } = createCapturingLogger();
+    for (const name of ["x-authenticateresponse", "X-AuthenticateResponse"]) {
+      logger.info({
+        [name]: "synthetic-session-proof",
+        headers: { [name]: "synthetic-session-proof" },
+        request: { headers: { [name]: "synthetic-session-proof" } },
+      });
+    }
+    expect(JSON.stringify(records)).not.toContain("synthetic-session-proof");
+    expect(JSON.stringify(records)).toContain("[Redacted]");
+  });
+
   test("censors runtime bindings in request headers and launch secrets", () => {
     const { logger, records } = createCapturingLogger();
     logger.info({

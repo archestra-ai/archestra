@@ -537,8 +537,9 @@ fn denied_block(feedback: &str) -> &str {
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
         RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
-        // Its text says how to declare at the spawn's block instead.
+        // Its text says what to do instead: declare at the spawn's block, or call the tool again.
         RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::Superseded
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting

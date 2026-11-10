@@ -60,6 +60,10 @@ import {
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { toolEntries } from "@/openappa/policy-text";
+import {
+  parseReviewScope,
+  type ReviewScopeItem,
+} from "@/openappa/review-scope";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -2594,6 +2598,11 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /** Unknown for a review stored before the runtime typed it, or one that joins several authorities. */
+  authority?: string;
+  hint?: string;
+  /** Unknown under the same conditions as `authority`: show `text` instead. */
+  scope?: ReviewScopeItem[];
 } | null> {
   try {
     if (
@@ -2616,12 +2625,16 @@ export async function loadOfferReview(params: {
       ),
     );
     if (!result) return null;
+    const scope = parseReviewScope(result.scope);
     return {
       offer_id: result.offerId,
       text: result.text,
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...(result.authority ? { authority: result.authority } : {}),
+      ...(result.hint ? { hint: result.hint } : {}),
+      ...(scope ? { scope } : {}),
     };
   } catch (error) {
     logger.warn(

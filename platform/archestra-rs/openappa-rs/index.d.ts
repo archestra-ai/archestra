@@ -276,6 +276,17 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+  /**
+   * The authority asked to rule. Absent for a review stored before the
+   * runtime typed it, or one that joins several authorities.
+   */
+  authority?: string
+  hint?: string
+  /**
+   * The review's coverage items as JSON text. Absent means unknown, so
+   * show `text`; `[]` means the ruling accepts nothing else.
+   */
+  scope?: string
 }
 
 /**

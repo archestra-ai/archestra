@@ -8,6 +8,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useChatAgentBootstrap } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
+import { useAppaSelfService } from "@/lib/openappa-github-sync.query";
 import { openAppaChatHref } from "@/lib/openappa-routes";
 
 export type ServerRulesCatalog = { id: string; name: string };
@@ -56,10 +57,15 @@ export function ServerRulesButton({
   );
 }
 
-/** The chat href for a server's rules, or null when the Keeper is out of reach. */
+/**
+ * The chat href for a server's rules, or null while self-service is off for
+ * the organization or the Keeper is out of reach.
+ */
 export function useServerRulesHref(catalog: ServerRulesCatalog): string | null {
   const openappaEnabled = useFeature("openappaEnabled") === true;
-  const agents = useChatAgentBootstrap(openappaEnabled);
+  const selfService =
+    useAppaSelfService(openappaEnabled).data?.enabled === true;
+  const agents = useChatAgentBootstrap(openappaEnabled && selfService);
   const keeper = agents.data?.find(
     (agent) =>
       agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
@@ -69,6 +75,6 @@ export function useServerRulesHref(catalog: ServerRulesCatalog): string | null {
     id: catalog.id,
     name: catalog.name,
   });
-  if (!openappaEnabled || !keeper || !prompt) return null;
+  if (!openappaEnabled || !selfService || !keeper || !prompt) return null;
   return openAppaChatHref(keeper.id, prompt);
 }

@@ -261,8 +261,6 @@ class OpenAppaGitlab {
     summary: string;
     upsert: { path: string; content: string }[];
     delete: string[];
-    /** The new branch; a fresh `archestra/openappa-<uuid>` when omitted. */
-    head?: string;
   }): Promise<{ iid: number; webUrl: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
@@ -279,7 +277,7 @@ class OpenAppaGitlab {
             `${path} is not a regular file in the repository`,
           );
       }
-      const head = params.head ?? `archestra/openappa-${randomUUID()}`;
+      const head = `archestra/openappa-${randomUUID()}`;
       await client.commitGitlabFiles({
         repo: params.repo,
         branch: head,
@@ -330,26 +328,6 @@ class OpenAppaGitlab {
     if (!request.sourceBranch.startsWith("archestra/openappa-"))
       throw new ApiError(404, "OpenAPPA policy merge request not found");
     return request;
-  }
-
-  /**
-   * Whether `ancestor` is in `commit`'s history: GitLab's merge base of the
-   * two is `ancestor` itself.
-   */
-  async contains(params: {
-    access: GitAccess;
-    repo: string;
-    commit: string;
-    ancestor: string;
-  }): Promise<boolean> {
-    if (params.commit === params.ancestor) return true;
-    const client = gitClient(params.access);
-    const base = await withGitlabErrors(() =>
-      client.json<{ id?: string }>(
-        `${client.repoApi(params.repo)}/repository/merge_base?refs[]=${encodeURIComponent(params.ancestor)}&refs[]=${encodeURIComponent(params.commit)}`,
-      ),
-    );
-    return base.id === params.ancestor;
   }
 
   async branchCommit(params: {

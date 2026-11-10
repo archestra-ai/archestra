@@ -13,10 +13,8 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
-import config from "@/config";
+import config, { OPENAPPA_SELF_SERVICE_VARIABLE } from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
-import { gitClient } from "@/git-hosts/git-access";
-import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -86,6 +84,7 @@ export async function getAppaGithubSync(organizationId: string) {
     return {
       enabled: enterpriseTier.isOpenappaActive(),
       source: null,
+      selfService: selfServiceState(row),
       hasPolicy: false,
       validationDirectory,
       githubWebUrl,
@@ -96,10 +95,63 @@ export async function getAppaGithubSync(organizationId: string) {
   return {
     enabled: enterpriseTier.isOpenappaActive(),
     source,
+    selfService: selfServiceState(row),
     hasPolicy: content !== null,
     validationDirectory,
     githubWebUrl,
     provider,
+  };
+}
+
+type SyncRow = NonNullable<
+  Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+>;
+
+/**
+ * Whether each MCP server's editors change its own rules through pull
+ * requests, and what decides it: ARCHESTRA_OPENAPPA_SELF_SERVICE while it is
+ * set, else the setting saved with the source. Off by default.
+ */
+export function selfServiceState(row: Pick<SyncRow, "selfService"> | null) {
+  const value = config.openappa.selfService;
+  const setting = row?.selfService ?? false;
+  return {
+    enabled: value ? value === "enabled" : setting,
+    setting,
+    ...(value
+      ? { environment: { variable: OPENAPPA_SELF_SERVICE_VARIABLE, value } }
+      : {}),
+  };
+}
+
+/**
+ * Whether self-service is in force on a source: on, and a GitHub App
+ * source that syncs, since the policy check and the branch ruleset are the
+ * App's. A token or a GitLab source never gets them.
+ */
+export function selfServiceActive(row: SyncRow | null): row is SyncRow & {
+  interval: NonNullable<SyncRow["interval"]>;
+  repo: string;
+  path: string;
+  githubAppConfigId: string;
+} {
+  return (
+    !!row?.interval &&
+    !!row.repo &&
+    !!row.path &&
+    !!row.githubAppConfigId &&
+    selfServiceState(row).enabled
+  );
+}
+
+/** What the MCP registry asks: whether its servers' editors may change their rules now. */
+export async function getAppaSelfService(organizationId: string) {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  return {
+    enabled:
+      enterpriseTier.isOpenappaActive() &&
+      selfServiceActive(row) &&
+      !!row?.sourceCommit,
   };
 }
 export async function configureAppaGithubSync(params: {
@@ -174,6 +226,7 @@ export async function createAppaGithubRepository(params: {
   path?: string;
   validationDirectory?: string;
   replace?: boolean;
+  selfService?: boolean;
 }) {
   assertEnabled();
   if (
@@ -274,6 +327,7 @@ export async function createAppaGithubRepository(params: {
           gitlabTokenId: null,
           // Kept even before the folder exists: validations run once it does.
           validationDirectory,
+          selfService: params.selfService ?? false,
         },
       });
     }
@@ -425,7 +479,7 @@ export async function createAppaGithubRepository(params: {
       409,
       `The policy changed while creating ${repo}. Review the repository and connect it manually.`,
     );
-  await OpenAppaGithubSyncModel.save(params.organizationId, {
+  const source = {
     repo,
     ref: created.default_branch,
     path: "appa.toml",
@@ -436,7 +490,10 @@ export async function createAppaGithubRepository(params: {
     // The template ships this folder, so validations work without a setup step.
     validationDirectory,
     setupPullRequestNumber,
-  });
+    selfService: params.selfService ?? false,
+  };
+  await beforeSourceChange(params.organizationId, source);
+  await OpenAppaGithubSyncModel.save(params.organizationId, source);
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
 }
@@ -492,6 +549,8 @@ async function createAppaGitlabProject(params: {
           githubAppConfigId: null,
           gitlabTokenId: params.gitlabTokenId,
           validationDirectory,
+          // A GitLab project never gets the App's check or ruleset.
+          selfService: false,
         },
       });
     seeded = {
@@ -518,7 +577,7 @@ async function createAppaGitlabProject(params: {
       409,
       `The policy changed while creating ${seeded.repo}. Review the project and connect it manually.`,
     );
-  await OpenAppaGithubSyncModel.save(params.organizationId, {
+  const source = {
     repo: seeded.repo,
     ref: seeded.branch,
     path: "appa.toml",
@@ -527,28 +586,90 @@ async function createAppaGitlabProject(params: {
     githubAppConfigId: null,
     gitlabTokenId: params.gitlabTokenId,
     validationDirectory,
-  });
+    // A GitLab project never gets the App's check or ruleset.
+    selfService: false,
+  };
+  await beforeSourceChange(params.organizationId, source);
+  await OpenAppaGithubSyncModel.save(params.organizationId, source);
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
 }
 
 export async function updateAppaGithubSync(params: {
   organizationId: string;
-  action: "sync" | "disconnect" | "schedule";
+  action: "sync" | "disconnect" | "schedule" | "self_service";
   interval?: AppaGithubSource["interval"];
+  enabled?: boolean;
 }) {
   assertEnabled();
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (!row || row.interval === null)
     throw new ApiError(409, "Connect a GitHub source first");
+  if (params.action === "self_service") {
+    await setSelfService({
+      organizationId: params.organizationId,
+      row,
+      enabled: params.enabled === true,
+    });
+    return getAppaGithubSync(params.organizationId);
+  }
   if (params.action === "sync")
     await syncAppaGithubPolicy(params.organizationId);
-  else
+  else {
+    // A stopped sync posts no check, so the ruleset that requires it goes too.
+    if (params.action === "disconnect" && selfServiceActive(row))
+      await withdrawRepositoryProtection(params.organizationId);
     await OpenAppaGithubSyncModel.setInterval(
       params.organizationId,
       params.action === "disconnect" ? null : (params.interval ?? row.interval),
     );
+  }
   return getAppaGithubSync(params.organizationId);
+}
+
+/**
+ * Turn self-service on or off for the source. On brings the branch ruleset
+ * at once, and reports an App that still lacks a permission; off takes the
+ * ruleset away. The environment variable, while set, is the only switch.
+ */
+async function setSelfService(params: {
+  organizationId: string;
+  row: SyncRow;
+  enabled: boolean;
+}) {
+  const state = selfServiceState(params.row);
+  if (state.environment)
+    throw new ApiError(
+      400,
+      `${state.environment.variable} sets self-service for this deployment. Unset it to edit this setting.`,
+    );
+  if (params.enabled && !params.row.githubAppConfigId)
+    throw new ApiError(
+      409,
+      "Self-service needs a GitHub App: connect the policy repository through one first.",
+    );
+  if (state.setting !== params.enabled) {
+    await OpenAppaGithubSyncModel.setSelfService(
+      params.organizationId,
+      params.enabled,
+    );
+    logger.info(
+      { organizationId: params.organizationId, enabled: params.enabled },
+      params.enabled
+        ? "OpenAPPA self-service Guardrails turned on"
+        : "OpenAPPA self-service Guardrails turned off",
+    );
+  }
+  if (params.enabled) {
+    try {
+      await maintainRepositoryProtection(params.organizationId);
+    } catch (error) {
+      logger.warn(
+        { organizationId: params.organizationId, error },
+        "OpenAPPA could not bring the policy repository's protection in line",
+      );
+    }
+  } else await withdrawRepositoryProtection(params.organizationId);
 }
 
 export async function syncAppaGithubPolicy(organizationId: string) {
@@ -748,9 +869,10 @@ export async function checkDueAppaGithubSyncs() {
   if (!enterpriseTier.isOpenappaActive()) return;
   for (const row of await OpenAppaGithubSyncModel.findDue())
     await OpenAppaGithubSyncModel.enqueue(row.organizationId);
-  // Open pull requests get a pull's checks every minute, before they merge.
+  // Open pull requests get a pull's checks every minute, before they merge,
+  // on the repositories whose servers' editors change their own rules.
   await mapWithConcurrency(
-    await OpenAppaGithubSyncModel.findConnected(),
+    (await OpenAppaGithubSyncModel.findConnected()).filter(selfServiceActive),
     4,
     async (row) => {
       try {
@@ -859,9 +981,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   if (await cacheManager.get(refused)) return;
   let pulls: CheckedPull[];
   try {
-    pulls = row.gitlabTokenId
-      ? await gitlabPullRequests(source)
-      : await githubPullRequests(source);
+    pulls = await githubPullRequests(source);
   } catch (error) {
     // A credential the host refuses is not asked again every minute.
     if (
@@ -1537,60 +1657,6 @@ async function postGithubCheck(params: {
     });
 }
 
-async function gitlabPullRequests(
-  source: PolicySource & { gitlabTokenId: string | null },
-): Promise<CheckedPull[]> {
-  if (!source.gitlabTokenId) return [];
-  const client = gitClient(
-    await resolveOpenAppaGitlabAccess({
-      organizationId: source.organizationId,
-      gitlabTokenId: source.gitlabTokenId,
-    }),
-  );
-  const project = client.repoApi(source.repo);
-  const requests = await (async () => {
-    const branch = source.ref ?? (await client.defaultBranch(source.repo));
-    return client.json<Array<{ sha?: string }>>(
-      `${project}/merge_requests?state=opened&target_branch=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
-    );
-  })().catch((error) => {
-    if (error instanceof GitHostError && [401, 403].includes(error.status))
-      throw new CheckRefused(error.status);
-    throw error;
-  });
-  return requests.flatMap((request) => {
-    const head = request.sha;
-    if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
-    return [
-      {
-        head,
-        result: head,
-        post: async (outcome) => {
-          const { title, summary } = checkSummary(outcome);
-          await client
-            .json(`${project}/statuses/${head}`, {
-              body: {
-                state: outcome.accepted ? "success" : "failed",
-                // GitLab has no skipped state: a skipped check passes, and says so.
-                name: POLICY_CHECK_NAME,
-                description: (outcome.accepted ? title : summary).slice(0, 255),
-              },
-            })
-            .catch((error) => {
-              // A 404 can be a head pushed over since; only these refuse.
-              if (
-                error instanceof GitHostError &&
-                [401, 403].includes(error.status)
-              )
-                throw new CheckRefused(error.status);
-              throw error;
-            });
-        },
-      },
-    ];
-  });
-}
-
 /**
  * The stored bindings a pull would newly hand to an uploaded battery. The
  * pulled text names no credential (`credentialErrors` refuses it), so every
@@ -1643,6 +1709,7 @@ async function saveSource(params: {
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
 }) {
+  await beforeSourceChange(params.organizationId, params.source);
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -2204,10 +2271,8 @@ export type RepositoryProtection = {
       | "active"
       | "incomplete"
       | "missing"
-      | "disabled"
       | "needs_permission"
       | "unavailable"
-      | "unsupported"
       | "error";
     url?: string;
     detail?: string;
@@ -2222,9 +2287,10 @@ export type RepositoryProtection = {
 };
 
 /**
- * The policy repository's protection, and with `apply` the changes that bring
- * it in line: a branch ruleset that requires a pull request, up to date, with
- * the policy check, which is where who may change each file is decided.
+ * The policy repository's protection while self-service is on, and with
+ * `apply` the changes that bring it in line: the branch ruleset that requires
+ * the policy check, which is where who may change each file is decided. Null
+ * while self-service is off, or without a connected GitHub App source.
  *
  * The ruleset is written with a token limited to the policy repository and
  * Administration. A permission the App was not granted is reported, not
@@ -2235,16 +2301,7 @@ async function repositoryProtection(params: {
   apply: boolean;
 }): Promise<RepositoryProtection | null> {
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (!row?.interval || !row.repo || !row.path || !row.sourceCommit)
-    return null;
-  if (row.gitlabTokenId)
-    return {
-      checkName: POLICY_CHECK_NAME,
-      branchRules: {
-        state: "unsupported",
-        detail: `${archestraMcpBranding.appName} keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.`,
-      },
-    };
+  if (!row?.sourceCommit || !selfServiceActive(row)) return null;
   const source = {
     ...row,
     repo: row.repo,
@@ -2287,13 +2344,62 @@ export async function getRepositoryProtection(
   return read;
 }
 
-/** Bring the repository's protection in line, as each sync does. */
+/**
+ * Bring the repository's protection in line, as each sync does. Off, that
+ * means no ruleset of Archestra's left on the repository: one left from when
+ * self-service was on, by a setting or by the environment variable, would
+ * hold every pull request on a check nobody posts any more.
+ */
 async function maintainRepositoryProtection(
   organizationId: string,
 ): Promise<RepositoryProtection | null> {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (
+    row?.interval &&
+    row.repo &&
+    row.githubAppConfigId &&
+    !selfServiceActive(row)
+  ) {
+    await withdrawRepositoryProtection(organizationId);
+    return null;
+  }
   const applied = await repositoryProtection({ organizationId, apply: true });
   protectionStatus.set(organizationId, applied);
   return applied;
+}
+
+/**
+ * Take the ruleset off the repository: turning self-service off, stopping
+ * the sync, or moving it to another repository leaves no rule behind that
+ * requires a check nobody posts any more. Best effort: a repository the App
+ * can no longer reach is logged, and the setting changes all the same.
+ */
+async function withdrawRepositoryProtection(organizationId: string) {
+  protectionStatus.set(organizationId, null);
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.repo || !row.githubAppConfigId) return;
+  try {
+    await removeGithubBranchRules({ ...row, repo: row.repo });
+  } catch (error) {
+    logger.warn(
+      { organizationId, repo: row.repo, error },
+      "OpenAPPA could not take its ruleset off the policy repository",
+    );
+  }
+}
+
+/**
+ * Before a source is saved: a repository the sync leaves, or a source saved
+ * with self-service off, gives its ruleset back first.
+ */
+async function beforeSourceChange(
+  organizationId: string,
+  next: { repo: string; selfService: boolean },
+) {
+  const current = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!selfServiceActive(current)) return;
+  if (current?.repo !== next.repo || !next.selfService)
+    await withdrawRepositoryProtection(organizationId);
 }
 
 type ConnectedSource = NonNullable<
@@ -2436,13 +2542,6 @@ async function githubBranchRules(
     url: `${base}/rulesets/${ours.id}`,
   });
   if (!existing.ok) return unavailable(existing);
-  // Disabled or in evaluate mode on GitHub: an administrator's choice to keep.
-  if (existing.body.enforcement !== "active")
-    return {
-      state: "disabled",
-      url: page(ours.id),
-      detail: `The ruleset is ${existing.body.enforcement} on GitHub, so ${archestraMcpBranding.appName} leaves it as it is.`,
-    };
   const { include = [], exclude = [] } =
     existing.body.conditions?.ref_name ?? {};
   // Whether `~DEFAULT_BRANCH` names the synced branch, read only when used.
@@ -2470,6 +2569,128 @@ async function githubBranchRules(
   });
   if (!updated.ok) return unavailable(updated);
   return { state: "active", ...found };
+}
+
+/**
+ * Delete Archestra's ruleset, and take its check out of any other ruleset
+ * that requires it: once the check is no longer posted, a rule that requires
+ * it would hold every pull request for good. A ruleset of the repository's
+ * own keeps its other rules.
+ */
+async function removeGithubBranchRules(source: {
+  organizationId: string;
+  repo: string;
+  githubAppConfigId: string | null;
+  githubPatId: string | null;
+}) {
+  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
+  try {
+    access = await resolveOpenAppaGithubAccess(source, {
+      administration: "write",
+    });
+  } catch (error) {
+    if (!(error instanceof MissingGithubPermission)) throw error;
+    // An App without Administration never wrote a ruleset: nothing to take off.
+    logger.debug(
+      { organizationId: source.organizationId, repo: source.repo },
+      `OpenAPPA cannot take its ruleset off the policy repository: ${error.message}`,
+    );
+    return;
+  }
+  const { token, api } = access;
+  if (!token) return;
+  const base = `${api}/repos/${source.repo}`;
+  const rulesets = await githubCall<
+    Array<{ id: number; name: string; source_type?: string }>
+  >({ token, url: `${base}/rulesets?includes_parents=false&per_page=100` });
+  if (!rulesets.ok) throw new ApiError(502, unavailable(rulesets).detail);
+  const integrationId = await checkIntegrationId(source);
+  for (const candidate of rulesets.body
+    .filter((ruleset) => (ruleset.source_type ?? "Repository") === "Repository")
+    .slice(0, 25)) {
+    const read = await githubCall<Ruleset>({
+      token,
+      url: `${base}/rulesets/${candidate.id}`,
+    });
+    if (!read.ok) continue;
+    const ours =
+      candidate.name === RULESET_NAME ||
+      (integrationId !== undefined &&
+        isOurRulesetShape(read.body.rules, integrationId));
+    const requires =
+      requiresPolicyCheck(read.body.rules) ||
+      (integrationId !== undefined &&
+        requiresOurCheck(read.body.rules, integrationId));
+    if (!ours && !requires) continue;
+    const written = ours
+      ? await githubCall({
+          token,
+          url: `${base}/rulesets/${candidate.id}`,
+          method: "DELETE",
+        })
+      : await githubCall({
+          token,
+          url: `${base}/rulesets/${candidate.id}`,
+          method: "PUT",
+          body: withoutPolicyCheck(read.body, integrationId),
+        });
+    // Already gone: the same outcome.
+    if (!written.ok && written.status !== 404)
+      throw new ApiError(502, unavailable(written).detail);
+  }
+}
+
+/** Whether a rule requires a check this App posts, under any name. */
+function requiresOurCheck(
+  rules: Rule[] | undefined,
+  integrationId: number,
+): boolean {
+  return (rules ?? []).some(
+    (rule) =>
+      rule.type === "required_status_checks" &&
+      (
+        (rule.parameters?.required_status_checks ?? []) as Array<{
+          integration_id?: number;
+        }>
+      ).some((check) => check.integration_id === integrationId),
+  );
+}
+
+/**
+ * A ruleset without the policy check: the check taken out of its required
+ * checks, and the rule taken out when nothing else was required.
+ */
+function withoutPolicyCheck(
+  existing: Ruleset,
+  integrationId: number | undefined,
+): Ruleset {
+  const rules = (existing.rules ?? []).flatMap((rule) => {
+    if (rule.type !== "required_status_checks") return [rule];
+    const checks = (rule.parameters?.required_status_checks ?? []) as Array<{
+      context?: string;
+      integration_id?: number;
+    }>;
+    const kept = checks.filter(
+      (check) =>
+        check.context !== POLICY_CHECK_NAME &&
+        (integrationId === undefined || check.integration_id !== integrationId),
+    );
+    if (kept.length === 0) return [];
+    return [
+      {
+        type: rule.type,
+        parameters: { ...rule.parameters, required_status_checks: kept },
+      },
+    ];
+  });
+  return {
+    name: existing.name,
+    target: existing.target,
+    enforcement: existing.enforcement,
+    conditions: existing.conditions,
+    bypass_actors: existing.bypass_actors ?? [],
+    rules,
+  };
 }
 
 /**
@@ -2572,9 +2793,11 @@ function desiredRuleset(params: {
 }
 
 /**
- * The existing ruleset with Archestra's rule added where missing, or null
- * when it already has it. What an administrator added stays, bypass entries
- * included; an exclusion that leaves the synced branch out does not.
+ * The existing ruleset with Archestra's rule added where missing, turned
+ * back on where turned off, or null when it is in order. What an
+ * administrator added stays, bypass entries included; an exclusion that
+ * leaves the synced branch out does not. To be rid of the ruleset, turn
+ * self-service off: that takes it away.
  */
 function strengthenedRuleset(
   existing: Ruleset,
@@ -2644,11 +2867,12 @@ function strengthenedRuleset(
   const kept = exclude.filter((pattern) => !names(pattern));
   if (!covers || kept.length < exclude.length) changed = true;
   if (existing.name !== desired.name) changed = true;
+  if (existing.enforcement !== "active") changed = true;
   if (!changed) return null;
   return {
     name: desired.name,
     target: existing.target,
-    enforcement: existing.enforcement,
+    enforcement: "active",
     conditions: {
       ref_name: {
         include: covers ? include : [...include, branch.ref],
@@ -2711,7 +2935,7 @@ async function checkIntegrationId(source: {
 function unavailable(response: {
   status: number;
   message?: string;
-}): RepositoryProtection["branchRules"] {
+}): RepositoryProtection["branchRules"] & { detail: string } {
   return {
     state:
       response.status === 403 || response.status === 404

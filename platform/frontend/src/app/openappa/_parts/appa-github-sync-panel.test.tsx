@@ -60,6 +60,7 @@ const source = {
   setupPullRequestNumber: null,
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
+  selfService: true,
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -80,6 +81,7 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source,
+    selfService: { enabled: true, setting: true },
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
 });
@@ -225,6 +227,129 @@ test("says when pull requests wait on a policy check the GitHub App cannot post"
   expect(screen.getByText(/Checks \(read and write\)/)).toBeVisible();
 });
 
+test("turns self-service on for a GitHub App source, which brings the repository protection, and off again", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1", selfService: false },
+    selfService: { enabled: false, setting: false },
+  };
+  const protection = vi.fn(() =>
+    HttpResponse.json({
+      checkName: "Guardrails Policy Admission",
+      branchRules: {
+        state: "active",
+        url: "https://github.com/example/policies/rules/5",
+      },
+    }),
+  );
+  const actions: unknown[] = [];
+  server.use(
+    http.get(`${url}/protection`, protection),
+    http.patch(url, async ({ request }) => {
+      const body = (await request.json()) as { enabled: boolean };
+      actions.push(body);
+      state = {
+        ...state,
+        source: {
+          ...source,
+          githubAppConfigId: "app-1",
+          selfService: body.enabled,
+        },
+        selfService: { enabled: body.enabled, setting: body.enabled },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  const selector = await screen.findByRole("combobox", {
+    name: "Self-service",
+  });
+  expect(selector).toHaveTextContent("Off");
+  expect(selector).toBeEnabled();
+  // Off: no protection to show, and nothing is read for it.
+  expect(screen.queryByText("Repository protection")).toBeNull();
+  expect(protection).not.toHaveBeenCalled();
+
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: /^On/ }));
+  await waitFor(() => expect(selector).toHaveTextContent("On"));
+  expect(actions).toEqual([{ action: "self_service", enabled: true }]);
+  expect(toast.success).toHaveBeenCalledWith(
+    "Self-service turned on. Server editors can change their servers' rules.",
+  );
+  expect(await screen.findByText("Repository protection")).toBeVisible();
+  expect(screen.getByRole("link", { name: "View ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
+
+  fireEvent.click(selector);
+  fireEvent.click(screen.getByRole("option", { name: /^Off/ }));
+  await waitFor(() => expect(selector).toHaveTextContent("Off"));
+  expect(actions).toHaveLength(2);
+  await waitFor(() =>
+    expect(screen.queryByText("Repository protection")).toBeNull(),
+  );
+});
+
+test("locks self-service while the environment variable sets it, naming the variable and its values", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1", selfService: false },
+    selfService: {
+      enabled: true,
+      setting: false,
+      environment: {
+        variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+        value: "enabled",
+      },
+    },
+  };
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        branchRules: { state: "missing" },
+      }),
+    ),
+  );
+  show();
+  const locked = await screen.findByRole("combobox", { name: "Self-service" });
+  expect(locked).toHaveTextContent("On");
+  expect(locked).toBeDisabled();
+  expect(locked).toHaveAccessibleDescription(
+    "Unset the environment variable to edit this setting.",
+  );
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" &&
+        element.textContent === "ARCHESTRA_OPENAPPA_SELF_SERVICE=enabled",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Self-service environment values" }),
+  ).toBeEnabled();
+  // In force: the protection shows all the same.
+  expect(await screen.findByText("Repository protection")).toBeVisible();
+});
+
+test("self-service needs a GitHub App: a source without one shows the switch off and locked", async () => {
+  state = {
+    ...state,
+    source: { ...source, selfService: false },
+    selfService: { enabled: false, setting: false },
+  };
+  show();
+  const selector = await screen.findByRole("combobox", {
+    name: "Self-service",
+  });
+  expect(selector).toHaveTextContent("Off");
+  expect(selector).toBeDisabled();
+  expect(screen.getByText(/Needs a GitHub App/)).toBeVisible();
+  expect(screen.queryByText("Repository protection")).toBeNull();
+});
+
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {
   server.use(
     http.patch(url, async ({ request }) => {
@@ -352,6 +477,7 @@ test("links an existing repository whose policy lives elsewhere through Advanced
         name: "policies",
         githubAppConfigId: appId,
         interval: "1h",
+        selfService: false,
         existing: true,
         replace: false,
         ref: "prod",
@@ -423,6 +549,7 @@ test("starts fresh from the template, connects it through a chosen App and finis
         name: "openappa-policy",
         githubAppConfigId: appId,
         interval: "1h",
+        selfService: false,
         existing: true,
         replace: false,
       });
@@ -562,7 +689,9 @@ test("editing an App-backed source keeps its repository and only warns about mis
     validationDirectory: "traces",
     githubPatId: null,
     gitlabTokenId: null,
+    // Editing keeps the source's own self-service setting.
     githubAppConfigId: appId,
+    selfService: true,
   });
 });
 
@@ -627,6 +756,7 @@ test("creates a private GitLab project in a group with the saved token", async (
       name: "openappa-policy",
       gitlabTokenId: tokenId,
       interval: "1h",
+      selfService: false,
       existing: false,
     }),
   );

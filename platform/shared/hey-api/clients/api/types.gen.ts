@@ -121471,9 +121471,18 @@ export type GetAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -121491,6 +121500,9 @@ export type UpdateAppaGithubSyncData = {
     } | {
         action: 'schedule';
         interval: '15m' | '1h' | '1d';
+    } | {
+        action: 'self_service';
+        enabled: boolean;
     };
     path?: never;
     query?: never;
@@ -121583,9 +121595,18 @@ export type UpdateAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -121605,6 +121626,7 @@ export type ConfigureAppaGithubSyncData = {
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
         gitlabTokenId?: string | null;
+        selfService?: boolean;
     };
     path?: never;
     query?: never;
@@ -121697,9 +121719,18 @@ export type ConfigureAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -121799,7 +121830,7 @@ export type GetAppaRepositoryProtectionResponses = {
             }>;
         };
         branchRules: {
-            state: 'active' | 'incomplete' | 'missing' | 'disabled' | 'needs_permission' | 'unavailable' | 'unsupported' | 'error';
+            state: 'active' | 'incomplete' | 'missing' | 'needs_permission' | 'unavailable' | 'error';
             url?: string;
             detail?: string;
             bypassActors?: number;
@@ -121809,6 +121840,92 @@ export type GetAppaRepositoryProtectionResponses = {
 };
 
 export type GetAppaRepositoryProtectionResponse = GetAppaRepositoryProtectionResponses[keyof GetAppaRepositoryProtectionResponses];
+
+export type GetAppaSelfServiceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/self-service';
+};
+
+export type GetAppaSelfServiceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaSelfServiceError = GetAppaSelfServiceErrors[keyof GetAppaSelfServiceErrors];
+
+export type GetAppaSelfServiceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+    };
+};
+
+export type GetAppaSelfServiceResponse = GetAppaSelfServiceResponses[keyof GetAppaSelfServiceResponses];
 
 export type CreateAppaGithubRepositoryData = {
     body: {
@@ -121822,6 +121939,7 @@ export type CreateAppaGithubRepositoryData = {
         path?: string;
         validationDirectory?: string;
         replace?: boolean;
+        selfService?: boolean;
     };
     path?: never;
     query?: never;
@@ -121914,9 +122032,18 @@ export type CreateAppaGithubRepositoryResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -121930,6 +122057,7 @@ export type StartAppaGithubAppData = {
     body: {
         githubUrl: string;
         owner: string;
+        selfService?: boolean;
     };
     path?: never;
     query?: never;

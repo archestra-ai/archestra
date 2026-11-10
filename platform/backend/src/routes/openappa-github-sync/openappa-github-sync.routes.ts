@@ -5,6 +5,7 @@ import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubSync,
+  getAppaSelfService,
   getRepositoryProtection,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
@@ -26,6 +27,7 @@ import {
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
   AppaRepositoryProtectionSchema,
+  AppaSelfServiceAvailabilitySchema,
   CreateAppaGithubRepositorySchema,
 } from "@/types/openappa-github-sync";
 
@@ -53,6 +55,20 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(await getRepositoryProtection(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/github-sync/self-service",
+    {
+      schema: {
+        operationId: RouteId.GetAppaSelfService,
+        description:
+          "Whether MCP server editors change their servers' Guardrails rules themselves, through pull requests on the policy repository",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaSelfServiceAvailabilitySchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await getAppaSelfService(request.organizationId)),
   );
   app.put(
     "/api/openappa/github-sync",

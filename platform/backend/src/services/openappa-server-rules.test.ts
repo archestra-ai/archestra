@@ -3,10 +3,6 @@ import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
-import {
-  RuntimeCredentialConnectionModel,
-  RuntimeCredentialDefinitionModel,
-} from "@/models";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -20,8 +16,11 @@ import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
+  getAppaGithubSync,
+  getAppaSelfService,
   getRepositoryProtection,
   syncAppaGithubPolicy,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -162,6 +161,8 @@ async function connectApp(params: {
   refuse?: string[];
   /** The policy file's path; a folder puts the policy in a shared repository. */
   path?: string;
+  /** Whether the servers' editors change their own rules; on unless told otherwise. */
+  selfService?: boolean;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
@@ -189,6 +190,7 @@ async function connectApp(params: {
     githubAppConfigId: app.id,
     githubPatId: null,
     validationDirectory: "",
+    selfService: params.selfService ?? true,
   });
   const tokens: Array<{
     repositories?: string[];
@@ -230,41 +232,15 @@ async function syncAndProtect(organizationId: string) {
   return getRepositoryProtection(organizationId);
 }
 
-async function connect(params: {
-  organizationId: string;
-  writerUserId?: string;
-}) {
-  let githubPatId: string | null = null;
-  if (params.writerUserId) {
-    const pat = await RuntimeCredentialDefinitionModel.create({
-      organizationId: params.organizationId,
-      createdBy: params.writerUserId,
-      definition: {
-        key: "policy-pat",
-        name: "Policy token",
-        kind: "secret",
-        description: "",
-        icon: null,
-        allowPersonal: false,
-        allowOrganization: true,
-      },
-    });
-    await RuntimeCredentialConnectionModel.upsert({
-      organizationId: params.organizationId,
-      scope: "organization",
-      userId: null,
-      credentialId: pat.key,
-      value: "test-policy-pat",
-    });
-    githubPatId = pat.id;
-  }
+/** A public source read without a credential: the pull alone, no self-service. */
+async function connect(params: { organizationId: string }) {
   await OpenAppaGithubSyncModel.save(params.organizationId, {
     repo: "example/policies",
     ref: "main",
     path: "appa.toml",
     interval: "1h",
     githubAppConfigId: null,
-    githubPatId,
+    githubPatId: null,
     validationDirectory: "",
   });
 }
@@ -842,7 +818,7 @@ builtin = "archestra"
   });
 });
 
-test("on GitLab, a pull reads every page of mcp/, merge requests get the policy check as a commit status, and a merged request says when it is applied", async ({
+test("on GitLab, a pull reads every page of mcp/, and the servers' rules stay the organization's: no merge request gets the check, and no rules are proposed", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -925,52 +901,22 @@ test("on GitLab, a pull reads every page of mcp/, merge requests get the policy 
   ])
     expect(effective.content).toContain(tool);
 
-  // Pat proposes Payments' rules; the merge request gets the check.
-  const proposed = await proposeServerRulesChange({
-    organizationId: org.id,
-    userId: pat.id,
-    catalogId: catalog.id,
-    content: INVOICES,
-    expectedCommit: accepted as string,
-    summary: "Invoices are suspicious",
-  });
-  expect(proposed).toMatchObject({ delivery: "pull_request", number: 1 });
+  // Self-service is the GitHub App's: a GitLab token posts no check, and
+  // keeps no branch rules, so a server's rules are not proposed through it.
   await checkDueAppaGithubSyncs();
-  expect(gitlab.statuses).toEqual([
-    expect.objectContaining({
-      state: "success",
-      name: "Guardrails Policy Admission",
-    }),
-  ]);
-  await checkDueAppaGithubSyncs();
-  expect(gitlab.statuses).toHaveLength(1);
-
-  const status = () =>
-    getServerRulesChangeStatus({
+  expect(gitlab.statuses).toEqual([]);
+  expect(await getRepositoryProtection(org.id)).toBeNull();
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+  await expect(
+    proposeServerRulesChange({
       organizationId: org.id,
       userId: pat.id,
       catalogId: catalog.id,
-      number: 1,
-    });
-  const queuedSyncs = async () =>
-    (
-      await db
-        .select()
-        .from(schema.tasksTable)
-        .where(eq(schema.tasksTable.taskType, "openappa_github_sync"))
-    ).length;
-  expect(await status()).toMatchObject({ state: "open", applied: false });
-  gitlab.merge(project, 1);
-  // Merged, and the accepted commit does not hold it yet: a sync is queued.
-  const before = await queuedSyncs();
-  expect(await status()).toMatchObject({ state: "merged", applied: false });
-  expect(await queuedSyncs()).toBe(before + 1);
-  // Pulled, and later commits keep it: applied, and nothing more is queued.
-  gitlab.commit(project, "main", { "README.md": "# Policies\n" });
-  await syncAppaGithubPolicy(org.id);
-  const queued = await queuedSyncs();
-  expect(await status()).toMatchObject({ state: "merged", applied: true });
-  expect(await queuedSyncs()).toBe(queued);
+      content: INVOICES,
+      expectedCommit: accepted as string,
+      summary: "Invoices are suspicious",
+    }),
+  ).rejects.toMatchObject({ statusCode: 409 });
 });
 
 test("a refused pull request check is checked again once the battery it names is uploaded, and every fifteen minutes", async ({
@@ -1149,7 +1095,7 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     catalogId: shadow.id,
   });
 
-  await connect({ organizationId: org.id, writerUserId: admin.id });
+  await connectApp({ organizationId: org.id });
   serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
   await syncAppaGithubPolicy(org.id);
 
@@ -1432,7 +1378,7 @@ test("each job's GitHub App token covers the policy repository and its own permi
   });
 });
 
-test("Archestra keeps one ruleset on the synced branch that requires the policy check: it creates it, restores the rule, keeps what an administrator added, renames its own, and leaves one turned off alone", async ({
+test("Archestra keeps one ruleset on the synced branch that requires the policy check: it creates it, restores the rule, keeps what an administrator added, renames its own, and turns one back on", async ({
   makeOrganization,
 }) => {
   config.openappa.enabled = true;
@@ -1641,7 +1587,8 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     { method: "POST", body: expect.objectContaining({ rules: [ourRule] }) },
   ]);
 
-  // Turned off on GitHub: an administrator's choice, left alone.
+  // Turned off on GitHub: turned back on, with its rule. Only turning
+  // self-service off takes the ruleset away.
   listed = [
     { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
   ];
@@ -1651,10 +1598,241 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     enforcement: "disabled",
   };
   written.length = 0;
-  expect((await syncAndProtect(org.id))?.branchRules).toMatchObject({
-    state: "disabled",
+  expect((await syncAndProtect(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
   });
-  expect(written).toEqual([]);
+  expect(written).toEqual([
+    {
+      method: "PUT",
+      body: expect.objectContaining({
+        enforcement: "active",
+        rules: [ourRule],
+      }),
+    },
+  ]);
+});
+
+test("self-service is opt-in: off, no check is posted, no ruleset is kept and server rules are not read; on brings the ruleset at once; the environment variable locks the setting; off again takes the ruleset away, and so does stopping the sync", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund_payment",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  const ourCheck = {
+    context: "Guardrails Policy Admission",
+    integration_id: 123,
+  };
+  const ours = {
+    id: 5,
+    name: "Guardrails Policy Admission",
+    target: "branch",
+    source_type: "Repository",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: false,
+          required_status_checks: [ourCheck],
+        },
+      },
+    ],
+  };
+  // The repository's own ruleset, which an administrator made require the check too.
+  const theirs = {
+    id: 7,
+    name: "Release rules",
+    target: "branch",
+    source_type: "Repository",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      { type: "deletion" },
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          required_status_checks: [{ context: "ci" }, ourCheck],
+        },
+      },
+    ],
+  };
+  let listed: Array<Record<string, unknown>> = [];
+  const calls: string[] = [];
+  let written: unknown = null;
+  server.use(
+    http.get(`${REPO}/pulls`, () => {
+      calls.push("GET pulls");
+      return HttpResponse.json([]);
+    }),
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json(listed)),
+    http.post(`${REPO}/rulesets`, () => {
+      calls.push("POST rulesets");
+      return HttpResponse.json({ id: 5 }, { status: 201 });
+    }),
+    http.get(`${REPO}/rulesets/5`, () => HttpResponse.json(ours)),
+    http.get(`${REPO}/rulesets/7`, () => HttpResponse.json(theirs)),
+    http.put(`${REPO}/rulesets/:id`, async ({ params, request }) => {
+      calls.push(`PUT ${params.id}`);
+      written = await request.json();
+      return HttpResponse.json({ id: Number(params.id) });
+    }),
+    http.delete(`${REPO}/rulesets/:id`, ({ params }) => {
+      calls.push(`DELETE ${params.id}`);
+      return new HttpResponse(null, { status: 204 });
+    }),
+  );
+
+  // Off: the sync keeps no ruleset, the minute's check reads no pull
+  // request, the registry shows no action, and the Keeper's tools refuse.
+  await syncAppaGithubPolicy(org.id);
+  expect(await getRepositoryProtection(org.id)).toBeNull();
+  await checkDueAppaGithubSyncs();
+  expect(calls).toEqual([]);
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+  expect((await getAppaGithubSync(org.id)).selfService).toEqual({
+    enabled: false,
+    setting: false,
+  });
+  await expect(
+    getServerRules({
+      organizationId: org.id,
+      userId: admin.id,
+      catalogId: catalog.id,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining("Self-service Guardrails is off"),
+  });
+
+  // On: the ruleset comes at once, and the checks with it.
+  const on = await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: true,
+  });
+  expect(on.selfService).toEqual({ enabled: true, setting: true });
+  expect(calls).toEqual(["POST rulesets"]);
+  listed = [
+    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
+    { id: 7, name: "Release rules", source_type: "Repository" },
+  ];
+  expect((await getRepositoryProtection(org.id))?.branchRules).toEqual({
+    state: "active",
+    url: "https://github.com/example/policies/rules/5",
+  });
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: true });
+  await checkDueAppaGithubSyncs();
+  expect(calls).toEqual(["POST rulesets", "GET pulls"]);
+
+  // The environment variable, while set, decides, and the setting cannot
+  // be edited; unset, the saved setting applies again.
+  config.openappa.selfService = "disabled";
+  try {
+    expect((await getAppaGithubSync(org.id)).selfService).toEqual({
+      enabled: false,
+      setting: true,
+      environment: {
+        variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+        value: "disabled",
+      },
+    });
+    expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+    await expect(
+      updateAppaGithubSync({
+        organizationId: org.id,
+        action: "self_service",
+        enabled: false,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("ARCHESTRA_OPENAPPA_SELF_SERVICE"),
+    });
+    // Off by the variable: the next sync takes the ruleset away, and the
+    // check out of the repository's own, as the setting would.
+    calls.length = 0;
+    await syncAppaGithubPolicy(org.id);
+    expect(calls).toEqual(["DELETE 5", "PUT 7"]);
+    expect(await getRepositoryProtection(org.id)).toBeNull();
+    config.openappa.selfService = "enabled";
+    await OpenAppaGithubSyncModel.setSelfService(org.id, false);
+    expect((await getAppaGithubSync(org.id)).selfService).toMatchObject({
+      enabled: true,
+      setting: false,
+    });
+    expect(await getAppaSelfService(org.id)).toEqual({ enabled: true });
+  } finally {
+    delete config.openappa.selfService;
+  }
+  expect(await getAppaSelfService(org.id)).toEqual({ enabled: false });
+  await OpenAppaGithubSyncModel.setSelfService(org.id, true);
+
+  // Off again: Archestra's ruleset is deleted, and its check leaves the
+  // repository's own ruleset, which keeps the rest.
+  calls.length = 0;
+  const off = await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  expect(off.selfService).toEqual({ enabled: false, setting: false });
+  expect(calls).toEqual(["DELETE 5", "PUT 7"]);
+  expect(written).toEqual({
+    name: "Release rules",
+    target: "branch",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+    bypass_actors: [],
+    rules: [
+      { type: "deletion" },
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          required_status_checks: [{ context: "ci" }],
+        },
+      },
+    ],
+  });
+  expect(await getRepositoryProtection(org.id)).toBeNull();
+
+  // Stopping the sync takes the ruleset away too: nothing posts the check then.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: true,
+  });
+  listed = [
+    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
+  ];
+  calls.length = 0;
+  await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
+  expect(calls).toEqual(["DELETE 5"]);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.interval).toBeNull();
 });
 
 test("without the Checks permission no ruleset is created, one that already requires the check is reported as holding pull requests, and the grant brings it", async ({

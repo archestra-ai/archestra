@@ -16,8 +16,10 @@ class OpenAppaGithubSyncModel {
   }
   static async save(
     organizationId: string,
-    source: Omit<AppaGithubSource, "gitlabTokenId"> & {
+    source: Omit<AppaGithubSource, "gitlabTokenId" | "selfService"> & {
       gitlabTokenId?: string | null;
+      /** Off unless the source says otherwise. */
+      selfService?: boolean;
       setupPullRequestNumber?: number;
     },
   ) {
@@ -25,11 +27,13 @@ class OpenAppaGithubSyncModel {
       validationDirectory,
       setupPullRequestNumber = null,
       gitlabTokenId = null,
+      selfService = false,
       ...policySource
     } = source;
     const values = {
       setupPullRequestNumber,
       gitlabTokenId,
+      selfService,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -64,6 +68,13 @@ class OpenAppaGithubSyncModel {
         .values({ organizationId, ...values })
         .onConflictDoUpdate({ target: table.organizationId, set: values });
     });
+  }
+  /** Turn self-service on or off for the source. */
+  static async setSelfService(organizationId: string, selfService: boolean) {
+    await db
+      .update(table)
+      .set({ selfService })
+      .where(eq(table.organizationId, organizationId));
   }
   /** Change or stop the schedule. */
   static async setInterval(

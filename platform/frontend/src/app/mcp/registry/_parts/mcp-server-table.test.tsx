@@ -318,7 +318,6 @@ describe("McpServerTable uninstall permission", () => {
   });
 
   it("offers a server's editors its Guardrails rules among the row actions", async () => {
-    const user = userEvent.setup();
     canModifyCatalogItem.mockReturnValue({ canModify: true, isLoading: false });
     serverRulesHref.mockReturnValue("/chat?agentId=keeper&user_prompt=rules");
 

@@ -17,6 +17,7 @@ import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { DeploymentSettingRow } from "@/components/settings/deployment-setting-row";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -98,8 +99,14 @@ export function AppaGithubSyncPanel() {
         className="mb-6 h-auto"
       />
     );
-  const { source, enabled, hasPolicy, validationDirectory, githubWebUrl } =
-    query.data;
+  const {
+    source,
+    enabled,
+    hasPolicy,
+    validationDirectory,
+    githubWebUrl,
+    selfService,
+  } = query.data;
   const git = appaGitHost(query.data);
   const urls = source?.repo ? git.urls(source.repo) : null;
   const lastChecked = source?.lastSyncedAt
@@ -262,8 +269,15 @@ export function AppaGithubSyncPanel() {
                   />
                 ) : null}
                 {connected && !source.setupPullRequestNumber && (
-                  <RepositoryProtection />
+                  <SelfServiceRow
+                    source={source}
+                    selfService={selfService}
+                    canManage={canManage === true}
+                  />
                 )}
+                {connected &&
+                  !source.setupPullRequestNumber &&
+                  selfService.enabled && <RepositoryProtection />}
               </GitSourceCard>
             ) : null}
           </div>
@@ -288,6 +302,7 @@ export function AppaGithubSyncPanel() {
               interval: source.interval ?? "1h",
               validationDirectory,
               webUrl: githubWebUrl,
+              selfService: source.selfService,
             }}
           />
         ) : (
@@ -326,6 +341,62 @@ type ProtectionView = {
  * The repository's protection for server rules files: the branch ruleset
  * Archestra keeps in line at each sync.
  */
+/**
+ * The self-service switch: whether each MCP server's editors change its own
+ * rules through pull requests. Locked while the environment variable sets
+ * it, and off for a source without a GitHub App, which posts no check.
+ */
+function SelfServiceRow({
+  source,
+  selfService,
+  canManage,
+}: {
+  source: Source;
+  selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
+  canManage: boolean;
+}) {
+  const update = useUpdateAppaGithubSync();
+  const appName = useAppName();
+  const eligible = !!source.githubAppConfigId;
+  return (
+    <GitSourceNotice>
+      <div className="rounded-md border">
+        <DeploymentSettingRow
+          title="Self-service"
+          description={
+            eligible
+              ? `Let the people who can edit an MCP server change its Guardrails rules themselves, through a pull request. ${appName} posts a check that passes their own changes, keeps a branch ruleset that requires it, and shows Edit Guardrails rules in the MCP registry.`
+              : "Needs a GitHub App. Connect the policy repository through one to let the people who can edit an MCP server change its Guardrails rules themselves."
+          }
+          value={selfService.enabled ? "enabled" : "disabled"}
+          disabled={!canManage || !eligible || update.isPending}
+          environmentVariable={selfService.environment?.variable}
+          options={[
+            {
+              value: "enabled",
+              label: "On",
+              description:
+                "Server editors change their servers' rules through pull requests the policy check gates.",
+            },
+            {
+              value: "disabled",
+              label: "Off",
+              description:
+                "Only people with the Guardrails permission change the policy. No check, no ruleset.",
+            },
+          ]}
+          onChange={(value) =>
+            update.mutate({
+              action: "self_service",
+              enabled: value === "enabled",
+            })
+          }
+        />
+      </div>
+    </GitSourceNotice>
+  );
+}
+
 function RepositoryProtection() {
   const { data, refetch, isFetching } = useAppaRepositoryProtection(true);
   const appName = useAppName();
@@ -499,13 +570,6 @@ function branchRulesView(
         status: `${appName} creates the ruleset at the next sync`,
         tone: "pending",
       };
-    case "disabled":
-      return {
-        status: "Turned off on GitHub",
-        tone: "off",
-        link,
-        detail: rules.detail,
-      };
     case "needs_permission":
       // An App created before Archestra kept rulesets: an opt-in, not a fault.
       return {
@@ -519,8 +583,6 @@ function branchRulesView(
         tone: "problem",
         detail: rules.detail,
       };
-    case "unsupported":
-      return { status: "Not managed here", tone: "off", detail: rules.detail };
     default:
       return {
         status: "Could not check",

@@ -472037,6 +472037,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "selfService": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -472059,8 +472062,45 @@
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
+                        "selfService",
                         "lastSyncedAt",
                         "lastSyncError"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "selfService": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "variable": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "variable",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -472084,6 +472124,7 @@
                   "required": [
                     "enabled",
                     "source",
+                    "selfService",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -472409,6 +472450,10 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "selfService": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -472503,6 +472548,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "selfService": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -472525,8 +472573,45 @@
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
+                        "selfService",
                         "lastSyncedAt",
                         "lastSyncError"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "selfService": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "variable": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "variable",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -472550,6 +472635,7 @@
                   "required": [
                     "enabled",
                     "source",
+                    "selfService",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -472865,6 +472951,25 @@
                       "interval"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
+                          "self_service"
+                        ]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "enabled"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -472953,6 +473058,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "selfService": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -472975,8 +473083,45 @@
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
+                        "selfService",
                         "lastSyncedAt",
                         "lastSyncError"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "selfService": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "variable": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "variable",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -473000,6 +473145,7 @@
                   "required": [
                     "enabled",
                     "source",
+                    "selfService",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -473322,10 +473468,8 @@
                             "active",
                             "incomplete",
                             "missing",
-                            "disabled",
                             "needs_permission",
                             "unavailable",
-                            "unsupported",
                             "error"
                           ]
                         },
@@ -473605,6 +473749,274 @@
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels"
       }
     },
+    "/api/openappa/github-sync/self-service": {
+      "get": {
+        "operationId": "getAppaSelfService",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "Whether MCP server editors change their servers' Guardrails rules themselves, through pull requests on the policy repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`mcpRegistry:read`](/docs/reference/permissions#mcpRegistry:read): Open the MCP registry and use its built-in servers",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpRegistry:read"
+          ]
+        }
+      }
+    },
     "/api/openappa/github-sync/repository": {
       "post": {
         "operationId": "createAppaGithubRepository",
@@ -473669,6 +474081,9 @@
                     "pattern": "^[a-zA-Z0-9_.-]+(?:\\/[a-zA-Z0-9_.-]+)*$"
                   },
                   "replace": {
+                    "type": "boolean"
+                  },
+                  "selfService": {
                     "type": "boolean"
                   }
                 },
@@ -473764,6 +474179,9 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "selfService": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -473786,8 +474204,45 @@
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
+                        "selfService",
                         "lastSyncedAt",
                         "lastSyncError"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "selfService": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "setting": {
+                          "type": "boolean"
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "variable": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "enum": [
+                                "enabled",
+                                "disabled"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "variable",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "setting"
                       ],
                       "additionalProperties": false
                     },
@@ -473811,6 +474266,7 @@
                   "required": [
                     "enabled",
                     "source",
+                    "selfService",
                     "hasPolicy",
                     "validationDirectory",
                     "githubWebUrl",
@@ -474086,6 +474542,9 @@
                     "type": "string",
                     "maxLength": 39,
                     "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$"
+                  },
+                  "selfService": {
+                    "type": "boolean"
                   }
                 },
                 "required": [

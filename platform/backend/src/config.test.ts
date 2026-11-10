@@ -3847,6 +3847,22 @@ describe("OpenAPPA feature configuration", () => {
     ).toMatchObject({ policyCheckName: "Acme policy" });
   });
 
+  test("self-service Guardrails is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfService");
+    expect(parseOpenAppaConfig({ selfService: " " })).not.toHaveProperty(
+      "selfService",
+    );
+    expect(parseOpenAppaConfig({ selfService: "enabled" }).selfService).toBe(
+      "enabled",
+    );
+    expect(parseOpenAppaConfig({ selfService: "disabled" }).selfService).toBe(
+      "disabled",
+    );
+    expect(() => parseOpenAppaConfig({ selfService: "true" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE must be one of: enabled, disabled",
+    );
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
@@ -3907,6 +3923,7 @@ describe("OpenAPPA feature configuration", () => {
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
+      policyCheckName: "Guardrails Policy Admission",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

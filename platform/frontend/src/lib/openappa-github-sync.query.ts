@@ -45,6 +45,26 @@ export function useAppaRepositoryProtection(enabled: boolean) {
     refetchInterval: 60_000,
   });
 }
+/**
+ * Whether this organization's MCP server editors change their servers' rules
+ * themselves, which shows the registry's Guardrails action. Anyone who may
+ * open the registry reads it.
+ */
+export function useAppaSelfService(enabled = true) {
+  const { data: canRead } = useHasPermissions({ mcpRegistry: ["read"] });
+  return useQuery({
+    enabled: enabled && canRead === true,
+    queryKey: appaSelfServiceQueryKey,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaSelfService();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { enabled: false };
+    },
+    staleTime: 60_000,
+  });
+}
+export const appaSelfServiceQueryKey = ["openappa-github-sync", "self-service"];
+
 export function useConfigureAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({
@@ -115,8 +135,19 @@ export function useUpdateAppaGithubSync() {
         archestraApiTypes.GetAppaGithubSyncResponses["200"]
       >(appaGithubSyncQueryKey)?.source?.setupPullRequestNumber,
     }),
-    onSettled: () => invalidatePolicyViews(client),
+    onSettled: () => {
+      invalidatePolicyViews(client);
+      client.invalidateQueries({ queryKey: appaSelfServiceQueryKey });
+    },
     onSuccess: (data, body, context) => {
+      if (body.action === "self_service") {
+        toast.success(
+          body.enabled
+            ? "Self-service turned on. Server editors can change their servers' rules."
+            : "Self-service turned off. The branch ruleset was removed.",
+        );
+        return;
+      }
       if (body.action === "sync" && data?.source?.lastSyncError) return;
       // Still waiting on the setup PR: the dialog and panel already say so.
       if (body.action === "sync" && data?.source?.setupPullRequestNumber)

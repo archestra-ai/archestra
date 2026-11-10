@@ -52,6 +52,12 @@ export const AppaGithubSourceSchema = z
     githubAppConfigId: z.string().uuid().nullable().default(null),
     /** A GitLab access token in place of a GitHub credential. */
     gitlabTokenId: z.string().uuid().nullable().default(null),
+    /**
+     * Let each MCP server's editors change its own rules through pull
+     * requests: the policy check and the branch ruleset. GitHub App sources
+     * only; ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, wins over it.
+     */
+    selfService: z.boolean().default(false),
   })
   .strict()
   .refine(
@@ -95,6 +101,8 @@ export const CreateAppaGithubRepositorySchema = z
     validationDirectory: PolicyTestDirectorySchema.optional(),
     /** Switch a running sync to this repository; the edit flow sends it. */
     replace: z.boolean().optional(),
+    /** Let each server's editors change its own rules; GitHub App sources only. */
+    selfService: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -106,8 +114,8 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
 }).omit({ content: true });
 /**
  * How the policy repository protects its server rules files: the branch
- * ruleset Archestra keeps, which makes the policy check the gate. Null
- * without a connected repository.
+ * ruleset Archestra keeps, which makes the policy check the gate. Null while
+ * self-service is off, or without a connected GitHub App source.
  */
 export const AppaRepositoryProtectionSchema = z
   .object({
@@ -136,10 +144,8 @@ export const AppaRepositoryProtectionSchema = z
         "active",
         "incomplete",
         "missing",
-        "disabled",
         "needs_permission",
         "unavailable",
-        "unsupported",
         "error",
       ]),
       url: z.string().optional(),
@@ -152,9 +158,25 @@ export const AppaRepositoryProtectionSchema = z
   })
   .nullable();
 
+export const SelfServiceChoiceSchema = z.enum(["enabled", "disabled"]);
+/**
+ * Whether each MCP server's editors change its own rules through pull
+ * requests, and what decides it.
+ */
+export const AppaSelfServiceSchema = z.object({
+  /** In force: the environment variable while one is set, else the saved setting. */
+  enabled: z.boolean(),
+  /** The setting saved with the Git sync source. */
+  setting: z.boolean(),
+  /** The environment variable that sets it, while one does, with its value. */
+  environment: z
+    .object({ variable: z.string(), value: SelfServiceChoiceSchema })
+    .optional(),
+});
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
+  selfService: AppaSelfServiceSchema,
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
   /** Web origin of the source's host, e.g. https://github.com, for links. */
@@ -168,4 +190,12 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z
     .object({ action: z.literal("schedule"), interval: AppaSyncIntervalSchema })
     .strict(),
+  /** Turn self-service on or off; refused while the environment variable sets it. */
+  z
+    .object({ action: z.literal("self_service"), enabled: z.boolean() })
+    .strict(),
 ]);
+/** Whether the caller's organization lets server editors change their own rules now. */
+export const AppaSelfServiceAvailabilitySchema = z.object({
+  enabled: z.boolean(),
+});

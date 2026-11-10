@@ -1004,6 +1004,7 @@ export const RouteId = {
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
   GetAppaRepositoryProtection: "getAppaRepositoryProtection",
+  GetAppaSelfService: "getAppaSelfService",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",

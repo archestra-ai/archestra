@@ -81,7 +81,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: "propose_guardrails_server_rules_change",
     title: "Propose an MCP server's Guardrails rules change",
-    description: `Open a pull request (a merge request on GitLab) on the policy repository that changes this one MCP server's rules file, and adds \`mcp/*.toml\` to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may change this server's rules, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
+    description: `Open a pull request on the policy repository that changes this one MCP server's rules file, and adds \`mcp/*.toml\` to appa.toml's include list when no server file is included yet. Call preview_guardrails_server_rules_change first with the same content and expectedCommit, and only after the user agreed. Nothing applies until the request is merged and Git sync pulls it. Its ${config.openappa.policyCheckName} check verifies the policy and that the user may change this server's rules, so the user's own merge is enough; no one else's approval is needed. Give the user the link from \`url\`.`,
     schema: z.strictObject({
       mcpServerId: ServerSchema,
       content: FileSchema,

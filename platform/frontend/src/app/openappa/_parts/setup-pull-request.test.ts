@@ -15,6 +15,7 @@ const source = {
   setupPullRequestNumber: 7,
   lastSyncedAt: null,
   lastSyncError: null,
+  selfService: false,
 };
 
 describe("setupPullRequestOutcome", () => {

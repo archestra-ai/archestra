@@ -45,6 +45,7 @@ import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -83,6 +84,7 @@ import {
   useAppaGithubAppAccounts,
   useAppaGithubAppRepositories,
   useAppaGithubRepositoryStatus,
+  useAppaGithubSync,
   useConfigureAppaGithubSync,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
@@ -194,6 +196,16 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
+  // Self-service for the servers' editors: the App then also gets Checks and
+  // Administration. The environment variable, while set, decides instead.
+  const [chosenSelfService, setSelfService] = useState(
+    editing?.selfService ?? false,
+  );
+  const selfServiceEnvironment =
+    useAppaGithubSync().data?.selfService.environment;
+  const selfService = selfServiceEnvironment
+    ? selfServiceEnvironment.value === "enabled"
+    : chosenSelfService;
   const [advanced, setAdvanced] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [ref, setRef] = useState(editing?.ref ?? "");
@@ -345,7 +357,7 @@ export function GithubSyncSetupDialog({
     const tab = openGithubWindow("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
-      { githubUrl: github.web, owner },
+      { githubUrl: github.web, owner, selfService },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest, GITHUB_WINDOW);
@@ -410,6 +422,7 @@ export function GithubSyncSetupDialog({
           githubAppConfigId: null,
           gitlabTokenId: null,
           ...credential,
+          selfService: !gitlab && selfService,
         },
         { onSuccess: () => onOpenChange(false), onError },
       );
@@ -424,6 +437,7 @@ export function GithubSyncSetupDialog({
           : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
         ...credential,
         interval,
+        selfService: !gitlab && selfService,
         existing: !creatingProject,
         // Editing moves the running sync to the new repository, created or not.
         ...((!creatingProject || editing) && { replace: !!editing }),
@@ -694,6 +708,39 @@ export function GithubSyncSetupDialog({
         </p>
       ) : null}
 
+      {step === "app" && !gitlab && !loadingApps ? (
+        <div className="flex items-start gap-3 rounded-lg border p-3">
+          <Checkbox
+            id="github-sync-self-service"
+            className="mt-0.5"
+            checked={selfService}
+            disabled={!!selfServiceEnvironment}
+            onCheckedChange={(checked) => setSelfService(checked === true)}
+          />
+          <div className="space-y-1">
+            <Label htmlFor="github-sync-self-service">
+              Let server editors change their own rules
+            </Label>
+            <FieldDescription>
+              The people who can edit an MCP server change its Guardrails rules
+              through a pull request, which a check from the App gates. The App
+              also needs Checks and Administration on the policy repository, for
+              the check and the branch ruleset.
+            </FieldDescription>
+            {selfServiceEnvironment ? (
+              <FieldDescription>
+                Set with{" "}
+                <code className="font-mono">
+                  {selfServiceEnvironment.variable}=
+                  {selfServiceEnvironment.value}
+                </code>
+                . Unset the environment variable to choose here.
+              </FieldDescription>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {step === "app" && !gitlab && !loadingApps && mode === "fork" ? (
         <GithubAppChoice
           icons={apps.map((app) => app.icon)}
@@ -831,6 +878,7 @@ export function GithubSyncSetupDialog({
               permissions={[
                 "Contents",
                 "Pull requests",
+                ...(selfService ? ["Checks", "Administration"] : []),
                 ...(github?.dotCom ? [] : ["Workflows"]),
               ].map((name) => ({ name, access: "Read & write" }))}
             />
@@ -1693,6 +1741,8 @@ type EditedSource = {
   validationDirectory: string;
   /** The host's web address, e.g. https://github.com. */
   webUrl: string;
+  /** Whether the servers' editors change their own rules through this source. */
+  selfService: boolean;
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;

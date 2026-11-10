@@ -28,10 +28,8 @@ import {
   openappaRepositoryIncludes,
   repositoryPath,
   resolveOpenAppaGithubAccess,
-  resolveOpenAppaGitlabAccess,
 } from "@/services/openappa-github-access";
-import { hasOwnFile } from "@/services/openappa-github-sync";
-import { openappaGitlab } from "@/services/openappa-gitlab";
+import { hasOwnFile, selfServiceActive } from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 
@@ -67,6 +65,10 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     guardrailsPolicyService.get(params.organizationId),
     OpenAppaGithubSyncModel.find(params.organizationId),
   ]);
+  // Off, there is nothing to read: the file is the organization's policy,
+  // and the registry shows no action. The Keeper passes the reason on.
+  if (source?.interval && source.repo && !selfServiceActive(source))
+    throw new ApiError(409, SELF_SERVICE_OFF);
   const included = includesServerRules(root.content, server.path);
   const accepted = await acceptedFile({
     organizationId: params.organizationId,
@@ -204,9 +206,14 @@ export async function proposeServerRulesChange(
   const author = requester
     ? { name: requester.name || requester.email, email: requester.email }
     : undefined;
-  const opened = change.source.gitlabTokenId
-    ? await openGitlabRequest({ ...change, title, body, files, head })
-    : await openGithubPull({ ...change, title, body, files, head, author });
+  const opened = await openGithubPull({
+    ...change,
+    title,
+    body,
+    files,
+    head,
+    author,
+  });
   return {
     stage: "proposed" as const,
     delivery: "pull_request" as const,
@@ -223,41 +230,6 @@ export async function getServerRulesChangeStatus(
 ) {
   const server = await serverFor(params);
   const source = await requireSource(params.organizationId);
-  if (source.gitlabTokenId) {
-    const access = await resolveOpenAppaGitlabAccess({
-      organizationId: params.organizationId,
-      gitlabTokenId: source.gitlabTokenId,
-    });
-    const request = await openappaGitlab.changeStatus({
-      access,
-      repo: source.repo,
-      iid: params.number,
-    });
-    if (!isServerBranch(server.prefix, request.sourceBranch))
-      throw new ApiError(
-        404,
-        "No rules change for this server has that number",
-      );
-    const merged = request.state === "merged" && !!request.mergedCommit;
-    // Applied once the accepted commit contains what the merge put there.
-    const applied =
-      merged &&
-      (await openappaGitlab.contains({
-        access,
-        repo: source.repo,
-        commit: source.sourceCommit,
-        ancestor: request.mergedCommit as string,
-      }));
-    // A pull applies what is merged; queue one rather than wait for the schedule.
-    if (merged && !applied)
-      await OpenAppaGithubSyncModel.enqueue(params.organizationId);
-    return {
-      number: request.iid,
-      url: request.webUrl,
-      state: request.state,
-      applied: merged ? applied : false,
-    };
-  }
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
   const pull = await github<{
@@ -507,6 +479,10 @@ function repositoryView(
     : null;
 }
 
+/** The refusal every server rules tool gives while self-service is off. */
+const SELF_SERVICE_OFF =
+  "Self-service Guardrails is off, so server rules cannot be read or proposed here. An administrator turns it on under Settings → Guardrails → Git sync.";
+
 async function requireSource(organizationId: string) {
   const source = await OpenAppaGithubSyncModel.find(organizationId);
   if (!source?.interval || !source.repo || !source.path || !source.sourceCommit)
@@ -514,6 +490,7 @@ async function requireSource(organizationId: string) {
       409,
       "Git sync is not set up, so server rules cannot be proposed. An administrator sets it up under Settings → Guardrails.",
     );
+  if (!selfServiceActive(source)) throw new ApiError(409, SELF_SERVICE_OFF);
   return {
     ...source,
     repo: source.repo,
@@ -524,35 +501,6 @@ async function requireSource(organizationId: string) {
 
 type Source = Awaited<ReturnType<typeof requireSource>>;
 type ChangedFile = { path: string; content: string };
-
-async function openGitlabRequest(params: {
-  source: Source;
-  title: string;
-  body: string;
-  files: ChangedFile[];
-  head: string;
-}) {
-  const { source } = params;
-  const access = await resolveOpenAppaGitlabAccess({
-    organizationId: source.organizationId,
-    gitlabTokenId: source.gitlabTokenId as string,
-  });
-  const branch =
-    source.ref ??
-    (await openappaGitlab.defaultBranch({ access, repo: source.repo }));
-  const request = await openappaGitlab.proposeChange({
-    access,
-    repo: source.repo,
-    branch,
-    baseSha: source.sourceCommit,
-    title: params.title,
-    summary: params.body,
-    upsert: params.files,
-    delete: [],
-    head: params.head,
-  });
-  return { number: request.iid, url: request.webUrl };
-}
 
 /**
  * One commit on a new branch from the accepted commit, then a pull request

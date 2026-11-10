@@ -47,6 +47,29 @@ describe("POST /api/openappa/github-app/manifest", () => {
       payload: { githubUrl: "https://github.com", owner },
     });
 
+  test("the manifest asks for every permission the policy repository's protection needs", async () => {
+    server.use(
+      http.get("https://api.github.com/users/:login", ({ params }) =>
+        HttpResponse.json({ login: params.login, type: "Organization" }),
+      ),
+    );
+    const started = await start("acme");
+    expect(started.statusCode, started.body).toBe(200);
+    const manifest = JSON.parse(started.json().manifest) as {
+      default_permissions: Record<string, string>;
+    };
+    // Reading and proposing (Contents, Pull requests), the policy check
+    // (Checks), the branch ruleset (Administration); Metadata comes with
+    // every App.
+    expect(manifest.default_permissions).toEqual({
+      contents: "write",
+      pull_requests: "write",
+      checks: "write",
+      administration: "write",
+      metadata: "read",
+    });
+  });
+
   test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
     // Anonymous API reads of an Enterprise Managed Users organization get a
     // 404, as for a missing account; only its web profile tells them apart.

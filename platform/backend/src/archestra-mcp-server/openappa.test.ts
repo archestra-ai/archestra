@@ -167,6 +167,7 @@ describe("OpenAPPA tool execution", () => {
     }) => {
       config.openappa = {
         enabled: true,
+        policyCheckName: "Guardrails Policy Admission",
         yellEnabled: false,
         yellForwardingEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,

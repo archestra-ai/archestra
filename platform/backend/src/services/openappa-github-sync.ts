@@ -13,6 +13,7 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import { gitClient } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
@@ -58,6 +59,7 @@ import {
 } from "@/services/openappa-github";
 import {
   githubAppLogin,
+  githubAppProfile,
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
@@ -769,10 +771,12 @@ export async function checkDueAppaGithubSyncs() {
 // =============================================================================
 
 /**
- * The check every policy pull request carries. The branch ruleset requires it
- * by this name, so the name stays the same whatever the deployment is called.
+ * The check every policy pull request carries, and the name of the branch
+ * ruleset that requires it: ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME, a
+ * product-free name by default. A renamed deployment moves the ruleset and
+ * its required check over at the next sync.
  */
-const POLICY_CHECK_NAME = "Guardrails policy";
+const POLICY_CHECK_NAME = config.openappa.policyCheckName;
 
 /** The most open pull requests checked in one repository each minute. */
 const MAX_CHECKED_PULLS = 50;
@@ -832,7 +836,7 @@ type Verdict = {
 /**
  * Check every open pull request (merge request on GitLab) into the synced
  * branch as a pull would check its result, and post the outcome on its head
- * commit as the "Archestra Guardrails policy" check. A branch rule that
+ * commit as the policy check (ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME). A branch rule that
  * requires the check stops a merge Git sync would refuse; without one, the
  * reviewers still see it.
  *
@@ -866,7 +870,14 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
   const keys = checking.map((pull) =>
-    checkKey("checked", organizationId, source.repo, pull.head, pull.result),
+    checkKey(
+      "checked",
+      organizationId,
+      source.repo,
+      POLICY_CHECK_NAME,
+      pull.head,
+      pull.result,
+    ),
   );
   const checked = await cacheManager.getMany<CheckedResult>(keys);
   for (const [index, pull] of checking.entries()) {
@@ -930,7 +941,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
             key: refused,
             organizationId,
             reason:
-              "a GitHub App needs the Checks permission (read and write), a token the commit statuses scope, and a GitLab token the api scope",
+              "a GitHub App needs the Checks permission (read and write), and a GitLab token the api scope",
           });
           return;
         }
@@ -1159,12 +1170,6 @@ async function githubPullRequests(
 
 type GithubPullUser = { id?: number; login?: string; type?: string };
 
-/** Personal access token owners by credential, for a day. */
-const tokenOwners = new LRUCacheManager<{ id?: number; login: string }>({
-  maxSize: 256,
-  defaultTtl: TimeInMs.Day,
-});
-
 /**
  * Whether the person behind a pull request may change what it changes: each
  * server rules file takes edit access to that server in the MCP registry,
@@ -1317,12 +1322,10 @@ async function pullRequester(params: {
 > {
   const { source, token, api, base, number, user } = params;
   const appName = archestraMcpBranding.appName;
-  const own = await ownIdentity({ source, token, api });
+  const own = await ownIdentity({ source });
   if (own === null) return null;
   const byArchestra =
-    own !== undefined &&
-    (own.login.toLowerCase() === user?.login?.toLowerCase() ||
-      (own.id !== undefined && own.id === user?.id));
+    own !== undefined && own.login.toLowerCase() === user?.login?.toLowerCase();
   if (byArchestra) {
     const commits = await pagedGithub<{
       sha?: string;
@@ -1370,7 +1373,6 @@ async function pullRequester(params: {
           reason: `This pull request has commits ${appName} did not make, so ${appName} cannot tell who asked for them. Propose the change again from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
         },
       };
-    // A person's own token opened it: the person is the requester.
   }
   if (user?.type !== "User" || user.id === undefined)
     return {
@@ -1405,39 +1407,24 @@ async function pullRequester(params: {
 }
 
 /**
- * The GitHub account Archestra's credential acts as: the App's bot, or the
- * owner of the personal access token. Undefined without a credential, null
- * for a read that failed for now.
+ * The GitHub account Archestra's App acts as, `<slug>[bot]`. Undefined
+ * without an App, null for a read that failed for now.
  */
 async function ownIdentity(params: {
   source: PolicySource;
-  token: string;
-  api: string;
-}): Promise<{ login: string; id?: number } | null | undefined> {
+}): Promise<{ login: string } | null | undefined> {
   const { source } = params;
-  if (source.githubAppConfigId) {
-    try {
-      const login = await githubAppLogin(source);
-      return login ? { login } : undefined;
-    } catch (error) {
-      logger.warn(
-        { organizationId: source.organizationId, error },
-        "OpenAPPA could not read the GitHub App's own login",
-      );
-      return null;
-    }
+  if (!source.githubAppConfigId) return undefined;
+  try {
+    const login = await githubAppLogin(source);
+    return login ? { login } : undefined;
+  } catch (error) {
+    logger.warn(
+      { organizationId: source.organizationId, error },
+      "OpenAPPA could not read the GitHub App's own login",
+    );
+    return null;
   }
-  if (!source.githubPatId) return undefined;
-  const cached = tokenOwners.get(source.githubPatId);
-  if (cached) return cached;
-  const user = await githubCall<{ id?: number; login?: string }>({
-    token: params.token,
-    url: `${params.api}/user`,
-  });
-  if (!user.ok || typeof user.body.login !== "string") return null;
-  const owner = { login: user.body.login, id: user.body.id };
-  tokenOwners.set(source.githubPatId, owner);
-  return owner;
 }
 
 /**
@@ -1462,10 +1449,7 @@ async function pagedGithub<T>(params: {
   return "over";
 }
 
-/**
- * A check run where the credential may create one, a GitHub App with the
- * Checks permission; otherwise a commit status, which reads the same.
- */
+/** The check run on a pull request's head, posted as the App. */
 async function postGithubCheck(params: {
   base: string;
   token: string;
@@ -1474,36 +1458,16 @@ async function postGithubCheck(params: {
 }) {
   const { base, token, head, outcome } = params;
   const { title, summary } = checkSummary(outcome);
-  let refused = false;
-  try {
-    await githubJson({
-      url: `${base}/check-runs`,
-      token,
-      method: "POST",
-      body: {
-        name: POLICY_CHECK_NAME,
-        head_sha: head,
-        status: "completed",
-        conclusion: outcome.accepted ? "success" : "failure",
-        output: { title, summary: summary.slice(0, 60_000) },
-      },
-      errors: async ({ status }) => {
-        refused = status === 403 || status === 404;
-        return new ApiError(502, `GitHub returned HTTP ${status}`);
-      },
-    });
-    return;
-  } catch (error) {
-    if (!refused) throw error;
-  }
   await githubJson({
-    url: `${base}/statuses/${head}`,
+    url: `${base}/check-runs`,
     token,
     method: "POST",
     body: {
-      state: outcome.accepted ? "success" : "failure",
-      context: POLICY_CHECK_NAME,
-      description: (outcome.accepted ? title : summary).slice(0, 140),
+      name: POLICY_CHECK_NAME,
+      head_sha: head,
+      status: "completed",
+      conclusion: outcome.accepted ? "success" : "failure",
+      output: { title, summary: summary.slice(0, 60_000) },
     },
     errors: async ({ status }) =>
       status === 403 || status === 404
@@ -2145,10 +2109,33 @@ export function hasOwnFile(
 // Repository protection: who reviews each server's file, and the branch rules
 // =============================================================================
 
-/** The ruleset Archestra keeps on the synced branch, found again by this name. */
-const RULESET_NAME = "Guardrails policy";
+/** The ruleset Archestra keeps on the synced branch: the check's name. */
+const RULESET_NAME = POLICY_CHECK_NAME;
+
+/** The permissions the GitHub App needs, each tried as its own job token. */
+const GITHUB_APP_PERMISSIONS = [
+  "contents",
+  "pull_requests",
+  "checks",
+  "administration",
+] as const;
 
 export type RepositoryProtection = {
+  /** The name of the policy check, and of the ruleset that requires it. */
+  checkName: string;
+  /**
+   * The GitHub App's grants against what this feature needs, with where to
+   * change them: an App created before a part existed is upgraded there.
+   * Absent for GitLab.
+   */
+  app?: {
+    settingsUrl: string;
+    installationUrl: string | null;
+    permissions: Array<{
+      name: (typeof GITHUB_APP_PERMISSIONS)[number];
+      granted: boolean;
+    }>;
+  };
   /** The ruleset on the synced branch. */
   branchRules: {
     state:
@@ -2191,6 +2178,7 @@ async function repositoryProtection(params: {
     return null;
   if (row.gitlabTokenId)
     return {
+      checkName: POLICY_CHECK_NAME,
       branchRules: {
         state: "unsupported",
         detail: `${archestraMcpBranding.appName} keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.`,
@@ -2202,10 +2190,20 @@ async function repositoryProtection(params: {
     path: row.path,
     sourceCommit: row.sourceCommit,
   };
-  const branchRules = await githubBranchRules(source, params.apply).catch(
-    (error) => ({ state: "error" as const, detail: protectionError(error) }),
-  );
-  return { branchRules };
+  const [branchRules, app] = await Promise.all([
+    githubBranchRules(source, params.apply).catch((error) => ({
+      state: "error" as const,
+      detail: protectionError(error),
+    })),
+    githubAppReadiness(source).catch((error) => {
+      logger.warn(
+        { organizationId: params.organizationId, error },
+        "OpenAPPA could not read the GitHub App's permissions",
+      );
+      return undefined;
+    }),
+  ]);
+  return { checkName: POLICY_CHECK_NAME, ...(app ? { app } : {}), branchRules };
 }
 
 /** The last protection read or applied, by organization, for a minute. */
@@ -2240,6 +2238,37 @@ async function maintainRepositoryProtection(
 type ConnectedSource = NonNullable<
   Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
 > & { repo: string; path: string; sourceCommit: string };
+
+/**
+ * Each permission this feature needs, tried as its own job token: GitHub
+ * refuses a token for a permission the installation was not granted, so the
+ * refusals are the list of what to add on the App and accept on the
+ * installation. Undefined without an App.
+ */
+async function githubAppReadiness(
+  source: ConnectedSource,
+): Promise<RepositoryProtection["app"]> {
+  if (!source.githubAppConfigId) return undefined;
+  const profile = await githubAppProfile(source);
+  if (!profile) return undefined;
+  const permissions = await Promise.all(
+    GITHUB_APP_PERMISSIONS.map(async (name) => {
+      try {
+        await resolveOpenAppaGithubAccess(source, { [name]: "write" });
+        return { name, granted: true };
+      } catch (error) {
+        if (error instanceof MissingGithubPermission)
+          return { name, granted: false };
+        throw error;
+      }
+    }),
+  );
+  return {
+    settingsUrl: profile.settingsUrl,
+    installationUrl: profile.installationUrl,
+    permissions,
+  };
+}
 
 function protectionError(error: unknown): string {
   return error instanceof ApiError
@@ -2287,17 +2316,36 @@ async function githubBranchRules(
     Array<{ id: number; name: string; source_type?: string }>
   >({ token, url: `${base}/rulesets?includes_parents=false&per_page=100` });
   if (!rulesets.ok) return unavailable(rulesets);
-  const ours = rulesets.body.find(
-    (ruleset) =>
-      ruleset.name === RULESET_NAME &&
-      (ruleset.source_type ?? "Repository") === "Repository",
+  const repositoryRulesets = rulesets.body.filter(
+    (ruleset) => (ruleset.source_type ?? "Repository") === "Repository",
   );
+  const integrationId = await checkIntegrationId(source);
+  // Ours by name, or by the check it requires from this App: a deployment
+  // renamed since (ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) finds its ruleset
+  // again and renames it, instead of leaving one that holds every pull request.
+  let ours = repositoryRulesets.find(
+    (ruleset) => ruleset.name === RULESET_NAME,
+  );
+  let existing: Awaited<ReturnType<typeof githubCall<Ruleset>>> | null = null;
+  if (!ours && integrationId) {
+    for (const candidate of repositoryRulesets.slice(0, 25)) {
+      const read = await githubCall<Ruleset>({
+        token,
+        url: `${base}/rulesets/${candidate.id}`,
+      });
+      if (read.ok && requiresCheckFrom(read.body.rules, integrationId)) {
+        ours = candidate;
+        existing = read;
+        break;
+      }
+    }
+  }
   // The check is required only while this App may post it: a required check
   // nobody posts holds every pull request for good.
   const check = await policyCheckAccess(source);
   const desired = desiredRuleset({
     branch,
-    integrationId: await checkIntegrationId(source),
+    integrationId,
     requireCheck: check.postable,
   });
   const checkGap = (
@@ -2325,7 +2373,7 @@ async function githubBranchRules(
       ...checkGap(desired.rules),
     };
   }
-  const existing = await githubCall<Ruleset>({
+  existing ??= await githubCall<Ruleset>({
     token,
     url: `${base}/rulesets/${ours.id}`,
   });
@@ -2390,6 +2438,22 @@ async function policyCheckAccess(
       };
     throw error;
   }
+}
+
+/** Whether a rule requires a check from this App, under any name. */
+function requiresCheckFrom(
+  rules: Rule[] | undefined,
+  integrationId: number,
+): boolean {
+  return (rules ?? []).some(
+    (rule) =>
+      rule.type === "required_status_checks" &&
+      (
+        (rule.parameters?.required_status_checks ?? []) as Array<{
+          integration_id?: number;
+        }>
+      ).some((check) => check.integration_id === integrationId),
+  );
 }
 
 /** Whether a rule requires the policy check, under any App. */
@@ -2534,20 +2598,25 @@ function strengthenedRuleset(
           (ours.integration_id === undefined ||
             check.integration_id === ours.integration_id),
       );
+      // A check this App posted under an earlier name is ours, renamed.
+      const renamed = checks.filter(
+        (check) =>
+          ours.integration_id !== undefined &&
+          check.integration_id === ours.integration_id &&
+          check.context !== ours.context,
+      );
       const strict =
         have.parameters?.strict_required_status_checks_policy === true;
-      if (!present || !strict) {
+      if (!present || !strict || renamed.length > 0) {
+        const kept = checks.filter(
+          (check) => check.context !== ours.context && !renamed.includes(check),
+        );
         rules[at] = {
           type: have.type,
           parameters: {
             ...have.parameters,
             strict_required_status_checks_policy: true,
-            required_status_checks: present
-              ? checks
-              : [
-                  ...checks.filter((check) => check.context !== ours.context),
-                  ours,
-                ],
+            required_status_checks: [...kept, ours],
           },
         };
         changed = true;
@@ -2562,9 +2631,10 @@ function strengthenedRuleset(
   const covers = include.some(names);
   const kept = exclude.filter((pattern) => !names(pattern));
   if (!covers || kept.length < exclude.length) changed = true;
+  if (existing.name !== desired.name) changed = true;
   if (!changed) return null;
   return {
-    name: existing.name,
+    name: desired.name,
     target: existing.target,
     enforcement: existing.enforcement,
     conditions: {

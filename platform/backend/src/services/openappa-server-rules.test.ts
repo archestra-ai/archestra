@@ -574,7 +574,7 @@ test("each open pull request carries the checks a pull would make on its merge r
   const org = await makeOrganization();
   const admin = await makeUser();
   await makeMember(admin.id, org.id, { role: "admin" });
-  await connect({ organizationId: org.id, writerUserId: admin.id });
+  await connectApp({ organizationId: org.id });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   const goodHead = "9".repeat(40);
   const badHead = "8".repeat(40);
@@ -604,11 +604,13 @@ test("each open pull request carries the checks a pull would make on its merge r
     context: string;
     description: string;
   }> = [];
-  // The token's owner opened both, so each is read from its commits; the
-  // administrator asked for the first, and may change the policy.
-  const owner = { id: 7, login: "admin-gh", type: "User" };
+  // The App opened both, so each is read from its commits; the administrator
+  // asked for the first, and may change the policy.
+  const owner = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
   server.use(
-    http.get("https://api.github.com/user", () => HttpResponse.json(owner)),
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails" }),
+    ),
     http.get(`${REPO}/pulls`, ({ request }) => {
       expect(new URL(request.url).searchParams.get("base")).toBe("main");
       return HttpResponse.json([
@@ -637,20 +639,12 @@ test("each open pull request carries the checks a pull would make on its merge r
             author: { email: admin.email },
             verification: { verified: true, reason: "valid" },
           },
-          committer: { login: "admin-gh", type: "User" },
+          committer: { login: "acme-guardrails[bot]", type: "Bot" },
         },
       ]),
     ),
-    // A check run where the credential may create one; a personal access
-    // token may not, and posts a commit status instead.
     http.post(`${REPO}/check-runs`, async ({ request }) => {
-      const run = (await request.json()) as (typeof runs)[number];
-      if (run.head_sha === badHead)
-        return HttpResponse.json(
-          { message: "Resource not accessible by personal access token" },
-          { status: 403 },
-        );
-      runs.push(run);
+      runs.push((await request.json()) as (typeof runs)[number]);
       return HttpResponse.json({ id: 1 }, { status: 201 });
     }),
     http.post(`${REPO}/statuses/:sha`, async ({ request, params }) => {
@@ -665,31 +659,32 @@ test("each open pull request carries the checks a pull would make on its merge r
   await checkDueAppaGithubSyncs();
   expect(runs).toEqual([
     expect.objectContaining({
-      name: "Guardrails policy",
+      name: "Guardrails Policy Admission",
       head_sha: goodHead,
       conclusion: "success",
     }),
+    expect.objectContaining({
+      name: "Guardrails Policy Admission",
+      head_sha: badHead,
+      conclusion: "failure",
+      output: expect.objectContaining({
+        summary: expect.stringMatching(
+          /^mcp\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for/,
+        ),
+      }),
+    }),
   ]);
-  expect(statuses).toEqual([
-    {
-      sha: badHead,
-      state: "failure",
-      context: "Guardrails policy",
-      description: expect.stringMatching(
-        /^mcp\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for/,
-      ),
-    },
-  ]);
+  // Nothing goes out as a commit status: the App posts check runs.
+  expect(statuses).toEqual([]);
   // Checking again posts nothing until a commit moves.
   await checkDueAppaGithubSyncs();
-  expect(runs).toHaveLength(1);
-  expect(statuses).toHaveLength(1);
+  expect(runs).toHaveLength(2);
   // Nothing was applied: the accepted commit is still the first.
   expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
     FIRST,
   );
 
-  // A credential that may post neither is not asked again every minute.
+  // An App that may not post is not asked again every minute.
   let listed = 0;
   server.use(
     http.get(`${REPO}/pulls`, () => {
@@ -719,7 +714,7 @@ test("a pull request check retries what failed for now, and checks again when th
   const org = await makeOrganization();
   const admin = await makeUser();
   await makeMember(admin.id, org.id, { role: "admin" });
-  await connect({ organizationId: org.id, writerUserId: admin.id });
+  await connectApp({ organizationId: org.id });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   serveRepository({
     head: FIRST,
@@ -739,17 +734,15 @@ test("a pull request check retries what failed for now, and checks again when th
         { head: { sha: "9".repeat(40) }, merge_commit_sha: THIRD },
       ]);
     }),
-    // A personal access token posts a commit status.
-    http.post(`${REPO}/check-runs`, () =>
-      HttpResponse.json({}, { status: 403 }),
-    ),
-    http.post(`${REPO}/statuses/:sha`, async ({ request }) => {
+    // The App posts check runs; `statuses` records their conclusions.
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
       if (failPost) {
         failPost = false;
         return HttpResponse.json({ message: "Server Error" }, { status: 502 });
       }
-      statuses.push((await request.json()) as (typeof statuses)[number]);
-      return HttpResponse.json({ id: 2 }, { status: 201 });
+      const run = (await request.json()) as { conclusion: string };
+      statuses.push({ state: run.conclusion });
+      return HttpResponse.json({ id: 1 }, { status: 201 });
     }),
   );
   const validate = vi.spyOn(guardrailsPolicyService, "validate");
@@ -927,7 +920,7 @@ test("on GitLab, a pull reads every page of mcp/, merge requests get the policy 
   expect(gitlab.statuses).toEqual([
     expect.objectContaining({
       state: "success",
-      name: "Guardrails policy",
+      name: "Guardrails Policy Admission",
     }),
   ]);
   await checkDueAppaGithubSyncs();
@@ -970,7 +963,7 @@ test("a refused pull request check is checked again once the battery it names is
   const org = await makeOrganization();
   const admin = await makeUser();
   await makeMember(admin.id, org.id, { role: "admin" });
-  await connect({ organizationId: org.id, writerUserId: admin.id });
+  await connectApp({ organizationId: org.id });
   // A battery with no helper and no credential: its rules alone.
   const files = [
     {
@@ -1013,12 +1006,10 @@ delta = {}
         { head: { sha: "9".repeat(40) }, merge_commit_sha: THIRD },
       ]),
     ),
-    http.post(`${REPO}/check-runs`, () =>
-      HttpResponse.json({}, { status: 403 }),
-    ),
-    http.post(`${REPO}/statuses/:sha`, async ({ request }) => {
-      statuses.push((await request.json()) as (typeof statuses)[number]);
-      return HttpResponse.json({ id: 2 }, { status: 201 });
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      const run = (await request.json()) as { conclusion: string };
+      statuses.push({ state: run.conclusion });
+      return HttpResponse.json({ id: 1 }, { status: 201 });
     }),
   );
   const validate = vi.spyOn(guardrailsPolicyService, "validate");
@@ -1430,7 +1421,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           ? [
               {
                 id: 5,
-                name: "Guardrails policy",
+                name: "Guardrails Policy Admission",
                 source_type: "Repository",
               },
             ]
@@ -1453,7 +1444,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
     {
       method: "POST",
       body: {
-        name: "Guardrails policy",
+        name: "Guardrails Policy Admission",
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1476,7 +1467,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Guardrails policy", integration_id: 123 },
+                { context: "Guardrails Policy Admission", integration_id: 123 },
               ],
             },
           },
@@ -1488,7 +1479,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
   // nothing is written again.
   existing = {
     id: 5,
-    name: "Guardrails policy",
+    name: "Guardrails Policy Admission",
     target: "branch",
     source_type: "Repository",
     enforcement: "active",
@@ -1515,7 +1506,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
         parameters: {
           do_not_enforce_on_create: false,
           required_status_checks: [
-            { context: "Guardrails policy", integration_id: 123 },
+            { context: "Guardrails Policy Admission", integration_id: 123 },
           ],
           strict_required_status_checks_policy: true,
         },
@@ -1552,7 +1543,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
               do_not_enforce_on_create: false,
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Guardrails policy", integration_id: 123 },
+                { context: "Guardrails Policy Admission", integration_id: 123 },
               ],
             },
           },
@@ -1572,7 +1563,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Guardrails policy", integration_id: 123 },
+                { context: "Guardrails Policy Admission", integration_id: 123 },
               ],
             },
           }
@@ -1610,7 +1601,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
   // ones come back, the stricter ones and their own additions stay.
   existing = {
     id: 5,
-    name: "Guardrails policy",
+    name: "Guardrails Policy Admission",
     target: "branch",
     enforcement: "active",
     conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1638,7 +1629,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
     {
       method: "PUT",
       body: {
-        name: "Guardrails policy",
+        name: "Guardrails Policy Admission",
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1664,7 +1655,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Guardrails policy", integration_id: 123 },
+                { context: "Guardrails Policy Admission", integration_id: 123 },
               ],
             },
           },
@@ -1707,7 +1698,13 @@ test("the ruleset requires the policy check only while the App may post it, and 
     http.get(`${REPO}/rulesets`, () =>
       HttpResponse.json(
         existing
-          ? [{ id: 5, name: "Guardrails policy", source_type: "Repository" }]
+          ? [
+              {
+                id: 5,
+                name: "Guardrails Policy Admission",
+                source_type: "Repository",
+              },
+            ]
           : [],
       ),
     ),
@@ -1751,7 +1748,7 @@ test("the ruleset requires the policy check only while the App may post it, and 
           do_not_enforce_on_create: false,
           strict_required_status_checks_policy: true,
           required_status_checks: [
-            { context: "Guardrails policy", integration_id: 123 },
+            { context: "Guardrails Policy Admission", integration_id: 123 },
           ],
         },
       },
@@ -1784,7 +1781,7 @@ test("the ruleset requires the policy check only while the App may post it, and 
             parameters: {
               strict_required_status_checks_policy: true,
               required_status_checks: [
-                { context: "Guardrails policy", integration_id: 123 },
+                { context: "Guardrails Policy Admission", integration_id: 123 },
               ],
             },
           },

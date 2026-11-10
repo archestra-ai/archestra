@@ -214,23 +214,41 @@ async function jobAccess(params: {
   return { token: minted.token, api, web };
 }
 
-/** GitHub App logins (`<slug>[bot]`) by credential, for a day: they do not change. */
-const appLogins = new LRUCacheManager<string>({
+/** What GitHub says of a source's App: who it acts as, and where it is managed. */
+type GithubAppProfile = {
+  /** The login the App acts as, `<slug>[bot]`: the committer of every commit it makes. */
+  login: string;
+  /** The App's permissions page on GitHub, where an administrator grants more. */
+  settingsUrl: string;
+  /** The installation's page, where a changed set of permissions is accepted. */
+  installationUrl: string | null;
+};
+
+/** App profiles by credential, for a day: they do not change. */
+const appProfiles = new LRUCacheManager<GithubAppProfile>({
   maxSize: 256,
   defaultTtl: 24 * 60 * 60_000,
 });
 
 /**
  * The GitHub login a source's App acts as, `<slug>[bot]`: the committer of
- * every commit the App makes, which GitHub signs. Null for a source that
- * reads with a personal access token or no credential.
+ * every commit the App makes, which GitHub signs. Null for a source without
+ * an App.
  */
 export async function githubAppLogin(source: {
   organizationId: string;
   githubAppConfigId: string | null;
 }): Promise<string | null> {
+  return (await githubAppProfile(source))?.login ?? null;
+}
+
+/** The source's App as GitHub describes it; null for a source without an App. */
+export async function githubAppProfile(source: {
+  organizationId: string;
+  githubAppConfigId: string | null;
+}): Promise<GithubAppProfile | null> {
   if (!source.githubAppConfigId) return null;
-  const cached = appLogins.get(source.githubAppConfigId);
+  const cached = appProfiles.get(source.githubAppConfigId);
   if (cached) return cached;
   const definition = await RuntimeCredentialDefinitionModel.findById({
     id: source.githubAppConfigId,
@@ -238,6 +256,7 @@ export async function githubAppLogin(source: {
   });
   if (definition?.kind !== "github_app" || !definition.appId)
     throw new ApiError(404, "GitHub App credential not found");
+  const appId = definition.appId;
   const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
     organizationId: source.organizationId,
     credentialId: definition.key,
@@ -245,19 +264,36 @@ export async function githubAppLogin(source: {
   });
   if (!privateKey)
     throw new ApiError(400, "GitHub App credential has no private key");
-  const app = await fetchAsGithubApp<{ slug?: unknown }>({
-    githubUrl: (
-      definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
-    ).replace(/\/+$/, ""),
-    appId: definition.appId,
-    privateKey,
-    path: "/app",
-  });
+  const api = (
+    definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
+  ).replace(/\/+$/, "");
+  const asApp = <T>(path: `/app${string}`) =>
+    fetchAsGithubApp<T>({ githubUrl: api, appId, privateKey, path });
+  const app = await asApp<{
+    slug?: unknown;
+    owner?: { login?: unknown; type?: unknown } | null;
+  }>("/app");
   if (typeof app.slug !== "string" || !app.slug)
     throw new ApiError(502, "GitHub did not name the App");
-  const login = `${app.slug}[bot]`;
-  appLogins.set(source.githubAppConfigId, login);
-  return login;
+  const web = githubSkillSourceFromApiUrl(api).webOrigin;
+  const owner = typeof app.owner?.login === "string" ? app.owner.login : null;
+  // A user's App is managed under the user's settings, an organization's
+  // under the organization's.
+  const settingsUrl =
+    owner && app.owner?.type === "Organization"
+      ? `${web}/organizations/${encodeURIComponent(owner)}/settings/apps/${encodeURIComponent(app.slug)}/permissions`
+      : `${web}/settings/apps/${encodeURIComponent(app.slug)}/permissions`;
+  let installationUrl: string | null = null;
+  if (definition.installationId) {
+    const installation = await asApp<{ html_url?: unknown }>(
+      `/app/installations/${encodeURIComponent(definition.installationId)}`,
+    ).catch(() => null);
+    installationUrl =
+      typeof installation?.html_url === "string" ? installation.html_url : null;
+  }
+  const profile = { login: `${app.slug}[bot]`, settingsUrl, installationUrl };
+  appProfiles.set(source.githubAppConfigId, profile);
+  return profile;
 }
 
 /** The GitLab host and token behind a source's GitLab token. */

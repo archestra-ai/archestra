@@ -74,6 +74,7 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
+  parseOpenAppaPolicyCheckName,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -3828,6 +3829,22 @@ describe("OpenAPPA feature configuration", () => {
     expect(() => parseOpenAppaConfig({ yellForwardingEnabled })).toThrow(
       "ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED must be true or false",
     );
+  });
+
+  test("the policy check's name defaults to a product-free one, is trimmed, and is bounded", () => {
+    expect(parseOpenAppaPolicyCheckName(undefined)).toBe(
+      "Guardrails Policy Admission",
+    );
+    expect(parseOpenAppaPolicyCheckName("  ")).toBe(
+      "Guardrails Policy Admission",
+    );
+    expect(parseOpenAppaPolicyCheckName(" Acme policy ")).toBe("Acme policy");
+    expect(() => parseOpenAppaPolicyCheckName("x".repeat(101))).toThrow(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+    expect(
+      parseOpenAppaConfig({ policyCheckName: "Acme policy" }),
+    ).toMatchObject({ policyCheckName: "Acme policy" });
   });
 
   test("reporting defaults on and supports an explicit opt-out", () => {

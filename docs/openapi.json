@@ -473267,6 +473267,52 @@
                   "nullable": true,
                   "type": "object",
                   "properties": {
+                    "checkName": {
+                      "type": "string"
+                    },
+                    "app": {
+                      "type": "object",
+                      "properties": {
+                        "settingsUrl": {
+                          "type": "string"
+                        },
+                        "installationUrl": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "contents",
+                                  "pull_requests",
+                                  "checks",
+                                  "administration"
+                                ]
+                              },
+                              "granted": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "granted"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "settingsUrl",
+                        "installationUrl",
+                        "permissions"
+                      ],
+                      "additionalProperties": false
+                    },
                     "branchRules": {
                       "type": "object",
                       "properties": {
@@ -473310,6 +473356,7 @@
                     }
                   },
                   "required": [
+                    "checkName",
                     "branchRules"
                   ],
                   "additionalProperties": false

@@ -2229,9 +2229,11 @@ export function parseOpenAppaConfig({
   authSecret,
   humanApprovalMode,
   softBlockMode,
+  policyCheckName,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
+  policyCheckName?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2286,6 +2288,7 @@ export function parseOpenAppaConfig({
   });
   return {
     enabled: true,
+    policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2347,6 +2350,22 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  * from the organization's default provider. Validation errors name variables
  * only, never credential values.
  */
+/**
+ * The name of the check Archestra posts on the policy repository's pull
+ * requests, and of the branch ruleset that requires it. Carries no product
+ * name by default, so a white-labeled deployment shows its users none.
+ * @public — exported for testability
+ */
+export function parseOpenAppaPolicyCheckName(value?: string): string {
+  const name = value?.trim() ?? "";
+  if (name === "") return "Guardrails Policy Admission";
+  if (name.length > 100)
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+  return name;
+}
+
 function parseOpenAppaReviewSummary({
   provider,
   model,
@@ -2438,6 +2457,7 @@ const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
+  policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:

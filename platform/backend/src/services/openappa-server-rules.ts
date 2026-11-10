@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -155,8 +156,7 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    instruction:
-      "Give the user the link. Once its Guardrails policy check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.",
+    instruction: `Give the user the link. Once its ${config.openappa.policyCheckName} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
 

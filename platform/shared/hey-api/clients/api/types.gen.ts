@@ -121789,6 +121789,15 @@ export type GetAppaRepositoryProtectionResponses = {
      * Default Response
      */
     200: {
+        checkName: string;
+        app?: {
+            settingsUrl: string;
+            installationUrl: string | null;
+            permissions: Array<{
+                name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+                granted: boolean;
+            }>;
+        };
         branchRules: {
             state: 'active' | 'incomplete' | 'missing' | 'disabled' | 'needs_permission' | 'unavailable' | 'unsupported' | 'error';
             url?: string;

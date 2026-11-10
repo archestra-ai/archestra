@@ -1663,7 +1663,7 @@ const PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/;
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 const DOT_COM_API = "https://api.github.com";
 /** The tab Guardrails works with GitHub in. */
-const GITHUB_WINDOW = "openappa-github-app";
+export const GITHUB_WINDOW = "openappa-github-app";
 const FRESH_NAME = "openappa-policy";
 const USABLE = new Set<RepositoryStatus>([
   "template",

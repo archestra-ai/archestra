@@ -132,6 +132,7 @@ test("shows the repository protection kept for server rules files, with bypass e
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
         branchRules: {
           state: "incomplete",
           url: "https://github.com/example/policies/rules/5",
@@ -157,10 +158,54 @@ test("shows the repository protection kept for server rules files, with bypass e
   );
 });
 
+test("lists the permissions an existing GitHub App lacks, with where to grant and accept them", async () => {
+  let reads = 0;
+  server.use(
+    http.get(`${url}/protection`, () => {
+      reads++;
+      return HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        app: {
+          settingsUrl:
+            "https://github.com/settings/apps/acme-guardrails/permissions",
+          installationUrl: "https://github.com/settings/installations/42",
+          permissions: [
+            { name: "contents", granted: true },
+            { name: "pull_requests", granted: true },
+            { name: "checks", granted: false },
+            { name: "administration", granted: false },
+          ],
+        },
+        branchRules: { state: "needs_permission", detail: "no Administration" },
+      });
+    }),
+  );
+  const opened = vi.spyOn(window, "open").mockReturnValue(null);
+  show();
+  const notice = await screen.findByText(/The GitHub App lacks/);
+  expect(notice).toHaveTextContent(
+    "The GitHub App lacks Checks (posts the policy check) and Administration (keeps the branch rules). Grant them on the App, as read and write, then accept the change on the installation.",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Update App permissions" }),
+  );
+  expect(opened).toHaveBeenCalledWith(
+    "https://github.com/settings/apps/acme-guardrails/permissions",
+    "openappa-github-app",
+  );
+  expect(
+    screen.getByRole("link", { name: "Accept on the installation" }),
+  ).toHaveAttribute("href", "https://github.com/settings/installations/42");
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+  opened.mockRestore();
+});
+
 test("says when pull requests wait on a policy check the GitHub App cannot post", async () => {
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
         branchRules: {
           state: "active",
           url: "https://github.com/example/policies/rules/5",
@@ -174,7 +219,7 @@ test("says when pull requests wait on a policy check the GitHub App cannot post"
   show();
   expect(
     await screen.findByText(
-      "Pull requests wait on a Guardrails policy check the GitHub App cannot post",
+      "Pull requests wait on a Guardrails Policy Admission check the GitHub App cannot post",
     ),
   ).toBeVisible();
   expect(screen.getByText(/Checks \(read and write\)/)).toBeVisible();

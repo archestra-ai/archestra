@@ -111,6 +111,26 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
  */
 export const AppaRepositoryProtectionSchema = z
   .object({
+    /** The name of the policy check, and of the ruleset that requires it. */
+    checkName: z.string(),
+    /** The GitHub App's grants against what the feature needs, and where to change them. */
+    app: z
+      .object({
+        settingsUrl: z.string(),
+        installationUrl: z.string().nullable(),
+        permissions: z.array(
+          z.object({
+            name: z.enum([
+              "contents",
+              "pull_requests",
+              "checks",
+              "administration",
+            ]),
+            granted: z.boolean(),
+          }),
+        ),
+      })
+      .optional(),
     branchRules: z.object({
       state: z.enum([
         "active",

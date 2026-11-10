@@ -12,6 +12,7 @@ import {
   GitSourceError,
   GitSourceNotice,
 } from "@/components/git/git-source-card";
+import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -51,7 +52,10 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
-import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import {
+  GITHUB_WINDOW,
+  GithubSyncSetupDialog,
+} from "./github-sync-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -323,11 +327,17 @@ type ProtectionView = {
  * Archestra keeps in line at each sync.
  */
 function RepositoryProtection() {
-  const { data } = useAppaRepositoryProtection(true);
+  const { data, refetch, isFetching } = useAppaRepositoryProtection(true);
   const appName = useAppName();
   if (!data) return null;
+  const missing = (data.app?.permissions ?? []).filter(
+    (permission) => !permission.granted,
+  );
   const rows: Array<{ label: string; view: ProtectionView }> = [
-    { label: "Branch rules", view: branchRulesView(data.branchRules, appName) },
+    {
+      label: "Branch rules",
+      view: branchRulesView(data.branchRules, appName, data.checkName),
+    },
   ];
   return (
     <GitSourceNotice>
@@ -369,14 +379,86 @@ function RepositoryProtection() {
             </div>
           ))}
         </dl>
+        {data.app && missing.length > 0 && (
+          <InlineNotice variant="warning">
+            <AlertTriangle className="size-4 shrink-0" aria-hidden />
+            <div className="min-w-0 flex-1 space-y-2">
+              <InlineNoticeText>
+                The GitHub App lacks{" "}
+                {missing.map((permission, index) => (
+                  <span key={permission.name}>
+                    {index > 0 &&
+                      (index === missing.length - 1 ? " and " : ", ")}
+                    <strong>{APP_PERMISSION_LABELS[permission.name]}</strong> (
+                    {APP_PERMISSION_PURPOSES[permission.name]})
+                  </span>
+                ))}
+                . Grant {missing.length === 1 ? "it" : "them"} on the App, as
+                read and write, then accept the change on the installation.
+              </InlineNoticeText>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    openGithubWindow(
+                      data.app?.settingsUrl ?? "",
+                      GITHUB_WINDOW,
+                    );
+                  }}
+                >
+                  Update App permissions
+                  <ExternalLink className="size-3" aria-hidden />
+                </Button>
+                {data.app.installationUrl && (
+                  <a
+                    href={data.app.installationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
+                  >
+                    <span>Accept on the installation</span>
+                    <ExternalLink className="size-3" aria-hidden />
+                  </a>
+                )}
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  disabled={isFetching}
+                  onClick={() => {
+                    void refetch();
+                  }}
+                >
+                  Check again
+                </Button>
+              </div>
+            </div>
+          </InlineNotice>
+        )}
       </div>
     </GitSourceNotice>
   );
 }
 
+const APP_PERMISSION_LABELS = {
+  contents: "Contents",
+  pull_requests: "Pull requests",
+  checks: "Checks",
+  administration: "Administration",
+} as const;
+
+const APP_PERMISSION_PURPOSES = {
+  contents: "reads the policy and writes proposals",
+  pull_requests: "finds and opens pull requests",
+  checks: "posts the policy check",
+  administration: "keeps the branch rules",
+} as const;
+
 function branchRulesView(
   rules: Protection["branchRules"],
   appName: string,
+  checkName: string,
 ): ProtectionView {
   const link = rules.url
     ? { href: rules.url, label: "View ruleset" }
@@ -392,8 +474,7 @@ function branchRulesView(
   const detail = [rules.detail, bypass].filter(Boolean).join(" ") || undefined;
   if (rules.checkRule === "unposted")
     return {
-      status:
-        "Pull requests wait on a Guardrails policy check the GitHub App cannot post",
+      status: `Pull requests wait on a ${checkName} check the GitHub App cannot post`,
       tone: "problem",
       link,
       detail,
@@ -403,8 +484,8 @@ function branchRulesView(
       return {
         status:
           rules.checkRule === "omitted"
-            ? `Merges need an up-to-date pull request; ${appName} adds the Guardrails policy check, which decides who may change each file, once the App may post it`
-            : "Merges need an up-to-date pull request that passes the Guardrails policy check, which decides who may change each file",
+            ? `Merges need an up-to-date pull request; ${appName} adds the ${checkName} check, which decides who may change each file, once the App may post it`
+            : `Merges need an up-to-date pull request that passes the ${checkName} check, which decides who may change each file`,
         tone: "ok",
         link,
         detail,

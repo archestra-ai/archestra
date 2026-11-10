@@ -36,11 +36,11 @@ Each permission serves one part of Git sync, and a part whose permission is miss
 | Metadata | Read | Lists the repositories the installation covers, in setup. GitHub grants it to every App. | Nothing to choose. |
 | Contents | Read and write | Reads `appa.toml`, the server files and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
 | Pull requests | Read and write | Finds the open pull requests to check, with who opened them and what they change. Opens pull requests: a server's rules from the APPA Keeper, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
-| Checks | Read and write | Posts the **Guardrails policy** check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
-| Administration | Read and write | Creates the **Guardrails policy** ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
+| Checks | Read and write | Posts the **Guardrails Policy Admission** check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
+| Administration | Read and write | Creates the **Guardrails Policy Admission** ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
 | Workflows | Read and write, GitHub Enterprise Server only | Lets setup commit the template's workflow files into an empty repository; GitHub refuses that commit otherwise. On GitHub.com the template repository brings them. | Setup on GitHub Enterprise Server fails on the workflow files. |
 
-Each job mints its own token, good for the policy repository and under an hour, with that job's slice alone: reading the policy takes Contents read; checking pull requests takes Pull requests read and Checks write; opening a pull request takes Contents and Pull requests write; the branch rules take Administration write. An App created before a part existed needs the permission added in its settings on GitHub and the change accepted on its installation.
+Each job mints its own token, good for the policy repository and under an hour, with that job's slice alone: reading the policy takes Contents read; checking pull requests takes Pull requests read and Checks write; opening a pull request takes Contents and Pull requests write; the branch rules take Administration write. An App created before a part existed lacks its permission: **Settings → Guardrails** lists what is missing under **Repository protection**, and **Update App permissions** opens the App's permissions page on GitHub. Grant them as read and write, accept the change on the installation, then click **Check again**.
 
 ### GitLab
 
@@ -90,7 +90,7 @@ To merge, an editor needs write access to the repository on GitHub, or someone w
 1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
-4. When the **Guardrails policy** check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
+4. When the **Guardrails Policy Admission** check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
 
 What to know:
 
@@ -102,8 +102,8 @@ What to know:
 
 Only a server's own editors can change its rules file, and they need no one's approval: the policy check on each pull request decides who may change what, by the MCP Registry, and the branch rules make that check the gate. Archestra never merges anything itself. At each sync it keeps two things:
 
-- **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result, and when the person who asked may not change a file it touches: a server's file takes edit access to that server; `appa.toml`, any other `.toml` beside it and the validations take [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Files Git sync never reads are not checked.
-- **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch and the passing check, and no approval. To require a second pair of eyes as well, raise the approval count on the ruleset on GitHub: Archestra keeps it. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
+- **The policy check:** every pull request into the synced branch gets the **Guardrails Policy Admission** check within a minute. It fails when Git sync would refuse the result, and when the person who asked may not change a file it touches: a server's file takes edit access to that server; `appa.toml`, any other `.toml` beside it and the validations take [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Files Git sync never reads are not checked. The check's name, and the ruleset's, is [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME).
+- **Branch rules:** the **Guardrails Policy Admission** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch and the passing check, and no approval. To require a second pair of eyes as well, raise the approval count on the ruleset on GitHub: Archestra keeps it. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
 Who asked is read from what GitHub vouches for. A pull request the APPA Keeper or **Settings → Guardrails** opened names the person who asked in its commits, which GitHub signs for the App; a commit someone else pushes onto that branch fails the check. A pull request a person opened on GitHub is theirs, through the GitHub account they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential); without one, the check fails and says so.
 
@@ -111,7 +111,7 @@ Who asked is read from what GitHub vouches for. A pull request the APPA Keeper o
 
 What to know:
 
-- An App created before Archestra kept these needs the Checks and Administration permissions added in its settings on GitHub, and the change accepted on its installation. Until then, the parts it cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
+- An App created before Archestra kept these lacks the Checks and Administration permissions; **Repository protection** lists them with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
 - To manage the branch yourself, turn the ruleset off on GitHub. Archestra leaves a disabled ruleset alone, and keeps any rule you make stricter.
 - GitLab projects get the policy check as a commit status, for the policy alone: it does not tell who asked there. Protect the branch and its approvals in GitLab.
 

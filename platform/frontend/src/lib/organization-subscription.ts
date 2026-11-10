@@ -41,14 +41,17 @@ export function organizationSubscriptionSubtitle(
   return `Billed to ${key.githubOrganization ?? "the organization"} on GitHub`;
 }
 
-/** "Enterprise plan · acme" or "Personal sign-in", for the logs. */
+/**
+ * "Github Copilot acme" or "Personal sign-in", for the logs. A plan is named
+ * as in every picker.
+ */
 export function copilotCredentialSourceLabel(
   source:
     | { kind: "organization"; organization: string | null }
     | { kind: "personal" },
 ): string {
   return source.kind === "organization"
-    ? `Enterprise plan · ${source.organization ?? "unknown organization"}`
+    ? organizationSubscriptionName({ githubOrganization: source.organization })
     : "Personal sign-in";
 }
 

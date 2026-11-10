@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { organizationSubscriptionName } from "./organization-subscription";
+import {
+  copilotCredentialSourceLabel,
+  organizationSubscriptionName,
+} from "./organization-subscription";
 
 describe("organizationSubscriptionName", () => {
   it("names a plan after its GitHub organization, whatever its key is called", () => {
@@ -23,6 +26,26 @@ describe("organizationSubscriptionName", () => {
     ).toBe("Copilot for engineering");
     expect(organizationSubscriptionName({ isGithubAppKey: true })).toBe(
       "Github Copilot Organization",
+    );
+  });
+});
+
+describe("copilotCredentialSourceLabel", () => {
+  it("names a plan in the logs as every picker does", () => {
+    expect(
+      copilotCredentialSourceLabel({
+        kind: "organization",
+        organization: "acme",
+      }),
+    ).toBe("Github Copilot acme");
+    expect(
+      copilotCredentialSourceLabel({
+        kind: "organization",
+        organization: null,
+      }),
+    ).toBe("Github Copilot Organization");
+    expect(copilotCredentialSourceLabel({ kind: "personal" })).toBe(
+      "Personal sign-in",
     );
   });
 });

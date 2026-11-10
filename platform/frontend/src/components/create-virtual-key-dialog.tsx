@@ -446,6 +446,7 @@ export function CreateVirtualKeyDialog({
             <VirtualKeyConnectionGuide
               keyValue={createdKey.value}
               keyType={createdKey.keyType}
+              virtualApiKeyId={createdKey.id}
               mappedProviderKeys={createdKey.providerApiKeys}
               includeFutureProviders={createdKey.includeFutureProviders}
               connectionBaseUrl={connectionBaseUrl}

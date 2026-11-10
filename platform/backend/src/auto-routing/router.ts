@@ -142,7 +142,7 @@ export async function resolveAutoModel(params: {
   if (!routerAuth) {
     throw new ApiError(
       403,
-      `Auto router "${settings.name}" is not added to this virtual key. Add it to the key on the LLM Proxy page.`,
+      `Auto router "${settings.name}" is not added to this ${auth.authMethod === "virtual_key" ? "virtual key" : "OAuth client"}. Add it in the ${auth.authMethod === "virtual_key" ? "key's" : "client's"} settings.`,
     );
   }
   const tierKeyIds = tierApiKeyIds(settings);
@@ -541,17 +541,21 @@ function tierApiKeyIds(settings: AutoRouter) {
 
 /**
  * The caller's auth as the router sees it; null when the caller may not use
- * the router. A virtual key may only when the router was added to it, and
- * then spends the tiers' own keys, the way it spends a model pool's member
- * keys, whatever provider keys it maps. Any other caller keeps its own keys
- * and reaches the router when those reach every tier.
+ * the router. A virtual key, or an OAuth client calling as the app, may only
+ * when the router was added to it, and then spends the tiers' own keys, the
+ * way it spends a model pool's member keys, whatever provider keys it maps.
+ * Any other caller keeps its own keys and reaches the router when those reach
+ * every tier.
  */
 async function authOnRouter(
   auth: ModelRouterAuth,
   settings: AutoRouter,
 ): Promise<ModelRouterAuth | null> {
-  if (auth.authMethod !== "virtual_key") return auth;
-  if (
+  if (auth.authMethod === "oauth_client_credentials") {
+    if (!auth.autoRouterIds.includes(settings.id)) return null;
+  } else if (auth.authMethod !== "virtual_key") {
+    return auth;
+  } else if (
     !(await AutoRouterModel.hasVirtualApiKeyGrant(
       settings.id,
       auth.virtualKeyId,

@@ -408,6 +408,7 @@ export function EditVirtualKeyDialog({
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}
           visibleTo={null}
+          virtualApiKeyId={virtualKey.id}
         />
       )}
     </TabbedDialogShell>

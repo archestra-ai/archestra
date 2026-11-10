@@ -24,11 +24,8 @@ import {
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
-import {
-  AutoModelField,
-  AutoRoutingLabelAction,
-  AutoRoutingUnavailableHint,
-} from "@/components/auto-routing-model-control";
+import { AutoRoutingUnavailableHint } from "@/components/auto-routing-model-control";
+import { KeyAutoRouters } from "@/components/credential-billing/key-auto-routers";
 import { ProviderGroupedModelSelect } from "@/components/provider-grouped-model-select";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
@@ -62,7 +59,6 @@ import {
   type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
-import { isAutoRouterName } from "@/lib/auto-router-name";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -85,6 +81,7 @@ export function VirtualKeyConnectionGuide({
   name,
   expiration,
   visibleTo,
+  virtualApiKeyId,
 }: {
   keyValue?: string;
   keyType: "standard" | "passthrough";
@@ -100,6 +97,8 @@ export function VirtualKeyConnectionGuide({
   expiration: string;
   /** Who can use the key; omitted for passthrough keys (always personal). */
   visibleTo: string | null;
+  /** The key itself, to show and offer the auto routers it was given. */
+  virtualApiKeyId?: string;
 }) {
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
@@ -242,6 +241,9 @@ export function VirtualKeyConnectionGuide({
       </Step>
 
       <Step number={3} title="Make your first request">
+        {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
+          <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+        )}
         <RequestExample
           // Remount on target change so the model resets to that target's
           // recommended model instead of keeping one it can't serve.
@@ -252,6 +254,8 @@ export function VirtualKeyConnectionGuide({
           keyValue={keyValue}
           routerProviders={routerProviders}
           mappedProviderKeys={mappedProviderKeys}
+          offerAutoModel={!!virtualApiKeyId && !isPassthrough}
+          virtualApiKeyId={virtualApiKeyId}
         />
         {isPassthrough && (
           <p className="text-xs text-muted-foreground">
@@ -434,6 +438,7 @@ export function RequestExample({
   fixedModel,
   offerAutoModel = false,
   virtualApiKeyId,
+  grantedRouterIds,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
@@ -470,12 +475,14 @@ export function RequestExample({
    */
   fixedModel?: string;
   /**
-   * Offers auto routing's `auto` model beside the picker, or a link to set it
-   * up. Only the Unified Model API accepts `auto`.
+   * Lists the auto routers the credential can call in the picker. Only the
+   * Unified Model API accepts them.
    */
   offerAutoModel?: boolean;
   /** The virtual key the example is for, which reaches only the auto routers it was given. */
   virtualApiKeyId?: string;
+  /** The auto routers given to the OAuth client the example is for, when it calls as the app. */
+  grantedRouterIds?: string[];
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
@@ -544,6 +551,8 @@ export function RequestExample({
     supportedEndpoints: string[] | null | undefined;
     isImage: boolean;
     pool?: string;
+    /** The endpoint every tier model of an auto router serves. */
+    routerEndpoint?: "chat/completions" | "responses";
     provider?: SupportedProvider;
     modelId?: string;
   }> = candidates
@@ -599,7 +608,23 @@ export function RequestExample({
     isImage: false,
     pool: pool.name,
   }));
-  const allOptions = [...poolOptions, ...modelOptions];
+  const autoRouting = useAutoRoutingOffer({
+    enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
+    virtualApiKeyId: virtualApiKeyId ?? null,
+    grantedRouterIds: grantedRouterIds ?? null,
+    routableModels: modelOptions,
+    modelsPending: isPending,
+  });
+  const offeredRouters =
+    autoRouting.kind === "available" ? autoRouting.routers : [];
+  // An auto router is asked for by its name, like a pool.
+  const routerOptions = offeredRouters.map((router) => ({
+    value: router.name,
+    supportedEndpoints: null,
+    isImage: false,
+    routerEndpoint: router.endpoint,
+  }));
+  const allOptions = [...poolOptions, ...routerOptions, ...modelOptions];
   const initialOption = allOptions.find(
     (option) => option.value === initialModel,
   )?.value;
@@ -608,24 +633,10 @@ export function RequestExample({
     pickedModel && allOptions.some((option) => option.value === pickedModel)
       ? pickedModel
       : (initialOption ?? modelOptions[0]?.value ?? allOptions[0]?.value);
-  const selectedModel = allOptions.find((option) => option.value === model);
-  const autoRouting = useAutoRoutingOffer({
-    enabled: offerAutoModel && target.kind === "model-router" && !fixedModel,
-    virtualApiKeyId: virtualApiKeyId ?? null,
-    routableModels: modelOptions,
-    modelsPending: isPending,
-  });
-  const offeredRouters =
-    autoRouting.kind === "available" ? autoRouting.routers : [];
-  const [pickedRouter, setPickedRouter] = useState<string | null>(
-    initialModel && isAutoRouterName(initialModel) ? initialModel : null,
-  );
-  const [autoPicked, setAutoPicked] = useState(pickedRouter !== null);
-  const autoRouter = autoPicked
-    ? (offeredRouters.find((router) => router.name === pickedRouter) ??
-      offeredRouters[0])
-    : undefined;
-  const isAuto = autoRouter !== undefined;
+  const selectedModel:
+    | ((typeof modelOptions)[number] & { pool?: string })
+    | undefined = allOptions.find((option) => option.value === model);
+  const isAuto = selectedModel?.routerEndpoint !== undefined;
   const [imageOperation, setImageOperation] =
     useState<ImageExampleOperation>("generate");
   const selectedImageOperation =
@@ -643,9 +654,9 @@ export function RequestExample({
       target,
       keyType,
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
-      model: autoRouter?.name ?? selectedModel?.pool ?? model,
+      model: selectedModel?.pool ?? model,
       isPool: !!selectedModel?.pool,
-      routerEndpoint: autoRouter?.endpoint,
+      routerEndpoint: selectedModel?.routerEndpoint,
       supportedEndpoints: selectedModel?.supportedEndpoints,
       imageOperation: selectedImageOperation,
     });
@@ -714,53 +725,32 @@ export function RequestExample({
           )}
         >
           <div className="space-y-1.5">
-            {autoRouting.kind === "none" ? (
-              <Label htmlFor="virtual-key-example-model">Model</Label>
-            ) : (
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="virtual-key-example-model">Model</Label>
-                <AutoRoutingLabelAction
-                  offer={autoRouting}
-                  checked={isAuto}
-                  onCheckedChange={(checked) => {
-                    setAutoPicked(checked);
-                    const first = pickedRouter ?? offeredRouters[0]?.name;
-                    if (checked && first) onModelChange?.(first);
-                    else if (model) onModelChange?.(model);
-                  }}
-                />
-              </div>
-            )}
-            {autoRouter ? (
-              <AutoModelField
-                id="virtual-key-example-model"
-                names={offeredRouters.map((router) => router.name)}
-                value={autoRouter.name}
-                onValueChange={(name) => {
-                  setPickedRouter(name);
-                  onModelChange?.(name);
-                }}
-              />
-            ) : (
-              <ProviderGroupedModelSelect
-                id="virtual-key-example-model"
-                value={model ?? ""}
-                onValueChange={(value) => {
-                  setPickedModel(value);
-                  onModelChange?.(value);
-                }}
-                models={modelOptions}
-                pools={pools.map((pool) => ({
-                  value: POOL_VALUE_PREFIX + pool.name,
-                  name: pool.name,
-                  description: pool.description,
-                }))}
-                disabled={isPending || allOptions.length === 0}
-                placeholder={
-                  isPending ? "Loading models…" : "No models found for this key"
-                }
-              />
-            )}
+            <Label htmlFor="virtual-key-example-model">Model</Label>
+            <ProviderGroupedModelSelect
+              id="virtual-key-example-model"
+              value={model ?? ""}
+              onValueChange={(value) => {
+                setPickedModel(value);
+                onModelChange?.(value);
+              }}
+              models={modelOptions}
+              pools={pools.map((pool) => ({
+                value: POOL_VALUE_PREFIX + pool.name,
+                name: pool.name,
+                description: pool.description,
+              }))}
+              autoRouters={offeredRouters.map((router) => ({
+                value: router.name,
+                name: router.name,
+                description: (["fast", "normal", "smart"] as const)
+                  .map((tier) => router.tiers[tier].modelId)
+                  .join(" · "),
+              }))}
+              disabled={isPending || allOptions.length === 0}
+              placeholder={
+                isPending ? "Loading models…" : "No models found for this key"
+              }
+            />
             {usesCatalog && !isAuto && (
               <p className="text-xs text-muted-foreground">
                 From your organization&apos;s model catalog. Your own key may

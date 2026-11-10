@@ -49,6 +49,8 @@ export type ModelRouterOAuthClientAuth = {
   providerApiKeys: ModelRouterMappedProviderKey[];
   /** Pools the client was granted outright. */
   modelPoolIds: string[];
+  /** Auto routers the client was granted. */
+  autoRouterIds: string[];
   oauthClient: {
     id: string;
     name: string;

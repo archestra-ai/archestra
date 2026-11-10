@@ -30,6 +30,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
+import AutoRouterModel from "@/models/auto-router";
 import { getLlmProxyRequestTelemetry } from "@/observability/llm-proxy-request";
 import {
   collectClientDelegationMarkers,
@@ -1422,13 +1423,18 @@ export async function authenticateModelRouterBearer(params: {
     const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
-    // A pool added to the key answers with its own member keys, so the key
-    // can still call that pool when it resolves to no provider key.
+    // A pool added to the key answers with its own member keys, and an auto
+    // router with its tiers' keys, so the key can still call them when it
+    // resolves to no provider key.
     if (
       mappings.length === 0 &&
       !(
         config.llmProxy.modelPoolsEnabled &&
         (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
+      ) &&
+      !(
+        config.autoRouting.enabled &&
+        (await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
       )
     ) {
       throw new ApiError(
@@ -1647,6 +1653,7 @@ async function getModelRouterOAuthClientAuth(
     organizationId: oauthClient.organizationId,
     billingTeamId: oauthClient.billingTeamId,
     modelPoolIds: oauthClient.modelPoolIds,
+    autoRouterIds: oauthClient.autoRouterIds,
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,

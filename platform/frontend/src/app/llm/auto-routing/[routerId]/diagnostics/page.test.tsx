@@ -298,9 +298,10 @@ describe("AutoRoutingDiagnosticsPage", () => {
     await screen.findByRole("slider", { name: "Budget" });
 
     saved = SAVED;
+    // Only the saved-budget diagnostics, whose key ends the router's own.
     await queryClient.refetchQueries({
-      queryKey: ["auto-routing", "diagnostics", null],
-      exact: true,
+      predicate: ({ queryKey }) =>
+        queryKey.at(-2) === "diagnostics" && queryKey.at(-1) === null,
     });
     await waitFor(() => expectShown(SAVED));
     await new Promise((settle) => setTimeout(settle, 400));

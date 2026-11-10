@@ -4,7 +4,6 @@ import {
   requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type AutoRouter, useAutoRouters } from "@/lib/auto-routing.query";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -13,8 +12,9 @@ const TIERS: AutoRoutingTier[] = ["fast", "normal", "smart"];
 type RouterEndpoint = "chat/completions" | "responses";
 type OfferedRouter = Pick<
   AutoRouter,
-  "name" | "enabled" | "tiers" | "virtualApiKeyIds"
+  "id" | "name" | "enabled" | "tiers" | "virtualApiKeyIds"
 >;
+type OfferedTier = NonNullable<AutoRouter["tiers"][AutoRoutingTier]>;
 
 /** A model the request example can pick for this credential. */
 interface RoutableModel {
@@ -25,17 +25,17 @@ interface RoutableModel {
 
 /** What the request example offers for auto routing. */
 export type AutoRoutingOffer =
-  /** Nothing: the alpha is off, or no router is set up and the viewer can't set one up. */
+  /** Nothing: the alpha is off, or the credential has no router that is set up. */
   | { kind: "none" }
-  /** Auto routing is off or no router has its three models; the viewer can set it up. */
-  | { kind: "setup" }
   /** The routers the credential can call, each on the endpoint every tier model serves. */
   | {
       kind: "available";
-      routers: Array<{ name: string; endpoint: RouterEndpoint }>;
+      routers: Array<{
+        name: string;
+        endpoint: RouterEndpoint;
+        tiers: Record<AutoRoutingTier, OfferedTier>;
+      }>;
     }
-  /** Routers exist, but the virtual key has none of them. */
-  | { kind: "unassigned" }
   /** Auto routing is on, but the credential can't reach these tier models. */
   | {
       kind: "unreachable";
@@ -45,8 +45,9 @@ export type AutoRoutingOffer =
   | { kind: "no-shared-endpoint" };
 
 /**
- * Decides the offer. A virtual key reaches the routers it was given, on their
- * own provider keys. Any other credential reaches a router when every tier
+ * Decides the offer. A virtual key, or an OAuth client calling as the app,
+ * reaches the routers it was given, on their own provider keys. Any other
+ * credential reaches a router when every tier
  * model is among the models the example can already pick for it, the same
  * list the model picker shows.
  *
@@ -59,7 +60,7 @@ export function autoRoutingOffer({
   featureEnabled,
   routers,
   virtualApiKeyId,
-  canConfigure,
+  grantedRouterIds = null,
   routableModels,
   modelsPending,
 }: {
@@ -67,7 +68,8 @@ export function autoRoutingOffer({
   routers: readonly OfferedRouter[] | null | undefined;
   /** The virtual key the example is for; null for any other credential. */
   virtualApiKeyId: string | null;
-  canConfigure: boolean;
+  /** The routers given to an OAuth client calling as the app; null for any other credential. */
+  grantedRouterIds?: readonly string[] | null;
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
@@ -76,26 +78,33 @@ export function autoRoutingOffer({
     (router) =>
       router.enabled && TIERS.every((tier) => router.tiers[tier] !== null),
   );
-  if (ready.length === 0) {
-    return canConfigure ? { kind: "setup" } : { kind: "none" };
-  }
   // Wait for the models rather than flash "unreachable".
-  if (modelsPending) return { kind: "none" };
+  if (ready.length === 0 || modelsPending) return { kind: "none" };
 
+  const usesRouterKeys = virtualApiKeyId !== null || grantedRouterIds !== null;
   const granted =
-    virtualApiKeyId === null
-      ? ready
-      : ready.filter((router) =>
+    virtualApiKeyId !== null
+      ? ready.filter((router) =>
           router.virtualApiKeyIds.includes(virtualApiKeyId),
-        );
-  if (granted.length === 0) return { kind: "unassigned" };
+        )
+      : grantedRouterIds !== null
+        ? ready.filter((router) => grantedRouterIds.includes(router.id))
+        : ready;
 
   const outcomes = granted.map((router) => ({
-    name: router.name,
-    outcome: routerOutcome(router, routableModels, virtualApiKeyId !== null),
+    router,
+    outcome: routerOutcome(router, routableModels, usesRouterKeys),
   }));
-  const available = outcomes.flatMap(({ name, outcome }) =>
-    outcome.kind === "available" ? [{ name, endpoint: outcome.endpoint }] : [],
+  const available = outcomes.flatMap(({ router, outcome }) =>
+    outcome.kind === "available"
+      ? [
+          {
+            name: router.name,
+            endpoint: outcome.endpoint,
+            tiers: router.tiers as Record<AutoRoutingTier, OfferedTier>,
+          },
+        ]
+      : [],
   );
   if (available.length > 0) return { kind: "available", routers: available };
   // None can be called: say why for the first.
@@ -128,7 +137,7 @@ function routerOutcome(
       },
     ];
   });
-  // A virtual key given the router spends the router's own keys.
+  // A credential given the router spends the router's own keys.
   const missing = usesRouterKeys
     ? []
     : tiers.flatMap(({ tier, provider, routable }) =>
@@ -157,11 +166,13 @@ function routerOutcome(
 export function useAutoRoutingOffer({
   enabled,
   virtualApiKeyId = null,
+  grantedRouterIds = null,
   routableModels,
   modelsPending,
 }: {
   enabled: boolean;
   virtualApiKeyId?: string | null;
+  grantedRouterIds?: readonly string[] | null;
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
@@ -169,15 +180,12 @@ export function useAutoRoutingOffer({
   const { data: routers } = useAutoRouters({
     enabled: enabled && featureEnabled,
   });
-  const { data: canConfigure = false } = useHasPermissions({
-    llmProxy: ["update"],
-  });
   if (!enabled) return { kind: "none" };
   return autoRoutingOffer({
     featureEnabled,
     routers,
     virtualApiKeyId,
-    canConfigure,
+    grantedRouterIds,
     routableModels,
     modelsPending,
   });

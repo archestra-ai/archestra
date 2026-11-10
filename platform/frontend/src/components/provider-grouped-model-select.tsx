@@ -40,7 +40,7 @@ const STICKY_GROUP =
 
 /**
  * A searchable model picker that lists models under sticky provider headings,
- * with model pools first.
+ * with model pools and auto routers first.
  */
 export function ProviderGroupedModelSelect({
   id,
@@ -48,6 +48,7 @@ export function ProviderGroupedModelSelect({
   onValueChange,
   models,
   pools,
+  autoRouters = [],
   disabled,
   placeholder,
 }: {
@@ -56,6 +57,8 @@ export function ProviderGroupedModelSelect({
   onValueChange: (value: string) => void;
   models: ModelOption[];
   pools: PoolOption[];
+  /** Auto routers, asked for by name like a pool. */
+  autoRouters?: PoolOption[];
   disabled?: boolean;
   placeholder: string;
 }) {
@@ -68,7 +71,13 @@ export function ProviderGroupedModelSelect({
     setOpen(false);
   };
 
-  const selectedPool = pools.find((pool) => pool.value === value);
+  const namedGroups = [
+    { heading: "Model pools", options: pools },
+    { heading: "Auto routers", options: autoRouters },
+  ].filter((group) => group.options.length > 0);
+  const selectedPool = namedGroups
+    .flatMap((group) => group.options)
+    .find((option) => option.value === value);
   const selectedModel = models.find((model) => model.value === value);
 
   const byProvider = new Map<SupportedProvider | undefined, ModelOption[]>();
@@ -134,28 +143,32 @@ export function ProviderGroupedModelSelect({
             onWheelCapture={(event) => event.stopPropagation()}
           >
             <CommandEmpty>No models match.</CommandEmpty>
-            {pools.length > 0 && (
-              <CommandGroup heading="Model pools" className={STICKY_GROUP}>
-                {pools.map((pool) => (
+            {namedGroups.map((group) => (
+              <CommandGroup
+                key={group.heading}
+                heading={group.heading}
+                className={STICKY_GROUP}
+              >
+                {group.options.map((option) => (
                   <CommandItem
-                    key={pool.value}
-                    value={pool.value}
-                    keywords={[pool.name]}
-                    onSelect={() => pick(pool.value)}
+                    key={option.value}
+                    value={option.value}
+                    keywords={[option.name]}
+                    onSelect={() => pick(option.value)}
                   >
                     <div className="flex min-w-0 flex-col">
-                      <span className="truncate">{pool.name}</span>
-                      {pool.description && (
+                      <span className="truncate">{option.name}</span>
+                      {option.description && (
                         <span className="truncate text-xs text-muted-foreground">
-                          {pool.description}
+                          {option.description}
                         </span>
                       )}
                     </div>
-                    {selectedMark(pool.value)}
+                    {selectedMark(option.value)}
                   </CommandItem>
                 ))}
               </CommandGroup>
-            )}
+            ))}
             {[...byProvider.entries()].map(([provider, group]) => {
               const providerLabel = provider
                 ? catalog.label(provider)

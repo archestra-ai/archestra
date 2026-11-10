@@ -104163,6 +104163,7 @@ export type GetLlmOauthClientsResponses = {
                 valueId?: string;
             }>;
             modelPoolIds: Array<string>;
+            autoRouterIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -104352,6 +104353,7 @@ export type CreateLlmOauthClientResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -104598,6 +104600,7 @@ export type UpdateLlmOauthClientResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -104726,6 +104729,7 @@ export type RotateLlmOauthClientSecretResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -115775,6 +115779,7 @@ export type GetOauthClientsResponses = {
                 valueId?: string;
             }>;
             modelPoolIds: Array<string>;
+            autoRouterIds: Array<string>;
             createdAt: string;
             updatedAt: string;
             billingTeam: {
@@ -115820,6 +115825,10 @@ export type CreateOauthClientData = {
          * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
          */
         modelPoolIds?: Array<string>;
+        /**
+         * Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        autoRouterIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -115977,6 +115986,7 @@ export type CreateOauthClientResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -116102,6 +116112,10 @@ export type UpdateOauthClientData = {
          * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
          */
         modelPoolIds?: Array<string>;
+        /**
+         * Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        autoRouterIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -116236,6 +116250,7 @@ export type UpdateOauthClientResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {
@@ -116367,6 +116382,7 @@ export type RotateOauthClientSecretResponses = {
             valueId?: string;
         }>;
         modelPoolIds: Array<string>;
+        autoRouterIds: Array<string>;
         createdAt: string;
         updatedAt: string;
         billingTeam: {

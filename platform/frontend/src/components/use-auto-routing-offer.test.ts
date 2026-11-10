@@ -25,6 +25,7 @@ const router = (
   }> = {},
 ) =>
   ({
+    id: name,
     name,
     enabled: true,
     tiers,
@@ -35,7 +36,6 @@ const base = {
   featureEnabled: true,
   routers: [router("auto")],
   virtualApiKeyId: null,
-  canConfigure: true,
   routableModels,
   modelsPending: false,
 };
@@ -50,35 +50,25 @@ describe("autoRoutingOffer", () => {
     });
   });
 
-  it("offers setup when auto routing is off or a tier has no model", () => {
+  it("offers nothing when auto routing is off or a tier has no model", () => {
     expect(
       autoRoutingOffer({
         ...base,
         routers: [router("auto", { enabled: false })],
       }),
-    ).toEqual({ kind: "setup" });
+    ).toEqual({ kind: "none" });
     expect(
       autoRoutingOffer({
         ...base,
         routers: [router("auto", { tiers: { ...tiers, smart: null } })],
       }),
-    ).toEqual({ kind: "setup" });
-  });
-
-  it("offers nothing instead of setup to viewers who can't configure it", () => {
-    expect(
-      autoRoutingOffer({
-        ...base,
-        canConfigure: false,
-        routers: [router("auto", { enabled: false })],
-      }),
     ).toEqual({ kind: "none" });
   });
 
   it("is available on chat completions when the credential reaches every tier model", () => {
-    expect(autoRoutingOffer({ ...base, canConfigure: false })).toEqual({
+    expect(autoRoutingOffer(base)).toEqual({
       kind: "available",
-      routers: [{ name: "auto", endpoint: "chat/completions" }],
+      routers: [{ name: "auto", endpoint: "chat/completions", tiers }],
     });
   });
 
@@ -96,7 +86,7 @@ describe("autoRoutingOffer", () => {
       }),
     ).toEqual({
       kind: "available",
-      routers: [{ name: "auto", endpoint: "responses" }],
+      routers: [{ name: "auto", endpoint: "responses", tiers }],
     });
   });
 
@@ -156,7 +146,13 @@ describe("autoRoutingOffer", () => {
         autoRoutingOffer({ ...base, routers, virtualApiKeyId: "key-b" }),
       ).toEqual({
         kind: "available",
-        routers: [{ name: "auto:support", endpoint: "chat/completions" }],
+        routers: [
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
+        ],
       });
     });
 
@@ -171,16 +167,43 @@ describe("autoRoutingOffer", () => {
       ).toEqual({
         kind: "available",
         routers: [
-          { name: "auto", endpoint: "chat/completions" },
-          { name: "auto:support", endpoint: "chat/completions" },
+          { name: "auto", endpoint: "chat/completions", tiers },
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
         ],
       });
     });
 
-    it("tells a virtual key with none of the routers that it is unassigned", () => {
+    it("offers an OAuth client only the routers it was given, on their own keys", () => {
+      expect(
+        autoRoutingOffer({
+          ...base,
+          routers,
+          grantedRouterIds: ["auto:support"],
+          routableModels: [],
+        }),
+      ).toEqual({
+        kind: "available",
+        routers: [
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
+        ],
+      });
+      expect(
+        autoRoutingOffer({ ...base, routers, grantedRouterIds: [] }),
+      ).toEqual({ kind: "none" });
+    });
+
+    it("offers nothing to a virtual key with none of the routers", () => {
       expect(
         autoRoutingOffer({ ...base, routers, virtualApiKeyId: "key-c" }),
-      ).toEqual({ kind: "unassigned" });
+      ).toEqual({ kind: "none" });
     });
 
     it("keeps the reachability rule for a credential that is not a virtual key", () => {

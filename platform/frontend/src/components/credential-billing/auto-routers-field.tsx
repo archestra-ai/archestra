@@ -11,8 +11,8 @@ import { useAvailableAutoRouters } from "@/lib/auto-routing.query";
 import { useFeature } from "@/lib/config/config.query";
 
 /**
- * Whether a virtual key form shows {@link AutoRoutersField}: the feature is on
- * and the caller may change which keys reach an auto router.
+ * Whether a virtual key or OAuth client form shows {@link AutoRoutersField}: the feature is on
+ * and the caller may change which credentials reach an auto router.
  */
 export function useCanSetAutoRouters(): boolean {
   const enabled = useFeature("autoRoutingEnabled") === true;
@@ -21,9 +21,9 @@ export function useCanSetAutoRouters(): boolean {
 }
 
 /**
- * The auto routers added to a virtual key by name, each removable, and a
- * picker for the rest. A router answers with its own tiers' keys, so any
- * router can be added whatever providers the key maps.
+ * The auto routers added to a virtual key or OAuth client by name, each
+ * removable, and a picker for the rest. A router answers with its own tiers'
+ * keys, so any router can be added whatever providers the credential maps.
  */
 export function AutoRoutersField({
   value,
@@ -49,7 +49,7 @@ export function AutoRoutersField({
       </div>
       <p className="text-xs text-muted-foreground">
         A model name that sends each session to a fast, normal or smart model
-        within a daily budget. The key calls a router by its name and runs on
+        within a daily budget. Requests ask for a router by its name and run on
         the router&apos;s own provider keys.
       </p>
       {listed.length > 0 && (

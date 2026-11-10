@@ -409773,6 +409773,13 @@
                               "type": "string"
                             }
                           },
+                          "autoRouterIds": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -409857,6 +409864,7 @@
                           "createdBy",
                           "labels",
                           "modelPoolIds",
+                          "autoRouterIds",
                           "createdAt",
                           "updatedAt",
                           "billingTeam",
@@ -410636,6 +410644,13 @@
                         "type": "string"
                       }
                     },
+                    "autoRouterIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -410723,6 +410738,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -411316,6 +411332,13 @@
                         "type": "string"
                       }
                     },
+                    "autoRouterIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -411400,6 +411423,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -412110,6 +412134,13 @@
                         "type": "string"
                       }
                     },
+                    "autoRouterIds": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -412197,6 +412228,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -451979,6 +452011,14 @@
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             }
                           },
+                          "autoRouterIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -452085,6 +452125,7 @@
                           "createdBy",
                           "labels",
                           "modelPoolIds",
+                          "autoRouterIds",
                           "createdAt",
                           "updatedAt",
                           "billingTeam",
@@ -452487,6 +452528,16 @@
                   },
                   "modelPoolIds": {
                     "description": "Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.",
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "autoRouterIds": {
+                    "description": "Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.",
                     "maxItems": 500,
                     "type": "array",
                     "items": {
@@ -452904,6 +452955,14 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "autoRouterIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -453013,6 +453072,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -453379,6 +453439,16 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
+                  "autoRouterIds": {
+                    "description": "Auto routers the client may call by name, on the routers' own provider keys. Omit on update to keep them. Only applies to client_credentials clients.",
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
                   "includeFutureProviders": {
                     "description": "Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.",
                     "type": "boolean"
@@ -453646,6 +453716,14 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "autoRouterIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -453752,6 +453830,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",
@@ -454466,6 +454545,14 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "autoRouterIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -454575,6 +454662,7 @@
                     "createdBy",
                     "labels",
                     "modelPoolIds",
+                    "autoRouterIds",
                     "createdAt",
                     "updatedAt",
                     "billingTeam",

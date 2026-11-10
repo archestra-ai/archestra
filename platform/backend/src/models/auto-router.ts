@@ -150,16 +150,32 @@ class AutoRouterModel {
     organizationId: string,
     routerId: string,
   ): Promise<boolean> {
-    const deleted = await db
-      .delete(routers)
-      .where(
-        and(
-          eq(routers.id, routerId),
-          eq(routers.organizationId, organizationId),
-        ),
-      )
-      .returning({ id: routers.id });
-    return deleted.length > 0;
+    return withDbTransaction(async (tx) => {
+      const deleted = await tx
+        .delete(routers)
+        .where(
+          and(
+            eq(routers.id, routerId),
+            eq(routers.organizationId, organizationId),
+          ),
+        )
+        .returning({ id: routers.id });
+      if (deleted.length === 0) return false;
+      // OAuth clients hold their routers in metadata, which no cascade reaches.
+      const metadata = schema.oauthClientsTable.metadata;
+      await tx
+        .update(schema.oauthClientsTable)
+        .set({
+          metadata: sql`jsonb_set(${metadata}, '{autoRouterIds}', COALESCE((SELECT jsonb_agg(router_id) FROM jsonb_array_elements(${metadata}->'autoRouterIds') AS router_id WHERE router_id <> to_jsonb(${routerId}::text)), '[]'::jsonb))`,
+        })
+        .where(
+          and(
+            sql`${metadata}->>'organizationId' = ${organizationId}`,
+            sql`${metadata}->'autoRouterIds' @> ${JSON.stringify([routerId])}::jsonb`,
+          ),
+        );
+      return true;
+    });
   }
 
   /**

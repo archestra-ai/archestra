@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { plan as fitPlan } from "@archestra/router-rs";
 import {
   AUTO_ROUTER_ID_HEADER,
   CHAT_API_KEY_ID_HEADER,
+  LLM_PROXY_OAUTH_SCOPE,
   MEMBER_ROLE_NAME,
   PROVIDER_BASE_URL_HEADER,
   type ResourcePermissionGrant,
@@ -29,10 +31,12 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   ModelPoolModel,
+  OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import AutoRouterModel from "@/models/auto-router";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingDecisionModel from "@/models/routing-decision";
@@ -1217,6 +1221,91 @@ describe("Model Router auto model", () => {
       expect(refused.json().error.message).toContain("auto:support");
       expect(upstreamModels).toEqual([]);
       expect(await decisions(org.organizationId)).toEqual([]);
+    });
+
+    test("a virtual key with no provider key routes on a router added to it", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const { value, virtualKey: key } = await VirtualApiKeyModel.create({
+        organizationId: org.organizationId,
+        name: "router-only",
+        authorId: null,
+        ...accessGrants("org"),
+        providerApiKeys: [],
+      });
+      await AutoRouterModel.setRoutersForVirtualApiKey(key.id, [org.routerId]);
+
+      const routed = await send(
+        { ...org, credential: value },
+        { ingress: "chat", path: "chat/completions", session: "s-1" },
+      );
+
+      expect(routed.statusCode, routed.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+    });
+
+    test("an OAuth client calling as the app routes only on the routers added to it", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const support = await addRouter(org, "auto:support");
+      // The client maps no provider key: the router's own keys answer.
+      const { oauthClient } = await LlmOauthClientModel.create({
+        organizationId: org.organizationId,
+        authorId: crypto.randomUUID(),
+        name: "Backend service",
+        providerApiKeys: [],
+        autoRouterIds: [support.router.id],
+      });
+      const credential = `oauth-${crypto.randomUUID()}`;
+      await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: createHash("sha256").update(credential).digest("base64url"),
+        clientId: oauthClient.clientId,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: `llm-proxy:${oauthClient.id}`,
+      });
+      const client = { ...org, credential };
+
+      const routed = await send(client, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+        model: "auto:support",
+      });
+      const refused = await send(client, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-2",
+      });
+
+      expect(routed.statusCode, routed.body).toBe(200);
+      expect(upstreamModels).toEqual([support.trio[1].modelId]);
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect(refused.json().error.message).toContain("OAuth client");
+      expect(
+        (await listedModelIds(client)).filter((id) => id.startsWith("auto")),
+      ).toEqual(["auto:support"]);
+
+      // Deleting the router takes it off the client.
+      await AutoRouterModel.delete(org.organizationId, support.router.id);
+      expect(
+        (await LlmOauthClientModel.findByClientId(oauthClient.clientId))
+          ?.autoRouterIds,
+      ).toEqual([]);
     });
 
     test("an unknown router name is refused", async ({

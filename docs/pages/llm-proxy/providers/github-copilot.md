@@ -2,7 +2,7 @@
 title: GitHub Copilot
 description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -51,3 +51,10 @@ curl "https://<archestra-host>/v1/github-copilot/chat/completions" \
 ```
 
 <span id="manage-or-reconnect-a-plan"></span><span id="proxy-endpoint"></span><span id="limits"></span>
+
+## Offer Only One Way to Connect
+
+Keep Copilot billing on the organization's plan, or on each person's own seat. Go to **Settings → LLM → Model providers**. GitHub Copilot has one card for **Personal subscription** and one for **Enterprise plan**. Switch off **Available** on the card you do not offer.
+
+- The plan you switch off leaves **Model Providers** and every picker, and nobody can set it up again.
+- Connections that already exist keep working, and you can still delete them.

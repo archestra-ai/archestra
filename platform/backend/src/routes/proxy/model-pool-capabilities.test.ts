@@ -41,7 +41,202 @@ describe("request compatibility", () => {
       await compatible({ messages: [{ role: "user", content: "hi" }] }),
     ).toEqual(members);
   });
+  test("Responses accounts for instructions, tool history and output reservations", async () => {
+    expect(
+      await compatible(
+        { input: "Hi", max_output_tokens: 65 },
+        "openai-responses",
+      ),
+    ).toEqual(members.slice(1));
+    expect(
+      await compatible(
+        { instructions: "word ".repeat(100), input: "Hi" },
+        "openai-responses",
+      ),
+    ).toEqual(members.slice(1));
+    expect(
+      await compatible(
+        {
+          input: [
+            {
+              type: "function_call_output",
+              call_id: "call_1",
+              output: "word ".repeat(100),
+            },
+          ],
+        },
+        "openai-responses",
+      ),
+    ).toEqual(members.slice(1));
+  });
+  test("Responses rejects account-local references without rejecting inline content or function schemas", async () => {
+    for (const request of [
+      { input: [{ type: "item_reference", id: "msg_stored" }] },
+      ...["input_file", "input_image"].map((type) => ({
+        input: [{ role: "user", content: [{ type, file_id: "file_stored" }] }],
+      })),
+      {
+        input: [
+          {
+            type: "function_call_output",
+            call_id: "call_1",
+            output: [{ type: "input_file", file_id: "file_stored" }],
+          },
+        ],
+      },
+      { prompt: { id: "pmpt_stored" } },
+      {
+        input: [
+          {
+            type: "computer_call_output",
+            call_id: "call_1",
+            output: { type: "computer_screenshot", file_id: "file_stored" },
+          },
+        ],
+      },
+      {
+        input: [{ type: "code_interpreter_call", container_id: "cntr_stored" }],
+      },
+      {
+        input: [
+          {
+            type: "shell_call",
+            environment: {
+              type: "container_reference",
+              container_id: "cntr_stored",
+            },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            type: "image_generation",
+            input_image_mask: { file_id: "file_stored" },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            type: "shell",
+            environment: {
+              type: "container_reference",
+              container_id: "cntr_stored",
+            },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            type: "shell",
+            environment: { type: "container_auto", file_ids: ["file_stored"] },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            type: "shell",
+            environment: {
+              type: "container_auto",
+              skills: [{ type: "skill_reference", skill_id: "skill_stored" }],
+            },
+          },
+        ],
+      },
+
+      { tools: [{ type: "file_search", vector_store_ids: ["vs_stored"] }] },
+      { tools: [{ type: "code_interpreter", container: "cntr_stored" }] },
+      {
+        tools: [
+          {
+            type: "code_interpreter",
+            container: { type: "auto", file_ids: ["file_stored"] },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            type: "namespace",
+            tools: [{ type: "file_search", vector_store_ids: ["vs_stored"] }],
+          },
+        ],
+      },
+    ]) {
+      await expect(compatible(request, "openai-responses")).rejects.toThrow(
+        "stored response, conversation, item, file, prompt, vector-store, container and skill references",
+      );
+    }
+    await expect(
+      compatible(
+        {
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_file",
+                  file_url: "https://example.test/file.pdf",
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              type: "image_generation",
+              input_image_mask: { image_url: "https://example.test/mask.png" },
+            },
+            { type: "shell", environment: { type: "local" } },
+            {
+              type: "function",
+              name: "lookup",
+              parameters: {
+                type: "object",
+                properties: { file_id: { type: "string" } },
+              },
+            },
+          ],
+        },
+        "openai-responses",
+      ),
+    ).resolves.toContainEqual(members[1]);
+  });
   test.each([
+    {
+      wire: "openai-responses",
+      modality: "image",
+      body: {
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_image", image_url: "data:image/png;base64,AA==" },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      wire: "openai-responses",
+      modality: "pdf",
+      body: {
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_file",
+                filename: "fixture.pdf",
+                file_data: "data:application/pdf;base64,AA==",
+              },
+            ],
+          },
+        ],
+      },
+    },
     {
       wire: "openai-chat",
       modality: "image",

@@ -2161,7 +2161,10 @@ async function handleObservedLLMProxy<
       const row = await LlmProviderApiKeyModel.findById(
         member.providerApiKeyId,
       );
-      const adapter = memberAdapter(member.provider);
+      const adapter = memberAdapter(
+        member.provider,
+        modelPoolPlan ? (poolWire ?? undefined) : undefined,
+      );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
       }
@@ -2320,6 +2323,20 @@ async function handleObservedLLMProxy<
         ? {
             plan: modelPoolPlan,
             prepareAttempt: async (member) => {
+              if (
+                poolWire === "openai-responses" &&
+                member.provider === "azure"
+              ) {
+                await validateAzureModelOperation({
+                  providerApiKeyId: member.providerApiKeyId,
+                  modelId: member.modelId,
+                  operation: "responses",
+                  parameters: requestAdapter.getOriginalRequest() as Record<
+                    string,
+                    unknown
+                  >,
+                });
+              }
               await ModelModel.assertAvailable({
                 provider: member.provider,
                 modelId: member.modelId,
@@ -3873,6 +3890,14 @@ async function handleStreaming<
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;
+    if (ctx.modelPool && ctx.upstreamAttempt.attemptOutcome === "answered") {
+      // Opening a pooled stream chose the member; it did not prove the
+      // generation completed. A later failure is terminal, never failover.
+      ctx.upstreamAttempt.attemptOutcome = "failed";
+      ctx.upstreamAttempt.failureReason =
+        poolFailoverReason(lifecycleError, ctx.upstreamAttempt.provider)
+          ?.reason ?? "stream_failed";
+    }
     streamFailureMessage = upstreamErrorMessage(
       lifecycleError,
       provider.extractErrorMessage,
@@ -4986,7 +5011,7 @@ async function failResponsesGeneration(params: {
   response: unknown;
   ctx: Pick<
     LLMProxyContext<unknown>,
-    "pluginRegistry" | "pluginContext" | "telemetry"
+    "pluginRegistry" | "pluginContext" | "telemetry" | "upstreamAttempt"
   >;
   error?: Error;
 }): Promise<boolean> {
@@ -4999,6 +5024,11 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
+  if (response?.status === "failed" && params.ctx.upstreamAttempt.modelPoolId) {
+    params.ctx.upstreamAttempt.attemptOutcome = "failed";
+    params.ctx.upstreamAttempt.failureReason =
+      typeof details?.code === "string" ? details.code : "generation_failed";
+  }
   if (
     response?.status === "incomplete" ||
     (params.error instanceof CodexResponsesGenerationError &&

@@ -873,6 +873,14 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   });
   if (auto.kind === "usage_limited")
     return sendUsageLimitRefusal(reply, auto.violation);
+  const poolId =
+    auto.kind === "as_requested"
+      ? await usableModelPoolId({ auth, model: body.model })
+      : null;
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openAiResponsesAdapterFactory);
+  }
   // A routed tier is sent on the key the router checked it with.
   const routedAuth = auto.kind === "routed" ? auto.auth : auth;
   const resolution = await resolveModelRoute({

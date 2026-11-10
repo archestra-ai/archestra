@@ -25,6 +25,7 @@ async function* from(items: unknown[]) {
 describe("the output a request allows", () => {
   test("reads the limit from each pool wire", () => {
     expect(requestedMaxOutputTokens({ max_tokens: 4096 })).toBe(4096);
+    expect(requestedMaxOutputTokens({ max_output_tokens: 128 })).toBe(128);
     expect(
       requestedMaxOutputTokens({ max_completion_tokens: 900, max_tokens: 10 }),
     ).toBe(900);

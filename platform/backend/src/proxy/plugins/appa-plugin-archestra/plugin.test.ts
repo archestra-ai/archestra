@@ -2834,9 +2834,13 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("binds an OpenCode native approval to the staged offer", async () => {
-    const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+  test.each([
+    { asked: "with the current heading", headingPrefix: "" },
+    { asked: "before the heading changed", headingPrefix: "[OpenAPPA] " },
+  ])("binds an OpenCode native approval to the staged offer ($asked)", async ({
+    headingPrefix,
+  }) => {
+    const questionText = 'Approve this call?\nmcp/example/write {"value":1}';
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "user:user|opencode-hitl-session",
@@ -3032,7 +3036,10 @@ describe("asking through the client's own question tool", () => {
             // trajectory stamp before the native HITL claim sees this ID.
             id: outerStamp?.callId ?? question.id,
             name: "question",
-            content: openCodeAnswer(questionText, "Approve"),
+            content: openCodeAnswer(
+              `${headingPrefix}${questionText}`,
+              "Approve",
+            ),
             isError: false,
           },
         ],
@@ -4645,7 +4652,7 @@ describe("asking through the client's own question tool", () => {
   });
 
   const INSPECTABLE_REVIEW_TEXT = [
-    "[OpenAPPA] Approve this call?",
+    "Approve this call?",
     'APPA asks you to rule as the authority "hitl".',
     "",
     "What this ruling would cover:",
@@ -4739,7 +4746,7 @@ describe("asking through the client's own question tool", () => {
       review: {
         offerId,
         text: [
-          "[OpenAPPA] Approve this call?",
+          "Approve this call?",
           "",
           "What this ruling would cover:",
           ...Array(5).fill(wide),

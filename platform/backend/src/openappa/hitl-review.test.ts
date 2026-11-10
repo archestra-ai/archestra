@@ -676,7 +676,7 @@ test.each([
 /** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
 function runtimeReview(coverage: string): string {
   return [
-    "[OpenAPPA] Approve this call?",
+    "Approve this call?",
     'APPA asks you to rule as the authority "hitl".',
     "Ask the person running this session to approve this exact call.",
     "",
@@ -998,9 +998,7 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(nativeQuestion?.question).toBe(
-    `[OpenAPPA] Approve this call?\n${body}`,
-  );
+  expect(nativeQuestion?.question).toBe(`Approve this call?\n${body}`);
   expect(review.text).toBe(`${graphicHeading}${body}`);
 });
 

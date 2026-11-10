@@ -5824,8 +5824,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const runtimeSession = `user:${userId}|${claudeSession}`;
     const offerId = "offer-hitl";
     const modelCopy = "Model-authored copy must not appear.";
-    const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+    const questionText = 'Approve this call?\nmcp/example/write {"value":1}';
     await stageHitlReview({
       session: {
         organization_id: agent.organizationId,
@@ -6196,7 +6195,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         review: {
           offerId,
           text: [
-            "[OpenAPPA] Approve this call?",
+            "Approve this call?",
             "",
             "What this ruling would cover:",
             "  - the readers must be the public audience",

@@ -520,7 +520,7 @@ describe("chat tool execution", () => {
   test("a staged HITL review replaces model-authored copy and records approval", async () => {
     const offerId = "offer-hitl";
     const questionText =
-      'Approve the example__write call?  •  Arguments: {value: 1}  •  Policy review: "[OpenAPPA] Approve this call?\\nmcp/example/write {\\"value\\":1}"  •  Approve allows only this exact call. Deny keeps it blocked.';
+      'Approve the example__write call?  •  Arguments: {value: 1}  •  Policy review: "Approve this call?\\nmcp/example/write {\\"value\\":1}"  •  Approve allows only this exact call. Deny keeps it blocked.';
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
     });

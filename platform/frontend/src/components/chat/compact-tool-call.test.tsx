@@ -1,4 +1,5 @@
 import {
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -42,6 +43,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 }));
 
 import { CompactToolGroup } from "./compact-tool-call";
+import { RemedyChainCard } from "./openappa-remedy-chain-card";
 import { identifyRemedyChains } from "./openappa-remedy-chains";
 
 const LOAD_SKILL_TOOL_NAME = "archestra__load_skill";
@@ -407,20 +409,20 @@ describe("CompactToolGroup", () => {
     {
       ruling: "deny",
       text: "[appa] Denied: the human reviewer refused this call to archestra__todo_write.",
-      circle: "execute remedy plan (denied by you)",
+      circle: "Guardrails step (denied by you)",
       header: "Denied by you",
     },
     {
       ruling: "approve",
       text: "[appa] Authorized. Call the archestra__todo_write tool again with exactly these arguments: {}",
-      circle: "execute remedy plan (approved by you)",
+      circle: "Guardrails step (approved by you)",
       header: "Approved by you",
     },
     {
       // The reviewer approved, but a policy publish retired the offer first.
       ruling: "superseded",
       text: "[appa] this offer no longer stands; re-propose the call",
-      circle: "execute remedy plan (policy changed, the agent will ask again)",
+      circle: "Guardrails step (policy changed, the agent will ask again)",
       header: "Policy changed, the agent will ask again",
     },
   ])("says the viewer's own ruling on a reviewed remedy ($ruling)", ({
@@ -430,6 +432,9 @@ describe("CompactToolGroup", () => {
     header,
   }) => {
     const remedyToolName = "archestra__execute_remedy_plan";
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name === remedyToolName ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME : null,
+    );
     vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
 
     render(
@@ -534,12 +539,80 @@ describe("CompactToolGroup", () => {
     expect(screen.getByText("Guardrails")).toBeInTheDocument();
     expect(
       screen
-        .getAllByText(/^archestra__(get_remedy_plans|execute_remedy_plan)$/)
+        .getAllByText(/^(Checked what's allowed|Guardrails step)$/)
         .map((node) => node.textContent),
-    ).toEqual([
-      "archestra__get_remedy_plans",
-      "archestra__execute_remedy_plan",
-    ]);
+    ).toEqual(["Checked what's allowed", "Guardrails step"]);
+  });
+
+  describe("a remedy step reaching the person", () => {
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0a0a0a0a0a0a0a0a", plan: "Share it")';
+    const card = (remedy: Record<string, unknown>) => {
+      mockGetToolShortName.mockImplementation((name: string) =>
+        name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+      );
+      const [chain] = identifyRemedyChains(
+        [
+          {
+            type: "tool-archestra__get_remedy_plans",
+            state: "output-available",
+            toolCallId: "call-notice",
+            input: {
+              tool: "fs__read_file",
+              arguments: { path: "/notes.md" },
+              ruling,
+              notice: { v: 1, call_id: "call-notice" },
+            },
+            output: ruling,
+          },
+          {
+            type: "tool-archestra__execute_remedy_plan",
+            toolCallId: "call-remedy",
+            input: { offer_id: "0a0a0a0a0a0a0a0a", plan: "Share it" },
+            ...remedy,
+          },
+        ] as never,
+        { getToolShortName: mockGetToolShortName },
+      );
+      return (
+        <QueryClientProvider client={new QueryClient()}>
+          <RemedyChainCard
+            chain={chain}
+            collapsible
+            onToolApprovalResponse={vi.fn()}
+          />
+        </QueryClientProvider>
+      );
+    };
+
+    it("opens the plan when a step already on screen starts waiting for approval", () => {
+      const { rerender, container } = render(
+        card({ state: "input-available" }),
+      );
+      expect(container).not.toHaveTextContent("Share it");
+
+      rerender(
+        card({
+          state: "approval-requested",
+          approval: { id: "approval-1" },
+        }),
+      );
+
+      expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+      expect(container).toHaveTextContent("Share it");
+    });
+
+    it("shows why a step failed without expanding it, minus the runtime's marker", () => {
+      render(
+        card({
+          state: "output-error",
+          errorText: "[appa] Not authorized.",
+        }),
+      );
+      fireEvent.click(screen.getByText("fs__read_file"));
+
+      expect(screen.getByText("Not authorized.")).toBeVisible();
+    });
   });
 
   it("renders a compact Skill marker for a load_skill activation (no path)", () => {

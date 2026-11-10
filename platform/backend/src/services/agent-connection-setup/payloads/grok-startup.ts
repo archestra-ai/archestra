@@ -1,6 +1,7 @@
 export const GROK_STARTUP = String.raw`
 class GrokStartup {
-  constructor(args) {
+  constructor(args, appName) {
+    this.appName = appName;
     const agentHeadless = args.includes("agent") && !args.some(arg => ["stdio", "serve", "leader", "--help", "-h", "--version", "-v"].includes(arg));
     this.headless = agentHeadless || args.some(arg => /^(?:--(?:single|prompt-json|prompt-file|print)(?:=|$)|-p)/.test(arg));
     this.format = args.find(arg => arg.startsWith("--output-format="))?.slice(16) || args[args.indexOf("--output-format") + 1] || "plain";
@@ -17,7 +18,7 @@ class GrokStartup {
     };
     process.on("SIGINT", this.signal);
     process.on("SIGTERM", this.signal);
-    if (this.visible) process.stderr.write("Archestra / Grok managed startup\n");
+    if (this.visible) process.stderr.write(this.appName + " / Grok managed startup\n");
   }
   checkConnectivity(url) {
     if (!this.headless) return;
@@ -45,7 +46,7 @@ class GrokStartup {
   reportPlainStatus(status) {
     if (this.healthReported) return;
     this.healthReported = true;
-    process.stdout.write("[Archestra] Connectivity: " + status.connectivity + ". Guardrails admission is confirmed by the server receipt in the agent reply.\n");
+    process.stdout.write("[" + this.appName + "] Connectivity: " + status.connectivity + ". Guardrails admission is confirmed by the server receipt in the agent reply.\n");
   }
   writeStructured(text) {
     // Legacy PowerShell decodes native pipes using its console code page.

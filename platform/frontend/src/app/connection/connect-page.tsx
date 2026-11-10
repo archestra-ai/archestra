@@ -1040,7 +1040,7 @@ function ConnectArea({
                   When it finishes
                 </p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                  {scriptNextSteps(client).map((line) => (
+                  {scriptNextSteps(client, data.appName).map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                   <li>
@@ -1153,7 +1153,7 @@ function desktopNextSteps({
  * backend/src/services/agent-connection-setup/agents/), which prints in full at
  * the end of the output.
  */
-function scriptNextSteps(client: ConnectClient): string[] {
+function scriptNextSteps(client: ConnectClient, appName: string): string[] {
   switch (client.id) {
     case "claude-code":
       return [
@@ -1188,7 +1188,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
     case "grok-build":
       return [
         "Open a new terminal and run grok to use the managed startup check. In the current terminal, use node ~/.archestra/grok/launch.cjs (PowerShell: node $HOME/.archestra/grok/launch.cjs). The first governed LLM reply shows its server-issued protected session receipt.",
-        "Your native SuperGrok login and model catalog are reused. Use /model or -m to select a native model; Archestra protection stays separate in the session receipt. To renew login, use /login inside Grok or node ~/.archestra/grok/login.cjs. MCP authorization remains separate: node ~/.archestra/grok/sign-in.cjs.",
+        `Your native SuperGrok login and model catalog are reused. Use /model or -m to select a native model; ${appName} protection stays separate in the session receipt. To renew login, use /login inside Grok or node ~/.archestra/grok/login.cjs. MCP authorization remains separate: node ~/.archestra/grok/sign-in.cjs.`,
         "Protected foreground and background subagents are supported, including resume. Workflows, monitors and scheduled execution remain blocked. Use an interactive session for approvals.",
         "Disconnect with node ~/.archestra/grok/disconnect.cjs; unrelated settings and logins are preserved.",
       ];

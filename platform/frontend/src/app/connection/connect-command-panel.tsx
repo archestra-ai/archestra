@@ -1525,7 +1525,7 @@ export function ConnectCommandPanel({
                 Reuses your native SuperGrok login, model names and model
                 selection. Grok refreshes its original credentials directly;
                 nothing is copied. Use /login inside Grok to renew your login.
-                Archestra protection appears in the session receipt. No API key
+                {appName} protection appears in the session receipt. No API key
                 or organization model catalog is required. MCP authorization is
                 a separate sign-in.
               </span>

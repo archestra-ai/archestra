@@ -523,6 +523,7 @@ test("TTY startup shows actual phases, pending server admission and native exit 
   expect(result.status, result.stderr).toBe(0);
   const screen = JSON.parse(result.stdout);
   expect(screen.status).toBe(0);
+  expect(screen.output).toContain("Test Platform / Grok managed startup");
   for (const phase of [
     "[ok] Connection state: managed configuration validated",
     "[ok] Skills sync: managed selection reconciled",
@@ -1118,7 +1119,7 @@ test.each([
   expect(screen.output).not.toContain("managed startup");
   expect(screen.output).not.toContain("\x1b[?1049h");
   expect(screen.output).toContain('"native":true');
-  expect(screen.output).toContain("[Archestra] Connectivity: unavailable");
+  expect(screen.output).toContain("[Test Platform] Connectivity: unavailable");
 });
 
 test.each([

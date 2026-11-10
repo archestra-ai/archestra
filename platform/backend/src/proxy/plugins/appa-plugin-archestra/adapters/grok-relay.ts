@@ -49,7 +49,7 @@ export function grokRelayInputError(value: unknown): string | undefined {
     input.text.includes(LABEL) ||
     input.text.includes("[appa] peer message")
   )
-    return "Grok messaging text contains reserved transport metadata. Supply only the message text; Archestra adds its own delivery proof.";
+    return "Grok messaging text contains reserved transport metadata. Supply only the message text; the proxy adds its own delivery proof.";
   if (Buffer.byteLength(JSON.stringify(input.text)) > MAX_WIRE_BYTES - 4096)
     return "Grok messaging text exceeds the protected native message limit.";
   // The native Option enum advertises null as well as omission for default delivery.

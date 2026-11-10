@@ -23,7 +23,7 @@ class GrokNativeTransport {
         if (response.destroyed) return;
         if (!response.headersSent) {
           response.writeHead(502, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ error: { message: "Native Grok transport failed. Verify your subscription login and the Archestra connection.", type: "connection_error" } }));
+          response.end(JSON.stringify({ error: { message: "Native Grok transport failed. Verify your subscription login and the managed connection.", type: "connection_error" } }));
         } else response.destroy();
       });
     });

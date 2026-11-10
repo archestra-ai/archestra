@@ -263,7 +263,7 @@ export function startupGuardDisconnectCommand(
 export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   "grok-build": [
     "Managed model, MCP and native skills in ~/.archestra/grok/native/ (dedicated GROK_HOME)",
-    "Archestra startup screen and managed grok function in your shell profile",
+    "Managed startup screen and grok function in your shell profile",
     "Private restoration snapshot and disconnect script in ~/.archestra/grok/",
   ],
   "claude-code": [

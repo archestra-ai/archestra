@@ -269,21 +269,38 @@ async fn admit(
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
-    let notices = list_notices(state, pg, input, actor).await?;
     let structured = input.structured.unwrap_or(false);
     let message_id = blank_as_none(input.message_id.as_deref());
+    let sender_id = blank_as_none(input.sender_session_id.as_deref());
     let digest = match admit_digest(input.value.as_deref(), input.digest.as_deref()) {
         DigestCheck::Absent => None,
         DigestCheck::Value(digest) => Some(digest),
         DigestCheck::Unverified => return Ok(unverified()),
     };
-    let Some(picked) = pick_admit(
-        &notices,
-        message_id,
-        blank_as_none(input.sender_session_id.as_deref()),
-        digest.as_deref(),
-        structured,
-    ) else {
+    // A direct delivery leaves the unread inbox. Its explicit proof still
+    // needs admission on every history replay (including memory jobs). Let
+    // the runtime check the retained row, recipient, digest and live label;
+    // inbox discovery is only for arrivals without a complete explicit proof.
+    let notices;
+    let candidate = if let (Some(message_id), Some(sender_session_id), Some(digest)) =
+        (message_id, sender_id, digest.as_deref())
+    {
+        Some(AdmitCandidate {
+            message_id,
+            sender_session_id,
+            digest,
+        })
+    } else {
+        notices = list_notices(state, pg, input, actor).await?;
+        pick_admit(
+            &notices,
+            message_id,
+            sender_id,
+            digest.as_deref(),
+            structured,
+        )
+    };
+    let Some(picked) = candidate else {
         return Ok(unverified());
     };
     let id = match EmbeddedPeerId::parse(picked.message_id) {

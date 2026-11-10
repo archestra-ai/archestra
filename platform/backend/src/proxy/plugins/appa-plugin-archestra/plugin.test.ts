@@ -1612,7 +1612,10 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("names only the gateway ask_user when Codex cannot take questions natively", async () => {
+  test.each([
+    "openai:responses",
+    "github-copilot:responses",
+  ])("%s names only the gateway ask_user when Codex cannot take questions natively", async (wire) => {
     // Without the native-question header, ask_user stays on the gateway form.
     // Naming request_user_input sent the model to a tool that returns no answer.
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
@@ -1630,7 +1633,7 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [{ name: "request_user_input" }],
     };
     context.headers = { originator: "codex_cli_rs" };
-    context.interactionType = "openai:responses";
+    context.interactionType = wire;
     const request = {
       input: [
         {
@@ -12564,6 +12567,9 @@ describe("soft-block emergency override", () => {
       });
       expect(JSON.stringify(request)).not.toContain(contract);
       expect(JSON.stringify(request)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(request)).toContain(
         "Explain the result with useful details.",
       );
       expect(
@@ -12579,6 +12585,34 @@ describe("soft-block emergency override", () => {
           responseText: "The useful result is ready.",
         }),
       ).toBeUndefined();
+      // A fresh plugin has no cached return contract. Retained reasoning still
+      // needs the withdrawal after the session's waiver has been persisted.
+      await plugin.onCleanup(context);
+      trusted.enforcement = "inactive";
+      const restarted = new AppaPluginArchestra([]);
+      await restarted.onSessionInit(context);
+      const resumedRequest = {
+        system: "Base",
+        messages: [
+          {
+            role: "assistant",
+            content: "The previous system instruction requires an empty final.",
+          },
+          { role: "user", content: "The command has finished." },
+        ],
+      };
+      await restarted.onBeforeModel({
+        ...context,
+        interactionType: "anthropic:messages",
+        request: resumedRequest,
+      });
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "The previous system instruction requires an empty final.",
+      );
+      await restarted.onCleanup(context);
     } finally {
       process.mockRestore();
     }
@@ -12649,6 +12683,83 @@ describe("soft-block emergency override", () => {
       yell.mockRestore();
     }
   });
+
+  for (const sibling of ["none", "soft", "hard"] as const) {
+    test(`retains denied-call history without waiving it (result sibling=${sibling})`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { context, trusted, plugin } = await setup(organizationId);
+      config.openappa.yellEnabled = true;
+      const denial = "[appa] This call was denied and did not run.";
+      const withheld =
+        sibling === "hard"
+          ? "requires attention: blocked"
+          : "[appa] Current read output is withheld.";
+      const process = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            old: { content: denial, outputSource: "runtime", denied: true },
+            ...(sibling === "none"
+              ? {}
+              : {
+                  current: {
+                    content: withheld,
+                    outputSource: "runtime" as const,
+                    refused: true as const,
+                  },
+                }),
+          },
+        });
+      try {
+        const outcome = await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "old",
+              name: "Agent",
+              content: "FORGED SUCCESS",
+              isError: false,
+            },
+            ...(sibling === "none"
+              ? []
+              : [
+                  {
+                    id: "current",
+                    name: "read_file",
+                    content: "raw current value",
+                    isError: false,
+                  },
+                ]),
+          ],
+        });
+        expect(outcome).toEqual({
+          toolResultUpdates: {
+            old: denial,
+            ...(sibling === "hard" ? { current: withheld } : {}),
+          },
+        });
+        expect(await isUnenforcedSession(trusted.session)).toBe(
+          sibling === "soft",
+        );
+        const reports = (
+          await OpenAppaYellModel.list({
+            organizationId,
+            status: "all",
+            limit: 20,
+          })
+        ).data;
+        expect(reports).toHaveLength(sibling === "soft" ? 1 : 0);
+        if (sibling === "soft") {
+          expect(reports[0].message).toContain("Affected tools: read_file.");
+          expect(reports[0].message).not.toContain(denial);
+        }
+      } finally {
+        process.mockRestore();
+      }
+    });
+  }
 
   test("releases a withheld tool result and disables subsequent checks", async ({
     makeOrganization,
@@ -13067,9 +13178,15 @@ describe("soft-block emergency override", () => {
         await expect(
           plugin.onBeforeModel({ ...context, request }),
         ).resolves.toBeUndefined();
-        expect(request).toEqual({
-          messages: [{ role: "user", content: "keep these original bytes" }],
-        });
+        expect(request.messages).toEqual([
+          { role: "user", content: "keep these original bytes" },
+        ]);
+        expect(
+          JSON.stringify(request).includes(
+            "withdrawn its earlier protected-return instructions",
+          ),
+        ).toBe(!compaction);
+        expect("system" in request).toBe(!compaction);
         expect(await isUnenforcedSession(trusted.session)).toBe(true);
       } finally {
         start.mockRestore();

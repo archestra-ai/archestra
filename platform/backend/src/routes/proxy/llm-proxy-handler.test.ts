@@ -1643,7 +1643,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       expect(texts).toEqual([
         "Let me check.",
         "Then I will summarise.",
-        "Tool get_weather is not enabled here",
+        "\n\nTool get_weather is not enabled here",
       ]);
       expect(final.content.some((block) => block.type === "tool_use")).toBe(
         false,
@@ -1736,7 +1736,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       };
       expect(logged.content.map((block) => block.text)).toEqual([
         "Let me check.Then I will summarise.",
-        "Tool get_weather is not enabled here",
+        "\n\nTool get_weather is not enabled here",
       ]);
       // The blocked call was never delivered, so it stays out of the record.
       expect(logged.content.some((block) => block.type === "tool_use")).toBe(

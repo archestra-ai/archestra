@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { APICallError, RetryError } from "ai";
 import { describe, expect, test } from "vitest";
 import { createLogger } from "./create-logger";
 
@@ -121,6 +122,70 @@ describe("log redaction", () => {
 });
 
 describe("bounded error serialization", () => {
+  test("omits attached request bodies without mutating the provider error", () => {
+    const { logger, records } = createCapturingLogger();
+    const requestBody = {
+      messages: [{ role: "user", content: "private-prompt" }],
+    };
+    const error = Object.assign(
+      new APICallError({
+        message: "Invalid model",
+        url: "https://provider.example/v1/chat/completions",
+        requestBodyValues: requestBody,
+        statusCode: 400,
+        responseBody: '{"error":"Invalid model"}',
+      }),
+      { requestBody: JSON.stringify(requestBody) },
+    );
+
+    logger.error(error);
+    logger.error({ err: error }, "Chat stream failed");
+    logger.error({ error }, "Chat request failed");
+
+    expect(records).toHaveLength(3);
+    expect(JSON.stringify(records)).not.toContain("private-prompt");
+    expect(records[0].err).toMatchObject({
+      message: "Invalid model",
+      statusCode: 400,
+      isRetryable: false,
+      responseBody: '{"error":"Invalid model"}',
+      stack: expect.any(String),
+    });
+    expect(error.requestBodyValues).toBe(requestBody);
+    expect(error.requestBody).toContain("private-prompt");
+  });
+
+  test("omits request bodies inside exhausted retries and aggregate errors", () => {
+    const { logger, records } = createCapturingLogger();
+    const error = new APICallError({
+      message: "Provider unavailable",
+      url: "https://provider.example/v1/chat/completions",
+      requestBodyValues: { messages: [{ content: "private-retry-prompt" }] },
+      statusCode: 503,
+    });
+    const retryError = new RetryError({
+      message: "Failed after retries",
+      reason: "maxRetriesExceeded",
+      errors: [error, error],
+    });
+    logger.error({ err: retryError });
+    logger.error({
+      error: new AggregateError([retryError], "Provider failed"),
+    });
+
+    expect(JSON.stringify(records)).not.toContain("private-retry-prompt");
+    expect(records[0].err).toMatchObject({
+      reason: "maxRetriesExceeded",
+      lastError: { statusCode: 503, isRetryable: true },
+      aggregateErrors: [{ statusCode: 503 }, { statusCode: 503 }],
+      errors: [{ statusCode: 503 }, { statusCode: 503 }],
+    });
+    expect(error.requestBodyValues).toEqual({
+      messages: [{ content: "private-retry-prompt" }],
+    });
+    expect(retryError.errors).toEqual([error, error]);
+  });
+
   test("drops headers/config and truncates responseBody on logged errors", () => {
     const { logger, records } = createCapturingLogger();
 

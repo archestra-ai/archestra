@@ -130,6 +130,7 @@ test.skipIf(!context)(
         namespace,
         taskId: "runtime",
         agentRuntimeId: "dns-proof",
+        ownerReferences: undefined,
         effectiveNetworkPolicy: {
           source: "environment" as const,
           policy: {

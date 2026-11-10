@@ -2129,7 +2129,10 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${displayToolName}`}
-          title={getToolCardTitle(displayToolName)}
+          title={getToolCardTitle(
+            displayToolName,
+            getToolShortName(displayToolName),
+          )}
           state={getHeaderState({
             state: part.state || "input-available",
             toolResultPart,

@@ -643,6 +643,24 @@ test("each open pull request carries the checks a pull would make on its merge r
         },
       ]),
     ),
+    // The App already posted a run on the first head under an earlier name:
+    // it is renamed and updated in place, not joined by a second run.
+    http.get(`${REPO}/commits/:sha/check-runs`, ({ params, request }) => {
+      expect(new URL(request.url).searchParams.get("app_id")).toBe("123");
+      return HttpResponse.json({
+        check_runs:
+          params.sha === goodHead
+            ? [{ id: 77, name: "Guardrails policy" }]
+            : [],
+      });
+    }),
+    http.patch(`${REPO}/check-runs/77`, async ({ request }) => {
+      runs.push({
+        head_sha: goodHead,
+        ...((await request.json()) as Omit<(typeof runs)[number], "head_sha">),
+      });
+      return HttpResponse.json({ id: 77 });
+    }),
     http.post(`${REPO}/check-runs`, async ({ request }) => {
       runs.push((await request.json()) as (typeof runs)[number]);
       return HttpResponse.json({ id: 1 }, { status: 201 });

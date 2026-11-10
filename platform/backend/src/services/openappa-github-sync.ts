@@ -1114,6 +1114,7 @@ async function githubPullRequests(
   });
   if (!token) return [];
   const base = `${api}/repos/${source.repo}`;
+  const appId = await checkIntegrationId(source);
   const branch =
     source.ref ??
     (
@@ -1147,7 +1148,8 @@ async function githubPullRequests(
       {
         head,
         result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
-        post: (outcome) => postGithubCheck({ base, token, head, outcome }),
+        post: (outcome) =>
+          postGithubCheck({ base, token, head, appId, outcome }),
         ...(number
           ? {
               authorship: () =>
@@ -1449,31 +1451,62 @@ async function pagedGithub<T>(params: {
   return "over";
 }
 
-/** The check run on a pull request's head, posted as the App. */
+/**
+ * The check run on a pull request's head, posted as the App. A run this App
+ * already has on the head is updated in place, name included: GitHub never
+ * removes a completed run, so a renamed check (ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME)
+ * would otherwise leave its old self beside the new one on every open pull
+ * request.
+ */
 async function postGithubCheck(params: {
   base: string;
   token: string;
   head: string;
+  appId: number | undefined;
   outcome: PullOutcome;
 }) {
   const { base, token, head, outcome } = params;
   const { title, summary } = checkSummary(outcome);
-  await githubJson({
-    url: `${base}/check-runs`,
-    token,
-    method: "POST",
-    body: {
-      name: POLICY_CHECK_NAME,
-      head_sha: head,
-      status: "completed",
-      conclusion: outcome.accepted ? "success" : "failure",
-      output: { title, summary: summary.slice(0, 60_000) },
-    },
-    errors: async ({ status }) =>
-      status === 403 || status === 404
-        ? new CheckRefused(status)
-        : new ApiError(502, `GitHub returned HTTP ${status}`),
-  });
+  const refused = async ({ status }: { status: number }) =>
+    status === 403 || status === 404
+      ? new CheckRefused(status)
+      : new ApiError(502, `GitHub returned HTTP ${status}`);
+  // Best effort: a listing that fails for now means a new run, which GitHub
+  // shows in place of the earlier one of the same name.
+  const existing = params.appId
+    ? await githubCall<{ check_runs?: Array<{ id?: number }> }>({
+        token,
+        url: `${base}/commits/${head}/check-runs?app_id=${params.appId}&per_page=100`,
+      }).catch(() => null)
+    : null;
+  const runs = (existing?.ok ? (existing.body.check_runs ?? []) : []).flatMap(
+    (run) => (typeof run.id === "number" ? [run.id] : []),
+  );
+  const body = {
+    name: POLICY_CHECK_NAME,
+    status: "completed",
+    conclusion: outcome.accepted ? "success" : "failure",
+    output: { title, summary: summary.slice(0, 60_000) },
+  };
+  // Every run of this App on the head takes the name and the outcome, so a
+  // run under an earlier name shows no stale verdict; GitHub shows the latest.
+  if (runs.length > 0)
+    for (const run of runs)
+      await githubJson({
+        url: `${base}/check-runs/${run}`,
+        token,
+        method: "PATCH",
+        body,
+        errors: refused,
+      });
+  else
+    await githubJson({
+      url: `${base}/check-runs`,
+      token,
+      method: "POST",
+      body: { ...body, head_sha: head },
+      errors: refused,
+    });
 }
 
 async function gitlabPullRequests(

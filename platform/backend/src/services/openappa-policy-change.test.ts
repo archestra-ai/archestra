@@ -286,7 +286,13 @@ for (const scenario of [
         },
       ]);
       expect(commitWrites).toEqual([
-        { message: params.title, tree: newTreeSha, parents: [baseSha] },
+        {
+          message: params.title,
+          tree: newTreeSha,
+          parents: [baseSha],
+          // The person who asked is the commit's author.
+          author: { name: user.name || user.email, email: user.email },
+        },
       ]);
       expect(refWrites).toEqual([
         {
@@ -456,10 +462,16 @@ for (const credential of ["app", "pat"] as const) {
             branch: string;
             sha: string;
             content: string;
+            author?: { name: string; email: string };
           };
           expect(body.branch).toBe(head);
           expect(body.sha).toBe(fileSha);
           expect(Buffer.from(body.content, "base64").toString()).toBe(changed);
+          // The person who asked is the commit's author, on this path too.
+          expect(body.author).toEqual({
+            name: user.name || user.email,
+            email: user.email,
+          });
           return HttpResponse.json({ content: { sha: fileSha } });
         },
       ),

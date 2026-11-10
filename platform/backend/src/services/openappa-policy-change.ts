@@ -171,6 +171,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "GitHub has changed since the last policy sync. Sync the policy, then review the new revision.",
     );
 
+  // The commit's author is the person who asked: GitHub signs the commit
+  // for Archestra's credential, so the policy check can trust that name.
+  const requester = await UserModel.getById(params.userId);
+  const author = requester
+    ? { name: requester.name || requester.email, email: requester.email }
+    : undefined;
   let head: string;
   if (params.validationChanges) {
     await assertValidationSource(params);
@@ -222,9 +228,6 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         ],
       },
     });
-    // The commit's author is the person who asked: GitHub signs the commit
-    // for Archestra's credential, so the policy check can trust that name.
-    const requester = await UserModel.getById(params.userId);
     const commitResult = await githubJson<{ sha: string }>({
       method: "POST",
       url: `${base}/git/commits`,
@@ -234,14 +237,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         message: params.title,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
-        ...(requester
-          ? {
-              author: {
-                name: requester.name || requester.email,
-                email: requester.email,
-              },
-            }
-          : {}),
+        ...(author ? { author } : {}),
       },
     });
     const commitSha = checkedSha(commitResult.sha);
@@ -286,6 +282,8 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
+        // The same author on this path: the policy check reads it.
+        ...(author ? { author } : {}),
       },
     });
   }

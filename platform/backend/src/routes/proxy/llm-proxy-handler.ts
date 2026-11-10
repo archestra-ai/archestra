@@ -151,6 +151,7 @@ import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -3712,6 +3713,14 @@ async function handleStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    // Before the calls reach the client, so the gateway finds their session.
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? toolCalls,
+      });
 
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
@@ -4527,6 +4536,13 @@ async function handleNonStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? emittedToolCalls,
+      });
     // Record metrics for tool calls substituted with denial notices.
     blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {

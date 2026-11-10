@@ -1,5 +1,5 @@
-# Published dagger-sdk 0.21.9 from https://crates.io/api/v1/crates/dagger-sdk/0.21.9/download
-# Archive SHA-256: b064828d6089ee9805d34be1a853b9a28f51212c46c97ac8cd20a16643d55537
+# Published dagger-sdk 0.21.11 from https://crates.io/api/v1/crates/dagger-sdk/0.21.11/download
+# Archive SHA-256: c80f881b239a0f8bc6ec97d0a3d72dc6b207c62e91e649dfcb95859baa04a65b
 # All src/ files, README.md and LICENSE are byte-identical to that archive.
 # This normalized manifest backports only the dependency changes from
 # https://github.com/dagger/dagger/commit/6ae7fda32bda243b61f0e079a724df11072e99dc
@@ -10,7 +10,7 @@
 [package]
 edition = "2021"
 name = "dagger-sdk"
-version = "0.21.9"
+version = "0.21.11"
 authors = [
     "kjuulh <contact@kasperhermansen.com>",
     "Dagger <hello@dagger.io>",

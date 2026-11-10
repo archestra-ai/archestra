@@ -783,7 +783,7 @@ dependencies = [
 
 [[package]]
 name = "dagger-sdk"
-version = "0.21.9"
+version = "0.21.11"
 dependencies = [
  "async-trait",
  "base64 0.21.7",

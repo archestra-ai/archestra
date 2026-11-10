@@ -435,3 +435,39 @@ test("metadata-only withholds standalone error aliases while retaining numeric a
     providerErrorDetails: { statusCode: 400 },
   });
 });
+
+test("metadata-only withholds raw stream and payload diagnostics while full mode retains them", () => {
+  const marker = "synthetic-private-malformed-provider-frame";
+  const { logger, records } = createCapturingLogger("metadata_only");
+  logger.warn(
+    {
+      error: new SyntaxError(marker),
+      line: `data: ${marker}`,
+      dataLength: marker.length,
+    },
+    "Failed to parse SSE chunk from Zhipu",
+  );
+  logger.info(
+    {
+      data: marker,
+      linePreview: marker,
+      event: marker,
+      chunk: { text: marker },
+      body: marker,
+      request: { messages: [marker] },
+      response: { content: marker },
+    },
+    "Unparseable provider frame",
+  );
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({
+    error: { type: "SyntaxError" },
+    dataLength: marker.length,
+  });
+  const full = createCapturingLogger("full");
+  full.logger.warn(
+    { error: new SyntaxError(marker), line: marker },
+    "Failed to parse SSE chunk",
+  );
+  expect(JSON.stringify(full.records)).toContain(marker);
+});

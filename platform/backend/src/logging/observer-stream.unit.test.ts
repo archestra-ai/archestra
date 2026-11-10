@@ -184,11 +184,12 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
   const marker = "synthetic-private-echoed-payload";
   try {
     const logger = createLogger({
-      level: "info",
+      level: "debug",
       contentMode: "metadata_only",
       streams: [
-        { stream: { write: (record) => stdout.push(record) } },
+        { level: "trace", stream: { write: (record) => stdout.push(record) } },
         {
+          level: "trace",
           stream: createLogObserverStream({
             logger: provider.getLogger("pino"),
             retain: (record) => retained.push(record),
@@ -248,11 +249,20 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
       },
       "Returning mapped error to frontend via stream",
     );
+    logger.warn(
+      {
+        error: new SyntaxError(marker),
+        line: `data: ${marker}`,
+        dataLength: marker.length,
+      },
+      "Failed to parse SSE chunk from Zhipu",
+    );
+    logger.debug({ data: marker }, "Unparseable provider frame");
     await provider.forceFlush();
     const exported = exporter.getFinishedLogRecords();
-    expect(stdout).toHaveLength(6);
-    expect(retained).toHaveLength(6);
-    expect(exported).toHaveLength(6);
+    expect(stdout).toHaveLength(8);
+    expect(retained).toHaveLength(8);
+    expect(exported).toHaveLength(8);
     expect(JSON.stringify([stdout, retained, exported])).not.toContain(marker);
     expect(exported[0].attributes.err).toMatchObject({ statusCode: 400 });
   } finally {

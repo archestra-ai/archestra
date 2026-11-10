@@ -126,6 +126,28 @@ export function withholdErrorContent(
   }
   for (const key of [
     "stack",
+    // Raw provider frames and request/response diagnostics can be logged next
+    // to an error rather than attached to it, including at debug level.
+    "line",
+    "linePreview",
+    "data",
+    "event",
+    "chunk",
+    "body",
+    "payload",
+    "text",
+    "content",
+    "prompt",
+    "messages",
+    "arguments",
+    "params",
+    "parameters",
+    "query",
+    "request",
+    "response",
+    "result",
+    "toolArguments",
+    "toolResult",
     "incompleteReason",
     "rawFinishReason",
     "responseBody",

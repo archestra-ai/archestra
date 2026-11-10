@@ -924,12 +924,15 @@ export async function executeA2AMessage(
         }
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
+          { model: selectedModel },
         );
       }
       if (streamError instanceof SubagentProviderError) {
         throw streamError;
       }
-      throw new ProviderError(mapProviderError(streamError, provider));
+      throw new ProviderError(mapProviderError(streamError, provider), {
+        model: selectedModel,
+      });
     }
 
     logger.info(

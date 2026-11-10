@@ -519,10 +519,13 @@ describe("delegation error propagation", () => {
   });
 
   test("rethrows a ProviderError with the originating subagent", async () => {
-    const providerError = new ProviderError({
-      message: "upstream is down",
-      authenticated: false,
-    } as any);
+    const providerError = new ProviderError(
+      {
+        message: "upstream is down",
+        authenticated: false,
+      } as any,
+      { model: "gpt-6.1-sol" },
+    );
     mockExecuteA2AMessage.mockRejectedValue(providerError);
 
     const error = await executeArchestraTool(
@@ -532,7 +535,12 @@ describe("delegation error propagation", () => {
     ).catch((caught) => caught);
 
     expect(error).toBeInstanceOf(SubagentProviderError);
-    expect(error.chatErrorResponse).toBe(providerError.chatErrorResponse);
+    // The error card names the subagent and its model, so the failure is not
+    // read as the conversation's own model failing.
+    expect(error.chatErrorResponse).toEqual({
+      ...providerError.chatErrorResponse,
+      subagent: { name: targetAgent.name, model: "gpt-6.1-sol" },
+    });
     expect(error.subagentId).toBe(targetAgent.id);
     expect(error.subagentName).toBe(targetAgent.name);
   });

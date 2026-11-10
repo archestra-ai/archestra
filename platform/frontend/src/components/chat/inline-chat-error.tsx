@@ -131,6 +131,12 @@ export function InlineChatError({
     if (!slimChatErrorUi) {
       if (agentName) lines.push(`Agent: ${agentName}`);
       if (selectedModel) lines.push(`Model: ${selectedModel}`);
+      if (chatError.subagent) {
+        lines.push(`Failed in subagent: ${chatError.subagent.name}`);
+        if (chatError.subagent.model) {
+          lines.push(`Subagent model: ${chatError.subagent.model}`);
+        }
+      }
       if (chatError.originalError?.provider) {
         lines.push(`Provider: ${chatError.originalError.provider}`);
       }
@@ -258,6 +264,18 @@ export function InlineChatError({
                 <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
                   <span className="opacity-60">Model</span>
                   <span>{selectedModel}</span>
+                </span>
+              )}
+              {chatError.subagent && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Failed in subagent</span>
+                  <span>{chatError.subagent.name}</span>
+                </span>
+              )}
+              {chatError.subagent?.model && (
+                <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+                  <span className="opacity-60">Subagent model</span>
+                  <span>{chatError.subagent.model}</span>
                 </span>
               )}
               {chatError.originalError?.provider && (

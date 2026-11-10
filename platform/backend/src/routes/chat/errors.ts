@@ -52,13 +52,19 @@ import { RequestTooLargeError } from "./normalization/enforce-request-size-limit
 
 export class ProviderError extends Error {
   public readonly chatErrorResponse: ChatErrorResponse;
+  /** The model whose call failed, when the thrower knows it. */
+  public readonly model?: string;
 
-  constructor(chatErrorResponse: ChatErrorResponse) {
+  constructor(
+    chatErrorResponse: ChatErrorResponse,
+    options?: { model?: string },
+  ) {
     super(
       chatErrorResponse.originalError?.message || chatErrorResponse.message,
     );
     this.name = "ProviderError";
     this.chatErrorResponse = chatErrorResponse;
+    this.model = options?.model;
   }
 }
 
@@ -66,6 +72,8 @@ export class ProviderError extends Error {
  * A provider failure raised while a parent agent was waiting on a delegated
  * agent. Keeping this as a ProviderError preserves the parent run's existing
  * retry and provider-error handling while retaining where the failure began.
+ * The chat error response names the subagent and its model, so the error card
+ * does not attribute the failure to the conversation's own model.
  */
 export class SubagentProviderError extends ProviderError {
   public readonly subagentId: string;
@@ -76,7 +84,17 @@ export class SubagentProviderError extends ProviderError {
     subagentId: string;
     subagentName: string;
   }) {
-    super(params.providerError.chatErrorResponse);
+    const { providerError } = params;
+    super(
+      {
+        ...providerError.chatErrorResponse,
+        subagent: {
+          name: params.subagentName,
+          ...(providerError.model ? { model: providerError.model } : {}),
+        },
+      },
+      { model: providerError.model },
+    );
     this.name = "SubagentProviderError";
     this.subagentId = params.subagentId;
     this.subagentName = params.subagentName;

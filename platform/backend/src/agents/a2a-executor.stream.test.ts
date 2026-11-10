@@ -550,6 +550,8 @@ describe("executeA2AMessage real stream boundary", () => {
 
     expect(error).toBeInstanceOf(ProviderError);
     expect((error as ProviderError).message).toContain("Insufficient credits");
+    // A delegating parent names this model on its error card.
+    expect((error as ProviderError).model).toBe("gemini-2.5-pro");
   });
 
   test("preserves the subagent origin on a captured provider error", async ({

@@ -1246,7 +1246,10 @@ builtin = "hitl"
     });
     assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
     const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
-    assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
+    assert.equal(
+      prefix,
+      '[appa] Authorized. The call is checked again and can still be blocked for another reason; then follow that block. Call the my_gateway_archestra__run_tool tool again with ',
+    );
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
 
     const direct = scope();

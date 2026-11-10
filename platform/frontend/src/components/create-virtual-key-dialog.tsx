@@ -307,12 +307,13 @@ export function CreateVirtualKeyDialog({
     });
   }, [createdKeyValue, generatedName, open]);
 
-  const hasProviderKeys =
-    isPassthrough || includeFutureProviders || providerApiKeyIds.length > 0;
+  const hasAccess =
+    isPassthrough ||
+    includeFutureProviders ||
+    providerApiKeyIds.length > 0 ||
+    (canSetModelPools && modelPoolIds.length > 0);
   const canSubmit =
-    newKeyName.trim().length > 0 &&
-    hasProviderKeys &&
-    !createMutation.isPending;
+    newKeyName.trim().length > 0 && hasAccess && !createMutation.isPending;
 
   // Once the key is created the form is replaced by the reveal view, so there
   // is nothing left to lose — only guard the editable form.
@@ -403,7 +404,7 @@ export function CreateVirtualKeyDialog({
   ]);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const noProviderKeys = !isPassthrough && parentableKeys.length === 0;
+  const noProviderKeys = !hasAccess && parentableKeys.length === 0;
 
   return (
     <FormDialog
@@ -424,7 +425,7 @@ export function CreateVirtualKeyDialog({
           ? undefined
           : isPassthrough
             ? "It links requests that carry your own provider key to you."
-            : "Requests with this key go through the provider keys below."
+            : "Requests with this key use the provider keys or model pools selected below."
       }
       size={createdKeyValue ? "large" : "small"}
       className={createdKeyValue ? "max-w-4xl" : "sm:max-w-[720px]"}
@@ -574,7 +575,11 @@ export function CreateVirtualKeyDialog({
         <DialogStickyFooter className="mt-0">
           {noProviderKeys && !createdKeyValue && (
             <p className="mr-auto text-xs text-muted-foreground">
-              <span>Add a provider key first.</span>
+              <span>
+                {canSetModelPools
+                  ? "Add a provider key or select a model pool."
+                  : "Add a provider key first."}
+              </span>
             </p>
           )}
           <DialogCancelButton>

@@ -4128,6 +4128,7 @@ class AgentModel {
   ): Promise<{
     llmApiKeyId: string | null;
     modelId: string | null;
+    modelPoolId: string | null;
     autoRouterId: string | null;
     runtime: Agent["runtime"];
   } | null> {
@@ -4139,6 +4140,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        modelPoolId: schema.agentsTable.modelPoolId,
         autoRouterId: schema.agentsTable.autoRouterId,
         runtime: schema.agentsTable.runtime,
       })

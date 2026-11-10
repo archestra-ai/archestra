@@ -13,14 +13,22 @@ import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
 import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
 import { makeAgent } from "@/mocks/data/agents";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
-import { configSeed } from "@/mocks/data/config";
+import { configSeed, makeConfig } from "@/mocks/data/config";
 import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import {
   appearanceSettingsSeed,
@@ -153,7 +161,10 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+afterEach(() => server.resetHandlers());
 beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
   archestraApiClient.setConfig({ baseUrl: window.location.origin });
   vi.mocked(usePathname).mockReturnValue(`/chat/${conversation.id}`);
   vi.mocked(useSearchParams).mockReturnValue(
@@ -362,4 +373,166 @@ test("a role without provider, model and agent read never requests them", async 
     server.events.removeListener("request:start", onRequest);
     server.resetHandlers();
   }
+});
+
+// These are real page regressions with HTTP fixtures, not live browser proof.
+// The subscription owner's key is metadata only; this caller has no direct keys.
+const pooledAgent = {
+  ...makeAgent({
+    id: "pooled-agent",
+    name: "Pooled Agent",
+    scope: "org",
+    modelId: "copilot-model",
+    llmApiKeyId: "owner-copilot-key",
+    modelPoolId: "agent-pool",
+  }),
+  resolvedLlmProvider: "github-copilot" as const,
+  llmProviderRequiresPerUserCredential: true,
+};
+
+async function renderPoolChat({
+  existing = false,
+  enabled = true,
+  pooled = true,
+}: {
+  existing?: boolean;
+  enabled?: boolean;
+  pooled?: boolean;
+} = {}) {
+  const selectedAgent = {
+    ...pooledAgent,
+    modelPoolId: pooled ? pooledAgent.modelPoolId : null,
+  };
+  const poolConversation = {
+    ...conversation,
+    agentId: selectedAgent.id,
+    agent: selectedAgent,
+    modelId: "shared-model",
+    chatApiKeyId: "inherited-shared-key",
+    modelPoolId: selectedAgent.modelPoolId,
+  };
+  server.use(
+    http.get("/api/config", () =>
+      HttpResponse.json(
+        makeConfig({ features: { llmModelPoolsEnabled: enabled } }),
+      ),
+    ),
+    http.get("/api/llm-provider-api-keys", () =>
+      HttpResponse.json(enabled && pooled ? [] : [makeLlmProviderApiKey()]),
+    ),
+    http.get("/api/llm-provider-api-keys/available", ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("includeKeyId")
+          ? [
+              makeLlmProviderApiKey({
+                id: "owner-copilot-key",
+                provider: "github-copilot",
+                userId: "another-owner",
+              }),
+            ]
+          : [],
+      ),
+    ),
+    http.get("/api/llm-models/available", () =>
+      HttpResponse.json([
+        {
+          id: "gpt-4.1",
+          dbId: "copilot-model",
+          displayName: "GPT 4.1",
+          provider: "github-copilot",
+          requiresUserConnection: true,
+          isConnected: false,
+        },
+      ]),
+    ),
+    http.get("/api/members/default-agent", () =>
+      HttpResponse.json({ defaultAgentId: selectedAgent.id }),
+    ),
+    http.get("/api/members/default-model", () => HttpResponse.json(null)),
+    http.get("/api/agents/chat-roster", () =>
+      HttpResponse.json([selectedAgent]),
+    ),
+    http.get(`/api/agents/${selectedAgent.id}`, () =>
+      HttpResponse.json(selectedAgent),
+    ),
+    http.get("/api/chat/conversations/:id", () =>
+      HttpResponse.json(poolConversation),
+    ),
+    http.get("/api/model-pools/available", () => HttpResponse.json([])),
+    http.get("/api/agents/:id/delegations", () => HttpResponse.json([])),
+    http.get("/api/internal_mcp_catalog/registry/issue-index", () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
+    http.get("/api/chat/conversations/:id/files", () => HttpResponse.json([])),
+  );
+  const path = existing ? `/chat/${conversation.id}` : "/chat";
+  window.history.replaceState(null, "", path);
+  vi.mocked(usePathname).mockReturnValue(path);
+  vi.mocked(useChatSession).mockReturnValue(
+    existing
+      ? ({
+          messages: [],
+          status: "ready",
+          setMessages: vi.fn(),
+          sendMessage: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as ReturnType<typeof useChatSession>)
+      : null,
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ConnectivityProvider>
+        <ChatPageContent
+          routeConversationId={existing ? conversation.id : undefined}
+        />
+      </ConnectivityProvider>
+    </QueryClientProvider>,
+  );
+  await screen.findAllByText("Pooled Agent", {}, { timeout: 5_000 });
+  const composer = await screen.findByRole("textbox", {}, { timeout: 5_000 });
+  await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  fireEvent.change(composer, { target: { value: "Hello through the pool" } });
+  return screen.getByRole("button", { name: "Submit" });
+}
+
+test("a fresh pooled chat submits without connecting the owner's subscription or adding a direct key", async () => {
+  const submitted: unknown[] = [];
+  server.use(
+    http.post("/api/chat/conversations", async ({ request }) => {
+      submitted.push(await request.json());
+      // Stop at the HTTP boundary rather than create a fake streaming session.
+      return HttpResponse.json(
+        { error: "Fixture stops after submission" },
+        { status: 400 },
+      );
+    }),
+  );
+  const submit = await renderPoolChat();
+  expect(submit).toBeEnabled();
+  expect(screen.queryByText("Connect an LLM provider")).not.toBeInTheDocument();
+  fireEvent.click(submit);
+  await waitFor(() =>
+    expect(submitted).toEqual([
+      expect.objectContaining({
+        agentId: pooledAgent.id,
+        modelPoolId: "agent-pool",
+      }),
+    ]),
+  );
+});
+
+test("an existing pooled chat retains its inherited shared selection without direct keys", async () => {
+  const submit = await renderPoolChat({ existing: true });
+  expect(submit).toBeEnabled();
+  expect(screen.queryByText("Connect an LLM provider")).not.toBeInTheDocument();
+});
+
+test.each([
+  { pooled: false, enabled: true },
+  { pooled: true, enabled: false },
+])("a direct or disabled-pool subscription still requires the caller to connect (%j)", async (settings) => {
+  expect(await renderPoolChat(settings)).toBeDisabled();
 });

@@ -550,6 +550,7 @@ export function ChatPageContent({
   // on. While its router cannot route, a chat on one shows the normal tier it
   // runs on.
   const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
+  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const organizationDefaultModel = useOrganizationDefaultModel({
     enabled: autoRoutingEnabled,
   });
@@ -1048,6 +1049,17 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
+  const initialPoolSelected = Boolean(
+    modelPoolsEnabled &&
+      initialModelPoolId &&
+      !autoRouterIdOfChoice(initialModelPoolId),
+  );
+  const conversationPoolSelected = Boolean(
+    modelPoolsEnabled && conversation?.modelPoolId,
+  );
+  const activePoolSelected = conversationId
+    ? conversationPoolSelected
+    : initialPoolSelected;
   const suggestionPreview = resolveSuggestionPreview(
     initialSuggestedPrompts,
     hoveredSuggestionPrompt,
@@ -1078,6 +1090,9 @@ export function ChatPageContent({
   // Unknown while the usable list loads, so the visible list (restored on
   // refresh) still decides the first paint.
   const hasAnyApiKey =
+    // A configured pool can supply a shared key through agent access even
+    // when the viewer has no directly granted keys of their own.
+    activePoolSelected ||
     // Until the permissions and then the keys arrive, keep the composer: the
     // no-provider screen shows only once the list has said there are none.
     // "No data yet", not "fetching": the render that enables the queries is
@@ -1092,10 +1107,12 @@ export function ChatPageContent({
         // until the roster has answered.
         Boolean(selectedAgentSummary?.llmApiKeyId) ||
         (hasChatAccess && isLoadingAgents)));
-  const isAgentSubscriptionMetadataPending = Boolean(
-    (selectedAgentSummary && !selectedAgentDetail) ||
-      (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
-  );
+  const isAgentSubscriptionMetadataPending =
+    !activePoolSelected &&
+    Boolean(
+      (selectedAgentSummary && !selectedAgentDetail) ||
+        (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
+    );
   // An unconnected per-user subscription is stored as a null conversation
   // model/key pair. In that state the agent's pinned model remains the effective
   // UI selection until the viewer connects or deliberately chooses an override.
@@ -1136,6 +1153,7 @@ export function ChatPageContent({
       needsConnect: agentRequiresPerUserConnect({
         agent: initialAgent,
         selectedModelId: initialModel,
+        modelPoolSelected: initialPoolSelected,
         selectedModel: chatModels.find((m) => m.dbId === initialModel),
         requiresPerUserCredential: activeAgentSubscription.requiresConnection,
         isCredentialConnected: activeAgentSubscription.isConnected,
@@ -1144,13 +1162,20 @@ export function ChatPageContent({
       provider: initialAgent?.resolvedLlmProvider,
       agentName: initialAgent?.name,
     };
-  }, [initialAgent, initialModel, chatModels, activeAgentSubscription]);
+  }, [
+    initialAgent,
+    initialModel,
+    initialPoolSelected,
+    chatModels,
+    activeAgentSubscription,
+  ]);
 
   const conversationPerUserConnect = useMemo(() => {
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent: conversationAgent,
         selectedModelId: conversationModelId,
+        modelPoolSelected: conversationPoolSelected,
         selectedModel: chatModels.find((m) => m.dbId === conversationModelId),
         requiresPerUserCredential: activeAgentSubscription.requiresConnection,
         isCredentialConnected: activeAgentSubscription.isConnected,
@@ -1162,6 +1187,7 @@ export function ChatPageContent({
   }, [
     conversationAgent,
     conversationModelId,
+    conversationPoolSelected,
     chatModels,
     activeAgentSubscription,
   ]);
@@ -3743,6 +3769,7 @@ export function ChatPageContent({
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
+                                conversationPoolSelected ||
                                 conversationModelSource === "agent" ||
                                 conversationPerUserConnect.needsConnect
                               }
@@ -4029,6 +4056,7 @@ export function ChatPageContent({
                               onModelPoolChange={setInitialModelPoolChoice}
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
+                                initialPoolSelected ||
                                 initialModelSource === "agent" ||
                                 initialPerUserConnect.needsConnect
                               }

@@ -259,6 +259,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "userLimitUsage.reset": "User limit usage reset",
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
+  "virtualApiKey.updated": "Virtual API key updated",
   "virtualApiKey.deleted": "Virtual API key deleted",
   "virtualApiKey.bulk_deleted": "Virtual API keys bulk deleted",
   // Auth surface

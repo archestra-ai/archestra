@@ -3,8 +3,13 @@ import {
   MEMBER_ROLE_NAME,
   topResourcePermissionPreset,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import config from "@/config";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import ModelPoolModel from "@/models/model-pool";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -418,7 +423,107 @@ describe("POST /api/llm-virtual-keys", () => {
     });
   });
 
-  test("POST /api/llm-virtual-keys rejects keys without provider mappings", async () => {
+  test("creates and audits a pool-only key while enforcing pool grants", async ({
+    makeUser,
+    makeMember,
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    config.llmProxy.modelPoolsEnabled = true;
+    const member = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    registerAuditLogHook(app);
+    const credential = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId,
+      input: {
+        name: "subscription-pool",
+        members: [
+          {
+            providerApiKeyId: credential.id,
+            modelId: "gpt-4.1",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    const create = (payload: Record<string, unknown> = {}) =>
+      app.inject({
+        method: "POST",
+        url: "/api/llm-virtual-keys",
+        payload: {
+          name: "pool-only key",
+          providerApiKeys: [],
+          modelPoolIds: [pool.id],
+          ...payload,
+        },
+      });
+    const response = await create();
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      authorId: user.id,
+      keyType: "standard",
+      providerApiKeys: [],
+      includeFutureProviders: false,
+    });
+    const id = response.json().id;
+    expect(
+      (await ModelPoolModel.findById({ organizationId, id: pool.id }))
+        ?.virtualApiKeyIds,
+    ).toEqual([id]);
+    const [audit] = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, id));
+    expect(audit).toMatchObject({
+      action: "virtualApiKey.created",
+      before: null,
+      after: { name: "pool-only key", providerApiKeyIds: [] },
+    });
+    expect(JSON.stringify(audit)).not.toContain(response.json().value);
+
+    expect((await create({ keyType: "passthrough" })).statusCode).toBe(400);
+    expect(
+      (await create({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
+    ).toBe(400);
+    const foreignOrganization = await makeOrganization();
+    const foreignCredential = await makeLlmProviderApiKey(
+      foreignOrganization.id,
+      null,
+      { provider: "openai" },
+    );
+    const foreignPool = await ModelPoolModel.create({
+      organizationId: foreignOrganization.id,
+      input: {
+        name: "foreign-pool",
+        members: [
+          {
+            providerApiKeyId: foreignCredential.id,
+            modelId: "gpt-4.1",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    expect((await create({ modelPoolIds: [foreignPool.id] })).statusCode).toBe(
+      400,
+    );
+    config.llmProxy.modelPoolsEnabled = false;
+    expect((await create()).statusCode).toBe(400);
+    config.llmProxy.modelPoolsEnabled = true;
+    user = member;
+    expect((await create()).statusCode).toBe(403);
+  });
+
+  test("POST /api/llm-virtual-keys rejects keys without provider mappings or pools", async () => {
     grantEverywhere(["llmVirtualKey"]);
 
     const response = await app.inject({
@@ -432,7 +537,7 @@ describe("POST /api/llm-virtual-keys", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "At least one provider API key is required",
+      "At least one provider API key or model pool is required",
     );
   });
 

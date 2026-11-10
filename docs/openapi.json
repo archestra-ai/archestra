@@ -475069,7 +475069,8 @@
                               "jev",
                               "claude_code",
                               "hitl",
-                              "archestra"
+                              "archestra",
+                              "stock"
                             ]
                           },
                           "request": {},
@@ -475516,7 +475517,8 @@
                             "jev",
                             "claude_code",
                             "hitl",
-                            "archestra"
+                            "archestra",
+                            "stock"
                           ]
                         },
                         "request": {},

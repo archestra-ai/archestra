@@ -81,7 +81,32 @@ describe("toConsultView", () => {
       name: "fetch",
       arguments: { url: "https://a.example" },
     });
+    expect(view.requirements).toEqual([]);
     expect(toConsultView(consult({ request: null })).toolCall).toBeNull();
+  });
+
+  it("extracts the call and the requirements from an authority request", () => {
+    const requirements = [
+      { kind: "trust", required: "trusted" },
+      { kind: "attention", mark: "human-approval" },
+    ];
+    const view = toConsultView(
+      consult({
+        request: {
+          kind: "authority",
+          artifact: {
+            tool: "github__create_issue",
+            arguments: { title: "Bug" },
+            requirements,
+          },
+        },
+      }),
+    );
+    expect(view.toolCall).toEqual({
+      name: "github__create_issue",
+      arguments: { title: "Bug" },
+    });
+    expect(view.requirements).toEqual(requirements);
   });
 });
 

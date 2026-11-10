@@ -109,6 +109,7 @@ import {
   gitHubActionsAccessError,
 } from "@/components/github-actions-access-section";
 import { IdentityFields } from "@/components/identity-fields";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
@@ -154,13 +155,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -4426,28 +4420,12 @@ export function AgentForm({
                             </>
                           ) : null}
                         </FieldDescription>
-                        <Select
-                          value={identityProviderId ?? "none"}
-                          onValueChange={(value) =>
-                            setIdentityProviderId(
-                              value === "none" ? null : value,
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="No Identity Provider selected" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">
-                              No Identity Provider
-                            </SelectItem>
-                            {identityProviders.map((provider) => (
-                              <SelectItem key={provider.id} value={provider.id}>
-                                {provider.providerId} ({provider.issuer})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <IdentityProviderSelect
+                          identityProviders={identityProviders}
+                          value={identityProviderId ?? null}
+                          onChange={setIdentityProviderId}
+                          noneLabel="No identity provider"
+                        />
                       </div>
                     )}
                     {showEntraAgentIdentity && (

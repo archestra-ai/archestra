@@ -47,6 +47,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { IdentityFields } from "@/components/identity-fields";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import {
@@ -2705,20 +2706,14 @@ function EnterpriseIdentityProviderField(params: {
             caller. This is required when the tool uses Resolve at call time or
             Identity Provider Token Exchange.
           </FormDescription>
-          <Select value={field.value ?? ""} onValueChange={field.onChange}>
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="Select an OIDC identity provider" />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              {params.identityProviders.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FormControl>
+            <IdentityProviderSelect
+              identityProviders={params.identityProviders}
+              value={field.value || null}
+              onChange={(next) => field.onChange(next ?? "")}
+              placeholder="Select an OIDC identity provider"
+            />
+          </FormControl>
           <FormMessage />
         </FormItem>
       )}

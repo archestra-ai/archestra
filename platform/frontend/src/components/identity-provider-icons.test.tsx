@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { IdentityProviderIcon } from "./identity-provider-icons.ee";
+import { IdentityProviderIcon } from "./identity-provider-icons";
 
 vi.mock("next/image", () => ({
   default: ({

@@ -26,4 +26,4 @@ jobs:
     permissions: {}
     steps:
       - name: Lint PR title
-        uses: archestra-ai/.github/actions/lint-pr-title@87c9cba6c2a072e2e66016c39cc601d4efad5415 # TODO: repin to the merged archestra-ai/.github commit
+        uses: archestra-ai/.github/actions/lint-pr-title@dbb529ba77ba07dd8f71f16ccb1b2317f4587312 # v1.24.0

@@ -147,10 +147,10 @@ Stored secrets stay hidden. Leave a secret blank to keep it.
 
 ## Bind Agents and Gateways
 
-Once a blueprint is set, every agent and MCP Gateway shows **Advanced → Entra agent identity**.
+Once a blueprint is set, every agent and MCP Gateway shows **Entra agent identity app ID** under **Identity**. For what an agent acts as overall, see [Agent Identity](/docs/agents/identity).
 
-1. Open the agent or gateway, and go to **Advanced → Entra agent identity**.
-2. Paste `<agent-identity-id>` into **Agent identity app ID**, and click **Save changes**.
+1. Open an agent's **Advanced** step, or a gateway's **Settings** tab.
+2. Under **Identity**, paste `<agent-identity-id>` into **Entra agent identity app ID**, and click **Save changes**.
 
 To check it works, call a tool on an MCP server that uses [IdP token exchange](/docs/mcp/authentication/idp-token-exchange). Open the call in the [MCP Gateway logs](/docs/admin/logs): **Token issued to** shows **Entra agent identity** and its ID.
 
@@ -179,4 +179,4 @@ By default, a tool call from an agent without an agent identity runs as the iden
 | "…blueprint has no client secret or certificate" | Set **Certificate Private Key** or **Blueprint Client Secret** under **Entra Agent ID** |
 | "This agent is bound to a Microsoft Entra agent identity, but…" | Set **Agent Identity Blueprint Client ID** on the identity provider |
 | "This identity provider requires every agent to act through its own Microsoft Entra agent identity" | Bind the agent, or uncheck **Require an agent identity** |
-| An Entra error that names no agent identity of yours | Check **Agent identity app ID** is the agent identity's ID. A wrong ID can fail with an unrelated error, such as `AADSTS50076`. |
+| An Entra error that names no agent identity of yours | Check **Entra agent identity app ID** is the agent identity's ID. A wrong ID can fail with an unrelated error, such as `AADSTS50076`. |

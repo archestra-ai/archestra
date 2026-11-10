@@ -48,7 +48,10 @@ import {
 } from "@/services/mcp-advanced-settings";
 import {
   assertCatalogCredentialRecovery,
+  enterpriseManagedOverrideRecoveryKeys,
+  enterpriseManagedOverrideSecretValues,
   extractLocalConfigSecrets,
+  moveEnterpriseManagedOverrideSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
@@ -67,7 +70,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
-import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types/enterprise-managed-credentials";
+import type { EnterpriseManagedCredentialConfig } from "@/types/enterprise-managed-credentials";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
@@ -1092,9 +1095,9 @@ async function handleEditMcpConfig(
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        ...(existing.enterpriseManagedConfig
-          ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
-          : []),
+        ...enterpriseManagedOverrideRecoveryKeys(
+          existing.enterpriseManagedConfig,
+        ),
         // SPDX-SnippetEnd
       ],
     });
@@ -2032,6 +2035,10 @@ async function moveCatalogSecretsToBag(params: {
   const submittedClientSecret = (
     updateData.oauthConfig as { client_secret?: unknown } | null | undefined
   )?.client_secret;
+  const submittedEnterpriseManagedConfig = updateData.enterpriseManagedConfig as
+    | EnterpriseManagedCredentialConfig
+    | null
+    | undefined;
   const clientRecovery = params.existingClientSecretKeys
     ? {
         requiredKeys: params.existingClientSecretKeys,
@@ -2039,6 +2046,13 @@ async function moveCatalogSecretsToBag(params: {
           ...(typeof submittedClientSecret === "string" && submittedClientSecret
             ? { client_secret: submittedClientSecret }
             : {}),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...enterpriseManagedOverrideSecretValues(
+            submittedEnterpriseManagedConfig,
+          ),
+          // SPDX-SnippetEnd
         },
       }
     : undefined;
@@ -2083,6 +2097,22 @@ async function moveCatalogSecretsToBag(params: {
       updateData.clientSecretId = id;
     }
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const clientSecretId =
+    (updateData.clientSecretId as string | undefined) ?? existingClientSecretId;
+  const movedOverrides = await moveEnterpriseManagedOverrideSecrets({
+    enterpriseManagedConfig: submittedEnterpriseManagedConfig,
+    clientSecretId,
+    catalogName,
+    recovery: clientRecovery,
+  });
+  if (movedOverrides.clientSecretId !== clientSecretId) {
+    updateData.clientSecretId = movedOverrides.clientSecretId;
+  }
+  // SPDX-SnippetEnd
 }
 
 /**

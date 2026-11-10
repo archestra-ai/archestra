@@ -2,7 +2,7 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 5
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-09
 ---
 
 Give users and clients an HTTPS endpoint, then configure the routes and public URLs to match it.
@@ -33,6 +33,24 @@ Terraform model-pool writes check this endpoint before sending changes. Verify `
 Gateway OAuth discovery uses the configured public URLs. An unconfigured host falls back to the request scheme, which can advertise HTTP behind a TLS-terminating proxy. [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY) does not change that rule.
 
 If a reverse proxy requires sign-in, let `/connect.md`, `/llms.txt`, and setup endpoints under `/api/client-connections` and `/api/connection-setups/script` load without a browser session. Also allow `/v1/connection-instructions` through; it checks the installation credential and current access itself.
+
+## Public Webhook Endpoints
+
+Archestra's web app and APIs can stay on your private network. A few integrations call Archestra from the internet, so expose their webhook paths and nothing else.
+
+| Integration | Path the internet must reach | When |
+| --- | --- | --- |
+| [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams) | `/api/webhooks/chatops/ms-teams` | Always |
+| [Slack](/docs/agents/triggers-and-channels/slack#incoming-connections) | `/api/webhooks/chatops/slack` | Webhook Mode only. Socket Mode, the default, needs none. |
+| [Outlook email](/docs/agents/triggers-and-channels/email) | `/api/webhooks/incoming-email` | Always |
+| [Jira](/docs/agents/triggers-and-channels/jira#receive-webhooks-instead) | `/api/webhooks/chatops/jira` | Only when you receive webhooks. Polling needs none. |
+| [Telegram](/docs/agents/triggers-and-channels/telegram) | None | Never |
+
+Expose them in one of these ways:
+
+- **Webhook host:** give a separate public host an ingress that routes only `/api/webhooks` to backend port 9000. Set [`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL) to it, so new Slack apps and the Jira **Webhook URL** use that host. For Outlook, use the same host in [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`](/docs/admin/deployment/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL).
+- **Teams port:** [`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`](/docs/admin/deployment/configuration#ARCHESTRA_PUBLIC_ENDPOINTS_PORT) serves only the Teams endpoint on a port of its own. In Helm, set `archestra.publicEndpointsPort`, which also adds the port to the Service.
+- **Local instance:** set [`ARCHESTRA_NGROK_AUTH_TOKEN`](/docs/admin/deployment/configuration#ARCHESTRA_NGROK_AUTH_TOKEN) to open an ngrok tunnel on startup. The tunnel exposes the whole backend API, so use it only for development. For Teams, also set [`ARCHESTRA_NGROK_DOMAIN`](/docs/admin/deployment/configuration#ARCHESTRA_NGROK_DOMAIN): the endpoint registered in Azure breaks when the domain changes.
 
 ## Streaming Timeouts
 

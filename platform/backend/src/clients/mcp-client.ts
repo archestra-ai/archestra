@@ -129,6 +129,7 @@ import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  EnterpriseCredentialClientType,
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
@@ -442,6 +443,9 @@ type TargetInstallRefusal =
  * only ever persisted, never returned.
  */
 type ToolCallAuthInfo = {
+  /** Client the call's enterprise-managed credential was issued to. */
+  credentialClientId?: string;
+  credentialClientType?: EnterpriseCredentialClientType;
   serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
@@ -920,6 +924,15 @@ class McpClient {
             enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
           })
         : null;
+
+      if (enterpriseTransportCredential?.issuedTo) {
+        authInfo = {
+          ...authInfo,
+          credentialClientId: enterpriseTransportCredential.issuedTo.clientId,
+          credentialClientType:
+            enterpriseTransportCredential.issuedTo.clientType,
+        };
+      }
 
       if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
         const authError =
@@ -4222,6 +4235,8 @@ class McpClient {
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
           source: authInfo?.source ?? null,
+          credentialClientId: authInfo?.credentialClientId ?? null,
+          credentialClientType: authInfo?.credentialClientType ?? null,
         },
         audit,
       );
@@ -5850,7 +5865,18 @@ class McpClient {
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
-    const cacheKey = this.buildEnterpriseCredentialCacheKey(params);
+    // Read before the cache key, so rebinding an agent to another Entra agent
+    // identity takes effect on its next call rather than when tokens expire.
+    // `null` for an app or an unbound agent: both are callers, so an identity
+    // provider that requires agent identities refuses them.
+    const entraAgentIdentityId =
+      params.enterpriseManagedConfig && params.owner.type === "agent"
+        ? await AgentModel.findEntraAgentIdentityId(params.owner.id)
+        : null;
+    const cacheKey = this.buildEnterpriseCredentialCacheKey({
+      ...params,
+      entraAgentIdentityId,
+    });
     if (cacheKey) {
       const cachedCredential = this.enterpriseCredentialCache.get(cacheKey);
       if (cachedCredential) {
@@ -5858,7 +5884,10 @@ class McpClient {
       }
     }
 
-    const credential = await resolveEnterpriseTransportCredential(params);
+    const credential = await resolveEnterpriseTransportCredential({
+      ...params,
+      entraAgentIdentityId,
+    });
     if (cacheKey && credential) {
       this.enterpriseCredentialCache.set(
         cacheKey,
@@ -5874,6 +5903,7 @@ class McpClient {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+    entraAgentIdentityId: string | null;
   }): string | null {
     if (!params.enterpriseManagedConfig || !params.tokenAuth) {
       return null;
@@ -5892,6 +5922,8 @@ class McpClient {
       responseFieldPath: params.enterpriseManagedConfig.responseFieldPath,
       audience: params.enterpriseManagedConfig.audience,
       scopes: params.enterpriseManagedConfig.scopes ?? [],
+      clientIdOverride: params.enterpriseManagedConfig.clientIdOverride ?? null,
+      entraAgentIdentityId: params.entraAgentIdentityId,
       tokenId: params.tokenAuth.tokenId,
       userId: params.tokenAuth.userId ?? null,
       teamId: params.tokenAuth.teamId,

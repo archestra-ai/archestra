@@ -26,6 +26,7 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
+import type { AutoRoutingBudgetPreset } from "@/types/auto-routing";
 import type { NetworkPolicy } from "@/types/environment";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
@@ -136,6 +137,14 @@ const agentsTable = softDeletablePgTable(
       precision: 12,
       scale: 2,
     }),
+    /**
+     * When set, each fit derives the daily budget from this preset and the
+     * current usage instead of using `autoRoutingBudgetUsdPerDay`, which stays
+     * as the custom budget to return to.
+     */
+    autoRoutingBudgetPreset: text(
+      "auto_routing_budget_preset",
+    ).$type<AutoRoutingBudgetPreset>(),
     autoRoutingScorerVersionId: uuid(
       "auto_routing_scorer_version_id",
     ).references(() => routingScorerVersionsTable.id),
@@ -153,6 +162,15 @@ const agentsTable = softDeletablePgTable(
       () => identityProvidersTable.id,
       { onDelete: "set null" },
     ),
+
+    /**
+     * Microsoft Entra agent identity (its app ID) this agent acts as when its
+     * tools exchange the caller's Entra token On-Behalf-Of. Downstream tokens
+     * then name the agent identity as the client, so Entra consent, Conditional
+     * Access and audit apply per agent. Null = the identity provider's (or MCP
+     * server's) shared client.
+     */
+    entraAgentIdentityId: text("entra_agent_identity_id"),
 
     /**
      * Optional Environment whose runtime + egress NetworkPolicy this agent's

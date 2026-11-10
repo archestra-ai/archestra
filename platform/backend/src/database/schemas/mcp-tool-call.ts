@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   CommonToolCall,
+  EnterpriseCredentialClientType,
   MCPGatewayAuthMethod,
   McpGatewayCallSource,
   ToolOwnerType,
@@ -106,6 +107,15 @@ const mcpToolCallsTable = pgTable(
      * platform made in-process, and for rows from before this was recorded.
      */
     source: varchar("source", { length: 20 }).$type<McpGatewayCallSource>(),
+    /**
+     * For a call that used an enterprise-managed credential: the client the
+     * exchanged token was issued to (its `azp`), and which kind of client it
+     * is, such as the calling agent's Entra agent identity. Null otherwise.
+     */
+    credentialClientId: text("credential_client_id"),
+    credentialClientType: varchar("credential_client_type", {
+      length: 32,
+    }).$type<EnterpriseCredentialClientType>(),
     /** Elapsed request-processing time, excluding audit persistence. */
     durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

@@ -727,6 +727,33 @@ describe("openappaFailure: wrapping", () => {
 });
 
 describe("unansweredAnnotationNotice", () => {
+  test("identifies missing built-in annotator configuration without exposing helper diagnostics or mistaking other failures for it", () => {
+    const notice = (annotator: string, status: number) =>
+      unansweredAnnotationNotice(
+        openappaFailure(
+          runtimeFailure(
+            "annotation_refused",
+            `OpenAPPA processing interrupted: annotator=${annotator} error=non_success status=${status} detail="private helper diagnostic"`,
+          ),
+        ),
+      );
+    const missingModel = notice("archestra.llm-annotator", 409);
+    expect(missingModel).toContain("no usable model configuration");
+    expect(missingModel).toContain("The call did not run.");
+    expect(missingModel).toContain("Settings > Guardrails");
+    expect(missingModel).toContain(
+      "Signing in to the coding client does not configure this separate model.",
+    );
+    expect(missingModel).not.toContain("private helper diagnostic");
+    expect(missingModel).not.toContain("Make the same call again to retry.");
+    expect(notice("archestra.llm-annotator", 502)).not.toContain(
+      "no usable model configuration",
+    );
+    expect(notice("custom-annotator", 409)).not.toContain(
+      "no usable model configuration",
+    );
+  });
+
   test("turns an annotator timeout, as the service receives it, into a retry notice", () => {
     const failure = openappaFailure(
       new Error(

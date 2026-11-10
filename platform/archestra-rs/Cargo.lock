@@ -104,8 +104,8 @@ dependencies = [
 
 [[package]]
 name = "appa"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-adapter-amp",
  "appa-adapter-claude-code",
@@ -114,6 +114,7 @@ dependencies = [
  "appa-builtin",
  "appa-engine",
  "appa-eventlog",
+ "appa-file-tracker",
  "appa-package",
  "appa-policy",
  "appa-runtime-api",
@@ -160,16 +161,16 @@ dependencies = [
 
 [[package]]
 name = "appa-adapter-amp"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
 ]
 
 [[package]]
 name = "appa-adapter-claude-code"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -179,24 +180,24 @@ dependencies = [
 
 [[package]]
 name = "appa-adapter-kagent"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
 ]
 
 [[package]]
 name = "appa-adapter-opencode"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
 ]
 
 [[package]]
 name = "appa-builtin"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "serde",
  "serde_json",
@@ -205,8 +206,8 @@ dependencies = [
 
 [[package]]
 name = "appa-engine"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
  "imbl",
@@ -220,8 +221,8 @@ dependencies = [
 
 [[package]]
 name = "appa-eventlog"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -241,9 +242,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "appa-file-tracker"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "toml",
+]
+
+[[package]]
 name = "appa-package"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-runtime-api",
  "serde",
@@ -255,8 +267,8 @@ dependencies = [
 
 [[package]]
 name = "appa-policy"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "appa-engine",
  "appa-runtime-api",
@@ -269,8 +281,8 @@ dependencies = [
 
 [[package]]
 name = "appa-runtime-api"
-version = "0.38.1"
-source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=5c94b4c405ddf33171be7fa53aba8244959ba130#5c94b4c405ddf33171be7fa53aba8244959ba130"
+version = "0.40.1"
+source = "git+https://github.com/archestra-ai/OpenAPPA.git?rev=b4e430286c866801fc6c01c1e512e78fafe365fd#b4e430286c866801fc6c01c1e512e78fafe365fd"
 dependencies = [
  "serde",
  "serde_json",
@@ -991,7 +1003,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2147,7 +2159,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3050,9 +3062,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "3.4.0"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b23c62fe489ac1d401ab32688cfacac3737a8978dc3343e5361464c7724fd3cb"
+checksum = "f8be15815186873ea063bf005011d16c356804973489e40c39116ae3a2878d1f"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3063,6 +3075,7 @@ dependencies = [
  "http-body",
  "http-body-util",
  "indexmap",
+ "libc",
  "pastey",
  "pin-project-lite",
  "rand 0.10.2",
@@ -3083,9 +3096,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "3.4.0"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd740c45d66ceb87e5579082abc27bd771665e464e9660a17a048c721b2a6025"
+checksum = "8b0748e054a5f5598b3213cf72099ae6b2745ba4d996c59ccf455150a7dbb839"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -3144,7 +3157,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3202,7 +3215,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3459,9 +3472,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json_canonicalizer"
-version = "0.3.2"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe52319a927259afbfa5180c5157cd8167edfd3e8c254f9558c7fef44c5649f2"
+checksum = "87f7bb64f8c7e9f783fdfe883b5fe93a90bee1597c63705baa91842c5f698620"
 dependencies = [
  "ryu-js",
  "serde",
@@ -3736,7 +3749,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4439,7 +4452,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

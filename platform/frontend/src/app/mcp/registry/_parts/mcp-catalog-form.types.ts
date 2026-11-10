@@ -194,6 +194,10 @@ const enterpriseManagedConfigSchema = z.object({
     .optional(),
   headerName: z.string().optional(),
   responseFieldPath: z.string().optional(),
+  clientIdOverride: z.string().optional(),
+  clientSecretOverride: z.string().optional(),
+  privateKeyPemOverride: z.string().optional(),
+  privateKeyIdOverride: z.string().optional(),
 });
 
 const activeAuthFormSchema = z

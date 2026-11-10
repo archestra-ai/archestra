@@ -58,7 +58,11 @@ const COLUMNS: ColumnDef<AutoRoutingPlanSummary>[] = [
   {
     id: "budget",
     header: "Budget",
-    cell: ({ row }) => `${formatCurrency(row.original.budgetUsdPerDay)}/day`,
+    // A preset resolves no budget without a plan.
+    cell: ({ row }) =>
+      row.original.budgetUsdPerDay === null
+        ? "—"
+        : `${formatCurrency(row.original.budgetUsdPerDay)}/day`,
   },
   {
     id: "expectedSpend",

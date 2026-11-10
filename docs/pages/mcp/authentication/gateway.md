@@ -3,7 +3,7 @@ title: MCP Gateway Authentication
 sidebarTitle: Gateway Authentication
 description: Authenticate a client to an MCP Gateway with OAuth, a platform token, your identity provider's JWT, or a GitHub Actions token
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,7 +65,7 @@ The gateway's **Connect** tab also shows your tokens, ready to copy.
 
 Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
-The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/servers#identity-provider-token-exchange) for a token each MCP server accepts.
+The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/idp-token-exchange) for a token each MCP server accepts.
 
 1. Add your OIDC provider under **Settings → Identity Providers**. See [Identity Providers](/docs/admin/identity#adding-a-provider).
 2. On the gateway, go to **Advanced** and pick that provider.
@@ -134,12 +134,6 @@ A refusal names its reason in `error`:
 
 ## ID-JAG
 
-ID-JAG lets your identity provider decide which MCP servers each person can use. It is the core of MCP's [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) extension. Nobody approves each server one by one:
+The gateway does not accept an ID-JAG yet. After accepting one, it would have to pass the person's identity on to each MCP server behind it, and no standard defines that step yet. The IETF [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/) proposes one, and gateway support waits on it.
 
-1. The person signs in once, through your company's single sign-on.
-2. The client asks your identity provider for an ID-JAG for one MCP server. The provider checks its access policy first.
-3. The client trades the ID-JAG for that server's access token.
-
-Archestra plays the client role today, not the server role. It gets ID-JAGs from your identity provider to authenticate to MCP servers for a person. See [MCP Server Credentials](/docs/mcp/authentication/servers#identity-provider-token-exchange). The gateway does not accept an ID-JAG yet.
-
-Gateway support waits on the [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/). Without it, Archestra cannot pass the person's identity on to the next server after it accepts an ID-JAG.
+Archestra uses ID-JAG the other way today: it gets one from your identity provider to sign a person in to an MCP server. See [ID-JAG](/docs/mcp/authentication/idp-token-exchange#id-jag).

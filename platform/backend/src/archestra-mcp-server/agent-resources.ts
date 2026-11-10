@@ -9,6 +9,9 @@ import {
   type ResourcePermissionGrant,
   ResourcePermissionGrantSchema,
   resolveAgentCatalogId,
+  StoredSubagentLoadBalancingConfigSchema,
+  type SubagentLoadBalancingConfig,
+  SubagentLoadBalancingConfigSchema,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
@@ -154,6 +157,11 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
       ),
+    subagentLoadBalancing: SubagentLoadBalancingConfigSchema.nullable()
+      .optional()
+      .describe(
+        "Optional subagent load-balancing and automatic failover policy across assigned runtime subagents.",
+      ),
   })
   .strict();
 
@@ -258,6 +266,11 @@ const ResourceDetailOutputSchema = z.object({
     .describe(
       "Whether the agent may delegate to every internal agent the calling user can access.",
     ),
+  subagentLoadBalancing: StoredSubagentLoadBalancingConfigSchema.nullable()
+    .optional()
+    .describe(
+      "Configured subagent load-balancing and failover policy across assigned runtime subagents, or null when unconfigured.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -361,6 +374,7 @@ export async function handleCreateResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput;
     networkPolicy?: NetworkPolicyInput;
     llmApiKeyId?: string;
@@ -430,6 +444,9 @@ export async function handleCreateResource<
     }
     if (args.accessAllSubagents !== undefined) {
       createParams.accessAllSubagents = args.accessAllSubagents;
+    }
+    if (args.subagentLoadBalancing !== undefined) {
+      createParams.subagentLoadBalancing = args.subagentLoadBalancing;
     }
     Object.assign(createParams, runtimeAndModel);
     if (args.networkPolicy !== undefined) {
@@ -744,6 +761,7 @@ export async function handleEditResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    subagentLoadBalancing?: SubagentLoadBalancingConfig | null;
     runtime?: AgentRuntimeToolInput | null;
     networkPolicy?: NetworkPolicyInput | null;
     llmApiKeyId?: string | null;
@@ -822,6 +840,9 @@ export async function handleEditResource<
     }
     if (args.accessAllSubagents !== undefined) {
       updateData.accessAllSubagents = args.accessAllSubagents;
+    }
+    if (args.subagentLoadBalancing !== undefined) {
+      updateData.subagentLoadBalancing = args.subagentLoadBalancing;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

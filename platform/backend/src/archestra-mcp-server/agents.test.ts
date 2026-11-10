@@ -1993,6 +1993,49 @@ describe("agent runtime and model tools", () => {
       ).models,
     ).toEqual([]);
   });
+
+  test("create_agent, edit_agent, and get_agent configure and return subagentLoadBalancing", async () => {
+    const created = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Code Review Router",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+    });
+    expect(created.isError).toBe(false);
+    const agentId = extractCreatedId(created);
+
+    const fetched = await call(TOOL_GET_AGENT_SHORT_NAME, { id: agentId });
+    expect(fetched.isError).toBe(false);
+    expect((fetched.structuredContent as any).subagentLoadBalancing).toEqual({
+      enabled: true,
+      algorithm: "round_robin",
+      retries: 1,
+      fallbackEnabled: true,
+    });
+
+    const edited = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agentId,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "random",
+        retries: 2,
+        fallbackEnabled: false,
+      },
+    });
+    expect(edited.isError).toBe(false);
+
+    const refetched = await call(TOOL_GET_AGENT_SHORT_NAME, { id: agentId });
+    expect(refetched.isError).toBe(false);
+    expect((refetched.structuredContent as any).subagentLoadBalancing).toEqual({
+      enabled: true,
+      algorithm: "random",
+      retries: 2,
+      fallbackEnabled: false,
+    });
+  });
 });
 
 function extractCreatedId(

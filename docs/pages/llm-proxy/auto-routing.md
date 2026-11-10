@@ -16,10 +16,21 @@ The three tiers are your organization's default models: the default model is the
 
 1. Add a Jev API key under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
 2. Go to **Settings → Agents**. Under **Default Model for Agents and New Chats**, pick the default key and model, then the **Fast model** and **Smart model**.
-3. Go to **LLM → Auto Routing**, check the three tiers it shows, and set a daily budget in USD. The page says how many agents use the organization default.
+3. Go to **LLM → Auto Routing**, check the three tiers it shows, and pick a daily budget. The page says how many agents use the organization default.
 4. Turn auto routing on and save.
 
 Each tier can come from a different provider.
+
+### Daily Budget
+
+Pick a preset and Archestra sets the budget from recent traffic, then adjusts it every time the plan is refitted:
+
+- **Cost-efficient:** the most it can spend while the fast model still serves two thirds of sessions.
+- **Intelligence:** the least it needs for the smart model to serve two thirds of sessions.
+- **Balanced:** halfway in cost between the two.
+- **Custom:** a daily budget in USD that you set yourself.
+
+Until enough sessions are scored for a first plan, every session runs on the normal model, whatever the budget. Configure shows what the selected preset costs at today's traffic.
 
 ## What Gets Routed
 

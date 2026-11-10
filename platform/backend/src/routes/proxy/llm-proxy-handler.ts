@@ -136,6 +136,7 @@ import {
   scrubOpenappaIngress,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
+import { APPA_WITHDRAWN_CHILD_RETURN } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -150,6 +151,7 @@ import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -1884,6 +1886,11 @@ async function handleObservedLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      if (
+        (admission.kind === "ungoverned" || admission.kind === "waived") &&
+        admission.withdrawnChildReturn
+      )
+        pluginContext.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
       if (admission.kind !== "ungoverned") {
         const prepared = await prepareOpenappaRequest({
           admission,
@@ -3706,6 +3713,14 @@ async function handleStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    // Before the calls reach the client, so the gateway finds their session.
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? toolCalls,
+      });
 
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
@@ -3717,9 +3732,18 @@ async function handleStreaming<
         }) ?? contentMessage;
       childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
-      // Its text comes from APPA when enabled.
-      const refusalEvents =
-        streamAdapter.formatCompleteTextSSE(fullContentMessage);
+      // A root's preface may already be visible. Separate the ruling from
+      // that text; buffered child prose was discarded and needs no separator.
+      const precedingText = bufferModelResponse ? "" : streamAdapter.state.text;
+      const separator =
+        !precedingText || precedingText.endsWith("\n\n")
+          ? ""
+          : precedingText.endsWith("\n")
+            ? "\n"
+            : "\n\n";
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(
+        `${separator}${fullContentMessage}`,
+      );
       for (const event of refusalEvents) {
         childStream.emitPolicy(event);
       }
@@ -3888,8 +3912,7 @@ async function handleStreaming<
     }
     const eofError =
       error instanceof ResponsesStreamIncompleteError &&
-      provider.provider === "openai" &&
-      provider.interactionType === "openai:responses"
+      appaWireFamily(provider.interactionType) === "openai:responses"
         ? error
         : undefined;
     const responsesError =
@@ -4513,6 +4536,13 @@ async function handleNonStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? emittedToolCalls,
+      });
     // Record metrics for tool calls substituted with denial notices.
     blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {

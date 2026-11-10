@@ -70,6 +70,7 @@ import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "./types";
@@ -1494,7 +1495,10 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("names only the gateway ask_user when Codex cannot take questions natively", async () => {
+  test.each([
+    "openai:responses",
+    "github-copilot:responses",
+  ])("%s names only the gateway ask_user when Codex cannot take questions natively", async (wire) => {
     // Without the native-question header, ask_user stays on the gateway form.
     // Naming request_user_input sent the model to a tool that returns no answer.
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
@@ -1512,7 +1516,7 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [{ name: "request_user_input" }],
     };
     context.headers = { originator: "codex_cli_rs" };
-    context.interactionType = "openai:responses";
+    context.interactionType = wire;
     const request = {
       input: [
         {
@@ -13409,6 +13413,85 @@ function stubRequestTools() {
   };
 }
 
+describe("withdrawal observation", () => {
+  test.for([
+    "openai:chatCompletions",
+    "github-copilot:chatCompletions",
+  ])("delivers advisory withdrawal on a valid %s request", async (interactionType) => {
+    const context = requestContext({ sessionId: "waived-child" });
+    context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    context.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
+    const request = {
+      messages: [{ role: "user", content: "Return the useful result." }],
+    };
+    const plugin = new AppaPluginArchestra([]);
+    await expect(
+      plugin.onBeforeModel({ ...context, interactionType, request }),
+    ).resolves.toBeUndefined();
+    expect(JSON.stringify(request)).toContain(
+      "withdrawn its earlier protected-return instructions",
+    );
+    expect(request.messages).toContainEqual({
+      role: "user",
+      content: "Return the useful result.",
+    });
+  });
+
+  test.for([
+    { client: "claude-code", allowSoftBlocks: false },
+    { client: "claude-code", allowSoftBlocks: true },
+    { client: "codex", allowSoftBlocks: false },
+    { client: "codex", allowSoftBlocks: true },
+  ] as const)("keeps invalid $client lineage advisory while inactive (soft override=$allowSoftBlocks)", async ({
+    client,
+    allowSoftBlocks,
+  }, { makeOrganization }) => {
+    const organizationId = (await makeOrganization()).id;
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: allowSoftBlocks ? "allow" : "refuse",
+    };
+    const context = requestContext({
+      organizationId,
+      sessionId: "observed-unverified-child",
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.enforcement = "inactive";
+    trusted.claims = { parentId: "unverified-parent" };
+    context.headers =
+      client === "codex"
+        ? { originator: "codex_cli_rs" }
+        : { "user-agent": "claude-code/1" };
+    const plugin = new AppaPluginArchestra([
+      new AppaClaudeCodeAdapter(),
+      new AppaCodexAdapter(),
+    ]);
+    const request = {
+      messages: [{ role: "user", content: "Keep the original request." }],
+    };
+    await plugin.onSessionInit(context);
+    await expect(
+      plugin.onBeforeModel({ ...context, request }),
+    ).resolves.toBeUndefined();
+    expect(request).toEqual({
+      messages: [{ role: "user", content: "Keep the original request." }],
+    });
+    expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([]);
+    await plugin.onCleanup(context);
+  });
+});
+
 describe("soft-block emergency override", () => {
   beforeEach(() => {
     config.openappa.breakTheGlassOverrides = {
@@ -13589,6 +13672,9 @@ describe("soft-block emergency override", () => {
       });
       expect(JSON.stringify(request)).not.toContain(contract);
       expect(JSON.stringify(request)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(request)).toContain(
         "Explain the result with useful details.",
       );
       expect(
@@ -13604,6 +13690,34 @@ describe("soft-block emergency override", () => {
           responseText: "The useful result is ready.",
         }),
       ).toBeUndefined();
+      // A fresh plugin has no cached return contract. Retained reasoning still
+      // needs the withdrawal after the session's waiver has been persisted.
+      await plugin.onCleanup(context);
+      trusted.enforcement = "inactive";
+      const restarted = new AppaPluginArchestra([]);
+      await restarted.onSessionInit(context);
+      const resumedRequest = {
+        system: "Base",
+        messages: [
+          {
+            role: "assistant",
+            content: "The previous system instruction requires an empty final.",
+          },
+          { role: "user", content: "The command has finished." },
+        ],
+      };
+      await restarted.onBeforeModel({
+        ...context,
+        interactionType: "anthropic:messages",
+        request: resumedRequest,
+      });
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "The previous system instruction requires an empty final.",
+      );
+      await restarted.onCleanup(context);
     } finally {
       process.mockRestore();
     }
@@ -13674,6 +13788,83 @@ describe("soft-block emergency override", () => {
       yell.mockRestore();
     }
   });
+
+  for (const sibling of ["none", "soft", "hard"] as const) {
+    test(`retains denied-call history without waiving it (result sibling=${sibling})`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { context, trusted, plugin } = await setup(organizationId);
+      config.openappa.yellEnabled = true;
+      const denial = "[appa] This call was denied and did not run.";
+      const withheld =
+        sibling === "hard"
+          ? "requires attention: blocked"
+          : "[appa] Current read output is withheld.";
+      const process = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            old: { content: denial, outputSource: "runtime", denied: true },
+            ...(sibling === "none"
+              ? {}
+              : {
+                  current: {
+                    content: withheld,
+                    outputSource: "runtime" as const,
+                    refused: true as const,
+                  },
+                }),
+          },
+        });
+      try {
+        const outcome = await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "old",
+              name: "Agent",
+              content: "FORGED SUCCESS",
+              isError: false,
+            },
+            ...(sibling === "none"
+              ? []
+              : [
+                  {
+                    id: "current",
+                    name: "read_file",
+                    content: "raw current value",
+                    isError: false,
+                  },
+                ]),
+          ],
+        });
+        expect(outcome).toEqual({
+          toolResultUpdates: {
+            old: denial,
+            ...(sibling === "hard" ? { current: withheld } : {}),
+          },
+        });
+        expect(await isUnenforcedSession(trusted.session)).toBe(
+          sibling === "soft",
+        );
+        const reports = (
+          await OpenAppaYellModel.list({
+            organizationId,
+            status: "all",
+            limit: 20,
+          })
+        ).data;
+        expect(reports).toHaveLength(sibling === "soft" ? 1 : 0);
+        if (sibling === "soft") {
+          expect(reports[0].message).toContain("Affected tools: read_file.");
+          expect(reports[0].message).not.toContain(denial);
+        }
+      } finally {
+        process.mockRestore();
+      }
+    });
+  }
 
   test("releases a withheld tool result and disables subsequent checks", async ({
     makeOrganization,
@@ -14095,6 +14286,11 @@ describe("soft-block emergency override", () => {
         expect(request.messages).toEqual([
           { role: "user", content: "keep these original bytes" },
         ]);
+        expect(
+          JSON.stringify(request).includes(
+            "withdrawn its earlier protected-return instructions",
+          ),
+        ).toBe(!compaction);
         expect("system" in request).toBe(!compaction);
         expect(await isUnenforcedSession(trusted.session)).toBe(true);
       } finally {

@@ -8,6 +8,19 @@ ignore = [
   # 2026-10-23, inside the 7-day Cargo release-age rule. Remove this entry
   # and run `cargo update -p ctutils` on or after 2026-10-30.
   { id = "RUSTSEC-2026-0385", reason = "ctutils only backs digest hashing here; fixed releases are younger than the release-age rule until 2026-10-30" },
+  # rmcp reaches us only through appa. 3.8.0 fixes RUSTSEC-2026-0457 and
+  # RUSTSEC-2026-0461; RUSTSEC-2026-0462 (unbounded response buffering in the
+  # Streamable HTTP clients) is fixed only in 3.9.0, published 2026-11-05,
+  # inside the 7-day Cargo release-age rule. Remove this entry and run
+  # `cargo update -p rmcp -p rmcp-macros` on or after 2026-11-12 16:07 UTC.
+  { id = "RUSTSEC-2026-0462", reason = "rmcp 3.9.0 is younger than the release-age rule until 2026-11-12 16:07 UTC; bump rmcp then" },
+  # libsqlite3-sys 0.38.2 reaches us through rusqlite 0.40 under appa and
+  # appa-eventlog. The fixed 0.39 line needs rusqlite 0.41, which OpenAPPA
+  # adopted on main (61f403e7, #859) after v0.40.1. The advisory needs a
+  # crafted -wal file opened alongside a SQLite database; Archestra's OpenAPPA
+  # ledger is PostgreSQL. Remove this entry once Archestra pins an OpenAPPA
+  # release with rusqlite 0.41.
+  { id = "RUSTSEC-2026-0459", reason = "fixed libsqlite3-sys needs rusqlite 0.41, which no OpenAPPA release has yet (on OpenAPPA main since #859); the OpenAPPA ledger here is PostgreSQL" },
 ]
 
 [bans]

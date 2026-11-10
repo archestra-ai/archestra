@@ -14,6 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
 import { budgetScale } from "../_parts/budget-scale";
 import AutoRoutingDiagnosticsPage from "./page";
@@ -141,6 +142,8 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  // These diagnostics tests exercise a viewer without an active sign-in.
+  queryClient.setQueryData(authQueryKeys.session(), null);
   render(
     <QueryClientProvider client={queryClient}>
       <AutoRoutingDiagnosticsPage />
@@ -285,7 +288,10 @@ describe("AutoRoutingDiagnosticsPage", () => {
     await screen.findByRole("slider", { name: "Budget" });
 
     saved = SAVED;
-    await queryClient.refetchQueries();
+    await queryClient.refetchQueries({
+      queryKey: ["auto-routing", "diagnostics", null],
+      exact: true,
+    });
     await waitFor(() => expectShown(SAVED));
     await new Promise((settle) => setTimeout(settle, 400));
 

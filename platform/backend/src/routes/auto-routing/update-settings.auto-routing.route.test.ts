@@ -91,6 +91,73 @@ describe("PUT /api/auto-routing/settings", () => {
     );
   });
 
+  test("a preset plans on the budget it resolves, keeping the custom budget for when it is set again", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id);
+
+    const preset = await putSettings({ budgetPreset: "balanced" });
+
+    expect(preset.statusCode, preset.body).toBe(200);
+    expect(preset.json()).toMatchObject({
+      budgetPreset: "balanced",
+      budgetUsdPerDay: 50,
+      fit: { status: "active" },
+    });
+    const simulated = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auto-routing/simulate",
+      payload: { budgetPreset: "balanced", volumeMultiplier: 1 },
+    });
+    expect(await RoutingPlanModel.findActive(ctx.organizationId)).toMatchObject(
+      {
+        budgetUsdPerDay: simulated.json().budgetUsdPerDay.toFixed(2),
+        summary: simulated.json().summary,
+      },
+    );
+
+    const custom = await putSettings({ budgetUsdPerDay: 30 });
+
+    expect(custom.statusCode, custom.body).toBe(200);
+    expect(custom.json()).toMatchObject({
+      budgetPreset: null,
+      budgetUsdPerDay: 30,
+    });
+    expect(await RoutingPlanModel.findActive(ctx.organizationId)).toMatchObject(
+      { budgetUsdPerDay: "30.00" },
+    );
+  });
+
+  test("a preset enables without a budget and is never refused as too low", async () => {
+    const [fast, normal, smart] = await Promise.all([
+      makeRoutingModel(),
+      makeRoutingModel(),
+      makeRoutingModel(),
+    ]);
+    await setAutoRoutingTiers(ctx.organizationId, { fast, normal, smart });
+
+    const response = await putSettings({
+      enabled: true,
+      budgetPreset: "cost_efficient",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      budgetUsdPerDay: null,
+      budgetPreset: "cost_efficient",
+      fit: { status: "cold_start" },
+    });
+    const [coldStart] = await RoutingPlanModel.findHistory(
+      ctx.organizationId,
+      1,
+    );
+    expect(coldStart.plan).toMatchObject({
+      status: "cold_start",
+      budgetUsdPerDay: null,
+    });
+    expect((await putSettings({ budgetPreset: null })).statusCode).toBe(400);
+  });
+
   test("an infeasible budget is refused, keeping the saved budget and the serving plan", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await seedHistory(ctx.organizationId, trio[2].id);

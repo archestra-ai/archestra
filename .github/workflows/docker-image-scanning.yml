@@ -36,6 +36,7 @@ jobs:
     outputs:
       scan: ${{ steps.policy.outputs.scan }}
       matrix: ${{ steps.policy.outputs.matrix }}
+      upstream-matrix: ${{ steps.policy.outputs.upstream-matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,9 +146,43 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Third-party images a release runs unchanged (the Dagger engine the backend
+  # provisions). Nothing here builds them, so scan the exact pinned reference
+  # under the same Critical/High fixable-CVE policy as the candidates.
+  scan-upstream-images:
+    name: Scan pinned upstream image (${{ matrix.image }}, ${{ matrix.arch }})
+    needs: [classify]
+    if: ${{ needs.classify.outputs.scan == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # Required to checkout the local scan actions.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.classify.outputs.upstream-matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+      - name: Scan pinned upstream image
+        uses: $/.github/actions/scan-docker-image
+        with:
+          # registry:// reads the published image, never a same-named local one.
+          image: registry://${{ matrix.reference }}
+          platform: linux/${{ matrix.arch }}
+          exit-code: "true"
+
   release-image-security:
     name: Release Image Security
-    needs: [classify, scan-release-images]
+    needs: [classify, scan-release-images, scan-upstream-images]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -171,6 +206,7 @@ jobs:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
           SCAN_RESULT: ${{ needs.scan-release-images.result }}
+          UPSTREAM_SCAN_RESULT: ${{ needs.scan-upstream-images.result }}
           EVIDENCE_DIR: ${{ runner.temp }}/release-evidence
           CANDIDATE_INDEX: ${{ runner.temp }}/release-candidate-index.json
           GH_TOKEN: ${{ github.token }}

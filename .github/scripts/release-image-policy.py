@@ -71,6 +71,20 @@ def candidate_matrix(root):
     return {"include": images}
 
 
+def upstream_matrix(root):
+    """Third-party images a release runs unchanged, pinned in this branch's source.
+
+    The candidate matrix covers images built here. These are pulled by reference
+    at runtime, so a release scans the exact pinned reference instead.
+    """
+    manager = root / "platform/backend/src/k8s/dagger-environment-runtime/manager.ts"
+    engines = re.findall(r'^const ENGINE_IMAGE = "(registry\.dagger\.io/engine:v[0-9]+\.[0-9]+\.[0-9]+)";$',
+                         manager.read_text(), re.M)
+    if len(engines) != 1:
+        raise ValueError("Missing or ambiguous pinned Dagger engine image")
+    return {"include": [{"image": "dagger-engine", "reference": engines[0]}]}
+
+
 def is_release_pr(pr, repository):
     head, base = pr["head"], pr["base"]
     if not head["ref"].startswith("release-please--"):
@@ -100,7 +114,7 @@ def requires_scan(event_name, event, repository):
 
 
 def validate_gate(event_name, event, repository, classify_result, decision, scan_result, current=None,
-                  workflow_sha=None):
+                  workflow_sha=None, *, upstream_scan_result):
     if classify_result != "success":
         raise ValueError("Release classification did not succeed")
     required = requires_scan(event_name, event, repository)
@@ -109,11 +123,13 @@ def validate_gate(event_name, event, repository, classify_result, decision, scan
     if decision != str(required).lower():
         raise ValueError("Missing or inconsistent scan decision")
     if not required:
-        if scan_result != "skipped":
+        if scan_result != "skipped" or upstream_scan_result != "skipped":
             raise ValueError("Unexpected scan result for an ordinary event")
         return
     if scan_result != "success":
         raise ValueError(f"Every release image scan must succeed (got {scan_result!r})")
+    if upstream_scan_result != "success":
+        raise ValueError(f"Every pinned upstream image scan must succeed (got {upstream_scan_result!r})")
     group = event["merge_group"]
     if workflow_sha != group["head_sha"] or current != group["head_sha"]:
         raise ValueError("Merge group changed or scans belong to another queue revision")
@@ -181,12 +197,14 @@ def main():
     event_name, repository = os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REPOSITORY"]
     if mode == "classify":
         decision = requires_scan(event_name, event, repository)
-        inventory = candidate_matrix(Path(__file__).resolve().parents[2])
-        matrix = {"include": [row | {"arch": arch} for row in inventory["include"]
-                              for arch in ("amd64", "arm64")]}
+        root = Path(__file__).resolve().parents[2]
+        matrix, upstream = ({"include": [row | {"arch": arch} for row in inventory["include"]
+                                         for arch in ("amd64", "arm64")]}
+                            for inventory in (candidate_matrix(root), upstream_matrix(root)))
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"scan={str(decision).lower()}\n")
             output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
+            output.write(f"upstream-matrix={json.dumps(upstream, separators=(',', ':'))}\n")
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None
@@ -203,7 +221,7 @@ def main():
                 ))
         validate_gate(event_name, event, repository, os.environ["CLASSIFY_RESULT"],
                       os.environ["SCAN_REQUIRED"], os.environ["SCAN_RESULT"], current,
-                      os.environ["GITHUB_SHA"])
+                      os.environ["GITHUB_SHA"], upstream_scan_result=os.environ["UPSTREAM_SCAN_RESULT"])
         if required and event_name == "merge_group":
             branch = event["merge_group"]["base_ref"].removeprefix("refs/heads/")
             head = f"{repository.split('/')[0]}:release-please--branches--{branch}--components--platform"

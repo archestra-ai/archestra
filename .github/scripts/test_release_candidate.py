@@ -256,7 +256,8 @@ class GateIntegrationTests(unittest.TestCase):
                 "GITHUB_EVENT_PATH": str(directory / "event.json"), "EVIDENCE_DIR": str(evidence),
                 "CANDIDATE_INDEX": str(directory / "release-candidate-index.json"),
                 "API_TREE": tree,
-                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
+                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success",
+                "UPSTREAM_SCAN_RESULT": "success"}
             def gate(overrides=None):
                 (directory / "release-candidate-index.json").unlink(missing_ok=True)
                 (directory / "ref-count").unlink(missing_ok=True)
@@ -270,14 +271,14 @@ class GateIntegrationTests(unittest.TestCase):
                 env["GITHUB_EVENT_NAME"] = event_name
                 if event_name == "pull_request":
                     env["SCAN_REQUIRED"] = "false"
-                    env["SCAN_RESULT"] = "skipped"
+                    env["SCAN_RESULT"] = env["UPSTREAM_SCAN_RESULT"] = "skipped"
                     result = gate()
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertFalse((directory / "release-candidate-index.json").exists())
                     self.assertNotEqual(gate({"SCAN_RESULT": "success"}).returncode, 0)
                     continue
                 env["SCAN_REQUIRED"] = "true"
-                env["SCAN_RESULT"] = "success"
+                env["SCAN_RESULT"] = env["UPSTREAM_SCAN_RESULT"] = "success"
                 result = gate()
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 index = json.loads((directory / "release-candidate-index.json").read_text())
@@ -285,6 +286,7 @@ class GateIntegrationTests(unittest.TestCase):
                 self.assertEqual(len(index["records"]), len(policy.candidate_matrix(ROOT)["include"]) * 2)
                 for scan in ("failure", "skipped", "cancelled", "", "neutral"):
                     self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
+                    self.assertNotEqual(gate({"UPSTREAM_SCAN_RESULT": scan}).returncode, 0)
                 self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)
                 if event_name == "merge_group":
                     # Missing, stale and unavailable cached test merges cannot

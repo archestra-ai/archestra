@@ -42,6 +42,23 @@ The matrix derives agents from this branch's catalog and includes Platform full
 and slim, MCP, p4 and sandbox. The publisher-inventory regression follows release
 workflow callers, including new companion images and catalog targets.
 
+## Pinned upstream images
+
+A release also runs third-party images it does not build. The Dagger engine is
+one: the backend provisions `ENGINE_IMAGE` from
+`platform/backend/src/k8s/dagger-environment-runtime/manager.ts` for every
+organization. Classification reads that pin from the candidate source and fails
+closed when it is missing or ambiguous. Version-changing merge groups scan the
+exact reference with `registry://`, so a local image of the same name cannot
+stand in, on both `linux/amd64` and `linux/arm64`, under the same Critical/High
+fixable-CVE policy. The gate requires every upstream leg to succeed alongside
+the candidate scans, and requires them skipped on ordinary events.
+
+These scans gate the release; they are not publication evidence, because the
+release ships a reference rather than retained bytes. A finding is fixed by
+moving the pin (the daily `dagger` job in `update-client-versions.yml` proposes
+new upstream releases), not by an allowlist.
+
 ## Build and evidence contract
 
 Both architectures build and scan natively. Scout 1.24.0's AMD64 and ARM64 CLI

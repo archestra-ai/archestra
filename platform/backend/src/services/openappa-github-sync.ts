@@ -803,6 +803,12 @@ const REFUSED_TTL = 10 * TimeInMs.Minute;
  */
 const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
 
+/** How long a pull request that changes no policy file is left alone, per head. */
+const UNRELATED_TTL = TimeInMs.Day;
+
+/** How long whether a ruleset requires the check is remembered. */
+const REQUIRED_TTL = 10 * TimeInMs.Minute;
+
 /** The most changed files and commits one pull request may hold to be checked. */
 const MAX_PULL_FILES = 1000;
 const MAX_PULL_COMMITS = 250;
@@ -825,6 +831,8 @@ type CheckedResult = {
   policy: (Verdict & { deployment: string }) | null;
   /** What the pull request changes that Git sync reads, and whether it may. */
   judged: Verdict & { governed: string[] };
+  /** Whether the outcome was posted; an unrelated request's may not be. */
+  posted: boolean;
 };
 
 /** One check's outcome as stored. */
@@ -855,10 +863,11 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const refused = checkKey("refused", organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
   let pulls: CheckedPull[];
+  let checkRequired: () => Promise<boolean>;
   try {
-    pulls = row.gitlabTokenId
+    ({ pulls, checkRequired } = row.gitlabTokenId
       ? await gitlabPullRequests(source)
-      : await githubPullRequests(source);
+      : await githubPullRequests(source));
   } catch (error) {
     // A credential the host refuses is not asked again every minute.
     if (
@@ -883,6 +892,14 @@ async function checkAppaGithubPullRequests(organizationId: string) {
     ),
   );
   const checked = await cacheManager.getMany<CheckedResult>(keys);
+  // Whether a ruleset on the branch requires the check: only then does a pull
+  // request that changes no policy file get one, as skipped, so it is not
+  // held; otherwise such a request is left alone. Read once per pass.
+  let required: boolean | undefined;
+  const isRequired = async () => {
+    required ??= await checkRequired();
+    return required;
+  };
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
     const stored = checked.get(key);
@@ -894,14 +911,23 @@ async function checkAppaGithubPullRequests(organizationId: string) {
     // refusal for a while.
     const judgedStands =
       previous !== undefined &&
-      now - previous.judged.checkedAt < RECHECK_AUTHORSHIP;
+      now - previous.judged.checkedAt <
+        (previous.judged.governed.length === 0
+          ? UNRELATED_TTL
+          : RECHECK_AUTHORSHIP);
     const policyStands =
       previous !== undefined &&
       (previous.policy === null ||
         (previous.policy.deployment === deployment &&
           (previous.policy.accepted ||
             now - previous.policy.checkedAt < RECHECK_REFUSED)));
-    if (judgedStands && policyStands) continue;
+    // An unrelated request left without a check is posted once a ruleset
+    // requires one.
+    const unposted =
+      previous !== undefined &&
+      previous.judged.governed.length === 0 &&
+      !previous.posted;
+    if (judgedStands && policyStands && !unposted) continue;
     const judged = judgedStands
       ? previous.judged
       : await (async () => {
@@ -942,14 +968,20 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       reason: outcome.accepted ? null : outcome.reason,
       policy,
       judged,
+      posted: previous?.posted ?? false,
     };
-    // A changed deployment that leaves the outcome as posted posts nothing.
-    if (
+    // A changed deployment that leaves the outcome as posted posts nothing; a
+    // request that changes no policy file gets nothing unless a ruleset
+    // requires the check.
+    const changed =
       previous?.accepted !== result.accepted ||
-      previous.reason !== result.reason
-    )
+      previous.reason !== result.reason ||
+      !previous.posted;
+    const wanted = !unrelated || (await isRequired());
+    if (changed && wanted)
       try {
         await pull.post(outcome);
+        result.posted = true;
       } catch (error) {
         if (error instanceof CheckRefused) {
           await refuseChecks({
@@ -978,7 +1010,10 @@ async function checkAppaGithubPullRequests(organizationId: string) {
 }
 
 /** A shared cache key for the policy check, from its parts. */
-function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+function checkKey(
+  kind: "checked" | "refused" | "required",
+  ...parts: string[]
+) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
     .update(JSON.stringify(parts))
     .digest("hex")}` as const;
@@ -1133,12 +1168,12 @@ function checkSummary(outcome: PullOutcome) {
 
 async function githubPullRequests(
   source: PolicySource,
-): Promise<CheckedPull[]> {
+): Promise<{ pulls: CheckedPull[]; checkRequired: () => Promise<boolean> }> {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     pull_requests: "read",
     checks: "write",
   });
-  if (!token) return [];
+  if (!token) return { pulls: [], checkRequired: async () => false };
   const base = `${api}/repos/${source.repo}`;
   const appId = await checkIntegrationId(source);
   const branch =
@@ -1165,7 +1200,7 @@ async function githubPullRequests(
         ? new CheckRefused(status)
         : new ApiError(502, `GitHub returned HTTP ${status}`),
   });
-  return pulls.flatMap((pull) => {
+  const checked: CheckedPull[] = pulls.flatMap((pull) => {
     const head = pull.head?.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     const merged = pull.merge_commit_sha;
@@ -1192,6 +1227,60 @@ async function githubPullRequests(
       },
     ];
   });
+  return {
+    pulls: checked,
+    checkRequired: () =>
+      githubCheckRequired({
+        source,
+        token,
+        base,
+        branch,
+      }),
+  };
+}
+
+/**
+ * Whether a ruleset on the synced branch requires the policy check, read from
+ * GitHub's own reading of the branch's rules and remembered for a while.
+ * False when the rules cannot be read: an unrelated pull request is then
+ * left alone rather than given a check nobody asked for.
+ */
+async function githubCheckRequired(params: {
+  source: PolicySource;
+  token: string;
+  base: string;
+  branch: string;
+}): Promise<boolean> {
+  const key = checkKey(
+    "required",
+    params.source.organizationId,
+    params.source.repo,
+    params.branch,
+    POLICY_CHECK_NAME,
+  );
+  const remembered = await cacheManager.get<boolean>(key);
+  if (remembered !== undefined && remembered !== null) return remembered;
+  const rules = await githubCall<
+    Array<{
+      type?: string;
+      parameters?: { required_status_checks?: Array<{ context?: string }> };
+    }>
+  >({
+    token: params.token,
+    url: `${params.base}/rules/branches/${encodeURIComponent(params.branch)}`,
+  }).catch(() => null);
+  const required =
+    rules?.ok === true &&
+    Array.isArray(rules.body) &&
+    rules.body.some(
+      (rule) =>
+        rule.type === "required_status_checks" &&
+        (rule.parameters?.required_status_checks ?? []).some(
+          (check) => check.context === POLICY_CHECK_NAME,
+        ),
+    );
+  await cacheManager.set(key, required, REQUIRED_TTL).catch(() => undefined);
+  return required;
 }
 
 // --- Authorship: who asked for a pull request, and whether they may ---
@@ -1533,8 +1622,11 @@ async function postGithubCheck(params: {
 
 async function gitlabPullRequests(
   source: PolicySource & { gitlabTokenId: string | null },
-): Promise<CheckedPull[]> {
-  if (!source.gitlabTokenId) return [];
+): Promise<{ pulls: CheckedPull[]; checkRequired: () => Promise<boolean> }> {
+  // GitLab tells nothing of what its merge checks require: a merge request
+  // that changes no policy file is left alone.
+  const checkRequired = async () => false;
+  if (!source.gitlabTokenId) return { pulls: [], checkRequired };
   const client = gitClient(
     await resolveOpenAppaGitlabAccess({
       organizationId: source.organizationId,
@@ -1552,7 +1644,7 @@ async function gitlabPullRequests(
       throw new CheckRefused(error.status);
     throw error;
   });
-  return requests.flatMap((request) => {
+  const pulls: CheckedPull[] = requests.flatMap((request) => {
     const head = request.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     return [
@@ -1583,6 +1675,7 @@ async function gitlabPullRequests(
       },
     ];
   });
+  return { pulls, checkRequired };
 }
 
 /**
@@ -2200,6 +2293,7 @@ export type RepositoryProtection = {
       | "missing"
       | "disabled"
       | "needs_permission"
+      | "not_managed"
       | "unavailable"
       | "unsupported"
       | "error";
@@ -2389,13 +2483,23 @@ async function githubBranchRules(
         token,
         url: `${base}/rulesets/${candidate.id}`,
       });
-      if (read.ok && requiresCheckFrom(read.body.rules, integrationId)) {
+      // Ours renamed has our shape: a ruleset of the repository's own that
+      // merely requires the check is theirs, and is left alone.
+      if (read.ok && isOurRulesetShape(read.body.rules, integrationId)) {
         ours = candidate;
         existing = read;
         break;
       }
     }
   }
+  // A policy in a folder of a repository that holds other work: rules on the
+  // whole branch would reach that work too, so none are added. The repository
+  // requires the check itself where it wants GitHub to block a bad merge.
+  if (!ours && repositoryPath(source, "") !== "")
+    return {
+      state: "not_managed",
+      detail: `The policy lives in ${repositoryPath(source, "")}/ of a repository that holds other work, so ${archestraMcpBranding.appName} adds no rules to its branch. To have GitHub block a pull request that would break the policy, require the ${POLICY_CHECK_NAME} check in a ruleset of your own; a pull request that changes no policy file gets the check as skipped.`,
+    };
   // The check is required only while this App may post it: a required check
   // nobody posts holds every pull request for good.
   const check = await policyCheckAccess(source);
@@ -2496,19 +2600,31 @@ async function policyCheckAccess(
   }
 }
 
-/** Whether a rule requires a check from this App, under any name. */
-function requiresCheckFrom(
+/**
+ * Whether a ruleset has the shape Archestra writes, under any name: the four
+ * rules, the check among them required from this App.
+ */
+function isOurRulesetShape(
   rules: Rule[] | undefined,
   integrationId: number,
 ): boolean {
-  return (rules ?? []).some(
-    (rule) =>
-      rule.type === "required_status_checks" &&
-      (
-        (rule.parameters?.required_status_checks ?? []) as Array<{
-          integration_id?: number;
-        }>
-      ).some((check) => check.integration_id === integrationId),
+  const types = new Set((rules ?? []).map((rule) => rule.type));
+  return (
+    [
+      "deletion",
+      "non_fast_forward",
+      "pull_request",
+      "required_status_checks",
+    ].every((type) => types.has(type)) &&
+    (rules ?? []).some(
+      (rule) =>
+        rule.type === "required_status_checks" &&
+        (
+          (rule.parameters?.required_status_checks ?? []) as Array<{
+            integration_id?: number;
+          }>
+        ).some((check) => check.integration_id === integrationId),
+    )
   );
 }
 

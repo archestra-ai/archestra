@@ -160,6 +160,8 @@ function serveRepository(state: {
 async function connectApp(params: {
   organizationId: string;
   refuse?: string[];
+  /** The policy file's path; a folder puts the policy in a shared repository. */
+  path?: string;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
@@ -182,7 +184,7 @@ async function connectApp(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, {
     repo: "example/policies",
     ref: "main",
-    path: "appa.toml",
+    path: params.path ?? "appa.toml",
     interval: "1h",
     githubAppConfigId: app.id,
     githubPatId: null,
@@ -1958,6 +1960,19 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
     http.get("https://api.github.com/app", () =>
       HttpResponse.json({ slug: "acme-guardrails" }),
     ),
+    // The ruleset requires the check: an unrelated request gets it as skipped.
+    http.get(`${REPO}/rules/branches/main`, () =>
+      HttpResponse.json([
+        {
+          type: "required_status_checks",
+          parameters: {
+            required_status_checks: [
+              { context: "Guardrails Policy Admission" },
+            ],
+          },
+        },
+      ]),
+    ),
     http.get(`${REPO}/pulls`, () =>
       HttpResponse.json(
         Object.entries(pulls).map(([number, pull]) => ({
@@ -2016,4 +2031,95 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   // Nothing moved: nothing is posted again.
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(6);
+});
+
+test("a policy in a folder of a shared repository gets no ruleset, and a pull request that changes no policy file gets no check until a ruleset requires it", async ({
+  makeOrganization,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  await connectApp({ organizationId: org.id, path: "guardrails/appa.toml" });
+  const rulesetWrites: string[] = [];
+  const runs: Array<{ head_sha: string; conclusion: string }> = [];
+  let branchRules: unknown[] = [];
+  const head = "a".repeat(40);
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails" }),
+    ),
+    http.get(`${REPO}/commits/:ref`, () => HttpResponse.json({ sha: FIRST })),
+    http.get(`${REPO}/contents/guardrails`, () =>
+      HttpResponse.json([
+        {
+          type: "file",
+          name: "appa.toml",
+          path: "guardrails/appa.toml",
+          sha: createHash("sha1").update(RULES).digest("hex"),
+        },
+      ]),
+    ),
+    http.get(`${REPO}/contents/guardrails/appa.toml`, () =>
+      HttpResponse.text(RULES),
+    ),
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.post(`${REPO}/rulesets`, () => {
+      rulesetWrites.push("POST");
+      return HttpResponse.json({ id: 5 }, { status: 201 });
+    }),
+    http.get(`${REPO}/rules/branches/main`, () =>
+      HttpResponse.json(branchRules),
+    ),
+    http.get(`${REPO}/pulls`, () =>
+      HttpResponse.json([
+        {
+          number: 1,
+          head: { sha: head },
+          merge_commit_sha: null,
+          user: { id: 1, login: "dev", type: "User" },
+        },
+      ]),
+    ),
+    http.get(`${REPO}/pulls/:number/files`, () =>
+      HttpResponse.json([{ filename: "src/app/main.ts" }]),
+    ),
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+  );
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
+    FIRST,
+  );
+  // No rules on a branch that carries other work.
+  expect(rulesetWrites).toEqual([]);
+  expect((await getRepositoryProtection(org.id))?.branchRules).toMatchObject({
+    state: "not_managed",
+    detail: expect.stringContaining("guardrails/ of a repository"),
+  });
+  // A product pull request: nothing posted while no ruleset asks for the check.
+  await checkDueAppaGithubSyncs();
+  await checkDueAppaGithubSyncs();
+  expect(runs).toEqual([]);
+  // The repository requires the check in a ruleset of its own: the request
+  // gets it as skipped, once, so it is not held.
+  branchRules = [
+    {
+      type: "required_status_checks",
+      parameters: {
+        required_status_checks: [{ context: "Guardrails Policy Admission" }],
+      },
+    },
+  ];
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(Date.now() + 11 * 60_000);
+  try {
+    await checkDueAppaGithubSyncs();
+    await checkDueAppaGithubSyncs();
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(runs).toEqual([
+    expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
+  ]);
 });

@@ -516,6 +516,13 @@ function branchRulesView(
         tone: "off",
         detail: rules.detail,
       };
+    case "not_managed":
+      return {
+        status:
+          "Not added: the policy lives in a folder of a repository that holds other work",
+        tone: "off",
+        detail: rules.detail,
+      };
     case "unavailable":
       return {
         status: "Not available for this repository",

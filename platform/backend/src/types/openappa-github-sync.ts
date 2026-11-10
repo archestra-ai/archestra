@@ -138,6 +138,7 @@ export const AppaRepositoryProtectionSchema = z
         "missing",
         "disabled",
         "needs_permission",
+        "not_managed",
         "unavailable",
         "unsupported",
         "error",

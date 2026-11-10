@@ -121799,7 +121799,7 @@ export type GetAppaRepositoryProtectionResponses = {
             }>;
         };
         branchRules: {
-            state: 'active' | 'incomplete' | 'missing' | 'disabled' | 'needs_permission' | 'unavailable' | 'unsupported' | 'error';
+            state: 'active' | 'incomplete' | 'missing' | 'disabled' | 'needs_permission' | 'not_managed' | 'unavailable' | 'unsupported' | 'error';
             url?: string;
             detail?: string;
             bypassActors?: number;

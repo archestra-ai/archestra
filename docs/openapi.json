@@ -473324,6 +473324,7 @@
                             "missing",
                             "disabled",
                             "needs_permission",
+                            "not_managed",
                             "unavailable",
                             "unsupported",
                             "error"

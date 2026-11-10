@@ -7121,18 +7121,25 @@ async function recordNativeHitlRulings(params: {
       }
       continue;
     }
-    const reading = parse(
-      {
-        content:
-          typeof answer.content === "string"
-            ? answer.content
-            : JSON.stringify(answer.content ?? null),
-        ...(typeof answer.isError === "boolean"
-          ? { isError: answer.isError }
-          : {}),
-      },
-      asked,
-    );
+    const answerResult = {
+      content:
+        typeof answer.content === "string"
+          ? answer.content
+          : JSON.stringify(answer.content ?? null),
+      ...(typeof answer.isError === "boolean"
+        ? { isError: answer.isError }
+        : {}),
+    };
+    const currentReading = parse(answerResult, asked);
+    // A question issued before the heading lost its brand can still be
+    // answered for HITL_QUESTION_TTL_MS after a deploy.
+    const reading =
+      currentReading === "unrecognized"
+        ? parse(answerResult, {
+            ...asked,
+            question: `[OpenAPPA] ${asked.question}`,
+          })
+        : currentReading;
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer

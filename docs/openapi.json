@@ -439231,6 +439231,54 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "retrySettings": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "numRetries": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "retryPolicy": {
+                            "type": "object",
+                            "properties": {
+                              "connectionError": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              },
+                              "timeoutError": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              },
+                              "rateLimitError": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              },
+                              "internalServerError": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "initialDelayMs": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 8000
+                          },
+                          "maxDelayMs": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 60000
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -439274,6 +439322,54 @@
                             },
                             "enabled": {
                               "type": "boolean"
+                            },
+                            "retrySettings": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "numRetries": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "retryPolicy": {
+                                  "type": "object",
+                                  "properties": {
+                                    "connectionError": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 10
+                                    },
+                                    "timeoutError": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 10
+                                    },
+                                    "rateLimitError": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 10
+                                    },
+                                    "internalServerError": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 10
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "initialDelayMs": {
+                                  "type": "integer",
+                                  "minimum": 100,
+                                  "maximum": 8000
+                                },
+                                "maxDelayMs": {
+                                  "type": "integer",
+                                  "minimum": 100,
+                                  "maximum": 60000
+                                }
+                              },
+                              "additionalProperties": false
                             },
                             "createdAt": {
                               "type": "string",
@@ -439331,6 +439427,7 @@
                             "priority",
                             "weight",
                             "enabled",
+                            "retrySettings",
                             "createdAt",
                             "providerApiKeyName",
                             "provider",
@@ -439354,6 +439451,7 @@
                       "streamTimeoutSeconds",
                       "timeoutSeconds",
                       "cooldownSeconds",
+                      "retrySettings",
                       "createdAt",
                       "updatedAt",
                       "members",
@@ -439655,6 +439753,52 @@
                         "enabled": {
                           "default": true,
                           "type": "boolean"
+                        },
+                        "retrySettings": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "numRetries": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "retryPolicy": {
+                              "type": "object",
+                              "properties": {
+                                "connectionError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "timeoutError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "rateLimitError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "internalServerError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                }
+                              }
+                            },
+                            "initialDelayMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 8000
+                            },
+                            "maxDelayMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 60000
+                            }
+                          }
                         }
                       },
                       "required": [
@@ -439674,6 +439818,52 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 1800
+                  },
+                  "retrySettings": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "numRetries": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "retryPolicy": {
+                        "type": "object",
+                        "properties": {
+                          "connectionError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "timeoutError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "rateLimitError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "internalServerError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          }
+                        }
+                      },
+                      "initialDelayMs": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 8000
+                      },
+                      "maxDelayMs": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 60000
+                      }
+                    }
                   },
                   "cooldownSeconds": {
                     "nullable": true,
@@ -439727,6 +439917,54 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "retrySettings": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "numRetries": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "retryPolicy": {
+                          "type": "object",
+                          "properties": {
+                            "connectionError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "timeoutError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "rateLimitError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "internalServerError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "initialDelayMs": {
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 8000
+                        },
+                        "maxDelayMs": {
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 60000
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -439770,6 +440008,54 @@
                           },
                           "enabled": {
                             "type": "boolean"
+                          },
+                          "retrySettings": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "numRetries": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              },
+                              "retryPolicy": {
+                                "type": "object",
+                                "properties": {
+                                  "connectionError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "timeoutError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "rateLimitError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "internalServerError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "initialDelayMs": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 8000
+                              },
+                              "maxDelayMs": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 60000
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "createdAt": {
                             "type": "string",
@@ -439817,6 +440103,7 @@
                           "priority",
                           "weight",
                           "enabled",
+                          "retrySettings",
                           "createdAt",
                           "providerApiKeyName",
                           "provider"
@@ -439838,6 +440125,7 @@
                     "streamTimeoutSeconds",
                     "timeoutSeconds",
                     "cooldownSeconds",
+                    "retrySettings",
                     "createdAt",
                     "updatedAt",
                     "members",
@@ -440451,6 +440739,52 @@
                         "enabled": {
                           "default": true,
                           "type": "boolean"
+                        },
+                        "retrySettings": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "numRetries": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "retryPolicy": {
+                              "type": "object",
+                              "properties": {
+                                "connectionError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "timeoutError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "rateLimitError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "internalServerError": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                }
+                              }
+                            },
+                            "initialDelayMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 8000
+                            },
+                            "maxDelayMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 60000
+                            }
+                          }
                         }
                       },
                       "required": [
@@ -440470,6 +440804,52 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 1800
+                  },
+                  "retrySettings": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "numRetries": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "retryPolicy": {
+                        "type": "object",
+                        "properties": {
+                          "connectionError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "timeoutError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "rateLimitError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "internalServerError": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          }
+                        }
+                      },
+                      "initialDelayMs": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 8000
+                      },
+                      "maxDelayMs": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 60000
+                      }
+                    }
                   },
                   "cooldownSeconds": {
                     "nullable": true,
@@ -440535,6 +440915,54 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "retrySettings": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "numRetries": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "retryPolicy": {
+                          "type": "object",
+                          "properties": {
+                            "connectionError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "timeoutError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "rateLimitError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "internalServerError": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "initialDelayMs": {
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 8000
+                        },
+                        "maxDelayMs": {
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 60000
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -440578,6 +441006,54 @@
                           },
                           "enabled": {
                             "type": "boolean"
+                          },
+                          "retrySettings": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "numRetries": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10
+                              },
+                              "retryPolicy": {
+                                "type": "object",
+                                "properties": {
+                                  "connectionError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "timeoutError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "rateLimitError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  },
+                                  "internalServerError": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "initialDelayMs": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 8000
+                              },
+                              "maxDelayMs": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 60000
+                              }
+                            },
+                            "additionalProperties": false
                           },
                           "createdAt": {
                             "type": "string",
@@ -440625,6 +441101,7 @@
                           "priority",
                           "weight",
                           "enabled",
+                          "retrySettings",
                           "createdAt",
                           "providerApiKeyName",
                           "provider"
@@ -440646,6 +441123,7 @@
                     "streamTimeoutSeconds",
                     "timeoutSeconds",
                     "cooldownSeconds",
+                    "retrySettings",
                     "createdAt",
                     "updatedAt",
                     "members",

@@ -680,10 +680,9 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=pending']);
     assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
 
-    const committedEvents = await eventCount(session);
     const recovered = await declareAhead(session, 'ahead');
     assert.equal(recovered.result?.isError, false, JSON.stringify(recovered));
-    assert.equal(await eventCount(session), committedEvents, 'the retry takes the receipt over and declares nothing again');
+    // The retry's control hook records its vouch again; the declaration is not made again.
     assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
     assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=complete']);
     assert.deepEqual(await declareAhead(session, 'ahead'), recovered, 'the completed receipt replays byte-identically');

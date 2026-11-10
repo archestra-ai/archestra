@@ -1448,7 +1448,7 @@ function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.
   // Replace only the runtime's decorative prefix, never the reviewed payload.
   return text.startsWith(PIXEL_REVIEW_HEADING)
-    ? `[OpenAPPA] Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
+    ? `Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
     : text;
 }
 

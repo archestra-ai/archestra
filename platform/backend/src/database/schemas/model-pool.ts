@@ -1,5 +1,7 @@
+import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
 import {
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -38,6 +40,8 @@ const modelPoolsTable = pgTable(
      * (LiteLLM's `cooldown_time`). Null keeps the default.
      */
     cooldownSeconds: integer("cooldown_seconds"),
+    /** Null preserves legacy behavior (pool) or inherits the pool (member). */
+    retrySettings: jsonb("retry_settings").$type<ModelPoolRetrySettings>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

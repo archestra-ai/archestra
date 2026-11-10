@@ -762,7 +762,7 @@ describe("unansweredAnnotationNotice", () => {
     );
 
     expect(unansweredAnnotationNotice(failure)).toBe(
-      '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.tool-call" did not answer in time. The call did not run. Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.',
+      '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.tool-call" did not answer in time. The call did not run. The failure is temporary, on Guardrails' side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.',
     );
   });
 

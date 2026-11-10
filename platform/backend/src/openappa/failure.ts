@@ -94,7 +94,7 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
     return `[appa] Not checked: Guardrails' annotator has no usable model configuration. The call did not run. An administrator must configure an Annotator model and provider credential in Settings > Guardrails, or an organization default model and credential. Signing in to the coding client does not configure this separate model. Retry this call after the configuration is fixed.`;
   const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[refusal.reason] ?? "gave no answer"}. The call did not run.`;
   return refusal.transient
-    ? `${head} Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.`
+    ? `${head} The failure is temporary, on Guardrails' side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.`
     : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
 }
 

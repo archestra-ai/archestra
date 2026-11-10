@@ -179,6 +179,26 @@ jobs:
             gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
 
+  recheck-release-prs:
+    name: Re-check open release PRs
+    # Release PRs on the same line wait for this release (Previous Release
+    # Published). Re-check them now instead of at that workflow's next
+    # scheduled run: the release event this job's GITHUB_TOKEN publish caused
+    # starts no workflow, a workflow_dispatch does.
+    if: ${{ needs.finalize.outputs.published == 'true' }}
+    needs:
+      - finalize
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # Start the Previous Release Published workflow.
+    steps:
+      - name: Start Previous Release Published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run previous-release-published.yml --ref main
+
   update-terraform-provider:
     name: Start Terraform provider update
     # Propose each release from main to the Terraform provider as soon as it is

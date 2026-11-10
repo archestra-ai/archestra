@@ -227,6 +227,93 @@ describe("POST /api/model-pools", () => {
     }
   });
 
+  test("persists, preserves, resets and audits retry settings", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null);
+    const retrySettings = {
+      numRetries: 3,
+      retryPolicy: { rateLimitError: 0 },
+      initialDelayMs: 100,
+      maxDelayMs: 1000,
+    };
+    const member = {
+      providerApiKeyId: key.id,
+      modelId: "test-model",
+      retrySettings: { numRetries: 1, maxDelayMs: 100 },
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { name: "retry-pool", retrySettings, members: [member] },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
+    expect(listed.json()[0]).toMatchObject({
+      retrySettings,
+      members: [{ retrySettings: { numRetries: 1, maxDelayMs: 100 } }],
+    });
+    const kept = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: { name: "retry-pool", members: [member] },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
+    expect(kept.json().retrySettings).toEqual(retrySettings);
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: {
+        name: "retry-pool",
+        retrySettings: null,
+        members: [{ ...member, retrySettings: null }],
+      },
+    });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      retrySettings: null,
+      members: [{ retrySettings: null }],
+    });
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "modelPool.updated"),
+          eq(schema.auditLogsTable.resourceId, id),
+        ),
+      )
+      .orderBy(asc(schema.auditLogsTable.createdAt));
+    expect(audits[1]).toMatchObject({
+      before: {
+        retrySettings,
+        members: [{ retrySettings: { numRetries: 1, maxDelayMs: 100 } }],
+      },
+      after: { retrySettings: null, members: [{ retrySettings: null }] },
+    });
+    for (const invalid of [
+      { numRetries: -1 },
+      { numRetries: 11 },
+      { retryPolicy: { timeoutError: 1.5 } },
+      { initialDelayMs: 99 },
+      { maxDelayMs: 60001 },
+      { initialDelayMs: 1000, maxDelayMs: 500 },
+    ]) {
+      for (const payload of [
+        { retrySettings: invalid, members: [member] },
+        { members: [{ ...member, retrySettings: invalid }] },
+      ]) {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/model-pools/${id}`,
+          payload: { name: "retry-pool", ...payload },
+        });
+        expect(response.statusCode, response.body).toBe(400);
+      }
+    }
+  });
+
   test("rejects a personal key, a provider pools can't reach, and a repeated member", async ({
     makeLlmProviderApiKey,
   }) => {

@@ -112237,6 +112237,17 @@ export type GetModelPoolsResponses = {
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -112247,6 +112258,17 @@ export type GetModelPoolsResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -112268,9 +112290,31 @@ export type CreateModelPoolData = {
             priority?: number;
             weight?: number;
             enabled?: boolean;
+            retrySettings?: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
         }>;
         streamTimeoutSeconds?: number | null;
         timeoutSeconds?: number | null;
+        retrySettings?: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         cooldownSeconds?: number | null;
     };
     path?: never;
@@ -112357,6 +112401,17 @@ export type CreateModelPoolResponses = {
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -112367,6 +112422,17 @@ export type CreateModelPoolResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -112562,9 +112628,31 @@ export type UpdateModelPoolData = {
             priority?: number;
             weight?: number;
             enabled?: boolean;
+            retrySettings?: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
         }>;
         streamTimeoutSeconds?: number | null;
         timeoutSeconds?: number | null;
+        retrySettings?: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         cooldownSeconds?: number | null;
     };
     path: {
@@ -112653,6 +112741,17 @@ export type UpdateModelPoolResponses = {
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
+        retrySettings: {
+            numRetries?: number;
+            retryPolicy?: {
+                connectionError?: number;
+                timeoutError?: number;
+                rateLimitError?: number;
+                internalServerError?: number;
+            };
+            initialDelayMs?: number;
+            maxDelayMs?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -112663,6 +112762,17 @@ export type UpdateModelPoolResponses = {
             priority: number;
             weight: number;
             enabled: boolean;
+            retrySettings: {
+                numRetries?: number;
+                retryPolicy?: {
+                    connectionError?: number;
+                    timeoutError?: number;
+                    rateLimitError?: number;
+                    internalServerError?: number;
+                };
+                initialDelayMs?: number;
+                maxDelayMs?: number;
+            } | null;
             createdAt: string;
             providerApiKeyName: string;
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';

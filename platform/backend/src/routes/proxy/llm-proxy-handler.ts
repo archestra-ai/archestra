@@ -363,6 +363,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  abortSignal?: AbortSignal;
   prepareAttempt: (member: PlannedMember) => Promise<void>;
   checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
@@ -1379,6 +1380,7 @@ async function handleObservedLLMProxy<
           },
           grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
           sessionId,
+          retryCountHeader: headersForExtraction["x-archestra-num-retries"],
         })
       : null;
   const endpointModel = modelPoolPlan
@@ -2353,6 +2355,7 @@ async function handleObservedLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
+            abortSignal,
             prepareAttempt: async (member) => {
               if (
                 poolWire === "openai-responses" &&
@@ -5370,6 +5373,7 @@ async function openUpstream<TRequest, T>(params: {
   try {
     return await openThroughModelPool({
       plan: pool.plan,
+      signal: pool.abortSignal,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
       prepareAttempt: (member) => {
@@ -5451,7 +5455,7 @@ function logUpstreamRetry(params: {
   const { attempt, delayMs, provider, model } = params;
   logger.warn(
     { attempt, delayMs, provider, model },
-    "Retrying upstream connection before receiving model output",
+    "Retrying upstream call before receiving model output",
   );
 }
 

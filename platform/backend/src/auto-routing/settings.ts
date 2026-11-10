@@ -117,7 +117,7 @@ export async function createAutoRouter(
 ): Promise<AutoRouterChangeResponse> {
   await assertValidTiers(organizationId, body.tiers);
   if (body.decisionModel) {
-    await assertValidDecisionKey(organizationId, body.decisionModel.apiKeyId);
+    await assertValidDecisionModel(organizationId, body.decisionModel);
   }
   if (await AutoRouterModel.findByName(organizationId, body.name)) {
     throw new ApiError(409, `An auto router named "${body.name}" exists.`);
@@ -148,7 +148,7 @@ export async function updateAutoRouter(
 ): Promise<AutoRouterChangeResponse> {
   if (body.tiers) await assertValidTiers(organizationId, body.tiers);
   if (body.decisionModel) {
-    await assertValidDecisionKey(organizationId, body.decisionModel.apiKeyId);
+    await assertValidDecisionModel(organizationId, body.decisionModel);
   }
   const update: UpdateAutoRouter = {
     name: body.name,
@@ -379,11 +379,21 @@ async function assertValidTiers(
   }
 }
 
-/** A router's own decision key is a decisions provider's, shared with the whole organization. */
-async function assertValidDecisionKey(
+/**
+ * A router's decision model is one the decisions provider offers, and its own
+ * key is that provider's, shared with the whole organization. An unknown
+ * model would be stored and then fail every session's scoring.
+ */
+async function assertValidDecisionModel(
   organizationId: string,
-  apiKeyId: string | null,
+  { apiKeyId, model }: { apiKeyId: string | null; model: string },
 ): Promise<void> {
+  if (!JEV_MODELS.some((offered) => offered.id === model)) {
+    throw new ApiError(
+      400,
+      `"${model}" is not a decision model. Pick one of: ${JEV_MODELS.map((offered) => offered.id).join(", ")}.`,
+    );
+  }
   if (apiKeyId === null) return;
   const [key, organizationWide] = await Promise.all([
     LlmProviderApiKeyModel.findById(apiKeyId),

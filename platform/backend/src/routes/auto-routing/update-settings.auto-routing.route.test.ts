@@ -297,6 +297,29 @@ describe("POST and PUT /api/auto-routing/routers", () => {
     });
   });
 
+  test("a decision model the provider does not offer is refused, on create and on update", async () => {
+    await configureAutoRouting(ctx.organizationId);
+    const routerId = await autoRouterId(ctx.organizationId);
+    const unknown = { apiKeyId: null, model: "jev-1.13" };
+
+    const updated = await putRouter(routerId, { decisionModel: unknown });
+    const created = await postRouter(
+      await routerBody(await makeTrio(), {
+        name: "auto:support",
+        decisionModel: unknown,
+      }),
+    );
+
+    expect(updated.statusCode, updated.body).toBe(400);
+    expect(updated.json().error.message).toContain("jev-1.13");
+    expect(created.statusCode, created.body).toBe(400);
+    // Nothing was stored: the router keeps its generation.
+    const [router] = (
+      await ctx.app.inject({ method: "GET", url: "/api/auto-routing/routers" })
+    ).json();
+    expect(router.decisionModel.model).not.toBe("jev-1.13");
+  });
+
   test("a name taken by another router is refused", async () => {
     await configureAutoRouting(ctx.organizationId);
     const routerId = await autoRouterId(ctx.organizationId);

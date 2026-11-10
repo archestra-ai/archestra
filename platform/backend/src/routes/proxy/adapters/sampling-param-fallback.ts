@@ -21,7 +21,7 @@ const SAMPLING_PARAM_TOKENS: Record<string, SamplingParam> = {
 };
 
 const REJECTION_PATTERN =
-  /deprecated|not supported|unsupported|does not support|isn't supported|not allowed/;
+  /deprecated|not supported|unsupported|does not support|doesn't support|isn't supported|not allowed/;
 
 /**
  * Return which sampling params an upstream error is rejecting, or [] when the

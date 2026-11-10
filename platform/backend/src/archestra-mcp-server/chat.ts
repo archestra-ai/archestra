@@ -169,7 +169,11 @@ const registry = defineArchestraTools([
       const { agent: contextAgent } = context;
 
       logger.info(
-        { agentId: contextAgent.id, todoArgs: args },
+        {
+          agentId: contextAgent.id,
+          argumentKeys: Object.keys(args),
+          argumentsSize: JSON.stringify(args).length,
+        },
         "todo_write tool called",
       );
 

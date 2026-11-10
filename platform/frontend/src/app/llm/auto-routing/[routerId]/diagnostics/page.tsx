@@ -10,23 +10,23 @@ import { Slider } from "@/components/ui/slider";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRoutingDiagnostics,
+  useAutoRouter,
   useAutoRoutingDiagnostics,
   useAutoRoutingPlan,
-  useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
-import { budgetScale } from "../_parts/budget-scale";
+import { budgetScale } from "../../_parts/budget-scale";
 import {
   JevHistograms,
   RoutingTriangle,
   SizeScatter,
-} from "../_parts/diagnostics-charts";
-import { parseFittedHistory } from "../_parts/plan-document";
-import { TIER_COLOR, TIER_NAMES } from "../_parts/tiers";
-import { TryPrompt } from "../_parts/try-prompt";
-import { WhatIf } from "../_parts/what-if";
+} from "../../_parts/diagnostics-charts";
+import { parseFittedHistory } from "../../_parts/plan-document";
+import { TIER_COLOR, TIER_NAMES } from "../../_parts/tiers";
+import { TryPrompt } from "../../_parts/try-prompt";
+import { WhatIf } from "../../_parts/what-if";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
 
@@ -42,7 +42,7 @@ export default function AutoRoutingDiagnosticsPage() {
 
 /** Scores a prompt and shows the tier the active plan would send it to. */
 function TryPromptSection() {
-  const { data: settings } = useAutoRoutingSettings();
+  const { data: settings } = useAutoRouter();
   const { data: canUpdate = false } = useHasPermissions({
     llmProxy: ["update"],
   });
@@ -52,7 +52,7 @@ function TryPromptSection() {
 
 /** How the active plan would route under another budget or other tiers. */
 function WhatIfSection() {
-  const { data: settings } = useAutoRoutingSettings();
+  const { data: settings } = useAutoRouter();
   const { data: plan } = useAutoRoutingPlan(
     settings?.status.activePlan?.id ?? null,
   );
@@ -226,7 +226,7 @@ function RoutedView({ data }: { data: AutoRoutingDiagnostics }) {
 
 /** What the active plan was fitted on: how many sessions, how many from past traffic, and how recent. */
 function TrainingSummary() {
-  const { data: settings } = useAutoRoutingSettings();
+  const { data: settings } = useAutoRouter();
   const { data: plan } = useAutoRoutingPlan(
     settings?.status.activePlan?.id ?? null,
   );

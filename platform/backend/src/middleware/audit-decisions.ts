@@ -5,6 +5,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import AutoRouterModel from "@/models/auto-router";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
@@ -184,6 +185,7 @@ export const AUDIT_DECISIONS = {
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
   modelPoolsTable: { audited: true, model: ModelPoolModel },
+  autoRoutersTable: { audited: true, model: AutoRouterModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
@@ -889,6 +891,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child: pool × provider key; parent (model pool) audited",
   },
+  autoRouterVirtualApiKeysTable: {
+    audited: false,
+    reason: "join: auto router × virtual key; parent (virtual key) audited",
+  },
   modelPoolVirtualApiKeysTable: {
     audited: false,
     reason: "join: pool × virtual key; parent (model pool) audited",
@@ -1197,8 +1203,7 @@ export const AUDIT_DECISIONS = {
   },
   autoRoutingTiersTable: {
     audited: false,
-    reason:
-      "child of the auto-routing settings on the organization's LLM Proxy row",
+    reason: "child of an auto router; parent audited",
   },
   routingPlansTable: {
     audited: false,

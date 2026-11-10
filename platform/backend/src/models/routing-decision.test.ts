@@ -5,6 +5,7 @@ import db, { schema } from "@/database";
 import RoutingDecisionModel from "@/models/routing-decision";
 import { describe, expect, test } from "@/test";
 import {
+  ensureAutoRouter,
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
@@ -19,6 +20,7 @@ describe("RoutingDecisionModel", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
+    const router = await ensureAutoRouter(organization.id);
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     const sessionKey = sessionKeyFor("session-1");
@@ -28,6 +30,7 @@ describe("RoutingDecisionModel", () => {
         RoutingDecisionModel.insertOrGet(
           plannedDecision({
             organizationId: organization.id,
+            routerId: router.id,
             sessionKey,
             modelId: model.id,
             scorerVersionId: scorer.id,
@@ -49,6 +52,8 @@ describe("RoutingDecisionModel", () => {
   }) => {
     const first = await makeOrganization();
     const second = await makeOrganization();
+    const firstRouter = await ensureAutoRouter(first.id);
+    const secondRouter = await ensureAutoRouter(second.id);
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     const sessionKey = sessionKeyFor("shared-session-id");
@@ -56,6 +61,7 @@ describe("RoutingDecisionModel", () => {
     const a = await RoutingDecisionModel.insertOrGet(
       plannedDecision({
         organizationId: first.id,
+        routerId: firstRouter.id,
         sessionKey,
         modelId: model.id,
         scorerVersionId: scorer.id,
@@ -65,6 +71,7 @@ describe("RoutingDecisionModel", () => {
     const b = await RoutingDecisionModel.insertOrGet(
       plannedDecision({
         organizationId: second.id,
+        routerId: secondRouter.id,
         sessionKey,
         modelId: model.id,
         scorerVersionId: scorer.id,
@@ -77,7 +84,7 @@ describe("RoutingDecisionModel", () => {
     expect(
       (
         await RoutingDecisionModel.find({
-          organizationId: first.id,
+          routerId: firstRouter.id,
           sessionKey,
         })
       )?.tierIndex,
@@ -85,10 +92,47 @@ describe("RoutingDecisionModel", () => {
     expect(
       (
         await RoutingDecisionModel.find({
-          organizationId: second.id,
+          routerId: secondRouter.id,
           sessionKey,
         })
       )?.tierIndex,
+    ).toBe(2);
+  });
+
+  test("two routers of one organization keep separate decisions for the same session", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const routerA = await ensureAutoRouter(organization.id, "auto");
+    const routerB = await ensureAutoRouter(organization.id, "auto:support");
+    const model = await makeRoutingModel();
+    const scorer = await makeScorerVersion();
+    const sessionKey = sessionKeyFor("same-session-two-routers");
+    const insert = (routerId: string, tierIndex: number) =>
+      RoutingDecisionModel.insertOrGet(
+        plannedDecision({
+          organizationId: organization.id,
+          routerId,
+          sessionKey,
+          modelId: model.id,
+          scorerVersionId: scorer.id,
+          tierIndex,
+        }),
+      );
+
+    const a = await insert(routerA.id, 0);
+    const b = await insert(routerB.id, 2);
+
+    expect(a.created).toBe(true);
+    expect(b.created).toBe(true);
+    expect(b.decision.id).not.toBe(a.decision.id);
+    expect(
+      (await RoutingDecisionModel.find({ routerId: routerA.id, sessionKey }))
+        ?.tierIndex,
+    ).toBe(0);
+    expect(
+      (await RoutingDecisionModel.find({ routerId: routerB.id, sessionKey }))
+        ?.tierIndex,
     ).toBe(2);
   });
 
@@ -96,10 +140,12 @@ describe("RoutingDecisionModel", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
+    const router = await ensureAutoRouter(organization.id);
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     const values = plannedDecision({
       organizationId: organization.id,
+      routerId: router.id,
       sessionKey: sessionKeyFor("round-trip"),
       modelId: model.id,
       scorerVersionId: scorer.id,
@@ -107,7 +153,7 @@ describe("RoutingDecisionModel", () => {
 
     await RoutingDecisionModel.insertOrGet(values);
     const stored = await RoutingDecisionModel.find({
-      organizationId: organization.id,
+      routerId: router.id,
       sessionKey: values.sessionKey,
     });
 
@@ -239,11 +285,13 @@ describe("RoutingDecisionModel", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
+    const router = await ensureAutoRouter(organization.id);
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     const values = (session: string) =>
       plannedDecision({
         organizationId: organization.id,
+        routerId: router.id,
         sessionKey: sessionKeyFor(session),
         modelId: model.id,
         scorerVersionId: scorer.id,
@@ -286,7 +334,7 @@ describe("RoutingDecisionModel", () => {
     });
     expect(
       await RoutingDecisionModel.find({
-        organizationId: organization.id,
+        routerId: router.id,
         sessionKey: sessionKeyFor("old"),
       }),
     ).toBeNull();
@@ -297,6 +345,7 @@ describe("RoutingDecisionModel", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
+    const router = await ensureAutoRouter(organization.id);
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     const now = new Date("2026-06-01T00:00:00Z");
@@ -307,6 +356,7 @@ describe("RoutingDecisionModel", () => {
         Array.from({ length: 5 }, (_, i) => ({
           ...plannedDecision({
             organizationId: organization.id,
+            routerId: router.id,
             sessionKey: sessionKeyFor(`batch-${i}`),
             modelId: model.id,
             scorerVersionId: scorer.id,

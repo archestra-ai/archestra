@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { ModelModel } from "@/models";
 import type { Model } from "@/types";
-import type { AutoRoutingSettings, RouterDocument } from "@/types/auto-routing";
+import type { AutoRouter, RouterDocument } from "@/types/auto-routing";
 
 export const TIER_NAMES = ["fast", "normal", "smart"] as const;
 type TierName = (typeof TIER_NAMES)[number];
@@ -22,7 +22,7 @@ export type RouterTierSet = {
 
 /** The configured (fast, normal, smart) models, or why there is no trio. */
 export async function loadTrio(
-  settings: AutoRoutingSettings,
+  settings: AutoRouter,
 ): Promise<{ kind: "ok"; trio: Trio } | { kind: "missing"; tier: TierName }> {
   const ids = [
     settings.fastModelId,

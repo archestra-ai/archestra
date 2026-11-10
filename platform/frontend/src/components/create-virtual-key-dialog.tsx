@@ -7,6 +7,10 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
+  AutoRoutersField,
+  useCanSetAutoRouters,
+} from "@/components/credential-billing/auto-routers-field";
+import {
   BudgetFields,
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
@@ -165,6 +169,8 @@ export function CreateVirtualKeyDialog({
   const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
   const [modelPoolIds, setModelPoolIds] = useState<string[]>([]);
   const canSetModelPools = useCanSetModelPools();
+  const [autoRouterIds, setAutoRouterIds] = useState<string[]>([]);
+  const canSetAutoRouters = useCanSetAutoRouters();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
@@ -249,6 +255,7 @@ export function CreateVirtualKeyDialog({
       setSpendCap(null);
       setGrants([]);
       setModelPoolIds([]);
+      setAutoRouterIds([]);
       setLabels([]);
       initialSnapshotRef.current = {
         keyType,
@@ -355,6 +362,8 @@ export function CreateVirtualKeyDialog({
                 }),
               ),
               ...(canSetModelPools && { modelPoolIds }),
+              ...(canSetAutoRouters &&
+                autoRouterIds.length > 0 && { autoRouterIds }),
             },
       });
       setNewKeyName("");
@@ -380,6 +389,8 @@ export function CreateVirtualKeyDialog({
     expiresAt,
     grants,
     modelPoolIds,
+    canSetAutoRouters,
+    autoRouterIds,
     isPassthrough,
     labels,
     includeFutureProviders,
@@ -435,6 +446,7 @@ export function CreateVirtualKeyDialog({
             <VirtualKeyConnectionGuide
               keyValue={createdKey.value}
               keyType={createdKey.keyType}
+              virtualApiKeyId={createdKey.id}
               mappedProviderKeys={createdKey.providerApiKeys}
               includeFutureProviders={createdKey.includeFutureProviders}
               connectionBaseUrl={connectionBaseUrl}
@@ -496,6 +508,12 @@ export function CreateVirtualKeyDialog({
                 <ModelPoolsField
                   value={modelPoolIds}
                   onChange={setModelPoolIds}
+                />
+              )}
+              {!isPassthrough && canSetAutoRouters && (
+                <AutoRoutersField
+                  value={autoRouterIds}
+                  onChange={setAutoRouterIds}
                 />
               )}
               {canChooseOwner && (

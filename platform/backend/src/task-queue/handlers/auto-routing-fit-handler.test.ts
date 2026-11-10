@@ -2,18 +2,20 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { completeFit, fitNow, prepareFit } from "@/auto-routing/fit";
-import { getAutoRoutingSettings } from "@/auto-routing/settings";
+import { getAutoRouter } from "@/auto-routing/settings";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { loadTrio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
-import { AgentModel, ModelModel } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import { ModelModel } from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
   activeFit,
+  ensureAutoRouter,
   makeScorerVersion,
+  setAutoRoutingEnabled,
   setAutoRoutingTiers,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
@@ -32,7 +34,7 @@ describe("auto routing plan fit", () => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 29);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
 
     const [plan] = await plans(org.organizationId);
     expect(plan).toMatchObject({
@@ -40,7 +42,7 @@ describe("auto routing plan fit", () => {
       plan: null,
       diagnostics: { sessions: 29, min_sessions: 30 },
     });
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("publishes a plan for the current tiers that the router can serve", async ({
@@ -49,17 +51,17 @@ describe("auto routing plan fit", () => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
 
-    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const active = await RoutingPlanModel.findActive(org.routerId);
     expect(active).toMatchObject({ status: "active", trigger: "settings" });
     expect(active?.tiersFingerprint).toEqual(
-      tiersFingerprint(await currentTrio(org.organizationId)),
+      tiersFingerprint(await currentTrio(org.routerId)),
     );
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
-    const refit = await RoutingPlanModel.findActive(org.organizationId);
+    await handleAutoRoutingFit({ routerId: org.routerId });
+    const refit = await RoutingPlanModel.findActive(org.routerId);
     expect(refit?.id).not.toBe(active?.id);
     expect(refit?.trigger).toBe("nightly");
   });
@@ -69,19 +71,16 @@ describe("auto routing plan fit", () => {
   }) => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
-    await db
-      .update(schema.agentsTable)
-      .set({ autoRoutingBudgetUsdPerDay: null })
-      .where(eq(schema.agentsTable.organizationId, org.organizationId));
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
+      budgetUsdPerDay: null,
       budgetPreset: "intelligence",
     });
 
     await autoRoutingDispatcher.dispatch();
-    const [task] = await pendingFits(org.organizationId);
+    const [task] = await pendingFits(org.routerId);
     await handleAutoRoutingFit(task.payload);
 
-    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const active = await RoutingPlanModel.findActive(org.routerId);
     const summary = z
       .object({
         tier_session_share: z.tuple([z.number(), z.number(), z.number()]),
@@ -90,34 +89,34 @@ describe("auto routing plan fit", () => {
       .parse(active?.summary);
     expect(Number(active?.budgetUsdPerDay)).toBeGreaterThan(0);
     expect(summary.tier_session_share[2]).toBeGreaterThanOrEqual(2 / 3);
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("names an unrequested fit by what moved: nothing yet, then a finished backfill", async ({
     makeOrganization,
   }) => {
     const org = await configuredOrganization(makeOrganization);
-    await AutoRoutingSettingsModel.activateScorerVersion(
-      org.organizationId,
+    await AutoRouterModel.activateScorerVersion(
+      org.routerId,
       (await activeSourceVersion()).id,
     );
     await db
-      .update(schema.agentsTable)
+      .update(schema.autoRoutersTable)
       .set({
-        autoRoutingPlannedGeneration: sql`${schema.agentsTable.autoRoutingGeneration}`,
+        plannedGeneration: sql`${schema.autoRoutersTable.generation}`,
       })
-      .where(eq(schema.agentsTable.organizationId, org.organizationId));
+      .where(eq(schema.autoRoutersTable.id, org.routerId));
     await seedHistory(org, 40);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
-    expect(
-      (await RoutingPlanModel.findActive(org.organizationId))?.trigger,
-    ).toBe("initial");
+    await handleAutoRoutingFit({ routerId: org.routerId });
+    expect((await RoutingPlanModel.findActive(org.routerId))?.trigger).toBe(
+      "initial",
+    );
 
     const scorerVersionId = (await activeSourceVersion()).id;
     await withDbTransaction(async (tx) => {
-      const fitGeneration = await AutoRoutingSettingsModel.bumpGeneration(
-        org.organizationId,
+      const fitGeneration = await AutoRouterModel.bumpGeneration(
+        org.routerId,
         tx,
       );
       await tx.insert(schema.routingBackfillsTable).values({
@@ -133,35 +132,35 @@ describe("auto routing plan fit", () => {
         fitGeneration,
       });
     });
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
-    expect(
-      (await RoutingPlanModel.findActive(org.organizationId))?.trigger,
-    ).toBe("backfill");
+    await handleAutoRoutingFit({ routerId: org.routerId });
+    expect((await RoutingPlanModel.findActive(org.routerId))?.trigger).toBe(
+      "backfill",
+    );
   });
 
   test("records a router failure with its code and keeps the organization clean", async ({
     makeOrganization,
   }) => {
     const org = await configuredOrganization(makeOrganization);
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "0.01",
     });
     await seedHistory(org, 40);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
 
     const [plan] = await plans(org.organizationId);
     expect(plan.status).toBe("failed");
     expect(plan.error).toMatch(/^ARCHESTRA_ROUTER_INFEASIBLE: /);
-    expect(await RoutingPlanModel.findActive(org.organizationId)).toBeNull();
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await RoutingPlanModel.findActive(org.routerId)).toBeNull();
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("records tiers with different long-context thresholds as a failed fit", async ({
     makeOrganization,
   }) => {
     const org = await configuredOrganization(makeOrganization);
-    const [fast, normal] = await currentTrio(org.organizationId);
+    const [fast, normal] = await currentTrio(org.routerId);
     for (const [model, threshold] of [
       [fast, 128_000],
       [normal, 200_000],
@@ -176,15 +175,15 @@ describe("auto routing plan fit", () => {
     }
     await seedHistory(org, 40);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
 
     const [plan] = await plans(org.organizationId);
     expect(plan.status).toBe("failed");
     expect(plan.tiersFingerprint).toMatchObject({
       long_context_thresholds: [128_000, 200_000, null],
     });
-    expect(await RoutingPlanModel.findActive(org.organizationId)).toBeNull();
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await RoutingPlanModel.findActive(org.routerId)).toBeNull();
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("a new scorer version is activated once and refitted as a scorer change", async ({
@@ -192,15 +191,13 @@ describe("auto routing plan fit", () => {
   }) => {
     const org = await configuredOrganization(makeOrganization);
     const previous = await makeScorerVersion();
-    await AutoRoutingSettingsModel.activateScorerVersion(
-      org.organizationId,
-      previous.id,
-    );
-    const before = await AutoRoutingSettingsModel.find(org.organizationId);
-    if (!before) throw new Error("organization has no LLM Proxy");
+    await AutoRouterModel.activateScorerVersion(org.routerId, previous.id);
+    const before = await AutoRouterModel.find(org.routerId);
+    if (!before) throw new Error("auto router does not exist");
     await RoutingPlanModel.publish(
       activeFit({
         organizationId: org.organizationId,
+        routerId: org.routerId,
         scorerVersionId: previous.id,
         generation: before.generation,
         inputWatermark: new Date(Date.now() - 60_000),
@@ -208,34 +205,33 @@ describe("auto routing plan fit", () => {
     );
     await seedHistory(org, 40);
 
-    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    await handleAutoRoutingFit({ routerId: org.routerId });
 
     const running = (await activeSourceVersion()).id;
-    expect(await RoutingPlanModel.findActive(org.organizationId)).toMatchObject(
-      { trigger: "scorer_change", scorerVersionId: running },
-    );
-    expect(
-      await AutoRoutingSettingsModel.find(org.organizationId),
-    ).toMatchObject({
+    expect(await RoutingPlanModel.findActive(org.routerId)).toMatchObject({
+      trigger: "scorer_change",
+      scorerVersionId: running,
+    });
+    expect(await AutoRouterModel.find(org.routerId)).toMatchObject({
       scorerVersionId: running,
       generation: before.generation + 1,
     });
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("a history above the session cap fits a deterministic sample at the full window's volume", async ({
     makeOrganization,
   }) => {
     const org = await configuredOrganization(makeOrganization);
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "1000.00",
     });
     await seedHistory(org, 200);
     const cap = 60;
 
-    const full = await fittedPlan(org.organizationId);
-    const capped = await fittedPlan(org.organizationId, cap);
-    const again = await fittedPlan(org.organizationId, cap);
+    const full = await fittedPlan(org.routerId);
+    const capped = await fittedPlan(org.routerId, cap);
+    const again = await fittedPlan(org.routerId, cap);
 
     expect(full.inputs.history.sample).toHaveLength(200);
     expect(capped.inputs.history.sample).toHaveLength(cap);
@@ -253,10 +249,10 @@ describe("auto routing plan fit", () => {
   }) => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
-    const inputs = await prepareFit(org.organizationId);
+    const inputs = await prepareFit(org.routerId);
     if (!inputs) throw new Error("organization is not configured");
 
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "30.00",
     });
     const stale = await completeFit(inputs);
@@ -265,7 +261,7 @@ describe("auto routing plan fit", () => {
       kind: "rejected",
       reason: "stale_generation",
     });
-    expect(await isDirty(org.organizationId)).toBe(true);
+    expect(await isDirty(org.routerId)).toBe(true);
 
     await autoRoutingDispatcher.dispatch();
     const [task] = await db
@@ -277,13 +273,14 @@ describe("auto routing plan fit", () => {
           eq(schema.tasksTable.status, "pending"),
         ),
       );
-    expect(task.payload).toEqual({ organizationId: org.organizationId });
+    expect(task.payload).toEqual({ routerId: org.routerId });
 
     await handleAutoRoutingFit(task.payload);
-    const settings = await AutoRoutingSettingsModel.find(org.organizationId);
-    expect(await RoutingPlanModel.findActive(org.organizationId)).toMatchObject(
-      { generation: settings?.generation, budgetUsdPerDay: "30.00" },
-    );
+    const settings = await AutoRouterModel.find(org.routerId);
+    expect(await RoutingPlanModel.findActive(org.routerId)).toMatchObject({
+      generation: settings?.generation,
+      budgetUsdPerDay: "30.00",
+    });
   });
 
   test("a dispatcher fit over older usage loses to the inline fit that overlapped it", async ({
@@ -291,10 +288,10 @@ describe("auto routing plan fit", () => {
   }) => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
-    const dispatched = await prepareFit(org.organizationId);
+    const dispatched = await prepareFit(org.routerId);
     if (!dispatched) throw new Error("organization is not configured");
 
-    const inline = (await fitNow(org.organizationId, "settings"))?.fit;
+    const inline = (await fitNow(org.routerId, "settings"))?.fit;
     const late = await completeFit(dispatched);
 
     expect(late).toMatchObject({
@@ -302,12 +299,13 @@ describe("auto routing plan fit", () => {
       reason: "stale_watermark",
       plan: { status: "rejected", error: "stale_watermark" },
     });
-    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const active = await RoutingPlanModel.findActive(org.routerId);
     expect(inline).toEqual({ status: "active", planId: active?.id });
     expect(
-      (await getAutoRoutingSettings(org.organizationId)).status.lastFitError,
+      (await getAutoRouter(org.organizationId, org.routerId)).status
+        .lastFitError,
     ).toBeNull();
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("an inline fit racing a dispatched one leaves one active plan and nothing due", async ({
@@ -315,14 +313,14 @@ describe("auto routing plan fit", () => {
   }) => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "30.00",
     });
     await autoRoutingDispatcher.dispatch();
-    const [task] = await pendingFits(org.organizationId);
+    const [task] = await pendingFits(org.routerId);
 
     const [inline] = await Promise.all([
-      fitNow(org.organizationId, "settings"),
+      fitNow(org.routerId, "settings"),
       handleAutoRoutingFit(task.payload),
     ]);
 
@@ -332,7 +330,7 @@ describe("auto routing plan fit", () => {
     );
     expect(active).toHaveLength(1);
     expect(active[0].budgetUsdPerDay).toBe("30.00");
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 
   test("concurrent inline fits at one generation share a single fit", async ({
@@ -342,7 +340,7 @@ describe("auto routing plan fit", () => {
     await seedHistory(org, 40);
 
     const results = await Promise.all(
-      Array.from({ length: 3 }, () => fitNow(org.organizationId, "settings")),
+      Array.from({ length: 3 }, () => fitNow(org.routerId, "settings")),
     );
 
     const recorded = await plans(org.organizationId);
@@ -358,17 +356,17 @@ describe("auto routing plan fit", () => {
     const org = await configuredOrganization(makeOrganization);
     await seedHistory(org, 40);
 
-    const first = fitNow(org.organizationId, "settings");
-    await AutoRoutingSettingsModel.update(org.organizationId, {
+    const first = fitNow(org.routerId, "settings");
+    await AutoRouterModel.update(org.routerId, {
       budgetUsdPerDay: "30.00",
     });
     const results = await Promise.all([
       first,
-      fitNow(org.organizationId, "settings"),
-      fitNow(org.organizationId, "settings"),
+      fitNow(org.routerId, "settings"),
+      fitNow(org.routerId, "settings"),
     ]);
 
-    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const active = await RoutingPlanModel.findActive(org.routerId);
     expect(active?.budgetUsdPerDay).toBe("30.00");
     for (const result of results) {
       expect(result?.fit).toEqual({ status: "active", planId: active?.id });
@@ -377,7 +375,7 @@ describe("auto routing plan fit", () => {
       (plan) => plan.status !== "rejected",
     );
     expect(accepted).toHaveLength(1);
-    expect(await isDirty(org.organizationId)).toBe(false);
+    expect(await isDirty(org.routerId)).toBe(false);
   });
 });
 
@@ -393,24 +391,26 @@ const PlanSummarySchema = z
   })
   .passthrough();
 
-type Org = { organizationId: string; smartModelId: string };
+type Org = {
+  organizationId: string;
+  routerId: string;
+  smartModelId: string;
+};
 
 async function configuredOrganization(
   makeOrganization: () => Promise<{ id: string }>,
 ): Promise<Org> {
   const organizationId = (await makeOrganization()).id;
-  await AgentModel.getOrgLlmProxy(organizationId);
+  const router = await ensureAutoRouter(organizationId);
   const [fast, normal, smart] = [
     await pricedModel("1.00", "5.00"),
     await pricedModel("3.00", "15.00"),
     await pricedModel("15.00", "75.00"),
   ];
-  await setAutoRoutingTiers(organizationId, { fast, normal, smart });
-  await AutoRoutingSettingsModel.update(organizationId, {
-    enabled: true,
-    budgetUsdPerDay: "25.00",
-  });
-  return { organizationId, smartModelId: smart.id };
+  await setAutoRoutingTiers(organizationId, { fast, normal, smart }, router.id);
+  await setAutoRoutingEnabled(organizationId, true);
+  await AutoRouterModel.update(router.id, { budgetUsdPerDay: "25.00" });
+  return { organizationId, routerId: router.id, smartModelId: smart.id };
 }
 
 function pricedModel(input: string, output: string) {
@@ -427,8 +427,8 @@ function pricedModel(input: string, output: string) {
 }
 
 /** Prepares and publishes a fit reading at most `maxSessions` sessions; its plan must be active. */
-async function fittedPlan(organizationId: string, maxSessions?: number) {
-  const inputs = await prepareFit(organizationId, undefined, maxSessions);
+async function fittedPlan(routerId: string, maxSessions?: number) {
+  const inputs = await prepareFit(routerId, undefined, maxSessions);
   if (!inputs) throw new Error("organization is not configured");
   const published = await completeFit(inputs);
   if (published.kind !== "recorded" || published.plan.status !== "active")
@@ -440,27 +440,28 @@ async function fittedPlan(organizationId: string, maxSessions?: number) {
 async function seedHistory(org: Org, sessions: number) {
   await seedFitHistory({
     organizationId: org.organizationId,
+    routerId: org.routerId,
     modelId: org.smartModelId,
     scorerVersionId: (await activeSourceVersion()).id,
     sessions,
   });
 }
 
-async function currentTrio(organizationId: string) {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings) throw new Error("organization has no LLM Proxy");
+async function currentTrio(routerId: string) {
+  const settings = await AutoRouterModel.find(routerId);
+  if (!settings) throw new Error("auto router does not exist");
   const loaded = await loadTrio(settings);
   if (loaded.kind !== "ok") throw new Error("trio is not configured");
   return loaded.trio;
 }
 
-async function isDirty(organizationId: string): Promise<boolean> {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings) throw new Error("organization has no LLM Proxy");
+async function isDirty(routerId: string): Promise<boolean> {
+  const settings = await AutoRouterModel.find(routerId);
+  if (!settings) throw new Error("auto router does not exist");
   return settings.generation > settings.plannedGeneration;
 }
 
-function pendingFits(organizationId: string) {
+function pendingFits(routerId: string) {
   return db
     .select()
     .from(schema.tasksTable)
@@ -468,7 +469,7 @@ function pendingFits(organizationId: string) {
       and(
         eq(schema.tasksTable.taskType, "auto_routing_fit"),
         eq(schema.tasksTable.status, "pending"),
-        sql`${schema.tasksTable.payload}->>'organizationId' = ${organizationId}`,
+        sql`${schema.tasksTable.payload}->>'routerId' = ${routerId}`,
       ),
     );
 }

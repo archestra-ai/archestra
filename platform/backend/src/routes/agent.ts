@@ -55,6 +55,7 @@ import {
   ProjectModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
+import AutoRouterModel from "@/models/auto-router";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -854,7 +855,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      applyAgentAutoModel(body, { runtime: body.runtime ?? null });
+      await applyAgentAutoRouter(body, {
+        organizationId,
+        runtime: body.runtime ?? null,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
@@ -2295,7 +2299,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      applyAgentAutoModel(body, {
+      await applyAgentAutoRouter(body, {
+        organizationId,
         runtime:
           body.runtime !== undefined ? body.runtime : existingAgent.runtime,
         builtIn: existingAgent.builtInAgentConfig !== null,
@@ -3379,35 +3384,47 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
 }
 
 /**
- * `auto` replaces the agent's model, key and pool; picking any of them leaves
- * `auto`. Agent Runtime agents and built-in agents cannot run on `auto`.
+ * An auto router replaces the agent's model, key and pool; picking any of
+ * them leaves the router. Agent Runtime agents and built-in agents cannot run
+ * on one.
  */
-function applyAgentAutoModel(
+async function applyAgentAutoRouter(
   body: {
-    autoModel?: boolean;
+    autoRouterId?: string | null;
     modelPoolId?: string | null;
     llmApiKeyId?: string | null;
     modelId?: string | null;
   },
-  agent: { runtime: unknown; builtIn?: boolean },
-): void {
+  agent: { organizationId: string; runtime: unknown; builtIn?: boolean },
+): Promise<void> {
   const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
-  if (body.autoModel) {
+  if (body.autoRouterId) {
     if (hasRuntime) {
-      throw new ApiError(400, "Agent Runtime agents cannot run on auto.");
+      throw new ApiError(
+        400,
+        "Agent Runtime agents cannot run on an auto router.",
+      );
     }
     if (agent.builtIn) {
-      throw new ApiError(400, "Built-in agents cannot run on auto.");
+      throw new ApiError(400, "Built-in agents cannot run on an auto router.");
+    }
+    if (
+      !(await AutoRouterModel.findInOrganization(
+        agent.organizationId,
+        body.autoRouterId,
+      ))
+    ) {
+      throw new ApiError(400, "The selected auto router no longer exists.");
     }
     body.modelId = null;
     body.llmApiKeyId = null;
     body.modelPoolId = null;
   } else if (
     hasRuntime ||
-    (body.autoModel === undefined &&
+    (body.autoRouterId === undefined &&
       (body.modelPoolId || body.llmApiKeyId || body.modelId))
   ) {
-    // An agent that becomes an Agent Runtime agent leaves `auto` too.
-    body.autoModel = false;
+    // An agent that becomes an Agent Runtime agent leaves its auto router too.
+    body.autoRouterId = null;
   }
 }

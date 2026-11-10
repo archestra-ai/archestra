@@ -4,18 +4,17 @@ import {
   requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import {
-  type AutoRoutingSettings,
-  useAutoRoutingSettings,
-} from "@/lib/auto-routing.query";
+import { type AutoRouter, useAutoRouters } from "@/lib/auto-routing.query";
 import { useFeature } from "@/lib/config/config.query";
 
-/** The Unified Model API's auto routing model name. */
-export const AUTO_MODEL = "auto";
-
-type AutoRoutingTier = keyof AutoRoutingSettings["tiers"];
+type AutoRoutingTier = keyof AutoRouter["tiers"];
 const TIERS: AutoRoutingTier[] = ["fast", "normal", "smart"];
+type RouterEndpoint = "chat/completions" | "responses";
+type OfferedRouter = Pick<
+  AutoRouter,
+  "id" | "name" | "enabled" | "tiers" | "virtualApiKeyIds"
+>;
+type OfferedTier = NonNullable<AutoRouter["tiers"][AutoRoutingTier]>;
 
 /** A model the request example can pick for this credential. */
 interface RoutableModel {
@@ -26,62 +25,124 @@ interface RoutableModel {
 
 /** What the request example offers for auto routing. */
 export type AutoRoutingOffer =
-  /** Nothing: the alpha is off, or auto routing is off and the viewer can't set it up. */
+  /** Nothing: the alpha is off, or the credential has no router that is set up. */
   | { kind: "none" }
-  /** Auto routing is off or has no model for a tier; the viewer can set it up. */
-  | { kind: "setup" }
-  /** The credential can call `auto`, on the endpoint every tier model serves. */
-  | { kind: "available"; endpoint: "chat/completions" | "responses" }
+  /** The routers the credential can call, each on the endpoint every tier model serves. */
+  | {
+      kind: "available";
+      routers: Array<{
+        name: string;
+        endpoint: RouterEndpoint;
+        tiers: Record<AutoRoutingTier, OfferedTier>;
+      }>;
+    }
   /** Auto routing is on, but the credential can't reach these tier models. */
   | {
       kind: "unreachable";
       missing: Array<{ tier: AutoRoutingTier; provider: SupportedProvider }>;
     }
-  /** The tier models share no endpoint, so no request can call `auto`. */
+  /** The tier models share no endpoint, so no request can call the router. */
   | { kind: "no-shared-endpoint" };
 
 /**
- * Decides the offer. A tier counts as reachable when its model is among the
- * models the example can already pick for this credential, the same list the
- * model picker shows.
+ * Decides the offer. A virtual key, or an OAuth client calling as the app,
+ * reaches the routers it was given, on their own provider keys. Any other
+ * credential reaches a router when every tier
+ * model is among the models the example can already pick for it, the same
+ * list the model picker shows.
  *
- * The router refuses `auto` unless every tier model serves the request's
+ * The proxy refuses a router unless every tier model serves the request's
  * endpoint, so this mirrors its endpoint rules: a model that requires
  * Responses can't take Chat Completions, and a Chat Completions-only provider
  * can't take Responses.
  */
 export function autoRoutingOffer({
   featureEnabled,
-  settings,
-  canConfigure,
+  routers,
+  virtualApiKeyId,
+  grantedRouterIds = null,
   routableModels,
   modelsPending,
 }: {
   featureEnabled: boolean;
-  settings: Pick<AutoRoutingSettings, "enabled" | "tiers"> | null | undefined;
-  canConfigure: boolean;
+  routers: readonly OfferedRouter[] | null | undefined;
+  /** The virtual key the example is for; null for any other credential. */
+  virtualApiKeyId: string | null;
+  /** The routers given to an OAuth client calling as the app; null for any other credential. */
+  grantedRouterIds?: readonly string[] | null;
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
-  if (!featureEnabled || !settings) return { kind: "none" };
-  const configured = TIERS.flatMap((tier) => {
-    const model = settings.tiers[tier];
-    return model ? [{ tier, ...model }] : [];
-  });
-  if (!settings.enabled || configured.length < TIERS.length) {
-    return canConfigure ? { kind: "setup" } : { kind: "none" };
-  }
-  // Wait for the models rather than flash "unreachable".
-  if (modelsPending) return { kind: "none" };
-  const tiers = configured.map((tier) => ({
-    ...tier,
-    routable: routableModels.find(
-      (model) => model.value === `${tier.provider}:${tier.modelId}`,
-    ),
-  }));
-  const missing = tiers.flatMap(({ tier, provider, routable }) =>
-    routable ? [] : [{ tier, provider }],
+  if (!featureEnabled || !routers) return { kind: "none" };
+  const ready = routers.filter(
+    (router) =>
+      router.enabled && TIERS.every((tier) => router.tiers[tier] !== null),
   );
+  // Wait for the models rather than flash "unreachable".
+  if (ready.length === 0 || modelsPending) return { kind: "none" };
+
+  const usesRouterKeys = virtualApiKeyId !== null || grantedRouterIds !== null;
+  const granted =
+    virtualApiKeyId !== null
+      ? ready.filter((router) =>
+          router.virtualApiKeyIds.includes(virtualApiKeyId),
+        )
+      : grantedRouterIds !== null
+        ? ready.filter((router) => grantedRouterIds.includes(router.id))
+        : ready;
+
+  const outcomes = granted.map((router) => ({
+    router,
+    outcome: routerOutcome(router, routableModels, usesRouterKeys),
+  }));
+  const available = outcomes.flatMap(({ router, outcome }) =>
+    outcome.kind === "available"
+      ? [
+          {
+            name: router.name,
+            endpoint: outcome.endpoint,
+            tiers: router.tiers as Record<AutoRoutingTier, OfferedTier>,
+          },
+        ]
+      : [],
+  );
+  if (available.length > 0) return { kind: "available", routers: available };
+  // None can be called: say why for the first.
+  for (const { outcome } of outcomes) {
+    if (outcome.kind !== "available") return outcome;
+  }
+  return { kind: "none" };
+}
+
+type RouterOutcome =
+  | { kind: "available"; endpoint: RouterEndpoint }
+  | Extract<AutoRoutingOffer, { kind: "unreachable" | "no-shared-endpoint" }>;
+
+function routerOutcome(
+  router: OfferedRouter,
+  routableModels: readonly RoutableModel[],
+  usesRouterKeys: boolean,
+): RouterOutcome {
+  const tiers = TIERS.flatMap((tier) => {
+    const model = router.tiers[tier];
+    if (!model) return [];
+    return [
+      {
+        tier,
+        ...model,
+        routable: routableModels.find(
+          (candidate) =>
+            candidate.value === `${model.provider}:${model.modelId}`,
+        ),
+      },
+    ];
+  });
+  // A credential given the router spends the router's own keys.
+  const missing = usesRouterKeys
+    ? []
+    : tiers.flatMap(({ tier, provider, routable }) =>
+        routable ? [] : [{ tier, provider }],
+      );
   if (missing.length > 0) return { kind: "unreachable", missing };
 
   const requiresResponses = tiers.map(
@@ -104,25 +165,27 @@ export function autoRoutingOffer({
 
 export function useAutoRoutingOffer({
   enabled,
+  virtualApiKeyId = null,
+  grantedRouterIds = null,
   routableModels,
   modelsPending,
 }: {
   enabled: boolean;
+  virtualApiKeyId?: string | null;
+  grantedRouterIds?: readonly string[] | null;
   routableModels: readonly RoutableModel[];
   modelsPending: boolean;
 }): AutoRoutingOffer {
   const featureEnabled = useFeature("autoRoutingEnabled") === true;
-  const { data: settings } = useAutoRoutingSettings({
+  const { data: routers } = useAutoRouters({
     enabled: enabled && featureEnabled,
-  });
-  const { data: canConfigure = false } = useHasPermissions({
-    llmProxy: ["update"],
   });
   if (!enabled) return { kind: "none" };
   return autoRoutingOffer({
     featureEnabled,
-    settings,
-    canConfigure,
+    routers,
+    virtualApiKeyId,
+    grantedRouterIds,
     routableModels,
     modelsPending,
   });

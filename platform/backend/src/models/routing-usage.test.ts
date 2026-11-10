@@ -6,6 +6,7 @@ import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingUsageModel from "@/models/routing-usage";
 import { describe, expect, test } from "@/test";
 import {
+  ensureAutoRouter,
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
@@ -18,7 +19,7 @@ describe("routing usage", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const { organizationId, profileId, decision, scorer } = await setup({
+    const { routerId, profileId, decision, scorer } = await setup({
       makeAgent,
       makeOrganization,
     });
@@ -32,7 +33,7 @@ describe("routing usage", () => {
     );
 
     const [row] = await fitHistory({
-      organizationId,
+      routerId,
       scorerVersionId: scorer.id,
       inputWatermark: twoDaysAhead(),
     });
@@ -82,7 +83,7 @@ describe("routing usage", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const { organizationId, profileId, decision, scorer } = await setup({
+    const { routerId, profileId, decision, scorer } = await setup({
       makeAgent,
       makeOrganization,
     });
@@ -97,7 +98,7 @@ describe("routing usage", () => {
     );
 
     const [row] = await fitHistory({
-      organizationId,
+      routerId,
       scorerVersionId: scorer.id,
       inputWatermark: twoDaysAhead(),
     });
@@ -113,12 +114,12 @@ describe("routing usage", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const { organizationId, profileId, decision, scorer } = await setup({
+    const { routerId, profileId, decision, scorer } = await setup({
       makeAgent,
       makeOrganization,
     });
     const looked = await RoutingDecisionModel.find({
-      organizationId,
+      routerId,
       sessionKey: decision.sessionKey,
     });
     expect(looked?.id).toBe(decision.id);
@@ -141,7 +142,7 @@ describe("routing usage", () => {
     expect(await db.select().from(schema.routingUsageTable)).toHaveLength(1);
     expect(
       await fitHistory({
-        organizationId,
+        routerId,
         scorerVersionId: scorer.id,
         inputWatermark: twoDaysAhead(),
       }),
@@ -153,12 +154,14 @@ describe("routing usage", () => {
       makeAgent,
       makeOrganization,
     }) => {
-      const { organizationId, profileId, decision, scorer } = await setup({
-        makeAgent,
-        makeOrganization,
-      });
+      const { organizationId, routerId, profileId, decision, scorer } =
+        await setup({
+          makeAgent,
+          makeOrganization,
+        });
       const idle = await addDecision({
         organizationId,
+        routerId,
         sessionId: "idle",
         scorerVersionId: scorer.id,
       });
@@ -167,7 +170,7 @@ describe("routing usage", () => {
       await recordAt({ profileId, decisionId: idle.id, ago: 25 * HOUR_MS });
 
       const rows = await fitHistory({
-        organizationId,
+        routerId,
         scorerVersionId: scorer.id,
       });
 
@@ -178,24 +181,28 @@ describe("routing usage", () => {
       makeAgent,
       makeOrganization,
     }) => {
-      const { organizationId, profileId, decision, scorer } = await setup({
-        makeAgent,
-        makeOrganization,
-      });
+      const { organizationId, routerId, profileId, decision, scorer } =
+        await setup({
+          makeAgent,
+          makeOrganization,
+        });
       const otherScorer = await makeScorerVersion();
       const otherVersion = await addDecision({
         organizationId,
+        routerId,
         sessionId: "other-version",
         scorerVersionId: otherScorer.id,
       });
       const scorerError = await addDecision({
         organizationId,
+        routerId,
         sessionId: "scorer-error",
         scorerVersionId: scorer.id,
         overrides: { reason: "scorer_error", features: null },
       });
       const tooOld = await addDecision({
         organizationId,
+        routerId,
         sessionId: "too-old",
         scorerVersionId: scorer.id,
       });
@@ -213,7 +220,7 @@ describe("routing usage", () => {
       }
 
       const rows = await fitHistory({
-        organizationId,
+        routerId,
         scorerVersionId: scorer.id,
       });
 
@@ -224,7 +231,7 @@ describe("routing usage", () => {
       makeAgent,
       makeOrganization,
     }) => {
-      const { organizationId, profileId, decision, scorer } = await setup({
+      const { routerId, profileId, decision, scorer } = await setup({
         makeAgent,
         makeOrganization,
       });
@@ -238,7 +245,7 @@ describe("routing usage", () => {
       });
 
       const [row] = await fitHistory({
-        organizationId,
+        routerId,
         scorerVersionId: scorer.id,
         longContextThreshold: 1_150,
       });
@@ -269,14 +276,17 @@ async function setup(fixtures: {
 }) {
   const organization = await fixtures.makeOrganization();
   const agent = await fixtures.makeAgent({ organizationId: organization.id });
+  const router = await ensureAutoRouter(organization.id);
   const scorer = await makeScorerVersion();
   const decision = await addDecision({
     organizationId: organization.id,
+    routerId: router.id,
     sessionId: "session",
     scorerVersionId: scorer.id,
   });
   return {
     organizationId: organization.id,
+    routerId: router.id,
     profileId: agent.id,
     decision,
     scorer,
@@ -285,6 +295,7 @@ async function setup(fixtures: {
 
 async function addDecision(params: {
   organizationId: string;
+  routerId: string;
   sessionId: string;
   scorerVersionId: string;
   overrides?: Partial<ReturnType<typeof plannedDecision>>;
@@ -293,6 +304,7 @@ async function addDecision(params: {
   const { decision } = await RoutingDecisionModel.insertOrGet({
     ...plannedDecision({
       organizationId: params.organizationId,
+      routerId: params.routerId,
       sessionKey: RoutingSessionKeySchema.parse(params.sessionId),
       modelId: model.id,
       scorerVersionId: params.scorerVersionId,
@@ -359,7 +371,7 @@ async function recordAt(params: {
 }
 
 async function fitHistory(params: {
-  organizationId: string;
+  routerId: string;
   scorerVersionId: string;
   longContextThreshold?: number;
   inputWatermark?: Date;

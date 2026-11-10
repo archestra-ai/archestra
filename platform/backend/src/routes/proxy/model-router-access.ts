@@ -49,6 +49,8 @@ export type ModelRouterOAuthClientAuth = {
   providerApiKeys: ModelRouterMappedProviderKey[];
   /** Pools the client was granted outright. */
   modelPoolIds: string[];
+  /** Auto routers the client was granted. */
+  autoRouterIds: string[];
   oauthClient: {
     id: string;
     name: string;
@@ -218,6 +220,20 @@ const requestSecrets = new WeakMap<
   ModelRouterAuth,
   Map<string, Promise<string | undefined>>
 >();
+
+/**
+ * `derived` as a view of `auth` within the same request, such as its keys in
+ * another order, so that both read each secret once between them.
+ */
+export function withRequestSecretsOf<T extends ModelRouterAuth>(
+  auth: ModelRouterAuth,
+  derived: T,
+): T {
+  const secrets = requestSecrets.get(auth) ?? new Map();
+  requestSecrets.set(auth, secrets);
+  requestSecrets.set(derived, secrets);
+  return derived;
+}
 
 function readRequestSecret(
   auth: ModelRouterAuth,

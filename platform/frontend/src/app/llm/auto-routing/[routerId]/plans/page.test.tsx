@@ -5,11 +5,15 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import type { AutoRoutingPlanSummary } from "@/lib/auto-routing.query";
-import { rejectionReason } from "../_parts/plan-document";
+import {
+  AutoRouterIdContext,
+  type AutoRoutingPlanSummary,
+} from "@/lib/auto-routing.query";
+import { rejectionReason } from "../../_parts/plan-document";
 import AutoRoutingPlansPage from "./page";
 
 const API_ORIGIN = "http://localhost:9000";
+const ROUTER_ID = "00000000-0000-4000-8000-0000000000a1";
 
 const base: AutoRoutingPlanSummary = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -72,7 +76,7 @@ const rejected: AutoRoutingPlanSummary = {
 };
 
 const server = setupServer(
-  http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
+  http.get(`${API_ORIGIN}/api/auto-routing/routers/${ROUTER_ID}/plans`, () =>
     HttpResponse.json([base, failed, rejected]),
   ),
 );
@@ -87,12 +91,28 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
+function Wrapper({
+  client,
+  children,
+}: {
+  client: QueryClient;
+  children: React.ReactNode;
+}) {
+  return (
+    <QueryClientProvider client={client}>
+      <AutoRouterIdContext.Provider value={ROUTER_ID}>
+        {children}
+      </AutoRouterIdContext.Provider>
+    </QueryClientProvider>
+  );
+}
+
 describe("AutoRoutingPlansPage", () => {
   it("lists plan history with its spend, tier split and errors", async () => {
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <Wrapper client={new QueryClient()}>
         <AutoRoutingPlansPage />
-      </QueryClientProvider>,
+      </Wrapper>,
     );
 
     expect(
@@ -108,24 +128,26 @@ describe("AutoRoutingPlansPage", () => {
   it("offers a retry when plan history fails to load", async () => {
     let fail = true;
     server.use(
-      http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
-        fail
-          ? HttpResponse.json(
-              { error: { message: "Unavailable" } },
-              { status: 500 },
-            )
-          : HttpResponse.json([base]),
+      http.get(
+        `${API_ORIGIN}/api/auto-routing/routers/${ROUTER_ID}/plans`,
+        () =>
+          fail
+            ? HttpResponse.json(
+                { error: { message: "Unavailable" } },
+                { status: 500 },
+              )
+            : HttpResponse.json([base]),
       ),
     );
     const user = userEvent.setup();
     render(
-      <QueryClientProvider
+      <Wrapper
         client={
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
         <AutoRoutingPlansPage />
-      </QueryClientProvider>,
+      </Wrapper>,
     );
     const retry = await screen.findByRole("button", { name: "Retry" });
     expect(screen.queryByText("No plans yet")).not.toBeInTheDocument();
@@ -138,9 +160,9 @@ describe("AutoRoutingPlansPage", () => {
 
   it("shows a fit rejected at publication with its reason, not as an error", async () => {
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <Wrapper client={new QueryClient()}>
         <AutoRoutingPlansPage />
-      </QueryClientProvider>,
+      </Wrapper>,
     );
 
     const row = (await screen.findByText("rejected")).closest("tr");

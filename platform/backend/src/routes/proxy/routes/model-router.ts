@@ -14,8 +14,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import {
-  AUTO_MODEL,
-  autoModelAvailable,
+  availableAutoRouterNames,
   resolveAutoModel,
 } from "@/auto-routing/router";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
@@ -31,6 +30,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
+import AutoRouterModel from "@/models/auto-router";
 import { getLlmProxyRequestTelemetry } from "@/observability/llm-proxy-request";
 import {
   collectClientDelegationMarkers,
@@ -812,10 +812,12 @@ async function routeChatCompletion(
     applyModelPoolAuthOverride({ request, auth, poolId });
     return handleLLMProxy(body, request, reply, openaiAdapterFactory);
   }
+  // A routed tier is sent on the key the router checked it with.
+  const routedAuth = auto.kind === "routed" ? auto.auth : auth;
   const resolution = await resolveModelRoute({
     requestedModel: auto.model,
-    allowedProviders: getMappedProviders(auth),
-    allowedApiKeyIds: getMappedApiKeyIds(auth),
+    allowedProviders: getMappedProviders(routedAuth),
+    allowedApiKeyIds: getMappedApiKeyIds(routedAuth),
   });
   assertModelRouterCacheControls(resolution.provider, body);
   const routedBody = {
@@ -846,7 +848,7 @@ async function routeChatCompletion(
   });
   await applyModelRouterAuthOverride({
     request,
-    auth,
+    auth: routedAuth,
     resolution,
   });
 
@@ -879,10 +881,12 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     applyModelPoolAuthOverride({ request, auth, poolId });
     return handleLLMProxy(body, request, reply, openAiResponsesAdapterFactory);
   }
+  // A routed tier is sent on the key the router checked it with.
+  const routedAuth = auto.kind === "routed" ? auto.auth : auth;
   const resolution = await resolveModelRoute({
     requestedModel: auto.model,
-    allowedProviders: getMappedProviders(auth),
-    allowedApiKeyIds: getMappedApiKeyIds(auth),
+    allowedProviders: getMappedProviders(routedAuth),
+    allowedApiKeyIds: getMappedApiKeyIds(routedAuth),
   });
 
   assertModelRouterCacheControls(resolution.provider, body);
@@ -892,7 +896,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   // assistant phases and tools that are not Chat Completions functions.
   const selectedKey = await applyModelRouterAuthOverride({
     request,
-    auth,
+    auth: routedAuth,
     resolution,
   });
   const nativeResponsesAdapter = await getNativeResponsesAdapter({
@@ -952,7 +956,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   });
   await applyModelRouterAuthOverride({
     request,
-    auth,
+    auth: routedAuth,
     resolution,
   });
 
@@ -1292,16 +1296,14 @@ async function listModels(params: { auth: ModelRouterAuth }) {
       mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
   );
 
-  const autoModel = (await autoModelAvailable(params.auth))
-    ? [
-        {
-          id: AUTO_MODEL,
-          object: "model" as const,
-          created: 0,
-          owned_by: "archestra",
-        },
-      ]
-    : [];
+  const autoModel = (await availableAutoRouterNames(params.auth)).map(
+    (name) => ({
+      id: name,
+      object: "model" as const,
+      created: 0,
+      owned_by: "archestra",
+    }),
+  );
   return {
     object: "list" as const,
     data: [
@@ -1429,13 +1431,18 @@ export async function authenticateModelRouterBearer(params: {
     const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
-    // A pool added to the key answers with its own member keys, so the key
-    // can still call that pool when it resolves to no provider key.
+    // A pool added to the key answers with its own member keys, and an auto
+    // router with its tiers' keys, so the key can still call them when it
+    // resolves to no provider key.
     if (
       mappings.length === 0 &&
       !(
         config.llmProxy.modelPoolsEnabled &&
         (await ModelPoolModel.hasVirtualApiKeyGrant(resolved.virtualKey.id))
+      ) &&
+      !(
+        config.autoRouting.enabled &&
+        (await AutoRouterModel.hasAnyVirtualApiKeyGrant(resolved.virtualKey.id))
       )
     ) {
       throw new ApiError(
@@ -1654,6 +1661,7 @@ async function getModelRouterOAuthClientAuth(
     organizationId: oauthClient.organizationId,
     billingTeamId: oauthClient.billingTeamId,
     modelPoolIds: oauthClient.modelPoolIds,
+    autoRouterIds: oauthClient.autoRouterIds,
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,

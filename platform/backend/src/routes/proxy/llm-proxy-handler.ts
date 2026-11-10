@@ -22,7 +22,7 @@ import { uuidv7 } from "@/utils/uuid";
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -1551,18 +1551,24 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A user's chat or agent call on `auto` (marked by the in-process caller,
-    // which resolved the chat or agent to it) is routed across the auto-routing
-    // tiers. The router picks the session's tier and key, which the call is
+    // A user's chat or agent call on an auto router (named by the in-process
+    // caller, which resolved the chat or agent to it) is routed across that
+    // router's tiers. The router picks the session's tier and key, which the call is
     // sent with the way a pool member is, even when the tier is the model the
     // call names: the tier's key first, else one the user may use. A call the
     // router cannot route runs on the model it names (the normal tier). Agent
     // Runtime agents are never routed. A pooled call is accounted for by its
     // pool; it is never also routed.
+    const autoRouterHeader =
+      headersForExtraction[AUTO_ROUTER_ID_HEADER.toLowerCase()];
+    const autoRouterId =
+      typeof autoRouterHeader === "string" && autoRouterHeader
+        ? autoRouterHeader
+        : null;
     const autoRouteWire =
       internalCall &&
       config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan
         ? poolWire
@@ -1660,10 +1666,11 @@ async function handleObservedLLMProxy<
     }
 
     const autoRoute =
-      autoRouteUser && autoRouteWire
+      autoRouteUser && autoRouteWire && autoRouterId
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
+            routerId: autoRouterId,
             userId: autoRouteUser.id,
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,

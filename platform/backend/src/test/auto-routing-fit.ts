@@ -13,6 +13,7 @@ import { plannedDecision } from "./auto-routing";
  */
 export async function seedFitHistory(params: {
   organizationId: string;
+  routerId: string;
   modelId: string;
   scorerVersionId: string;
   sessions: number;

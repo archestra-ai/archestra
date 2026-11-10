@@ -25,8 +25,12 @@ import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { LimitValidationService, ModelModel } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import {
+  LimitValidationService,
+  LlmProviderApiKeyModel,
+  ModelModel,
+} from "@/models";
+import AutoRouterModel from "@/models/auto-router";
 import type { LimitViolationResponse } from "@/models/limit";
 import RoutingDecisionModel from "@/models/routing-decision";
 import { followAppaSessionHeader } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
@@ -37,13 +41,14 @@ import {
   type ModelRouterLimitAgent,
   modelRequiresResponses,
   modelRouterLimitScope,
+  withRequestSecretsOf,
 } from "@/routes/proxy/model-router-access";
 import { setAutoRoutingContext } from "@/routes/proxy/utils/auto-routing-context";
 import { extractAutoRoutingSessionMetadata } from "@/routes/proxy/utils/headers/session-metadata";
 import { routingPlanCache } from "@/services/routing-plan-cache";
 import { ApiError, type Model } from "@/types";
 import {
-  type AutoRoutingSettings,
+  type AutoRouter,
   FEATURES_SCHEMA_VERSION,
   type InsertRoutingDecision,
   type RoutingDecision,
@@ -78,6 +83,7 @@ import {
 } from "./tiers";
 
 export const AUTO_MODEL = "auto";
+const AUTO_ROUTER_NAME_PREFIX = `${AUTO_MODEL}:`;
 
 const DecisionSchema = z.object({
   tier_index: z.union([z.literal(0), z.literal(1), z.literal(2)]),
@@ -90,8 +96,10 @@ type PlannedDecision = z.infer<typeof DecisionSchema>;
 const RouterPolicySchema = z.object({ lam_star: z.number(), q: z.number() });
 type RouterPolicy = z.infer<typeof RouterPolicySchema>;
 
+/** An auto router's name: `auto`, or `auto:<name>` for any other router. */
 export function isAutoModel(model: string): boolean {
-  return model.trim() === AUTO_MODEL;
+  const name = model.trim();
+  return name === AUTO_MODEL || name.startsWith(AUTO_ROUTER_NAME_PREFIX);
 }
 
 const StoredResponseContinuationSchema = z.object({
@@ -99,18 +107,19 @@ const StoredResponseContinuationSchema = z.object({
 });
 
 type AutoModelResolution =
-  /** Not an "auto" request, or auto routing is off: the model as named. */
+  /** Not an auto router's name, or auto routing is off: the model as named. */
   | { kind: "as_requested"; model: string }
-  | { kind: "routed"; model: string }
+  /** `auth` is the caller's with the tier's own key first, for a caller the router was added to. */
+  | { kind: "routed"; model: string; auth: ModelRouterAuth }
   /** The caller is over a usage limit; nothing was scored. */
   | { kind: "usage_limited"; violation: LimitViolationResponse };
 
 /**
  * The model a Unified Model API request should be resolved as. Anything but
- * "auto" — and "auto" itself while the feature is off — is returned as is.
- * For "auto", picks the session's sticky tier (deciding it on first sight),
- * records the decision on `request` for the interaction write, and returns
- * the tier's provider-qualified id.
+ * an auto router's name — and those while the feature is off — is returned as
+ * is. For a router the caller may use, picks the session's sticky tier
+ * (deciding it on first sight), records the decision on `request` for the
+ * interaction write, and returns the tier's provider-qualified id.
  */
 export async function resolveAutoModel(params: {
   request: FastifyRequest;
@@ -125,8 +134,30 @@ export async function resolveAutoModel(params: {
   if (!config.autoRouting.enabled || !isAutoModel(params.requestedModel)) {
     return { kind: "as_requested", model: params.requestedModel };
   }
-  const { settings, trio } = await loadEnabledTrio(auth.organizationId);
-  const tiers = requireEligible(await checkTrio({ auth, endpoint, trio }));
+  const { settings, trio } = await loadEnabledTrio(
+    auth.organizationId,
+    params.requestedModel.trim(),
+  );
+  const routerAuth = await authOnRouter(auth, settings);
+  if (!routerAuth) {
+    throw new ApiError(
+      403,
+      `Auto router "${settings.name}" is not added to this ${auth.authMethod === "virtual_key" ? "virtual key" : "OAuth client"}. Add it in the ${auth.authMethod === "virtual_key" ? "key's" : "client's"} settings.`,
+    );
+  }
+  const tierKeyIds = tierApiKeyIds(settings);
+  const tiers = requireEligible(
+    await checkTrio({
+      auth: routerAuth,
+      endpoint,
+      trio,
+      preferredTierKeyIds: routerAuth === auth ? undefined : tierKeyIds,
+    }),
+  );
+  const onTier = (tier: EligibleTier): ModelRouterAuth =>
+    routerAuth === auth
+      ? auth
+      : preferringKey(routerAuth, tier.providerApiKeyId);
 
   const metadata = extractAutoRoutingSessionMetadata({
     headers: request.headers,
@@ -147,7 +178,7 @@ export async function resolveAutoModel(params: {
   ) {
     throw new ApiError(
       400,
-      `"${AUTO_MODEL}" cannot continue previous_response_id without a session id. Send the same ${SESSION_ID_HEADER} header on every turn of an auto conversation.`,
+      `"${settings.name}" cannot continue previous_response_id without a session id. Send the same ${SESSION_ID_HEADER} header on every turn of an auto conversation.`,
     );
   }
   const text = firstUserText(endpoint, body);
@@ -160,7 +191,6 @@ export async function resolveAutoModel(params: {
       : scoringContextFingerprint(scoringContext(body, { openingOnly: true })),
   });
   const decided = await sessionDecision({
-    organizationId: auth.organizationId,
     settings,
     trio,
     sessionKey,
@@ -177,18 +207,26 @@ export async function resolveAutoModel(params: {
     case "usage_limited":
       return decided;
     case "undecided":
-      return { kind: "routed", model: tiers[NORMAL_TIER].routedModel };
+      return {
+        kind: "routed",
+        model: tiers[NORMAL_TIER].routedModel,
+        auth: onTier(tiers[NORMAL_TIER]),
+      };
     case "decided": {
       const routed = await routeByDecision({
         request,
-        auth,
+        auth: routerAuth,
         endpoint,
         trio,
         tiers,
         decision: decided.decision,
         derivedSessionKey: sessionId ? null : sessionKey,
       });
-      return { kind: "routed", model: routed.tier.routedModel };
+      return {
+        kind: "routed",
+        model: routed.tier.routedModel,
+        auth: onTier(routed.tier),
+      };
     }
   }
 }
@@ -197,12 +235,12 @@ export async function resolveAutoModel(params: {
 type InternalAutoRoute = { model: Model; providerApiKeyId: string };
 
 /**
- * Routes a platform call on `auto` on a native provider route: the session's
+ * Routes a platform call on the auto router `routerId` on a native provider route: the session's
  * sticky tier, decided on first sight as for the Unified Model API, on the
  * tier's key (else one `userId` may use for it). The caller already checked
  * usage limits. Records the decision on `request` for the interaction write.
  *
- * Null when the call is not routed: auto routing is off, a tier is out of the
+ * Null when the call is not routed: auto routing is off, the router is gone, a tier is out of the
  * user's reach, or `reachable` says the client's wire cannot get to a tier's
  * provider. The call then runs on the model it names (the normal tier), and no
  * decision is stored that a later call could not follow.
@@ -210,6 +248,7 @@ type InternalAutoRoute = { model: Model; providerApiKeyId: string };
 export async function routeInternalAutoSession(params: {
   request: FastifyRequest;
   organizationId: string;
+  routerId: string;
   userId: string;
   /** The key the call names; a tier it serves is sent on it, not the user's ranked key. */
   callApiKeyId: string | null;
@@ -221,12 +260,15 @@ export async function routeInternalAutoSession(params: {
   const { request, organizationId } = params;
   const unroutable = (reason: string) => {
     logger.warn(
-      { organizationId, reason },
-      "[AutoRouting] Call runs on the organization default model",
+      { organizationId, routerId: params.routerId, reason },
+      "[AutoRouting] Call runs on the model it names",
     );
     return null;
   };
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const settings = await AutoRouterModel.findInOrganization(
+    organizationId,
+    params.routerId,
+  );
   if (!settings?.enabled) return null;
   const loaded = await loadTrio(settings);
   if (loaded.kind === "missing") {
@@ -248,22 +290,13 @@ export async function routeInternalAutoSession(params: {
   const auth = await userModelRouterAuth({
     organizationId,
     userId: params.userId,
-    preferredApiKeyIds: [
-      settings.fastApiKeyId,
-      settings.normalApiKeyId,
-      settings.smartApiKeyId,
-      params.callApiKeyId,
-    ],
+    preferredApiKeyIds: [...tierApiKeyIds(settings), params.callApiKeyId],
   });
   const eligibility = await checkTrio({
     auth,
     endpoint: null,
     trio,
-    preferredTierKeyIds: [
-      settings.fastApiKeyId,
-      settings.normalApiKeyId,
-      settings.smartApiKeyId,
-    ],
+    preferredTierKeyIds: tierApiKeyIds(settings),
   });
   const ineligible = eligibility.find((tier) => !tier.eligible);
   if (ineligible && !ineligible.eligible) {
@@ -279,7 +312,6 @@ export async function routeInternalAutoSession(params: {
     firstUserMessage: text,
   });
   const decided = await sessionDecision({
-    organizationId,
     settings,
     trio,
     sessionKey,
@@ -332,31 +364,45 @@ export async function routeInternalAutoSession(params: {
 }
 
 /**
- * Whether "auto" is offered to `auth`: the feature is on, the organization
- * enabled it, and every tier passes the inference-time checks on at least one
- * endpoint they all share.
+ * The names of the auto routers offered to `auth`: the feature is on, the
+ * organization enabled it, the caller may use the router, and every tier
+ * passes the inference-time checks on at least one endpoint they all share.
  */
-export async function autoModelAvailable(
+export async function availableAutoRouterNames(
   auth: ModelRouterAuth,
-): Promise<boolean> {
-  if (!config.autoRouting.enabled) return false;
-  const settings = await AutoRoutingSettingsModel.find(auth.organizationId);
-  if (!settings?.enabled) return false;
-  const loaded = await loadTrio(settings);
-  if (loaded.kind !== "ok") return false;
-  for (const endpoint of ModelRouterEndpointSchema.options) {
-    const eligibility = await checkTrio({ auth, endpoint, trio: loaded.trio });
-    if (eligibility.every((tier) => tier.eligible)) return true;
+): Promise<string[]> {
+  if (!config.autoRouting.enabled) return [];
+  const routers = await AutoRouterModel.list(auth.organizationId);
+  const names: string[] = [];
+  for (const settings of routers) {
+    if (!settings.enabled) return [];
+    const loaded = await loadTrio(settings);
+    if (loaded.kind !== "ok") continue;
+    const routerAuth = await authOnRouter(auth, settings);
+    if (!routerAuth) continue;
+    for (const endpoint of ModelRouterEndpointSchema.options) {
+      const eligibility = await checkTrio({
+        auth: routerAuth,
+        endpoint,
+        trio: loaded.trio,
+        preferredTierKeyIds:
+          routerAuth === auth ? undefined : tierApiKeyIds(settings),
+      });
+      if (eligibility.every((tier) => tier.eligible)) {
+        names.push(settings.name);
+        break;
+      }
+    }
   }
-  return false;
+  return names;
 }
 
-/** Native provider routes cannot serve "auto"; only the Unified Model API translates between tiers. */
+/** Native provider routes cannot serve an auto router; only the Unified Model API translates between tiers. */
 export function assertNotAutoOnNativeRoute(model: string): void {
   if (config.autoRouting.enabled && isAutoModel(model)) {
     throw new ApiError(
       400,
-      `"${AUTO_MODEL}" is only available through the Unified Model API.`,
+      `"${model.trim()}" is only available through the Unified Model API.`,
     );
   }
 }
@@ -460,22 +506,97 @@ function anchorPolicy(plan: RoutingPlan): RouterPolicy {
 
 async function loadEnabledTrio(
   organizationId: string,
-): Promise<{ settings: AutoRoutingSettings; trio: Trio }> {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings?.enabled) {
+  name: string,
+): Promise<{ settings: AutoRouter; trio: Trio }> {
+  const settings = await AutoRouterModel.findByName(organizationId, name);
+  if (!settings) {
     throw new ApiError(
       400,
-      `Auto routing is not enabled for this organization. Pick a provider-qualified model instead of "${AUTO_MODEL}".`,
+      `No auto router is named "${name}". Pick one of the organization's auto routers or a provider-qualified model.`,
+    );
+  }
+  if (!settings.enabled) {
+    throw new ApiError(
+      400,
+      `Auto routing is not enabled for this organization. Pick a provider-qualified model instead of "${name}".`,
     );
   }
   const loaded = await loadTrio(settings);
   if (loaded.kind === "missing") {
     throw new ApiError(
       400,
-      `Auto routing has no ${loaded.tier} tier model configured. Set the organization's default ${loaded.tier} model.`,
+      `Auto router "${name}" has no ${loaded.tier} tier model configured. Set its ${loaded.tier} model.`,
     );
   }
   return { settings, trio: loaded.trio };
+}
+
+function tierApiKeyIds(settings: AutoRouter) {
+  return [
+    settings.fastApiKeyId,
+    settings.normalApiKeyId,
+    settings.smartApiKeyId,
+  ] as const;
+}
+
+/**
+ * The caller's auth as the router sees it; null when the caller may not use
+ * the router. A virtual key, or an OAuth client calling as the app, may only
+ * when the router was added to it, and then spends the tiers' own keys, the
+ * way it spends a model pool's member keys, whatever provider keys it maps.
+ * Any other caller keeps its own keys and reaches the router when those reach
+ * every tier.
+ */
+async function authOnRouter(
+  auth: ModelRouterAuth,
+  settings: AutoRouter,
+): Promise<ModelRouterAuth | null> {
+  if (auth.authMethod === "oauth_client_credentials") {
+    if (!auth.autoRouterIds.includes(settings.id)) return null;
+  } else if (auth.authMethod !== "virtual_key") {
+    return auth;
+  } else if (
+    !(await AutoRouterModel.hasVirtualApiKeyGrant(
+      settings.id,
+      auth.virtualKeyId,
+    ))
+  ) {
+    return null;
+  }
+  const ids = tierApiKeyIds(settings).filter((id): id is string => id !== null);
+  const keys = await LlmProviderApiKeyModel.findByIds([...new Set(ids)]);
+  return withRequestSecretsOf(auth, {
+    ...auth,
+    providerApiKeys: [
+      ...keys
+        .filter((key) => key.organizationId === auth.organizationId)
+        .map((key) => ({
+          provider: key.provider,
+          providerApiKeyId: key.id,
+          providerApiKeyName: key.name,
+          secretId: key.secretId,
+          baseUrl: key.inferenceBaseUrl ?? key.baseUrl,
+          scope: key.scope,
+          userId: key.userId,
+        })),
+      ...auth.providerApiKeys,
+    ],
+  });
+}
+
+/** `auth` with `providerApiKeyId` tried first, so forwarding sends the tier on the key it was checked with. */
+function preferringKey(
+  auth: ModelRouterAuth,
+  providerApiKeyId: string,
+): ModelRouterAuth {
+  return withRequestSecretsOf(auth, {
+    ...auth,
+    providerApiKeys: [...auth.providerApiKeys].sort(
+      (a, b) =>
+        Number(b.providerApiKeyId === providerApiKeyId) -
+        Number(a.providerApiKeyId === providerApiKeyId),
+    ),
+  });
 }
 
 /**
@@ -484,8 +605,7 @@ async function loadEnabledTrio(
  * decision for being over a usage limit.
  */
 async function sessionDecision(params: {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   trio: Trio;
   sessionKey: RoutingSessionKey | null;
   text: string | null;
@@ -497,15 +617,16 @@ async function sessionDecision(params: {
   | { kind: "undecided" }
   | { kind: "usage_limited"; violation: LimitViolationResponse }
 > {
-  const { organizationId, sessionKey, text } = params;
+  const { sessionKey, text } = params;
+  const routerId = params.settings.id;
   const existing = sessionKey
-    ? await RoutingDecisionModel.find({ organizationId, sessionKey })
+    ? await RoutingDecisionModel.find({ routerId, sessionKey })
     : null;
   if (existing) return { kind: "decided", decision: existing };
   if (!sessionKey || text === null) {
     logger.info(
       {
-        organizationId,
+        routerId,
         reason: sessionKey ? "no_user_text" : "no_session_key",
       },
       "[AutoRouting] Nothing to decide on; routing to the normal tier",
@@ -517,7 +638,6 @@ async function sessionDecision(params: {
   return {
     kind: "decided",
     decision: await createDecisionOnce({
-      organizationId,
       settings: params.settings,
       trio: params.trio,
       sessionKey,
@@ -540,19 +660,8 @@ function checkTrio(params: {
   return Promise.all(
     params.trio.map((model, index) =>
       checkAutoTierEligibility({
-        auth: params.preferredTierKeyIds
-          ? {
-              ...params.auth,
-              providerApiKeys: [...params.auth.providerApiKeys].sort(
-                (a, b) =>
-                  Number(
-                    b.providerApiKeyId === params.preferredTierKeyIds?.[index],
-                  ) -
-                  Number(
-                    a.providerApiKeyId === params.preferredTierKeyIds?.[index],
-                  ),
-              ),
-            }
+        auth: params.preferredTierKeyIds?.[index]
+          ? preferringKey(params.auth, params.preferredTierKeyIds[index])
           : params.auth,
         endpoint: params.endpoint,
         model,
@@ -674,14 +783,13 @@ type Scored =
   | { kind: "failed"; scorerVersionId: string };
 
 type DecisionParams = {
-  organizationId: string;
-  settings: AutoRoutingSettings;
+  settings: AutoRouter;
   trio: Trio;
   sessionKey: RoutingSessionKey;
   scorerInput: PreRunInput;
 };
 
-/** First-request decisions in flight in this process, by organization and session key. */
+/** First-request decisions in flight in this process, by router and session key. */
 const decisionsInFlight = new Map<string, Promise<RoutingDecision>>();
 
 /**
@@ -690,12 +798,13 @@ const decisionsInFlight = new Map<string, Promise<RoutingDecision>>();
  * settles races between processes.
  */
 function createDecisionOnce(params: DecisionParams): Promise<RoutingDecision> {
-  const key = `${params.organizationId}\u0000${params.sessionKey}`;
+  const routerId = params.settings.id;
+  const key = `${routerId}\u0000${params.sessionKey}`;
   const pending = decisionsInFlight.get(key);
   if (pending) return pending;
   const created = (async () => {
     const stored = await RoutingDecisionModel.find({
-      organizationId: params.organizationId,
+      routerId,
       sessionKey: params.sessionKey,
     });
     if (stored) return stored;
@@ -711,15 +820,15 @@ function createDecisionOnce(params: DecisionParams): Promise<RoutingDecision> {
 async function decideSession(
   params: DecisionParams,
 ): Promise<InsertRoutingDecision> {
-  const { organizationId, trio } = params;
-  const scored = await scoreSession(organizationId, params.scorerInput);
-  if (params.settings.scorerVersionId !== scored.scorerVersionId) {
-    await AutoRoutingSettingsModel.activateScorerVersion(
-      organizationId,
+  const { settings, trio } = params;
+  const scored = await scoreSession(settings, params.scorerInput);
+  if (settings.scorerVersionId !== scored.scorerVersionId) {
+    await AutoRouterModel.activateScorerVersion(
+      settings.id,
       scored.scorerVersionId,
     );
   }
-  const active = await routingPlanCache.findActive(organizationId);
+  const active = await routingPlanCache.findActive(settings.id);
   const u = uniform();
 
   const routed = (
@@ -729,7 +838,8 @@ async function decideSession(
     planRow: RoutingPlan | null,
     planned: PlannedDecision | null = null,
   ): InsertRoutingDecision => ({
-    organizationId,
+    organizationId: settings.organizationId,
+    routerId: settings.id,
     sessionKey: params.sessionKey,
     tierIndex,
     modelId: trio[tierIndex].id,
@@ -754,7 +864,7 @@ async function decideSession(
     const plan = servingPlan(active, scored.scorerVersionId);
     if (plan === null) return routed("cold_start", NORMAL_TIER, 1, null);
     if (!fingerprintMatches(plan.tiersFingerprint, trio))
-      await requestReplan(params.settings, organizationId);
+      await requestReplan(settings);
     // scorer_error keeps the serving plan as provenance, stale or not.
     return routed("scorer_error", NORMAL_TIER, 1, plan);
   }
@@ -765,7 +875,7 @@ async function decideSession(
     features: scored.features,
     u,
   });
-  if (selection.replan) await requestReplan(params.settings, organizationId);
+  if (selection.replan) await requestReplan(settings);
   return routed(
     selection.reason,
     selection.tier,
@@ -776,12 +886,15 @@ async function decideSession(
 }
 
 async function scoreSession(
-  organizationId: string,
+  settings: AutoRouter,
   input: PreRunInput,
 ): Promise<Scored> {
-  const scorerVersionId = (await activeSourceVersion()).id;
+  const scorerVersionId = (await activeSourceVersion(settings.scorerModel)).id;
   try {
-    const reading = await preRunSource.read(input, { organizationId });
+    const reading = await preRunSource(settings.scorerModel).read(input, {
+      organizationId: settings.organizationId,
+      apiKeyId: settings.scorerApiKeyId,
+    });
     return {
       kind: "scored",
       features: decisionFeatures({ version: scorerVersionId, reading, input }),
@@ -791,18 +904,15 @@ async function scoreSession(
   } catch (error) {
     if (!(error instanceof SignalSourceError)) throw error;
     logger.warn(
-      { organizationId, reason: error.reason, status: error.status },
+      { routerId: settings.id, reason: error.reason, status: error.status },
       "[AutoRouting] Session scorer failed; routing to the normal tier",
     );
     return { kind: "failed", scorerVersionId };
   }
 }
 
-/** Marks the organization dirty once; the dispatcher then fits a plan for the current trio. */
-async function requestReplan(
-  settings: AutoRoutingSettings,
-  organizationId: string,
-) {
+/** Marks the router dirty once; the dispatcher then fits a plan for the current trio. */
+async function requestReplan(settings: AutoRouter) {
   if (settings.generation > settings.plannedGeneration) return;
-  await AutoRoutingSettingsModel.update(organizationId, {});
+  await AutoRouterModel.update(settings.id, {});
 }

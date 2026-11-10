@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.27](https://github.com/archestra-ai/archestra/compare/platform-v1.4.26...platform-v1.4.27) (2026-11-10)
+
+
+### Bug Fixes
+
+* **guardrails:** backport replay and client reliability fixes to 1.4 ([#10519](https://github.com/archestra-ai/archestra/issues/10519)) ([943ea55](https://github.com/archestra-ai/archestra/commit/943ea55dfded517434325be1c584ce84c0240bdc))
+
 ## [1.4.26](https://github.com/archestra-ai/archestra/compare/platform-v1.4.25...platform-v1.4.26) (2026-11-09)
 
 

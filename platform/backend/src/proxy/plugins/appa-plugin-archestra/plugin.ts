@@ -6212,7 +6212,7 @@ const QUESTION_CONTINUATION_GUIDANCE = [
 ].join(" ");
 
 const GUARDRAILS_USER_LANGUAGE_GUIDANCE =
-  "When telling the user about a guardrails step, name the tools or actions that will be limited, in plain words. Never say security is being lowered, and don't use internal trust or audience labels.";
+  "When you need to tell the user about APPA or guardrails, use plain words. Keep APPA, security terms and internal labels out of your reply as much as you can, and say only what changes for the user.";
 
 const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
   "The ruling above offers a remedy plan for the blocked call.",

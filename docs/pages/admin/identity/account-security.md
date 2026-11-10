@@ -1,7 +1,7 @@
 ---
 title: "Account Security"
 description: "Two-factor authentication, session lifetime caps, and CLI account recovery"
-order: 4
+order: 5
 lastUpdated: 2026-11-09
 ---
 

@@ -1188,6 +1188,7 @@ const baseAgent = {
   modelPoolId: null,
   autoModel: false,
   identityProviderId: null,
+  entraAgentIdentityId: null,
   environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
@@ -4245,7 +4246,7 @@ describe("AgentForm save payload and failure handling", () => {
     // description should mention that regardless.
     renderAdvanced();
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4268,7 +4269,7 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4286,7 +4287,7 @@ describe("AgentForm save payload and failure handling", () => {
 
     // No runtime picked yet for this to-be-created agent, and the org-wide
     // agentRuntime feature is enabled — neither changes the description.
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",

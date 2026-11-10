@@ -38,6 +38,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     modelId: null,
     modelPoolId: null,
     identityProviderId: null,
+    entraAgentIdentityId: null,
     environmentId: null,
     passthroughHeaders: null,
     toolExposureMode: "full",

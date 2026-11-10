@@ -34,17 +34,17 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { readConfig } from "@/services/config-cache";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
-import {
-  type CatalogItemApprovalStatus,
-  type CatalogTeamInput,
-  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-  type InsertInternalMcpCatalog,
-  type InternalMcpCatalog,
-  type ListInternalMcpCatalog,
-  type ResourceVisibilityScope,
-  type SecretValue,
-  type UpdateInternalMcpCatalog,
+import type {
+  CatalogItemApprovalStatus,
+  CatalogTeamInput,
+  InsertInternalMcpCatalog,
+  InternalMcpCatalog,
+  ListInternalMcpCatalog,
+  ResourceVisibilityScope,
+  SecretValue,
+  UpdateInternalMcpCatalog,
 } from "@/types";
+import { ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS } from "@/types/enterprise-managed-credentials";
 import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
@@ -1918,11 +1918,14 @@ class InternalMcpCatalogModel {
 
       if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
         const secret = resolvedSecretMap.get(catalogItem.clientSecretId);
-        const value =
-          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
-        if (value) {
-          catalogItem.enterpriseManagedConfig.clientSecretOverride =
-            String(value);
+        for (const {
+          field,
+          key,
+        } of ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS) {
+          const value = secret?.secret[key];
+          if (value) {
+            catalogItem.enterpriseManagedConfig[field] = String(value);
+          }
         }
       }
 
@@ -1983,11 +1986,14 @@ class InternalMcpCatalogModel {
 
       if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
         const secret = secretMap.get(catalogItem.clientSecretId);
-        const value =
-          secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
-        if (value) {
-          catalogItem.enterpriseManagedConfig.clientSecretOverride =
-            String(value);
+        for (const {
+          field,
+          key,
+        } of ENTERPRISE_MANAGED_OVERRIDE_SECRET_FIELDS) {
+          const value = secret?.secret[key];
+          if (value) {
+            catalogItem.enterpriseManagedConfig[field] = String(value);
+          }
         }
       }
 

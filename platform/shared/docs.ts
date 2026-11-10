@@ -41,6 +41,7 @@ export const COMMUNITY_DOCS_URL = getDocsUrl("get-started");
 export const DocsPage = {
   Contributing: "contributing",
   McpAuthentication: "mcp/authentication",
+  McpIdpTokenExchange: "mcp/authentication/idp-token-exchange",
   McpGatewayAuthentication: "mcp/authentication/gateway",
   Security: "contributing",
   // Platform
@@ -71,6 +72,7 @@ export const DocsPage = {
   PlatformAiToolGuardrailsGitSync: "agents/guardrails/git-sync",
   PlatformAiToolGuardrailsPolicies: "agents/guardrails/policies",
   PlatformEnterpriseManagedAuth: "admin/identity/sso",
+  PlatformEntraAgentId: "admin/identity/entra-agent-id",
   PlatformEnvironments: "admin/environments",
   PlatformFoundry: "integrations/ai-clients/foundry",
   PlatformIdentityProviders: "admin/identity",

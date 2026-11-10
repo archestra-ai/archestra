@@ -302,6 +302,10 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer mcp-server-access-token",
       expiresInSeconds: 300,
+      issuedTo: {
+        clientId: "resource-client",
+        clientType: "identity_provider",
+      },
     });
 
     const tokenRequest = fetchMock.mock.calls.find(
@@ -535,6 +539,10 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer mcp-server-access-token",
       expiresInSeconds: 300,
+      issuedTo: {
+        clientId: "resource-client",
+        clientType: "identity_provider",
+      },
     });
 
     fetchMock.mockRestore();
@@ -783,6 +791,10 @@ describe("resolveEnterpriseTransportCredential", () => {
       headerName: "Authorization",
       headerValue: "Bearer downstream-graph-access-token",
       expiresInSeconds: 3599,
+      issuedTo: {
+        clientId: "middle-tier-client-id",
+        clientType: "identity_provider",
+      },
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];

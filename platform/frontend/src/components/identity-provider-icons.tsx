@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import { IDENTITY_PROVIDER_ID } from "@archestra/shared";

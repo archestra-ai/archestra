@@ -1,7 +1,7 @@
 ---
 title: Workload Identity Federation
 description: Let CI jobs and workloads sign in as a service account with their own OIDC token instead of a stored API key
-order: 5
+order: 6
 lastUpdated: 2026-11-07
 ---
 

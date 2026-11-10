@@ -62831,6 +62831,10 @@
                                     "nullable": true,
                                     "type": "string"
                                   },
+                                  "entraAgentIdentityId": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
                                   "environmentId": {
                                     "nullable": true,
                                     "type": "string",
@@ -63605,6 +63609,7 @@
                                   "modelPoolId",
                                   "autoModel",
                                   "identityProviderId",
+                                  "entraAgentIdentityId",
                                   "environmentId",
                                   "runtime",
                                   "runtimeSecretId",
@@ -64660,6 +64665,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "entraAgentIdentityId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "environmentId": {
                             "nullable": true,
                             "type": "string",
@@ -65434,6 +65443,7 @@
                           "modelPoolId",
                           "autoModel",
                           "identityProviderId",
+                          "entraAgentIdentityId",
                           "environmentId",
                           "runtime",
                           "runtimeSecretId",
@@ -65843,6 +65853,11 @@
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "entraAgentIdentityId": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                   },
                   "environmentId": {
                     "nullable": true,
@@ -66749,6 +66764,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -67506,6 +67525,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -72120,6 +72140,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -72889,6 +72913,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -73635,6 +73660,10 @@
                           "type": "boolean"
                         },
                         "identityProviderId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "entraAgentIdentityId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -74395,6 +74424,7 @@
                         "modelPoolId",
                         "autoModel",
                         "identityProviderId",
+                        "entraAgentIdentityId",
                         "environmentId",
                         "runtime",
                         "runtimeSecretId",
@@ -74826,6 +74856,10 @@
                       "type": "boolean"
                     },
                     "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "entraAgentIdentityId": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -75586,6 +75620,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -75944,6 +75979,11 @@
                   "identityProviderId": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "entraAgentIdentityId": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                   },
                   "environmentId": {
                     "nullable": true,
@@ -76565,6 +76605,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -77322,6 +77366,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -79438,6 +79483,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -80195,6 +80244,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -80766,6 +80816,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -81523,6 +81577,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -88885,6 +88940,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "entraAgentIdentityId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "environmentId": {
                       "nullable": true,
                       "type": "string",
@@ -89642,6 +89701,7 @@
                     "modelPoolId",
                     "autoModel",
                     "identityProviderId",
+                    "entraAgentIdentityId",
                     "environmentId",
                     "runtime",
                     "runtimeSecretId",
@@ -161573,6 +161633,10 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "entraAgentIdentityId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "environmentId": {
                               "nullable": true,
                               "type": "string",
@@ -162330,6 +162394,7 @@
                             "modelPoolId",
                             "autoModel",
                             "identityProviderId",
+                            "entraAgentIdentityId",
                             "environmentId",
                             "runtime",
                             "runtimeSecretId",
@@ -164900,6 +164965,10 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "entraAgentIdentityId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
                                 "environmentId": {
                                   "nullable": true,
                                   "type": "string",
@@ -165657,6 +165726,7 @@
                                 "modelPoolId",
                                 "autoModel",
                                 "identityProviderId",
+                                "entraAgentIdentityId",
                                 "environmentId",
                                 "runtime",
                                 "runtimeSecretId",
@@ -344748,7 +344818,7 @@
                           "clientIdOverride": {
                             "type": "string"
                           },
-                          "clientSecretOverride": {
+                          "privateKeyIdOverride": {
                             "type": "string"
                           },
                           "tokenInjectionMode": {
@@ -345803,6 +345873,12 @@
                       "clientSecretOverride": {
                         "type": "string"
                       },
+                      "privateKeyPemOverride": {
+                        "type": "string"
+                      },
+                      "privateKeyIdOverride": {
+                        "type": "string"
+                      },
                       "tokenInjectionMode": {
                         "type": "string",
                         "enum": [
@@ -346528,7 +346604,7 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
-                        "clientSecretOverride": {
+                        "privateKeyIdOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -350278,7 +350354,7 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
-                        "clientSecretOverride": {
+                        "privateKeyIdOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -351270,6 +351346,12 @@
                       "clientSecretOverride": {
                         "type": "string"
                       },
+                      "privateKeyPemOverride": {
+                        "type": "string"
+                      },
+                      "privateKeyIdOverride": {
+                        "type": "string"
+                      },
                       "tokenInjectionMode": {
                         "type": "string",
                         "enum": [
@@ -351857,7 +351939,7 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
-                        "clientSecretOverride": {
+                        "privateKeyIdOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -354650,7 +354732,7 @@
                           "clientIdOverride": {
                             "type": "string"
                           },
-                          "clientSecretOverride": {
+                          "privateKeyIdOverride": {
                             "type": "string"
                           },
                           "tokenInjectionMode": {
@@ -355638,7 +355720,7 @@
                         "clientIdOverride": {
                           "type": "string"
                         },
-                        "clientSecretOverride": {
+                        "privateKeyIdOverride": {
                           "type": "string"
                         },
                         "tokenInjectionMode": {
@@ -426203,6 +426285,19 @@
                               "chat"
                             ]
                           },
+                          "credentialClientId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "credentialClientType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "identity_provider",
+                              "mcp_server",
+                              "entra_agent_identity"
+                            ]
+                          },
                           "durationMs": {
                             "nullable": true,
                             "type": "integer",
@@ -426238,6 +426333,8 @@
                           "authMethod",
                           "oauthClientId",
                           "source",
+                          "credentialClientId",
+                          "credentialClientType",
                           "durationMs",
                           "createdAt",
                           "userName",
@@ -426692,6 +426789,19 @@
                         "chat"
                       ]
                     },
+                    "credentialClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "credentialClientType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "identity_provider",
+                        "mcp_server",
+                        "entra_agent_identity"
+                      ]
+                    },
                     "durationMs": {
                       "nullable": true,
                       "type": "integer",
@@ -426727,6 +426837,8 @@
                     "authMethod",
                     "oauthClientId",
                     "source",
+                    "credentialClientId",
+                    "credentialClientType",
                     "durationMs",
                     "createdAt",
                     "userName",
@@ -580901,6 +581013,33 @@
                                   "urn:ietf:params:oauth:token-type:id_token",
                                   "urn:ietf:params:oauth:token-type:jwt"
                                 ]
+                              },
+                              "entraAgentId": {
+                                "type": "object",
+                                "properties": {
+                                  "blueprintClientId": {
+                                    "type": "string"
+                                  },
+                                  "clientSecret": {
+                                    "type": "string"
+                                  },
+                                  "privateKeyPem": {
+                                    "type": "string"
+                                  },
+                                  "certificateThumbprint": {
+                                    "type": "string"
+                                  },
+                                  "blueprintScope": {
+                                    "type": "string"
+                                  },
+                                  "requireAgentIdentity": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "blueprintClientId"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -581190,6 +581329,8 @@
                             "oidcConfig.clientSecret",
                             "oidcConfig.enterpriseManagedCredentials.clientSecret",
                             "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                            "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+                            "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
                             "samlConfig.privateKey",
                             "samlConfig.decryptionPvk",
                             "samlConfig.spMetadata.privateKey",
@@ -581576,6 +581717,32 @@
                               "urn:ietf:params:oauth:token-type:access_token",
                               "urn:ietf:params:oauth:token-type:id_token",
                               "urn:ietf:params:oauth:token-type:jwt"
+                            ]
+                          },
+                          "entraAgentId": {
+                            "type": "object",
+                            "properties": {
+                              "blueprintClientId": {
+                                "type": "string"
+                              },
+                              "clientSecret": {
+                                "type": "string"
+                              },
+                              "privateKeyPem": {
+                                "type": "string"
+                              },
+                              "certificateThumbprint": {
+                                "type": "string"
+                              },
+                              "blueprintScope": {
+                                "type": "string"
+                              },
+                              "requireAgentIdentity": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "blueprintClientId"
                             ]
                           }
                         }
@@ -581968,6 +582135,33 @@
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]
+                            },
+                            "entraAgentId": {
+                              "type": "object",
+                              "properties": {
+                                "blueprintClientId": {
+                                  "type": "string"
+                                },
+                                "clientSecret": {
+                                  "type": "string"
+                                },
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "certificateThumbprint": {
+                                  "type": "string"
+                                },
+                                "blueprintScope": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "blueprintClientId"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -582257,6 +582451,8 @@
                           "oidcConfig.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",
@@ -583791,6 +583987,33 @@
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]
+                            },
+                            "entraAgentId": {
+                              "type": "object",
+                              "properties": {
+                                "blueprintClientId": {
+                                  "type": "string"
+                                },
+                                "clientSecret": {
+                                  "type": "string"
+                                },
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "certificateThumbprint": {
+                                  "type": "string"
+                                },
+                                "blueprintScope": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "blueprintClientId"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -584080,6 +584303,8 @@
                           "oidcConfig.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",
@@ -584465,6 +584690,32 @@
                               "urn:ietf:params:oauth:token-type:access_token",
                               "urn:ietf:params:oauth:token-type:id_token",
                               "urn:ietf:params:oauth:token-type:jwt"
+                            ]
+                          },
+                          "entraAgentId": {
+                            "type": "object",
+                            "properties": {
+                              "blueprintClientId": {
+                                "type": "string"
+                              },
+                              "clientSecret": {
+                                "type": "string"
+                              },
+                              "privateKeyPem": {
+                                "type": "string"
+                              },
+                              "certificateThumbprint": {
+                                "type": "string"
+                              },
+                              "blueprintScope": {
+                                "type": "string"
+                              },
+                              "requireAgentIdentity": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "blueprintClientId"
                             ]
                           }
                         }
@@ -584857,6 +585108,33 @@
                                 "urn:ietf:params:oauth:token-type:id_token",
                                 "urn:ietf:params:oauth:token-type:jwt"
                               ]
+                            },
+                            "entraAgentId": {
+                              "type": "object",
+                              "properties": {
+                                "blueprintClientId": {
+                                  "type": "string"
+                                },
+                                "clientSecret": {
+                                  "type": "string"
+                                },
+                                "privateKeyPem": {
+                                  "type": "string"
+                                },
+                                "certificateThumbprint": {
+                                  "type": "string"
+                                },
+                                "blueprintScope": {
+                                  "type": "string"
+                                },
+                                "requireAgentIdentity": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "blueprintClientId"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "additionalProperties": false
@@ -585146,6 +585424,8 @@
                           "oidcConfig.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.clientSecret",
                           "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem",
                           "samlConfig.privateKey",
                           "samlConfig.decryptionPvk",
                           "samlConfig.spMetadata.privateKey",

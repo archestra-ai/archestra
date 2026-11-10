@@ -1488,6 +1488,35 @@ describe("asking through the client's own question tool", () => {
       }
     });
 
+    test("keeps every guided history after many ever shorter replays", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-many-replays",
+      );
+      const history = (laterResults: number) => [
+        ruling(0),
+        ...Array.from({ length: laterResults }, (_, index) =>
+          later(`later-${index + 1}`),
+        ),
+      ];
+      try {
+        // 41 guided histories, each one shorter than the last.
+        for (let laterResults = 40; laterResults >= 0; laterResults--) {
+          expect(await guided(history(laterResults))).toBe(true);
+        }
+        // The oldest, longest ones are still recognized as retries.
+        expect(await guided(history(40))).toBe(true);
+        expect(await guided(history(39))).toBe(true);
+        // A history past every guided one is progress.
+        expect(await guided(history(41))).toBe(false);
+      } finally {
+        restore();
+      }
+    }, 60_000);
+
     test("guides again every history it guided, after a shorter replay or overlapping requests", async ({
       makeOrganization,
     }) => {

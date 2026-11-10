@@ -3302,12 +3302,18 @@ type RemedyContinuation = {
   laterResults: number;
 };
 
-/** Distinct guided histories kept per ruling; the shortest ones are kept. */
-const MAX_GUIDED_HISTORIES = 32;
+/**
+ * Result counts after a ruling at which its continuation was delivered, as
+ * sorted, disjoint, non-adjacent `[first, last]` ranges. A request is only
+ * guided at a count below every guided one (or at a guided one), so replays
+ * of ever shorter histories form one range: the record stays small without
+ * dropping any guided history.
+ */
+type GuidedHistories = Array<[number, number]>;
 
 /**
  * Records that the history `continuation` describes was told to apply the
- * ruling's plan. Each guided history is kept, so a replay of any of them is
+ * ruling's plan. Every guided history is kept, so a replay of any of them is
  * guided again, and overlapping requests cannot drop each other's record.
  */
 async function recordRemedyContinuation(params: {
@@ -3322,12 +3328,10 @@ async function recordRemedyContinuation(params: {
   try {
     await cacheManager.withLock(key, async (cache) => {
       const guided = guidedHistories(await cache.get<unknown>(key));
-      if (guided.includes(laterResults)) return;
+      if (isGuidedHistory(guided, laterResults)) return;
       await cache.set(
         key,
-        [...guided, laterResults]
-          .sort((a, b) => a - b)
-          .slice(0, MAX_GUIDED_HISTORIES),
+        withGuidedHistory(guided, laterResults),
         TimeInMs.Day,
       );
     });
@@ -3340,13 +3344,49 @@ async function recordRemedyContinuation(params: {
   }
 }
 
-/** The result counts after a ruling at which its continuation was delivered. */
-function guidedHistories(value: unknown): number[] {
-  return Array.isArray(value)
-    ? value.filter(
-        (count): count is number => Number.isInteger(count) && count >= 0,
-      )
-    : [];
+/** Reads a stored record; anything malformed counts as no record. */
+function guidedHistories(value: unknown): GuidedHistories {
+  if (!Array.isArray(value)) return [];
+  const ranges: GuidedHistories = [];
+  for (const range of value) {
+    if (
+      !Array.isArray(range) ||
+      range.length !== 2 ||
+      !Number.isInteger(range[0]) ||
+      !Number.isInteger(range[1]) ||
+      range[0] < 0 ||
+      range[1] < range[0]
+    )
+      return [];
+    ranges.push([range[0], range[1]]);
+  }
+  return ranges.reduce(withGuidedRange, []);
+}
+
+function isGuidedHistory(guided: GuidedHistories, count: number): boolean {
+  return guided.some(([first, last]) => first <= count && count <= last);
+}
+
+function withGuidedHistory(
+  guided: GuidedHistories,
+  count: number,
+): GuidedHistories {
+  return withGuidedRange(guided, [count, count]);
+}
+
+/** Inserts `range`, merging it with ranges it overlaps or touches. */
+function withGuidedRange(
+  guided: GuidedHistories,
+  range: [number, number],
+): GuidedHistories {
+  const merged: GuidedHistories = [];
+  for (const [first, last] of [...guided, range].sort((a, b) => a[0] - b[0])) {
+    const previous = merged.at(-1);
+    if (previous && first <= previous[1] + 1)
+      previous[1] = Math.max(previous[1], last);
+    else merged.push([first, last]);
+  }
+  return merged;
 }
 
 function remedyContinuationDeliveredKey(params: {
@@ -8111,8 +8151,8 @@ async function hasRemedyOfferResult(params: {
   );
   if (
     guided.length > 0 &&
-    !guided.includes(continuation.laterResults) &&
-    continuation.laterResults > Math.min(...guided)
+    !isGuidedHistory(guided, continuation.laterResults) &&
+    continuation.laterResults > guided[0][0]
   ) {
     // The model read the guided ruling and went on with other calls: the
     // plan it declined is not put to it again. A history that was guided

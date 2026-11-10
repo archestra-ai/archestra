@@ -3,9 +3,10 @@ name: Previous Release Published
 # A merged release PR leaves a draft release that waits for its approval in
 # release-publisher. This required check holds the next release PR on the same
 # line (main: X.Y.0-rc.N; release/X.Y: X.Y.Z) until that release is published,
-# and keeps one comment on the PR that says why
-# (.github/scripts/previous-release-published.py). Every other PR passes at
-# once.
+# and keeps one comment on the PR that says why. Every other PR passes at once.
+# The logic is the organization's shared action
+# (archestra-ai/.github actions/previous-release-published); every repository
+# that requires the check uses this same caller.
 #
 # The check runs on the PR's head commit, so a release published later re-runs
 # the PR's failed run instead (recheck): release-finalize.yml dispatches it
@@ -41,40 +42,16 @@ jobs:
       group: previous-release-published-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}
       cancel-in-progress: true
     permissions:
-      contents: write # List draft releases (push access only); read the script and merge-group commits.
-      pull-requests: write # Read the PR and keep its one status comment.
+      contents: write # List draft releases (push access only).
+      pull-requests: write # Read the PR and keep its one comment.
       actions: read # Link each draft's Release Please run.
     steps:
-      - name: Pass PRs that release nothing
-        id: scope
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [ "$EVENT_NAME" = pull_request ] && [[ "$HEAD_REF" != release-please--branches--* ]]; then
-            echo "Not a release PR: nothing to wait for."
-            echo "check=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "check=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout repository
-        if: ${{ steps.scope.outputs.check == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
       - name: Check the previous release is published
-        if: ${{ steps.scope.outputs.check == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
-          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
-        run: python3 .github/scripts/previous-release-published.py check
+        uses: archestra-ai/.github/actions/previous-release-published@2d746b7a967e97648728216185f2584493aa6d76 # archestra-ai/.github#74
+        with:
+          tag-prefix: platform-v
+          release-branches: "true"
+          release-workflow: release-please.yml
 
   recheck:
     name: Re-check open release PRs
@@ -89,15 +66,10 @@ jobs:
       pull-requests: read # List the open release PRs.
       actions: write # Re-run a release PR's failed check once it is clear.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
       - name: Re-run checks that are now clear
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          WORKFLOW_FILE: previous-release-published.yml
-        run: python3 .github/scripts/previous-release-published.py recheck
+        uses: archestra-ai/.github/actions/previous-release-published@2d746b7a967e97648728216185f2584493aa6d76 # archestra-ai/.github#74
+        with:
+          mode: recheck
+          tag-prefix: platform-v
+          release-branches: "true"
+          release-workflow: release-please.yml

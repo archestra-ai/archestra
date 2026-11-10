@@ -599,6 +599,15 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       commitSha: commit.sha,
       content,
     });
+    // The ruleset keeps an unauthorized change from merging; should one reach
+    // the branch all the same (ruleset off, a bypass, a direct push), the
+    // pull refuses it the way it refuses an invalid policy.
+    if (row.sourceCommit && row.sourceCommit !== commit.sha)
+      await assertPulledAuthorship({
+        source: { ...row, repo, path },
+        from: row.sourceCommit,
+        to: commit.sha,
+      });
     const contentHash = createHash("sha256").update(content).digest("hex");
     const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
@@ -1194,6 +1203,18 @@ async function githubAuthorship(params: {
   number: number;
   user: GithubPullUser | null;
 }): Promise<PullOutcome | null> {
+  return (await judgeGithubPull(params))?.outcome ?? null;
+}
+
+/** A pull request's authorship verdict, with the governed files it changes. */
+async function judgeGithubPull(params: {
+  source: PolicySource;
+  token: string;
+  api: string;
+  base: string;
+  number: number;
+  user: GithubPullUser | null;
+}): Promise<{ outcome: PullOutcome; governed: string[] } | null> {
   const { source, token, base, number } = params;
   const appName = archestraMcpBranding.appName;
   const changed = await pagedGithub<{
@@ -1207,9 +1228,12 @@ async function githubAuthorship(params: {
   if (changed === null) return null;
   if (changed === "over")
     return {
-      accepted: false,
-      title: "This pull request changes too many files to check",
-      reason: `${appName} checks who may change each file in a pull request of up to ${MAX_PULL_FILES} files. Split this one.`,
+      governed: [],
+      outcome: {
+        accepted: false,
+        title: "This pull request changes too many files to check",
+        reason: `${appName} checks who may change each file in a pull request of up to ${MAX_PULL_FILES} files. Split this one.`,
+      },
     };
   const governed = governedFiles(
     source,
@@ -1219,10 +1243,13 @@ async function githubAuthorship(params: {
       ),
     ),
   );
-  if (governed.length === 0) return { accepted: true };
+  const paths = governed.map((file) => file.path);
+  if (governed.length === 0)
+    return { governed: paths, outcome: { accepted: true } };
   const requester = await pullRequester({ ...params, governed });
   if (requester === null) return null;
-  if ("refused" in requester) return requester.refused;
+  if ("refused" in requester)
+    return { governed: paths, outcome: requester.refused };
   const { userId, email } = requester;
   const prefixes = governed.some((file) => file.prefix !== null)
     ? await catalogToolPrefixes(source.organizationId)
@@ -1246,9 +1273,12 @@ async function githubAuthorship(params: {
     if (!allowed) {
       const catalog = await InternalMcpCatalogModel.findById(catalogId);
       return {
-        accepted: false,
-        title: "The requester may not change these rules",
-        reason: `${email} may not change ${file.path}: that takes edit access to the MCP server ${catalog?.name ?? file.prefix} in the MCP registry.`,
+        governed: paths,
+        outcome: {
+          accepted: false,
+          title: "The requester may not change these rules",
+          reason: `${email} may not change ${file.path}: that takes edit access to the MCP server ${catalog?.name ?? file.prefix} in the MCP registry.`,
+        },
       };
     }
   }
@@ -1264,13 +1294,115 @@ async function githubAuthorship(params: {
           (prefixes?.byPrefix.get(file.prefix)?.size ?? 0) !== 1,
       );
       return {
-        accepted: false,
-        title: "The requester may not change the policy",
-        reason: `${email} may not change ${first?.path ?? source.path}: that takes the guardrailsPolicy:update permission.`,
+        governed: paths,
+        outcome: {
+          accepted: false,
+          title: "The requester may not change the policy",
+          reason: `${email} may not change ${first?.path ?? source.path}: that takes the guardrailsPolicy:update permission.`,
+        },
       };
     }
   }
-  return { accepted: true };
+  return { governed: paths, outcome: { accepted: true } };
+}
+
+/**
+ * The pull's own authorship rule, for what reached the branch since the
+ * accepted commit: every governed file changed in between must come from a
+ * merged pull request whose requester may change it; a file changed outside
+ * one, or by one the check would have refused, refuses the pull. Throws an
+ * ApiError naming why, as the policy checks do; a read that fails for now
+ * throws a 503 and the next sync tries again.
+ */
+async function assertPulledAuthorship(params: {
+  source: PolicySource;
+  from: string;
+  to: string;
+}): Promise<void> {
+  const { source, from, to } = params;
+  // Only an App vouches for who asked; a source without one is not judged here.
+  if (!source.githubAppConfigId) return;
+  const appName = archestraMcpBranding.appName;
+  const { token, api } = await resolveOpenAppaGithubAccess(source, {
+    contents: "read",
+    pull_requests: "read",
+  });
+  if (!token) return;
+  const base = `${api}/repos/${source.repo}`;
+  const later = () =>
+    new ApiError(
+      503,
+      `${appName} could not read what changed since the accepted commit. Git sync tries again at its next sync.`,
+    );
+  const compared = await githubCall<{
+    files?: Array<{ filename?: string; previous_filename?: string }>;
+    commits?: Array<{ sha?: string }>;
+  }>({ token, url: `${base}/compare/${from}...${to}?per_page=250` });
+  if (!compared.ok) throw later();
+  const files = compared.body.files ?? [];
+  const commits = compared.body.commits ?? [];
+  const governed = governedFiles(
+    source,
+    files.flatMap((file) =>
+      [file.filename, file.previous_filename].filter(
+        (path): path is string => typeof path === "string",
+      ),
+    ),
+  );
+  if (governed.length === 0) return;
+  // GitHub lists at most 300 files and 250 commits of a comparison.
+  if (files.length >= 300 || commits.length >= 250)
+    throw new ApiError(
+      400,
+      `More than ${files.length >= 300 ? "300 files" : "250 commits"} changed since the accepted commit ${from.slice(0, 7)}, so ${appName} cannot tell who changed each policy file. Apply the changes in smaller steps.`,
+    );
+  const range = new Set(commits.flatMap((entry) => entry.sha ?? []));
+  const branch = source.ref ?? (await defaultBranch({ token, base }));
+  const closed = await pagedGithub<{
+    number?: number;
+    merged_at?: string | null;
+    merge_commit_sha?: string | null;
+    user?: GithubPullUser | null;
+  }>({
+    token,
+    url: `${base}/pulls?state=closed&base=${encodeURIComponent(branch)}&sort=updated&direction=desc`,
+    max: 300,
+  });
+  if (closed === null) throw later();
+  const merged =
+    closed === "over"
+      ? []
+      : closed.filter(
+          (pull) =>
+            pull.number &&
+            pull.merged_at &&
+            pull.merge_commit_sha &&
+            range.has(pull.merge_commit_sha),
+        );
+  const covered = new Set<string>();
+  for (const pull of merged) {
+    const judged = await judgeGithubPull({
+      source,
+      token,
+      api,
+      base,
+      number: pull.number as number,
+      user: pull.user ?? null,
+    });
+    if (judged === null) throw later();
+    if (!judged.outcome.accepted)
+      throw new ApiError(
+        400,
+        `Pull request #${pull.number}: ${judged.outcome.reason}`,
+      );
+    for (const path of judged.governed) covered.add(path);
+  }
+  const outside = governed.filter((file) => !covered.has(file.path));
+  if (outside.length > 0)
+    throw new ApiError(
+      400,
+      `${outside.map((file) => file.path).join(", ")} changed between ${from.slice(0, 7)} and ${to.slice(0, 7)} outside a pull request ${appName} can attribute. Policy files change through pull requests that pass the ${POLICY_CHECK_NAME} check; revert the commit, or make the change again as a pull request.`,
+    );
 }
 
 /**
@@ -1442,7 +1574,7 @@ async function pagedGithub<T>(params: {
   for (let page = 1; all.length <= params.max; page++) {
     const read = await githubCall<T[]>({
       token: params.token,
-      url: `${params.url}?per_page=100&page=${page}`,
+      url: `${params.url}${params.url.includes("?") ? "&" : "?"}per_page=100&page=${page}`,
     });
     if (!read.ok || !Array.isArray(read.body)) return null;
     all.push(...read.body);

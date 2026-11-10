@@ -107,6 +107,8 @@ Only a server's own editors can change its rules file, and they need no one's ap
 
 Who asked is read from what GitHub vouches for. A pull request the APPA Keeper or **Settings → Guardrails** opened names the person who asked in its commits, which GitHub signs for the App; a commit someone else pushes onto that branch fails the check. A pull request a person opened on GitHub is theirs, through the GitHub account they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential); without one, the check fails and says so.
 
+Git sync checks the same thing again before it applies a commit: a policy file changed outside a pull request it can attribute, or by one the check would have refused, is not applied, and the last accepted policy stays, as for an invalid policy. So a ruleset turned off or bypassed delays a bad change at most; it cannot apply it.
+
 **Settings → Guardrails** shows the branch rules under **Repository protection**.
 
 What to know:

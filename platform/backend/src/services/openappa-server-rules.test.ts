@@ -2047,3 +2047,142 @@ test("the policy check refuses a pull request whose requester may not change its
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(6);
 });
+
+test("a pull refuses a commit that changed a server's file outside an authorized pull request, and applies one merged by its editor", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  const pat = await makeUser({ email: "pat@example.com" });
+  await makeTeamMember(payments.id, pat.id);
+  const sam = await makeUser({ email: "sam@example.com" });
+  await makeMember(sam.id, org.id);
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    {
+      organizationId: org.id,
+      initialPermissionGrants: [
+        {
+          subject: { type: "team", id: payments.id },
+          actions: ["read", "use", "update"],
+        },
+      ],
+    },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__read",
+    description: "read",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  await connectApp({ organizationId: org.id });
+  const root = `include = ["mcp/*.toml"]\n${RULES}`;
+  const state = {
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+      [SECOND]: { "appa.toml": root, "mcp/payments_api.toml": INVOICES },
+      [THIRD]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+    },
+  };
+  serveRepository(state);
+  const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
+  const signed = (email: string, sha: string) => ({
+    sha,
+    commit: {
+      author: { email },
+      verification: { verified: true, reason: "valid" },
+    },
+    committer: { login: "acme-guardrails[bot]", type: "Bot" },
+  });
+  let closed: Array<Record<string, unknown>> = [];
+  const pulls: Record<number, { email: string; sha: string }> = {
+    1: { email: pat.email, sha: SECOND },
+    2: { email: sam.email, sha: THIRD },
+  };
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails" }),
+    ),
+    http.get(`${REPO}/compare/:range`, ({ params }) => {
+      const [, to] = String(params.range).split("...");
+      return HttpResponse.json({
+        files: [{ filename: "mcp/payments_api.toml" }],
+        commits: [{ sha: to }],
+      });
+    }),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("state") === "closed"
+          ? closed
+          : [],
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/files`, () =>
+      HttpResponse.json([{ filename: "mcp/payments_api.toml" }]),
+    ),
+    http.get(`${REPO}/pulls/:number/commits`, ({ params }) => {
+      const pull = pulls[Number(params.number)];
+      return HttpResponse.json(pull ? [signed(pull.email, pull.sha)] : []);
+    }),
+  );
+  await syncAppaGithubPolicy(org.id);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
+    FIRST,
+  );
+
+  // The file changed on the branch with no pull request behind it.
+  state.head = SECOND;
+  await syncAppaGithubPolicy(org.id);
+  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
+    sourceCommit: FIRST,
+    lastSyncError: expect.stringMatching(
+      /^mcp\/payments_api\.toml changed between 1111111 and 2222222 outside a pull request Archestra can attribute\./,
+    ),
+  });
+
+  // The same commit turns out to be Pat's pull request, merged: applied.
+  closed = [
+    {
+      number: 1,
+      merged_at: "2026-11-10T10:00:00Z",
+      merge_commit_sha: SECOND,
+      user: bot,
+    },
+  ];
+  await syncAppaGithubPolicy(org.id);
+  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
+    sourceCommit: SECOND,
+    lastSyncError: null,
+  });
+
+  // A merge of Sam's pull request, who may not edit Payments API: refused.
+  state.head = THIRD;
+  closed = [
+    {
+      number: 2,
+      merged_at: "2026-11-10T11:00:00Z",
+      merge_commit_sha: THIRD,
+      user: bot,
+    },
+    ...closed,
+  ];
+  await syncAppaGithubPolicy(org.id);
+  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
+    sourceCommit: SECOND,
+    lastSyncError:
+      "Pull request #2: sam@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server payments_api in the MCP registry.",
+  });
+});

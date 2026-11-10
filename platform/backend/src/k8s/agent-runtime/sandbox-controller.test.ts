@@ -1,7 +1,8 @@
-import { KubeConfig } from "@kubernetes/client-node";
+import { KubeConfig, type V1NetworkPolicy } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { classifyAgentRunFailure } from "@/services/agent-runtime/run-failure";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
@@ -100,7 +101,20 @@ test("re-checks a negative answer once it is stale and flips without a restart",
   expect(discoveryRequests).toBe(afterInstall);
 });
 
-test("launch on retry waits for a Sandbox whose first read has no deletionTimestamp yet until it finishes deleting", async () => {
+test.each([
+  { dnsSource: "discovered", configuredIps: [], expectedDnsIp: "10.96.0.10" },
+  {
+    dnsSource: "configured",
+    configuredIps: ["169.254.20.10"],
+    expectedDnsIp: "169.254.20.10",
+  },
+])("launch on retry waits for Sandbox deletion and applies $dnsSource DNS restrictions", async ({
+  configuredIps,
+  expectedDnsIp,
+}) => {
+  clusterDnsResolver.clearCache();
+  config.orchestrator.kubernetes.clusterDnsIps = configuredIps;
+  const policies: V1NetworkPolicy[] = [];
   serveController({ installed: true });
   await expect(manager.assertSandboxApiInstalled()).resolves.toBeUndefined();
 
@@ -169,7 +183,10 @@ test("launch on retry waits for a Sandbox whose first read has no deletionTimest
     ),
     http.post(
       `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies`,
-      () => HttpResponse.json({}, { status: 201 }),
+      async ({ request }) => {
+        policies.push((await request.json()) as V1NetworkPolicy);
+        return HttpResponse.json({}, { status: 201 });
+      },
     ),
     http.patch(
       `${origin}/apis/networking.k8s.io/v1/namespaces/test/networkpolicies/:name`,
@@ -209,6 +226,21 @@ test("launch on retry waits for a Sandbox whose first read has no deletionTimest
   expect(sandboxReads).toBe(3);
   expect(cacheControlHeaders).toEqual(["no-cache", "no-cache", "no-cache"]);
   expect(createdSandboxName).toBe("workspace");
+  const platformPolicy = policies.find(
+    (policy) => policy.metadata?.name === "workspace-np",
+  );
+  const dnsRules = platformPolicy?.spec?.egress?.filter((rule) =>
+    rule.ports?.some((port) => port.port === 53),
+  );
+  expect(dnsRules?.flatMap((rule) => rule.to ?? [])).toEqual([
+    {
+      namespaceSelector: {
+        matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+      },
+      podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+    },
+    { ipBlock: { cidr: `${expectedDnsIp}/32` } },
+  ]);
 });
 
 test("keeps the terminating-sandbox marker after a deletion timeout so a later launch never adopts the timed-out Sandbox and only creates once it is gone", async () => {

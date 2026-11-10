@@ -182,6 +182,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SERVICE_EGRESS_CONTEXT !== "orbstack")(
         platformNamespace: namespace,
         platformPodLabels: { app: "api" },
         platformPorts: [9000],
+        clusterDnsIps: [],
       };
       const oldPolicy = buildAgentRuntimePlatformEgressPolicy(params);
       apply(floor);

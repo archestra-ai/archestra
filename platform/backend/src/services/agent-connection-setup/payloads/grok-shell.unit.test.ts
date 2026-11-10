@@ -28,7 +28,10 @@ const hasPowerShell =
     { encoding: "utf8" },
   ).status === 0;
 
-function shellFixture(platform: "linux" | "darwin" | "win32") {
+function shellFixture(
+  platform: "linux" | "darwin" | "win32",
+  environment: Record<string, string> = {},
+) {
   const home = mkdtempSync(path.join(tmpdir(), "grok shell $& [日本語] ' "));
   const require = createRequire(import.meta.url);
   const root = path.join(home, ".archestra/grok");
@@ -47,7 +50,7 @@ function shellFixture(platform: "linux" | "darwin" | "win32") {
       Buffer,
       state,
       install,
-      process: { platform, execPath: process.execPath },
+      process: { platform, execPath: process.execPath, env: environment },
       grokFile: (file: string) =>
         existsSync(file) ? readFileSync(file) : null,
       require: (name: string) => {
@@ -79,6 +82,93 @@ function shellFixture(platform: "linux" | "darwin" | "win32") {
     close: () => rmSync(home, { recursive: true, force: true }),
   };
 }
+
+test.each([
+  ".profile",
+  ".bash_login",
+] as const)("installation preserves Bash login selection through %s", (login) => {
+  const { home, run, apply, close } = shellFixture("linux");
+  try {
+    const profile = path.join(home, login);
+    writeFileSync(profile, "export GROK_LOGIN_SENTINEL=retained\n");
+    const installed = run(null);
+    apply(installed.changes);
+    expect(existsSync(path.join(home, ".bash_profile"))).toBe(false);
+    const probe = spawnSync(
+      "bash",
+      [
+        "--noprofile",
+        "--norc",
+        "-c",
+        '. "$HOME/' +
+          login +
+          '"; printf "%s" "$GROK_LOGIN_SENTINEL"; type grok >/dev/null',
+      ],
+      { env: { ...process.env, HOME: home }, encoding: "utf8" },
+    );
+    expect(probe.status, probe.stderr).toBe(0);
+    expect(probe.stdout).toBe("retained");
+    apply(run({ shellProfiles: installed.profiles }, false).changes);
+    expect(readFileSync(profile, "utf8")).toBe(
+      "export GROK_LOGIN_SENTINEL=retained\n",
+    );
+  } finally {
+    close();
+  }
+});
+
+test("installation honors ZDOTDIR without creating an unused home zsh profile", () => {
+  const environment: Record<string, string> = {};
+  const { home, run, apply, close } = shellFixture("linux", environment);
+  try {
+    environment.ZDOTDIR = path.join(home, "zsh configuration");
+    const installed = run(null);
+    apply(installed.changes);
+    expect(existsSync(path.join(home, ".zshrc"))).toBe(false);
+    const probe = spawnSync("zsh", ["-di", "-c", "type grok"], {
+      env: { ...process.env, HOME: home, ...environment },
+      encoding: "utf8",
+    });
+    expect(probe.status, probe.stderr).toBe(0);
+    expect(probe.stdout).toContain("grok is a shell function");
+    const installedDirectory = environment.ZDOTDIR;
+    environment.ZDOTDIR = path.join(home, "another zsh directory");
+    expect(() => run({ shellProfiles: installed.profiles }, false)).toThrow(
+      "Shell profile locations changed",
+    );
+    environment.ZDOTDIR = installedDirectory;
+    apply(run({ shellProfiles: installed.profiles }, false).changes);
+    expect(existsSync(path.join(environment.ZDOTDIR, ".zshrc"))).toBe(false);
+  } finally {
+    close();
+  }
+});
+
+test.each([
+  false,
+  true,
+])("reconnect retires a previously created login profile only when it has no user edits (edited=%s)", (edited) => {
+  const { home, run, apply, close } = shellFixture("linux");
+  try {
+    const first = run(null);
+    apply(first.changes);
+    const login = path.join(home, ".bash_profile");
+    expect(existsSync(login)).toBe(true);
+    const original = "export GROK_LOGIN_SENTINEL=original\n";
+    writeFileSync(path.join(home, ".profile"), original);
+    if (edited)
+      writeFileSync(login, `${readFileSync(login, "utf8")}# later edit\n`);
+    const reconnected = run({ shellProfiles: first.profiles });
+    apply(reconnected.changes);
+    expect(existsSync(login)).toBe(edited);
+    apply(run({ shellProfiles: reconnected.profiles }, false).changes);
+    expect(readFileSync(path.join(home, ".profile"), "utf8")).toBe(original);
+    if (edited) expect(readFileSync(login, "utf8")).toBe("# later edit\n");
+    else expect(existsSync(login)).toBe(false);
+  } finally {
+    close();
+  }
+});
 
 test.each([
   "linux",

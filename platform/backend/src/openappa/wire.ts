@@ -575,6 +575,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
       stripChildTrajectoryReceipts(
         stripChildTrajectoryReferences(site.get(), {
           preserveLineBoundaries: true,
+          collectReferences: false,
         }).text,
         { preserveLineBoundaries: true },
       ).text,
@@ -587,6 +588,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
         stripChildTrajectoryReceipts(
           stripChildTrajectoryReferences(text, {
             preserveLineBoundaries: true,
+            collectReferences: false,
           }).text,
           { preserveLineBoundaries: true },
         ).text,
@@ -603,6 +605,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
         stripChildTrajectoryReceipts(
           stripChildTrajectoryReferences(envelope, {
             preserveLineBoundaries: true,
+            collectReferences: false,
           }).text,
           {
             preserveLineBoundaries: true,
@@ -615,6 +618,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
         stripChildTrajectoryReceipts(
           stripChildTrajectoryReferences(envelope, {
             preserveLineBoundaries: true,
+            collectReferences: false,
           }).text,
           { preserveLineBoundaries: true },
         ).text,

@@ -541,6 +541,47 @@ test("TTY startup shows actual phases, pending server admission and native exit 
   expect(screen.nativeStartDelayMs).toBeGreaterThan(1300);
 });
 
+test("Windows startup invocation supplies its per-process execution policy before starting native Grok", () => {
+  const current = startupFixture();
+  const stateFile = path.join(current.root, "connection.json");
+  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  writeFileSync(
+    path.join(current.root, "startup.ps1"),
+    readFileSync(path.join(current.root, "startup.sh")),
+  );
+  state.startupGuard.file = "startup.ps1";
+  writeFileSync(stateFile, JSON.stringify(state));
+  // Simulate only the OS dispatch selection. The generated launch arguments
+  // reach a real subprocess that refuses to run without the process override.
+  writeFileSync(
+    current.launcher,
+    readFileSync(current.launcher, "utf8").replace(
+      'const windows = process.platform === "win32", name =',
+      "const windows = true, name =",
+    ),
+  );
+  writeFileSync(
+    path.join(current.home, "bin/powershell.exe"),
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args[args.indexOf("-ExecutionPolicy") + 1] !== "Bypass") process.exit(73);
+const fileIndex = args.indexOf("-File");
+const result = require("node:child_process").spawnSync("bash", args.slice(fileIndex + 1), { stdio: "inherit" });
+process.exit(result.status ?? 1);
+`,
+    { mode: 0o700 },
+  );
+  const result = spawnSync(
+    "python3",
+    ["-c", PTY_STARTUP, process.execPath, current.launcher],
+    { env: current.env, encoding: "utf8", timeout: 20000 },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  const screen = JSON.parse(result.stdout);
+  expect(screen.status, screen.output).toBe(0);
+  expect(screen.output).toContain('"native":true');
+});
+
 test("cancelling the visible startup screen does not start native Grok", () => {
   const current = startupFixture();
   const result = spawnSync(

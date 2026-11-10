@@ -2741,6 +2741,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const adapter = this.bindings.get(context.resources)?.adapter;
+    if (
+      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
+    ) {
+      // Preparation failures must not erase the binding needed by the later
+      // continuation check and release the original resume unchanged.
+      return this.guardedPrepareToolCalls(context);
+    }
     return this.withSoftBlockWaiver(
       context,
       "onPrepareToolCalls",

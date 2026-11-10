@@ -14270,6 +14270,59 @@ describe("soft-block emergency override", () => {
     config.openappa.yellEnabled = false;
   });
 
+  test("a failed approval preparation cannot waive a batch containing a Grok resume", async ({
+    makeOrganization,
+  }) => {
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "grok-prepare-resume",
+    });
+    context.headers = { "x-archestra-agent-id": "grok-build" };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    trusted.request.tools = {
+      ...stubRequestTools(),
+      askUser: { name: "archestra__ask_user" },
+      platformToolNames: new Set(["archestra__ask_user"]),
+    };
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    await plugin.onSessionInit(context);
+    const review = vi
+      .spyOn(hitlReview, "getHitlAskUserArguments")
+      .mockRejectedValue(new ApiError(503, "Synthetic review storage failure"));
+    try {
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "resume",
+              name: "spawn_subagent",
+              arguments: {
+                resume_from: "00000000-0000-4000-8000-000000000001",
+                prompt: "Continue the child.",
+              },
+            },
+            {
+              id: "review",
+              name: "archestra__ask_user",
+              arguments: {
+                question: "Approve?",
+                options: [{ label: "Approve" }, { label: "Deny" }],
+                remedy_offer_ids: ["synthetic-offer"],
+              },
+            },
+          ],
+        }),
+      ).rejects.toThrow("Synthetic review storage failure");
+      expect(review).toHaveBeenCalledOnce();
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      review.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test.for([
     "denial",
     "runtime failure",

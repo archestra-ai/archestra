@@ -1,7 +1,10 @@
 export const GROK_SHELL = String.raw`
 function grokShellProfiles() {
   const os = require("node:os"), home = os.homedir();
-  if (process.platform !== "win32") return [".profile", ".bash_profile", ".bashrc", ".zshrc"].map(name => path.join(home, name));
+  if (process.platform !== "win32") return [
+    ...[".bash_profile", ".bash_login", ".profile", ".bashrc"].map(name => path.join(home, name)),
+    path.join(process.env?.ZDOTDIR ? path.resolve(process.env.ZDOTDIR) : home, ".zshrc")
+  ];
   const result = require("node:child_process").spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath('MyDocuments') | ConvertTo-Json -Compress"], { encoding: "utf8", shell: false, windowsHide: true, timeout: 10000 });
   let documents;
   try { documents = result.status === 0 ? JSON.parse(result.stdout.replace(/^\uFEFF/, "").trim()) : null; } catch {}
@@ -50,9 +53,26 @@ function grokShellChanges(state, install) {
     ? start + "\r\n" + windowsBody + "\r\n" + end
     : start + "\n" + unixBody + "\n" + end;
   const newline = process.platform === "win32" ? "\r\n" : "\n";
-  const changes = [], profiles = [];
-  for (const file of grokShellProfiles()) {
+  const changes = [], profiles = [], locations = grokShellProfiles();
+  if (state?.shellProfiles?.some(entry => !locations.includes(entry.file))) throw new Error("Shell profile locations changed. Restore the previous ZDOTDIR before reconnecting or disconnecting Grok.");
+  const unix = process.platform !== "win32", home = require("node:os").homedir();
+  const loginProfiles = unix ? [".bash_profile", ".bash_login", ".profile"].map(name => path.join(home, name)) : [];
+  const onlyManaged = (file, bytes) => {
+    const previous = state?.shellProfiles?.find(entry => entry.file === file);
+    return bytes !== null && previous?.before === null && typeof previous.block === "string" &&
+      bytes.toString().replace(/\r\n/g, "\n") === previous.block.replace(/\r\n/g, "\n");
+  };
+  // A profile created by an earlier installer must not hide the user's
+  // original login profile. Preserve profiles with later user edits.
+  const loginProfile = loginProfiles.find(file => {
+    const bytes = grokFile(file);
+    return bytes !== null && !onlyManaged(file, bytes);
+  }) || path.join(home, ".bash_profile");
+  const createdProfiles = new Set(unix ? [path.join(home, ".bashrc"), locations[locations.length - 1], loginProfile] : locations);
+  for (const file of locations) {
     const before = grokFile(file), previous = state?.shellProfiles?.find(entry => entry.file === file);
+    if (install && before === null && !previous && !createdProfiles.has(file)) continue;
+    const keep = install && !(unix && loginProfiles.includes(file) && file !== loginProfile && onlyManaged(file, before));
     const utf16 = before?.[0] === 255 && before?.[1] === 254;
     const encoding = utf16 ? "utf16le" : "utf8";
     const text = before?.toString(encoding) || "";
@@ -68,16 +88,16 @@ function grokShellChanges(state, install) {
       const match = matches[0], owned = match[0], from = owned.indexOf(start), to = owned.indexOf(end) + end.length;
       const ownedNewline = /\r?\n/.exec(owned.slice(from))?.[0] || newline;
       block = owned.slice(0, from) + body.replace(/\r?\n/g, ownedNewline) + owned.slice(to);
-      content = text.slice(0, match.index) + (install ? block : "") + text.slice(match.index + owned.length);
+      content = text.slice(0, match.index) + (keep ? block : "") + text.slice(match.index + owned.length);
       const original = Buffer.from(previous.before || "", "base64");
-      if (!install && (content === original.toString(encoding) || process.platform === "win32" && content.replace(/^\uFEFF/, "") === original.toString(encoding))) content = previous.before === null ? null : original;
+      if (!keep && (content === original.toString(encoding) || process.platform === "win32" && content.replace(/^\uFEFF/, "") === original.toString(encoding))) content = previous.before === null ? null : original;
     } else {
       if (!install) continue;
       if (text.includes(start) || text.includes(end)) throw new Error("An unrecognized managed Grok profile block exists. Preserve the profile before reconnecting.");
       const prefix = process.platform === "win32" && !text.startsWith("\uFEFF") ? "\uFEFF" : "";
       content = prefix + text + block;
     }
-    if (install) profiles.push({ file, block, before: previous ? previous.before : before?.toString("base64") ?? null });
+    if (keep) profiles.push({ file, block, before: previous ? previous.before : before?.toString("base64") ?? null });
     if (typeof content === "string") content = Buffer.from(content, encoding);
     if (install) fs.mkdirSync(path.dirname(file), { recursive: true });
     changes.push({ file, expected: before, content });

@@ -7,12 +7,32 @@ const REFERENCE =
 
 export function stripChildTrajectoryReferences(
   text: string,
-  options: { preserveLineBoundaries?: boolean } = {},
+  options: {
+    preserveLineBoundaries?: boolean;
+    collectReferences?: boolean;
+  } = {},
 ): {
   text: string;
   references: string[];
 } {
   const references: string[] = [];
+  if (options.collectReferences === false) {
+    // Callee text and nested notifications cannot establish caller identity.
+    // Strip them in one pass without applying the caller's proof-count limit.
+    const stripped = text.replace(
+      new RegExp(
+        `((?:\\r?\\n){0,2})${REFERENCE.source}((?:\\r?\\n){0,2})`,
+        "g",
+      ),
+      (_match, lead: string, _reference: string, trail: string) =>
+        options.preserveLineBoundaries &&
+        (lead === "\n" || lead === "\r\n") &&
+        trail
+          ? lead
+          : "",
+    );
+    return { text: defangChildReferenceText(stripped), references };
+  }
   if (Buffer.byteLength(text) > 8 * 1024 * 1024) {
     if (text.includes("started subagent"))
       throw new ApiError(400, "OpenAPPA child reference exceeds its limit");
@@ -39,7 +59,25 @@ export function stripChildTrajectoryReferences(
       boundary +
       stripped.slice(end + trail.length);
   }
-  if (/▄█▄▄▄█▄ {2}started subagent [^\r\n]*@/.test(stripped))
-    throw new ApiError(400, "OpenAPPA received a malformed child reference");
+  // Near-matches can be quoted by any tool or model. They are display text,
+  // never identity evidence; do not let them poison every replay of a chat.
+  // Exact references still require the retained signed binding when resolved.
+  stripped = defangChildReferenceText(stripped);
   return { text: stripped, references };
+}
+
+function defangChildReferenceText(text: string): string {
+  // Legacy signed receipts use the same banner without "@". Leave those
+  // intact for their own verifier. Scan each line once, including long lines.
+  return text
+    .split("\n")
+    .map((line) =>
+      line.includes("@")
+        ? line.replaceAll(
+            "▄█▄▄▄█▄  started subagent",
+            "[quoted child reference]",
+          )
+        : line,
+    )
+    .join("\n");
 }

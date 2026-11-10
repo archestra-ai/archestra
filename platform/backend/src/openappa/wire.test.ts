@@ -264,6 +264,85 @@ describe("session receipt text carriers", () => {
 });
 
 describe("child trajectory receipt text carriers", () => {
+  test("tool-result reference-shaped text does not consume the caller's proof budget", () => {
+    const reference =
+      "▄█▄▄▄█▄  started subagent AAA-AAAA@abcdefghijklmnopqrstuv";
+    const body = {
+      messages: [
+        {
+          role: "tool",
+          tool_call_id: "read",
+          content: `${Array(65).fill(reference).join("\n")}\nKeep this text.`,
+        },
+      ],
+    };
+    const references: string[] = [];
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({
+        family: "openai:chatCompletions",
+        body,
+        references,
+      }),
+    ).toEqual([]);
+    expect(references).toEqual([]);
+    expect(body.messages[0].content.trim()).toBe("Keep this text.");
+  });
+
+  test.each([
+    "anthropic:messages",
+    "openai:chatCompletions",
+    "openai:responses",
+  ] as const)("malformed display references remain harmless across tool-result and history replay (%s)", (family) => {
+    const malformed =
+      "Read from a file:\n▄█▄▄▄█▄  started subagent not-a-reference@bad\nKeep this text.";
+    const nested = `<task-notification>${malformed}</task-notification>`;
+    const body =
+      family === "openai:responses"
+        ? {
+            input: [
+              { role: "assistant", content: malformed },
+              { role: "user", content: nested },
+              {
+                type: "function_call_output",
+                call_id: "read",
+                output: malformed,
+              },
+            ],
+          }
+        : {
+            messages: [
+              { role: "assistant", content: malformed },
+              { role: "user", content: nested },
+              family === "anthropic:messages"
+                ? {
+                    role: "user",
+                    content: [
+                      {
+                        type: "tool_result",
+                        tool_use_id: "read",
+                        content: malformed,
+                      },
+                    ],
+                  }
+                : { role: "tool", tool_call_id: "read", content: malformed },
+            ],
+          };
+    const references: string[] = [];
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({ family, body, references }),
+    ).toEqual([]);
+    expect(references).toEqual([]);
+    const sanitized = JSON.stringify(body);
+    expect(sanitized).not.toContain("▄█▄▄▄█▄  started subagent");
+    expect(sanitized).toContain("not-a-reference@bad");
+    expect(sanitized).toContain("Keep this text.");
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({ family, body, references }),
+    ).toEqual([]);
+    expect(JSON.stringify(body)).toBe(sanitized);
+    expect(references).toEqual([]);
+  });
+
   test("strips a signed carrier from history and prepends it on the response", () => {
     config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
     const footer = mintChildTrajectoryReceipt({

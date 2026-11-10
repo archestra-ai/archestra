@@ -386,7 +386,7 @@ if (startup.showBeforeLaunch && state.startupGuard && process.env.ARCHESTRA_GROK
   const windows = process.platform === "win32", name = windows ? "startup.ps1" : "startup.sh";
   const guardFile = path.join(__dirname, name);
   if (state.startupGuard.file !== name || grokDigest(grokFile(guardFile)) !== state.startupGuard.sha256) throw new Error("The Grok startup screen changed. Preserve your edits and reconnect before launching.");
-  const status = await startup.run(windows ? "powershell.exe" : "bash", windows ? ["-NoProfile", "-File", guardFile, ...args] : [guardFile, ...args], { preparing: false });
+  const status = await startup.run(windows ? "powershell.exe" : "bash", windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", guardFile, ...args] : [guardFile, ...args], { preparing: false });
   if (status !== 0) throw new Error("The Grok startup screen could not finish. No native session was started.");
   if (!fs.existsSync(path.join(__dirname, "connection.json"))) { console.log("Grok disconnected. Open a fresh terminal to start ordinary Grok."); return; }
   state = readGrokSnapshot(path.join(__dirname, "connection.json"));

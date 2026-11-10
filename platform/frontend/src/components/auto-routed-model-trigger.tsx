@@ -11,17 +11,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type AutoRoutingTiers = Extract<
-  archestraApiTypes.GetOrganizationDefaultModelResponses["200"]["autoRouting"],
-  { active: true }
->["tiers"];
+type AutoRoutingTiers =
+  archestraApiTypes.GetOrganizationDefaultModelResponses["200"]["autoRouters"][number]["tiers"];
 
 /**
- * The model control of an agent on `auto`, or without a provider key while
- * the organization default is `auto`. It names what the agent runs on in a
+ * The model control of an agent on an auto router, or without a provider key
+ * while the organization default is one. It names the router in a
  * few words that never truncate; the tooltip lists the three routed models.
  */
-export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
+export function AutoRoutedModelTrigger({
+  tiers,
+  label = "Auto",
+}: {
+  tiers: AutoRoutingTiers;
+  /** The router's label, e.g. "Auto · support". */
+  label?: string;
+}) {
   const rows = [
     { tier: "Fast", ...tiers.fast },
     { tier: "Normal", ...tiers.normal },
@@ -41,7 +46,7 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
             className="cursor-default gap-2 aria-disabled:cursor-default aria-disabled:opacity-100"
           >
             <Sparkles aria-hidden />
-            <span className="text-foreground/80">Auto</span>
+            <span className="text-foreground/80">{label}</span>
             <span className="hidden text-muted-foreground sm:inline">
               3 models
             </span>

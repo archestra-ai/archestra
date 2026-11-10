@@ -5,6 +5,7 @@ import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingUsageModel from "@/models/routing-usage";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  ensureAutoRouter,
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
@@ -43,6 +44,7 @@ describe("GET /api/interactions/:interactionId/auto-routing", () => {
     const { decision } = await RoutingDecisionModel.insertOrGet({
       ...plannedDecision({
         organizationId: ctx.organizationId,
+        routerId: (await ensureAutoRouter(ctx.organizationId)).id,
         sessionKey: RoutingSessionKeySchema.parse(sessionId),
         modelId: model.id,
         scorerVersionId: scorer.id,
@@ -125,6 +127,7 @@ describe("GET /api/interactions/:interactionId/auto-routing", () => {
     const { decision } = await RoutingDecisionModel.insertOrGet({
       ...plannedDecision({
         organizationId: ctx.organizationId,
+        routerId: (await ensureAutoRouter(ctx.organizationId)).id,
         sessionKey: RoutingSessionKeySchema.parse("fallback"),
         modelId: model.id,
         scorerVersionId: scorer.id,

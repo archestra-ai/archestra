@@ -7,7 +7,7 @@ import type {
 import { firstUserText } from "./first-user-text";
 import { selectTier, uniform } from "./router";
 import { scoringContext } from "./scoring-context";
-import { loadAutoRoutingSettings } from "./settings";
+import { loadAutoRouter } from "./settings";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type PreRunInput, SignalSourceError } from "./signals/types";
 import { loadTrio, TIER_NAMES } from "./tiers";
@@ -18,9 +18,10 @@ import { loadTrio, TIER_NAMES } from "./tiers";
  * requested; the scorer call is real and billed.
  */
 export async function previewAutoRouting(
-  params: AutoRoutingPreviewBody & { organizationId: string },
+  params: AutoRoutingPreviewBody & { organizationId: string; routerId: string },
 ): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
+  const router = await loadAutoRouter(organizationId, params.routerId);
   const source =
     "request" in params
       ? {
@@ -44,7 +45,7 @@ export async function previewAutoRouting(
     ...source,
     firstUserText: source.firstUserText,
   };
-  const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
+  const loaded = await loadTrio(router);
   if (loaded.kind === "missing") {
     throw new ApiError(
       400,
@@ -52,15 +53,15 @@ export async function previewAutoRouting(
     );
   }
   const { trio } = loaded;
-  const scored = await preRunSource
-    .read(input, { organizationId })
+  const scored = await preRunSource(router.scorerModel)
+    .read(input, { organizationId, apiKeyId: router.scorerApiKeyId })
     .catch((error: unknown) => {
       throw scorerFailure(error);
     });
-  const version = (await activeSourceVersion()).id;
+  const version = (await activeSourceVersion(router.scorerModel)).id;
   // No re-plan is requested for a stale plan: preview has no side effects.
   const outcome = selectTier({
-    active: await RoutingPlanModel.findActive(organizationId),
+    active: await RoutingPlanModel.findActive(router.id),
     scorerVersionId: version,
     trio,
     features: decisionFeatures({ version, reading: scored, input }),

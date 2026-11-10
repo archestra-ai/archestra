@@ -1,18 +1,25 @@
 import { randomUUID } from "node:crypto";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, publishFittedPlan } from "@/test/auto-routing";
+import {
+  autoRouterId,
+  configureAutoRouting,
+  publishFittedPlan,
+} from "@/test/auto-routing";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
-describe("GET /api/auto-routing/plans/:id", () => {
+describe("GET /api/auto-routing/routers/:id/plans/:planId", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
   });
 
-  const getPlan = (id: string) =>
-    ctx.app.inject({ method: "GET", url: `/api/auto-routing/plans/${id}` });
+  const getPlan = (routerId: string, id: string) =>
+    ctx.app.inject({
+      method: "GET",
+      url: `/api/auto-routing/routers/${routerId}/plans/${id}`,
+    });
 
   test("returns the fitted plan document and the tiers it was fitted for", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
@@ -21,7 +28,7 @@ describe("GET /api/auto-routing/plans/:id", () => {
       trio,
     });
 
-    const response = await getPlan(plan.id);
+    const response = await getPlan(plan.routerId, plan.id);
 
     expect(response.statusCode, response.body).toBe(200);
     const body = response.json();
@@ -44,8 +51,11 @@ describe("GET /api/auto-routing/plans/:id", () => {
       organizationId: other.id,
       trio: await configureAutoRouting(other.id),
     });
+    await configureAutoRouting(ctx.organizationId);
+    const ownRouterId = await autoRouterId(ctx.organizationId);
 
-    expect((await getPlan(plan.id)).statusCode).toBe(404);
-    expect((await getPlan(randomUUID())).statusCode).toBe(404);
+    expect((await getPlan(plan.routerId, plan.id)).statusCode).toBe(404);
+    expect((await getPlan(ownRouterId, plan.id)).statusCode).toBe(404);
+    expect((await getPlan(ownRouterId, randomUUID())).statusCode).toBe(404);
   });
 });

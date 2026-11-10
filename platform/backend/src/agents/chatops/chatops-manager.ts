@@ -3400,7 +3400,7 @@ export class ChatOpsManager {
           agent: {
             llmApiKeyId: agent.llmApiKeyId,
             modelId: agent.modelId,
-            autoModel: agent.autoModel,
+            autoRouterId: agent.autoRouterId,
           },
           organizationId: params.organizationId,
           userId: params.userId,

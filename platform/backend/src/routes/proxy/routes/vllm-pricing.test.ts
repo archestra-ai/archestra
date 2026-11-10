@@ -1,4 +1,4 @@
-import { AUTO_ROUTABLE_HEADER } from "@archestra/shared";
+import { AUTO_ROUTER_ID_HEADER } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
@@ -12,6 +12,7 @@ import ModelModel from "@/models/model";
 import ModelPoolModel from "@/models/model-pool";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { accessGrants, expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
 import modelRouterRoutes from "./model-router";
@@ -68,6 +69,9 @@ for (const scenario of [
     const agent = await makeAgent({ agentType: "agent" });
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId);
+    // An auto router with no tiers cannot route, so the call runs on its own model.
+    const router =
+      "auto" in scenario ? await ensureAutoRouter(agent.organizationId) : null;
     const token = await makePassthroughCredential({
       organizationId: agent.organizationId,
       ownerId: user.id,
@@ -141,8 +145,8 @@ for (const scenario of [
         headers: {
           authorization: "Bearer synthetic-key",
           "x-archestra-virtual-key": token,
-          ...("auto" in scenario
-            ? { ...internalCallHeader(), [AUTO_ROUTABLE_HEADER]: "true" }
+          ...(router
+            ? { ...internalCallHeader(), [AUTO_ROUTER_ID_HEADER]: router.id }
             : {}),
         },
         payload: {

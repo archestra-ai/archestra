@@ -13,50 +13,62 @@ const routableModels = [
   { value: "openai:gpt-5.5", supportedEndpoints: chat },
   { value: "anthropic:claude-opus-5-5", supportedEndpoints: chat },
 ];
+type OfferedRouter = NonNullable<
+  Parameters<typeof autoRoutingOffer>[0]["routers"]
+>[number];
+const router = (
+  name: string,
+  overrides: Partial<{
+    enabled: boolean;
+    tiers: Record<"fast" | "normal" | "smart", unknown>;
+    virtualApiKeyIds: string[];
+  }> = {},
+) =>
+  ({
+    id: name,
+    name,
+    enabled: true,
+    tiers,
+    virtualApiKeyIds: [],
+    ...overrides,
+  }) as OfferedRouter;
 const base = {
   featureEnabled: true,
-  settings: { enabled: true, tiers },
-  canConfigure: true,
+  routers: [router("auto")],
+  virtualApiKeyId: null,
   routableModels,
   modelsPending: false,
 };
 
 describe("autoRoutingOffer", () => {
-  it("offers nothing while the alpha is off or the settings are unavailable", () => {
+  it("offers nothing while the alpha is off or the routers are unavailable", () => {
     expect(autoRoutingOffer({ ...base, featureEnabled: false })).toEqual({
       kind: "none",
     });
-    expect(autoRoutingOffer({ ...base, settings: null })).toEqual({
+    expect(autoRoutingOffer({ ...base, routers: null })).toEqual({
       kind: "none",
     });
   });
 
-  it("offers setup when auto routing is off or a tier has no model", () => {
-    expect(
-      autoRoutingOffer({ ...base, settings: { enabled: false, tiers } }),
-    ).toEqual({ kind: "setup" });
+  it("offers nothing when auto routing is off or a tier has no model", () => {
     expect(
       autoRoutingOffer({
         ...base,
-        settings: { enabled: true, tiers: { ...tiers, smart: null } },
+        routers: [router("auto", { enabled: false })],
       }),
-    ).toEqual({ kind: "setup" });
-  });
-
-  it("offers nothing instead of setup to viewers who can't configure it", () => {
+    ).toEqual({ kind: "none" });
     expect(
       autoRoutingOffer({
         ...base,
-        canConfigure: false,
-        settings: { enabled: false, tiers },
+        routers: [router("auto", { tiers: { ...tiers, smart: null } })],
       }),
     ).toEqual({ kind: "none" });
   });
 
   it("is available on chat completions when the credential reaches every tier model", () => {
-    expect(autoRoutingOffer({ ...base, canConfigure: false })).toEqual({
+    expect(autoRoutingOffer(base)).toEqual({
       kind: "available",
-      endpoint: "chat/completions",
+      routers: [{ name: "auto", endpoint: "chat/completions", tiers }],
     });
   });
 
@@ -72,7 +84,10 @@ describe("autoRoutingOffer", () => {
           },
         ],
       }),
-    ).toEqual({ kind: "available", endpoint: "responses" });
+    ).toEqual({
+      kind: "available",
+      routers: [{ name: "auto", endpoint: "responses", tiers }],
+    });
   });
 
   it("refuses when a Responses-only tier meets a Chat Completions-only provider", () => {
@@ -84,7 +99,7 @@ describe("autoRoutingOffer", () => {
     expect(
       autoRoutingOffer({
         ...base,
-        settings: { enabled: true, tiers: kimiTiers },
+        routers: [router("auto", { tiers: kimiTiers })],
         routableModels: [
           { value: "kimi:kimi-k2", supportedEndpoints: chat },
           { value: "openai:gpt-5.5", supportedEndpoints: chat },
@@ -110,5 +125,101 @@ describe("autoRoutingOffer", () => {
     expect(
       autoRoutingOffer({ ...base, routableModels: [], modelsPending: true }),
     ).toEqual({ kind: "none" });
+  });
+
+  describe("virtual keys", () => {
+    const secondTiers = {
+      fast: { id: "6", provider: "openai", modelId: "gpt-5.5-nano", apiKey },
+      normal: { id: "7", provider: "openai", modelId: "gpt-5.5", apiKey },
+      smart: { id: "8", provider: "openai", modelId: "gpt-5.5-max", apiKey },
+    } as const;
+    const routers = [
+      router("auto", { virtualApiKeyIds: ["key-a"] }),
+      router("auto:support", {
+        tiers: secondTiers,
+        virtualApiKeyIds: ["key-b"],
+      }),
+    ];
+
+    it("offers a virtual key only the router it was given", () => {
+      expect(
+        autoRoutingOffer({ ...base, routers, virtualApiKeyId: "key-b" }),
+      ).toEqual({
+        kind: "available",
+        routers: [
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
+        ],
+      });
+    });
+
+    it("offers every router a virtual key was given, regardless of its own models", () => {
+      expect(
+        autoRoutingOffer({
+          ...base,
+          routers: routers.map((r) => ({ ...r, virtualApiKeyIds: ["key-a"] })),
+          virtualApiKeyId: "key-a",
+          routableModels: [],
+        }),
+      ).toEqual({
+        kind: "available",
+        routers: [
+          { name: "auto", endpoint: "chat/completions", tiers },
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
+        ],
+      });
+    });
+
+    it("offers an OAuth client only the routers it was given, on their own keys", () => {
+      expect(
+        autoRoutingOffer({
+          ...base,
+          routers,
+          grantedRouterIds: ["auto:support"],
+          routableModels: [],
+        }),
+      ).toEqual({
+        kind: "available",
+        routers: [
+          {
+            name: "auto:support",
+            endpoint: "chat/completions",
+            tiers: secondTiers,
+          },
+        ],
+      });
+      expect(
+        autoRoutingOffer({ ...base, routers, grantedRouterIds: [] }),
+      ).toEqual({ kind: "none" });
+    });
+
+    it("offers nothing to a virtual key with none of the routers", () => {
+      expect(
+        autoRoutingOffer({ ...base, routers, virtualApiKeyId: "key-c" }),
+      ).toEqual({ kind: "none" });
+    });
+
+    it("keeps the reachability rule for a credential that is not a virtual key", () => {
+      expect(
+        autoRoutingOffer({
+          ...base,
+          routers,
+          routableModels: routableModels.slice(0, 1),
+        }),
+      ).toEqual({
+        kind: "unreachable",
+        missing: [
+          { tier: "normal", provider: "openai" },
+          { tier: "smart", provider: "anthropic" },
+        ],
+      });
+    });
   });
 });

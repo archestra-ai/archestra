@@ -22,7 +22,7 @@ import { uuidv7 } from "@/utils/uuid";
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -1560,18 +1560,24 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A user's chat or agent call on `auto` (marked by the in-process caller,
-    // which resolved the chat or agent to it) is routed across the auto-routing
-    // tiers. The router picks the session's tier and key, which the call is
+    // A user's chat or agent call on an auto router (named by the in-process
+    // caller, which resolved the chat or agent to it) is routed across that
+    // router's tiers. The router picks the session's tier and key, which the call is
     // sent with the way a pool member is, even when the tier is the model the
     // call names: the tier's key first, else one the user may use. A call the
     // router cannot route runs on the model it names (the normal tier). Agent
     // Runtime agents are never routed. A pooled call is accounted for by its
     // pool; it is never also routed.
+    const autoRouterHeader =
+      headersForExtraction[AUTO_ROUTER_ID_HEADER.toLowerCase()];
+    const autoRouterId =
+      typeof autoRouterHeader === "string" && autoRouterHeader
+        ? autoRouterHeader
+        : null;
     const autoRouteWire =
       internalCall &&
       config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan
         ? poolWire
@@ -1678,10 +1684,11 @@ async function handleObservedLLMProxy<
     }
 
     const autoRoute =
-      autoRouteUser && autoRouteWire
+      autoRouteUser && autoRouteWire && autoRouterId
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
+            routerId: autoRouterId,
             userId: autoRouteUser.id,
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
@@ -2185,7 +2192,10 @@ async function handleObservedLLMProxy<
       const row = await LlmProviderApiKeyModel.findById(
         member.providerApiKeyId,
       );
-      const adapter = memberAdapter(member.provider);
+      const adapter = memberAdapter(
+        member.provider,
+        modelPoolPlan ? (poolWire ?? undefined) : undefined,
+      );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
       }
@@ -2344,6 +2354,20 @@ async function handleObservedLLMProxy<
         ? {
             plan: modelPoolPlan,
             prepareAttempt: async (member) => {
+              if (
+                poolWire === "openai-responses" &&
+                member.provider === "azure"
+              ) {
+                await validateAzureModelOperation({
+                  providerApiKeyId: member.providerApiKeyId,
+                  modelId: member.modelId,
+                  operation: "responses",
+                  parameters: requestAdapter.getOriginalRequest() as Record<
+                    string,
+                    unknown
+                  >,
+                });
+              }
               await ModelModel.assertAvailable({
                 provider: member.provider,
                 modelId: member.modelId,
@@ -3897,6 +3921,14 @@ async function handleStreaming<
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;
+    if (ctx.modelPool && ctx.upstreamAttempt.attemptOutcome === "answered") {
+      // Opening a pooled stream chose the member; it did not prove the
+      // generation completed. A later failure is terminal, never failover.
+      ctx.upstreamAttempt.attemptOutcome = "failed";
+      ctx.upstreamAttempt.failureReason =
+        poolFailoverReason(lifecycleError, ctx.upstreamAttempt.provider)
+          ?.reason ?? "stream_failed";
+    }
     streamFailureMessage = upstreamErrorMessage(
       lifecycleError,
       provider.extractErrorMessage,
@@ -5011,7 +5043,7 @@ async function failResponsesGeneration(params: {
   response: unknown;
   ctx: Pick<
     LLMProxyContext<unknown>,
-    "pluginRegistry" | "pluginContext" | "telemetry"
+    "pluginRegistry" | "pluginContext" | "telemetry" | "upstreamAttempt"
   >;
   error?: Error;
 }): Promise<boolean> {
@@ -5024,6 +5056,11 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
+  if (response?.status === "failed" && params.ctx.upstreamAttempt.modelPoolId) {
+    params.ctx.upstreamAttempt.attemptOutcome = "failed";
+    params.ctx.upstreamAttempt.failureReason =
+      typeof details?.code === "string" ? details.code : "generation_failed";
+  }
   if (
     response?.status === "incomplete" ||
     (params.error instanceof CodexResponsesGenerationError &&

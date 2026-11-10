@@ -1,22 +1,27 @@
 import { randomUUID } from "node:crypto";
 import config from "@/config";
 import AgentModel from "@/models/agent";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, setAutoRoutingTiers } from "@/test/auto-routing";
+import {
+  autoRouterId,
+  configureAutoRouting,
+  ensureAutoRouter,
+  setAutoRoutingTiers,
+} from "@/test/auto-routing";
 import { ApiError } from "@/types";
-import { getAutoRoutingSettings, updateAutoRoutingSettings } from "./settings";
+import { getAutoRouter, listAutoRouters, updateAutoRouter } from "./settings";
 import { sharedLongContextThreshold, tiersFingerprint } from "./tiers";
 
-describe("updateAutoRoutingSettings", () => {
+describe("updateAutoRouter", () => {
   beforeEach(() => {
     config.autoRouting.enabled = true;
   });
 
-  test("enabling is refused while the organization trio has different long-context thresholds", async ({
+  test("saving is refused while the router's trio has different long-context thresholds", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
@@ -25,22 +30,24 @@ describe("updateAutoRoutingSettings", () => {
       await withThreshold(200_000),
       await withThreshold(128_000),
     ];
-    await setAutoRoutingTiers(organizationId, { fast, normal, smart });
+    const router = await ensureAutoRouter(organizationId);
+    await setAutoRoutingTiers(
+      organizationId,
+      { fast, normal, smart },
+      router.id,
+    );
 
-    const error = await updateAutoRoutingSettings(organizationId, {
-      enabled: true,
+    const error = await updateAutoRouter(organizationId, router.id, {
       budgetUsdPerDay: 10,
     }).catch((reason) => reason);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ statusCode: 400 });
-    expect((await AutoRoutingSettingsModel.find(organizationId))?.enabled).toBe(
-      false,
-    );
+    expect((await AutoRouterModel.find(router.id))?.budgetUsdPerDay).toBeNull();
   });
 });
 
-describe("getAutoRoutingSettings", () => {
+describe("listAutoRouters", () => {
   beforeEach(() => {
     config.autoRouting.enabled = true;
   });
@@ -53,15 +60,27 @@ describe("getAutoRoutingSettings", () => {
     await configureAutoRouting(organizationId);
     const agent = (overrides: Parameters<typeof makeAgent>[0] = {}) =>
       makeAgent({ organizationId, agentType: "agent", ...overrides });
-    await agent({ autoModel: true });
-    await agent({ autoModel: true });
+    const routerId = await autoRouterId(organizationId);
+    const other = await ensureAutoRouter(organizationId, "auto:other");
+    await agent({ autoRouterId: routerId });
+    await agent({ autoRouterId: routerId });
+    await agent({ autoRouterId: other.id });
     await agent();
-    await AgentModel.delete((await agent({ autoModel: true })).id);
-    await OrganizationModel.patch(organizationId, { defaultAutoModel: true });
+    await AgentModel.delete((await agent({ autoRouterId: routerId })).id);
+    await OrganizationModel.patch(organizationId, {
+      defaultAutoRouterId: routerId,
+    });
 
-    const { usage, tiers } = await getAutoRoutingSettings(organizationId);
+    const routers = await listAutoRouters(organizationId);
+    const router = routers.find((candidate) => candidate.id === routerId);
+    if (!router) throw new Error("router missing");
+    const { usage, tiers } = router;
 
     expect(usage).toEqual({ agentCount: 2, organizationDefault: true });
+    expect(routers.find((router) => router.id === other.id)?.usage).toEqual({
+      agentCount: 1,
+      organizationDefault: false,
+    });
     expect(tiers.normal?.apiKey.name).toMatch(/^Auto routing openai/);
   });
 });
@@ -76,15 +95,14 @@ describe("tier updates", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const [fast] = await configureAutoRouting(organizationId);
+    const routerId = await autoRouterId(organizationId);
     const other = await withThreshold(128_000);
 
     await OrganizationModel.patch(organizationId, {
       defaultFastModelId: other.id,
     });
 
-    expect(
-      (await AutoRoutingSettingsModel.find(organizationId))?.fastModelId,
-    ).toBe(fast.id);
+    expect((await AutoRouterModel.find(routerId))?.fastModelId).toBe(fast.id);
   });
 
   test("saving tiers on organization-wide keys serving their models re-plans", async ({
@@ -93,7 +111,8 @@ describe("tier updates", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const [fast, normal, smart] = await configureAutoRouting(organizationId);
-    const before = await AutoRoutingSettingsModel.find(organizationId);
+    const routerId = await autoRouterId(organizationId);
+    const before = await AutoRouterModel.find(routerId);
     const key = await makeLlmProviderApiKey(organizationId, null, {
       provider: "openai",
     });
@@ -107,7 +126,7 @@ describe("tier updates", () => {
       providerApiKeyId: key.id,
     });
 
-    const saved = await updateAutoRoutingSettings(organizationId, {
+    const saved = await updateAutoRouter(organizationId, routerId, {
       tiers: { fast: on(normal), normal: on(normal), smart: on(smart) },
     });
 
@@ -115,9 +134,9 @@ describe("tier updates", () => {
       id: normal.id,
       apiKey: { id: key.id },
     });
-    expect(
-      (await AutoRoutingSettingsModel.find(organizationId))?.generation,
-    ).toBeGreaterThan(before?.generation ?? 0);
+    expect((await AutoRouterModel.find(routerId))?.generation).toBeGreaterThan(
+      before?.generation ?? 0,
+    );
   });
 
   test("a tier on a key not shared with the whole organization is refused", async ({
@@ -127,6 +146,7 @@ describe("tier updates", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const [fast, normal, smart] = await configureAutoRouting(organizationId);
+    const routerId = await autoRouterId(organizationId);
     const user = await makeUser();
     const personal = await makeLlmProviderApiKey(organizationId, null, {
       provider: "openai",
@@ -135,13 +155,13 @@ describe("tier updates", () => {
     await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(personal.id, [
       fast.id,
     ]);
-    const current = await getAutoRoutingSettings(organizationId);
+    const current = await getAutoRouter(organizationId, routerId);
     const keep = (tier: "normal" | "smart", model: { id: string }) => ({
       modelId: model.id,
       providerApiKeyId: current.tiers[tier]?.apiKey.id ?? "",
     });
 
-    const error = await updateAutoRoutingSettings(organizationId, {
+    const error = await updateAutoRouter(organizationId, routerId, {
       tiers: {
         fast: { modelId: fast.id, providerApiKeyId: personal.id },
         normal: keep("normal", normal),
@@ -159,6 +179,7 @@ describe("tier updates", () => {
   }) => {
     const organizationId = (await makeOrganization()).id;
     const [fast, normal, smart] = await configureAutoRouting(organizationId);
+    const routerId = await autoRouterId(organizationId);
     const unlinked = await makeLlmProviderApiKey(organizationId, null, {
       provider: "openai",
     });
@@ -167,7 +188,7 @@ describe("tier updates", () => {
       providerApiKeyId: unlinked.id,
     });
 
-    const error = await updateAutoRoutingSettings(organizationId, {
+    const error = await updateAutoRouter(organizationId, routerId, {
       tiers: { fast: on(fast), normal: on(normal), smart: on(smart) },
     }).catch((reason: unknown) => reason);
 

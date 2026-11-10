@@ -95,7 +95,8 @@ function AutoRoutingSection({ row }: { row: InteractionSummary }) {
       title="Auto routing"
       aside={
         <span className="truncate text-[11px] text-muted-foreground">
-          auto → {shortModelName(decision.model.modelId)}
+          {decision.router?.name ?? "auto"} →{" "}
+          {shortModelName(decision.model.modelId)}
         </span>
       }
     >

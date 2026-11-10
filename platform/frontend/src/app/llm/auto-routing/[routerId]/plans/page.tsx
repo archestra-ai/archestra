@@ -14,7 +14,7 @@ import {
   describeFitError,
   parsePlanSummary,
   rejectionReason,
-} from "../_parts/plan-document";
+} from "../../_parts/plan-document";
 
 export default function AutoRoutingPlansPage() {
   const query = useAutoRoutingPlans();

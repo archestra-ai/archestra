@@ -140,6 +140,7 @@ function oauthClient(overrides: Partial<OauthClient>): OauthClient {
     allowedGatewayIds: [],
     includeFutureProviders: false,
     modelPoolIds: [],
+    autoRouterIds: [],
     ...overrides,
   };
 }

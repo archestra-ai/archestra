@@ -61,12 +61,14 @@ import {
 } from "@/components/ui/command";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { autoRouterLabel } from "@/lib/auto-router-name";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import {
   type ChatSetupAgent,
   REASONING_OPTIONS,
   useChatSetupOptions,
 } from "@/lib/chat/use-chat-setup-options";
+import type { AutoRouterOption } from "@/lib/hooks/use-organization-default-model";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmModel } from "@/lib/llm-models.query";
@@ -191,7 +193,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const showProvider = ctx.canShowProviderSettings;
   const currentPool = data.activePool;
   const pools = showProvider ? data.pools : [];
-  const auto = showProvider ? data.auto : null;
+  const autoRouters = showProvider ? data.autoRouters : [];
   const onAuto = data.autoSelected;
   const showModels =
     showProvider && !ctx.subscriptionConnectRequired && !currentPool && !onAuto;
@@ -228,7 +230,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       (data.keys.length > 0 ||
         subscriptions.length > 0 ||
         pools.length > 0 ||
-        !!auto)
+        autoRouters.length > 0)
     )
       list.push("key");
     if (showModels || showSignIn) list.push("model");
@@ -243,7 +245,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     data.keys.length,
     subscriptions.length,
     pools.length,
-    auto,
+    autoRouters.length,
   ]);
   // The menu opens on Model, which a pool doesn't have: open on the pool.
   const scope: Scope | undefined = scopes.includes(scopeState)
@@ -280,8 +282,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     key: onAuto
       ? {
           icon: <SparklesIcon className="size-4" />,
-          text: "Auto",
-          aria: "Model: Auto",
+          text: data.modelName,
+          aria: `Model: ${data.modelName}`,
         }
       : currentPool
         ? {
@@ -318,7 +320,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       ),
       agent: count(allAgents.map(agentKeywords)),
       key: count([
-        ...(auto ? [AUTO_KEYWORDS] : []),
+        ...autoRouters.map(autoRouterKeywords),
         ...pools.map(poolKeywords),
         ...apiKeySections
           .flatMap((section) => section.keys)
@@ -341,7 +343,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     apiKeySections,
     subscriptions,
     pools,
-    auto,
+    autoRouters,
     data.providerLabel,
     data.keyScopeLabel,
   ]);
@@ -363,8 +365,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         ? currentAgent
           ? agentValue(currentAgent.id)
           : ""
-        : onAuto
-          ? AUTO_VALUE
+        : data.selectedAutoRouterId
+          ? autoRouterValue(data.selectedAutoRouterId)
           : currentPool
             ? poolValue(currentPool.id)
             : currentKey
@@ -442,8 +444,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     data.selectPool(id);
     ctx.close();
   };
-  const pickAuto = () => {
-    data.selectAuto();
+  const pickAutoRouter = (id: string) => {
+    data.selectAutoRouter(id);
     ctx.close();
   };
   const pickKey = (k: LlmProviderApiKey) => {
@@ -689,13 +691,16 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             </CommandGroup>
           ))}
         {/* ---------------- Key scope ---------------- */}
-        {scope === "key" && auto && (
+        {scope === "key" && autoRouters.length > 0 && (
           <CommandGroup className={GROUP}>
-            <AutoRow
-              description={auto.description}
-              selected={onAuto}
-              onSelect={pickAuto}
-            />
+            {autoRouters.map((router) => (
+              <AutoRow
+                key={router.id}
+                router={router}
+                selected={router.id === data.selectedAutoRouterId}
+                onSelect={() => pickAutoRouter(router.id)}
+              />
+            ))}
           </CommandGroup>
         )}
         {scope === "key" && pools.length > 0 && (
@@ -1011,18 +1016,18 @@ function AgentRow({
 }
 
 function AutoRow({
-  description,
+  router,
   selected,
   onSelect,
 }: {
-  description: string;
+  router: AutoRouterOption;
   selected: boolean;
   onSelect: () => void;
 }) {
   return (
     <CommandItem
-      value={AUTO_VALUE}
-      keywords={AUTO_KEYWORDS}
+      value={autoRouterValue(router.id)}
+      keywords={autoRouterKeywords(router)}
       onSelect={onSelect}
       className={cn(ITEM, "min-h-11")}
     >
@@ -1030,9 +1035,9 @@ function AutoRow({
         <SparklesIcon className="size-3.5" />
       </PickerIcon>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-medium">Auto</span>
+        <span className="truncate font-medium">{router.label}</span>
         <span className="truncate text-xs leading-4 text-muted-foreground">
-          {description}
+          {router.description}
         </span>
       </div>
       <Selected on={selected} />
@@ -1040,8 +1045,12 @@ function AutoRow({
   );
 }
 
-const AUTO_VALUE = "auto";
-const AUTO_KEYWORDS = ["auto", "auto routing"];
+const autoRouterValue = (id: string) => `auto-router:${id}`;
+const autoRouterKeywords = (router: AutoRouterOption) => [
+  router.label,
+  "auto",
+  "auto routing",
+];
 
 function PoolRow({
   pool,
@@ -1488,13 +1497,14 @@ function useOrganizationDefaultNote(agent: ChatSetupAgent | undefined) {
   return (dbId: string): string | null => {
     if (!organizationDefault?.model || organizationDefault.model.id !== dbId)
       return null;
-    if (
-      !agentFollowsDefault ||
-      !organizationDefault.defaultAutoModel ||
-      !organizationDefault.autoRouting.active
-    )
-      return "Organization default";
-    const { fast, normal, smart } = organizationDefault.autoRouting.tiers;
-    return `Organization default · Auto: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
+    const router = agentFollowsDefault
+      ? organizationDefault.autoRouters.find(
+          (candidate) =>
+            candidate.id === organizationDefault.defaultAutoRouterId,
+        )
+      : undefined;
+    if (!router) return "Organization default";
+    const { fast, normal, smart } = router.tiers;
+    return `Organization default · ${autoRouterLabel(router.name)}: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
   };
 }

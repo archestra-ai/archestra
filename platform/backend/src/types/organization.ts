@@ -411,25 +411,26 @@ export type OrganizationDefaultModelRef = z.infer<
 >;
 
 /**
- * What "Organization default" runs on, and whether the `auto` model can be
- * picked. `model` is the default model, or the normal tier while the default
- * is `auto`. `autoRouting` is active while auto routing is on and its tiers
- * are set, so `auto` is offered and routes across them.
+ * What "Organization default" runs on, and the auto routers that can be
+ * picked as a model. `model` is the default model, or the default router's
+ * normal tier. `autoRouters` lists those that route: auto routing is on and
+ * their tiers are set.
  */
 export const OrganizationDefaultModelSchema = z.object({
   model: OrganizationDefaultModelRefSchema.nullable(),
-  defaultAutoModel: z.boolean(),
-  autoRouting: z.discriminatedUnion("active", [
-    z.object({ active: z.literal(false) }),
+  /** The router chats and agents on the organization default run on, when it is one. */
+  defaultAutoRouterId: z.string().uuid().nullable(),
+  autoRouters: z.array(
     z.object({
-      active: z.literal(true),
+      id: z.string().uuid(),
+      name: z.string(),
       tiers: z.object({
         fast: OrganizationDefaultModelRefSchema,
         normal: OrganizationDefaultModelRefSchema,
         smart: OrganizationDefaultModelRefSchema,
       }),
     }),
-  ]),
+  ),
 });
 export type OrganizationDefaultModel = z.infer<
   typeof OrganizationDefaultModelSchema
@@ -530,10 +531,10 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultFastModelId: z.string().uuid().nullable().optional(),
   defaultSmartModelId: z.string().uuid().nullable().optional(),
   /**
-   * Chats and agents on the organization default run on `auto`. The default
-   * model stays what built-in tasks and forked subagents run on.
+   * Chats and agents on the organization default run on this auto router.
+   * The default model stays what built-in tasks and forked subagents run on.
    */
-  defaultAutoModel: z.boolean().optional(),
+  defaultAutoRouterId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

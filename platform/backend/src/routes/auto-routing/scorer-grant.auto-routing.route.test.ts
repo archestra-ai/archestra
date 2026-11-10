@@ -85,8 +85,8 @@ describe("the session scorer and a Jev key's grants", () => {
     const inject = ctx.app.inject.bind(ctx.app);
     const scorer = async () =>
       (
-        await inject({ method: "GET", url: "/api/auto-routing/settings" })
-      ).json().status.scorer;
+        await inject({ method: "GET", url: "/api/auto-routing/routers" })
+      ).json()[0].status.scorer;
     const score = async () => {
       const { scoreOffer } = (
         await inject({ method: "GET", url: "/api/auto-routing/backfill" })

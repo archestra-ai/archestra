@@ -33,6 +33,7 @@ Changing only `prerelease-type` does not replace an existing beta suffix in Rele
 Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
 After `1.4.0-rc.14` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.15`.
 RCs publish after successful builds once a second Engineering member (not whoever merged or started it) approves it in archestra-ai/release-publisher's `stable-release` environment, and move only `archestra/platform:latest`. Stable releases wait for the same approval. The release run waits up to 6 hours; when nobody approves in time, re-run its failed jobs to send a new request.
+Until that release is published, the required **Previous Release Published** check fails the next release PR on the same line (`main` for RCs, `release/X.Y` for its patches), and a comment on the PR names the draft it waits for. The check re-runs on its own once the release is published, or once its draft is deleted to abandon the version.
 
 ```mermaid
 gitGraph

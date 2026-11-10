@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { autoRoutingOffer } from "./use-auto-routing-offer";
 
+const apiKey = { id: "key-1", name: "Organization key" };
 const tiers = {
-  fast: { id: "1", provider: "openai", modelId: "gpt-5.5-mini" },
-  normal: { id: "2", provider: "openai", modelId: "gpt-5.5" },
-  smart: { id: "3", provider: "anthropic", modelId: "claude-opus-5-5" },
+  fast: { id: "1", provider: "openai", modelId: "gpt-5.5-mini", apiKey },
+  normal: { id: "2", provider: "openai", modelId: "gpt-5.5", apiKey },
+  smart: { id: "3", provider: "anthropic", modelId: "claude-opus-5-5", apiKey },
 } as const;
 const chat = ["/chat/completions"];
 const routableModels = [
@@ -77,8 +78,8 @@ describe("autoRoutingOffer", () => {
   it("refuses when a Responses-only tier meets a Chat Completions-only provider", () => {
     const kimiTiers = {
       ...tiers,
-      fast: { id: "4", provider: "kimi", modelId: "kimi-k2" },
-      smart: { id: "5", provider: "openai", modelId: "gpt-5.4-codex" },
+      fast: { id: "4", provider: "kimi", modelId: "kimi-k2", apiKey },
+      smart: { id: "5", provider: "openai", modelId: "gpt-5.4-codex", apiKey },
     } as const;
     expect(
       autoRoutingOffer({

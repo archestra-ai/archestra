@@ -23,7 +23,9 @@ jobs:
     name: Toggle Release Freeze
     runs-on: ubuntu-latest
     # The release-freeze app key lives only in this environment (main).
-    environment: release-freeze
+    environment:
+      name: release-freeze
+      deployment: false # A secrets and branch gate; nothing is deployed.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,7 +35,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}

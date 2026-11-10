@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { Sparkles } from "lucide-react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +17,8 @@ type AutoRoutingTiers = Extract<
 >["tiers"];
 
 /**
- * The model control of an agent that has no provider key yet while the
- * organization default is auto routed. It names what the agent runs on in a
+ * The model control of an agent on `auto`, or without a provider key while
+ * the organization default is `auto`. It names what the agent runs on in a
  * few words that never truncate; the tooltip lists the three routed models.
  */
 export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
@@ -39,20 +40,8 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
             aria-disabled
             className="cursor-default gap-2 aria-disabled:cursor-default aria-disabled:opacity-100"
           >
-            <span className="flex -space-x-1" aria-hidden>
-              {rows.map((row) => (
-                <span
-                  key={row.tier}
-                  className="grid size-5 place-items-center rounded-full border bg-background"
-                >
-                  <ModelSelectorLogo
-                    provider={row.provider}
-                    className="size-3"
-                  />
-                </span>
-              ))}
-            </span>
-            <span className="text-foreground/80">Auto routed</span>
+            <Sparkles aria-hidden />
+            <span className="text-foreground/80">Auto</span>
             <span className="hidden text-muted-foreground sm:inline">
               3 models
             </span>
@@ -77,9 +66,6 @@ export function AutoRoutedModelTrigger({ tiers }: { tiers: AutoRoutingTiers }) {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-muted-foreground">
-            Add a provider API key to pick one.
-          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

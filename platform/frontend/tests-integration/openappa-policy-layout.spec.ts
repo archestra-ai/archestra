@@ -189,7 +189,9 @@ for (const viewport of [
         },
       ]);
       await page.goto("/openappa/policy");
-      const policySource = page.getByText("Revision 1", { exact: true });
+      const policySource = page.getByText("Read-only source", {
+        exact: true,
+      });
       await expect(policySource).toBeInViewport();
       await expect(
         page.getByRole("button", { name: "Save & apply" }),

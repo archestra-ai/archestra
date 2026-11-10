@@ -30,6 +30,7 @@
     "src/routes/proxy/llm-proxy-handler.ts",
     "src/routes/proxy/llm-proxy-helpers.ts",
     "src/routes/proxy/llm-proxy-resource-auth.ts",
+    "src/routes/proxy/model-pool-capabilities.ts",
     "src/routes/proxy/model-pool-failover.ts",
     "src/routes/proxy/model-pool-transport.ts",
     "src/routes/proxy/model-router-access.ts",
@@ -49,6 +50,7 @@
   "include": [
     "src/**/*.ts",
     "src/playwright-mcp-image.json",
+    "src/archestra-mcp-server/search-texts.generated.json",
     "src/skills/skill-catalog.generated.json"
   ],
   "exclude": [
@@ -73,6 +75,7 @@
     "src/standalone-scripts/codegen-appa-guide.ts",
     "src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",
     "src/standalone-scripts/codegen-openapi.ts",
+    "src/standalone-scripts/codegen-tool-search-texts.ts",
     "src/standalone-scripts/costs-bench/backfill.ts",
     "src/standalone-scripts/costs-bench/run-bench.ts",
     "src/standalone-scripts/count-openappa-legacy.ts",
@@ -179,6 +182,7 @@
     "src/openappa/policy-moved.ts",
     "src/openappa/policy-text.ts",
     "src/openappa/replay-owner.ts",
+    "src/openappa/rule-targets.ts",
     "src/openappa/template.generated.ts",
     "src/services/agent-runtime/runtime-credentials.ts",
     "src/services/github-app-manifest-setup.ts",
@@ -256,7 +260,6 @@
     "src/services/environments/environment.ts",
     "src/services/environments/network-policy-match.ts",
     "src/services/environments/remote-server-network-policy.ts",
-    "src/services/error-tracking.ts",
     "src/services/git-credentials.ts",
     "src/services/github-actions-access.ts",
     "src/services/github-app-config.ts",
@@ -329,6 +332,7 @@
 
 
     "src/archestra-mcp-server/run-tool-target.ts",
+    "src/archestra-mcp-server/search-text.ts",
     "src/archestra-mcp-server/tool-attestation.ts",
     "src/clients/realtime-audio.ts",
     "src/openappa/child-trajectory-receipt.ts",

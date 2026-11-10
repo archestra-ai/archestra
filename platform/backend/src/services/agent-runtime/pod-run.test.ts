@@ -45,6 +45,34 @@ describe("resolveAgentRuntime", () => {
     });
     expect(resolved?.image).toBe(current);
   });
+
+  test("moves an Agent saved with an older release's digest pin to this deployment's image", () => {
+    const current = config.agentRuntime.catalogImages.codex;
+    const name = current.split("@")[0];
+    const repository = name.slice(0, name.lastIndexOf(":"));
+    const resolved = resolveAgentRuntime({
+      ...agentWithRuntime,
+      runtime: {
+        ...runtime,
+        image: `${repository}:1.4.0@sha256:${"e".repeat(64)}`,
+      },
+    });
+    expect(resolved?.image).toBe(current);
+  });
+
+  test("launches the author's own digest pin exactly as saved", () => {
+    for (const image of [
+      `ghcr.io/archestra-ai/agent-codex@sha256:${"e".repeat(64)}`,
+      `registry.example/team/agent-codex:v2@sha256:${"e".repeat(64)}`,
+    ]) {
+      expect(
+        resolveAgentRuntime({
+          ...agentWithRuntime,
+          runtime: { ...runtime, image },
+        })?.image,
+      ).toBe(image);
+    }
+  });
 });
 
 const runtime = {

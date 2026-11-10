@@ -3,7 +3,7 @@ title: Auto Routing
 description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,10 +16,21 @@ The three tiers are your organization's default models: the default model is the
 
 1. Add a Jev API key under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
 2. Go to **Settings → Agents**. Under **Default Model for Agents and New Chats**, pick the default key and model, then the **Fast model** and **Smart model**.
-3. Go to **LLM → Auto Routing**, check the three tiers it shows, and set a daily budget in USD. The page says how many agents use the organization default.
+3. Go to **LLM → Auto Routing**, check the three tiers it shows, and pick a daily budget. The page says how many agents use the organization default.
 4. Turn auto routing on and save.
 
 Each tier can come from a different provider.
+
+### Daily Budget
+
+Pick a preset and Archestra sets the budget from recent traffic, then adjusts it every time the plan is refitted:
+
+- **Cost-efficient:** the most it can spend while the fast model still serves two thirds of sessions.
+- **Intelligence:** the least it needs for the smart model to serve two thirds of sessions.
+- **Balanced:** halfway in cost between the two.
+- **Custom:** a daily budget in USD that you set yourself.
+
+Until enough sessions are scored for a first plan, every session runs on the normal model, whatever the budget. Configure shows what the selected preset costs at today's traffic.
 
 ## What Gets Routed
 
@@ -67,7 +78,9 @@ The session keeps that fallback until it ends. An agent or chat on the organizat
 
 ## Inspect a Recorded Decision
 
-Use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing) to inspect the decision linked to a request you can view in LLM Logs. It returns the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
+See why a request got its model in [Logs](/docs/admin/logs): an auto-routed request is marked **auto→**. Open it, and **Auto routing** shows how the scorer rated the task for each tier, the tier it picked and why, and how much cheaper it was than the smart model.
+
+To read the decision programmatically, use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing) to inspect the decision linked to a request you can view in LLM Logs. It returns the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
 
 A `null` decision means there is no retained decision linked to that request; the request may not have been auto routed, or its decision may have expired. It is not a reconstructed explanation or proof that routing was disabled.
 

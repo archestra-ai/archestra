@@ -22,6 +22,7 @@ import {
   ensureStringIsRfc1123Compliant,
 } from "@/k8s/deployment-names";
 import {
+  describeK8sApiError,
   isK8sConflictError,
   isK8sNotFoundError,
   isTransientK8sApiError,
@@ -62,6 +63,7 @@ import {
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 import {
   customYamlToDeployment,
+  findDockerImagePlaceholderContainer,
   resolvePlaceholders,
 } from "./k8s-yaml-generator";
 import {
@@ -369,6 +371,18 @@ const TERMINAL_CONTAINER_WAITING_REASONS = [
 const TRANSIENT_IMAGE_PULL_WAITING_REASONS = [
   "ImagePullBackOff",
   "ErrImagePull",
+];
+
+// Except when the registry answered that the image does not exist (a deleted
+// tag or repository). The kubelet keeps retrying those too, but no retry can
+// succeed, so they are failures. Matched against the waiting message, which
+// carries the runtime's pull error: containerd reports `code = NotFound`, the
+// registry API's own codes come through as `manifest unknown` / `name
+// unknown`.
+const MISSING_IMAGE_PULL_PATTERNS = [
+  /\bcode = NotFound\b/,
+  /\bmanifest unknown\b/i,
+  /\bname unknown\b/i,
 ];
 
 interface ManagedCustomPolicyResource {
@@ -3104,6 +3118,17 @@ export default class K8sDeployment {
           );
         }
 
+        // FOLLOW THE BASE IMAGE: a server on the default base image moves to
+        // the one this platform is configured with now, whatever state it is
+        // in. A hibernated deployment is patched at zero replicas, so it wakes
+        // on the current image.
+        await lifecycle?.assertOwned?.();
+        const followedDeployment = await this.followDefaultBaseImage({
+          deployment: existingDeployment,
+          runFencedMutation: lifecycle?.runFencedMutation,
+        });
+        const adoptedDeployment = followedDeployment ?? existingDeployment;
+
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3182,7 +3207,9 @@ export default class K8sDeployment {
         );
 
         // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
-        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        const failureCheck = await this.checkPodContainerStatusesForFailure({
+          deployment: adoptedDeployment,
+        });
         if (failureCheck.hasFailed && !failureCheck.isTransientImagePull) {
           if (this.observeState("failed")) {
             this.errorMessage = failureCheck.message;
@@ -3556,6 +3583,18 @@ export default class K8sDeployment {
    */
   async beginWake(options?: LifecycleMutationOptions): Promise<void> {
     await this.assertBrowserEnabled();
+    // A deployment can sleep through a platform upgrade. Move it to the
+    // current default base image before it scales up, so the wake does not
+    // depend on a registry still holding the image it was created on.
+    if (this.defaultBaseImageContainerName()) {
+      const live = await this.readLiveDeployment();
+      if (live) {
+        await this.followDefaultBaseImage({
+          deployment: live,
+          runFencedMutation: options?.runFencedMutation,
+        });
+      }
+    }
     const generation = ++this.stateGeneration;
 
     let replicas = 1;
@@ -4347,14 +4386,25 @@ export default class K8sDeployment {
    * Used on startup and during state refresh to detect deployments stuck in a
    * failure state. Image pull failures are reported separately
    * (`isTransientImagePull`) because the kubelet retries pulls on its own and
-   * the pod recovers once the pull succeeds.
+   * the pod recovers once the pull succeeds — unless the registry says the
+   * image does not exist, which is a failure that names the `missingImage`.
+   *
+   * Given the Deployment, a pull failure on a pod whose image the Deployment
+   * no longer asks for is ignored: that pod belongs to a rollout's old
+   * ReplicaSet and is being replaced.
    */
-  private async checkPodContainerStatusesForFailure(): Promise<{
+  private async checkPodContainerStatusesForFailure(params?: {
+    deployment?: k8s.V1Deployment;
+  }): Promise<{
     hasFailed: boolean;
     isTransientImagePull: boolean;
+    missingImage: string | null;
     message: string;
   }> {
     let transientImagePullMessage: string | null = null;
+    let missingImagePull: { image: string; message: string } | null = null;
+    const templateContainers =
+      params?.deployment?.spec?.template?.spec?.containers ?? [];
 
     try {
       const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
@@ -4372,9 +4422,33 @@ export default class K8sDeployment {
           const message =
             cs.state?.waiting?.message || `Container in ${reason} state`;
           if (TERMINAL_CONTAINER_WAITING_REASONS.includes(reason)) {
-            return { hasFailed: true, isTransientImagePull: false, message };
+            return {
+              hasFailed: true,
+              isTransientImagePull: false,
+              missingImage: null,
+              message,
+            };
           }
-          if (TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(reason)) {
+          if (!TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(reason)) {
+            continue;
+          }
+          const podImage = pod.spec?.containers?.find(
+            (container) => container.name === cs.name,
+          )?.image;
+          const templateImage = templateContainers.find(
+            (container) => container.name === cs.name,
+          )?.image;
+          if (podImage && templateImage && podImage !== templateImage) {
+            continue;
+          }
+          if (
+            MISSING_IMAGE_PULL_PATTERNS.some((pattern) => pattern.test(message))
+          ) {
+            missingImagePull = {
+              image: podImage ?? cs.image ?? "",
+              message,
+            };
+          } else {
             transientImagePullMessage = message;
           }
         }
@@ -4386,15 +4460,182 @@ export default class K8sDeployment {
       );
     }
 
+    if (missingImagePull) {
+      return {
+        hasFailed: true,
+        isTransientImagePull: false,
+        missingImage: missingImagePull.image || null,
+        message: `Image not found in its registry: ${missingImagePull.message}`,
+      };
+    }
+
     if (transientImagePullMessage) {
       return {
         hasFailed: true,
         isTransientImagePull: true,
+        missingImage: null,
         message: transientImagePullMessage,
       };
     }
 
-    return { hasFailed: false, isTransientImagePull: false, message: "" };
+    return {
+      hasFailed: false,
+      isTransientImagePull: false,
+      missingImage: null,
+      message: "",
+    };
+  }
+
+  /**
+   * Pod failure facts for a refresh, plus the one repair a refresh makes: a
+   * server on the default base image whose pods cannot pull it because the
+   * registry no longer has that image is moved to the current base image
+   * (see {@link followDefaultBaseImage}) and reported as still starting.
+   */
+  private async readPodFailureForRefresh(params: {
+    deployment: k8s.V1Deployment;
+    runFencedMutation?: LifecycleMutationOptions["runFencedMutation"];
+  }): Promise<{
+    podFailure: OrdinaryDeploymentFacts["podFailure"];
+    failureMessage: string | null;
+  }> {
+    const failureCheck = await this.checkPodContainerStatusesForFailure({
+      deployment: params.deployment,
+    });
+    if (!failureCheck.hasFailed) {
+      return { podFailure: null, failureMessage: null };
+    }
+    if (failureCheck.missingImage) {
+      const followed = await this.followDefaultBaseImage(params);
+      if (followed) {
+        return {
+          podFailure: { failed: true, transient: true },
+          failureMessage: `Image ${failureCheck.missingImage} is no longer available; moving to ${mcpServerBaseImage}`,
+        };
+      }
+    }
+    return {
+      podFailure: {
+        failed: true,
+        transient: failureCheck.isTransientImagePull,
+      },
+      failureMessage: failureCheck.message,
+    };
+  }
+
+  /**
+   * Move a Deployment that runs the default MCP base image onto the base
+   * image this platform is configured with now.
+   *
+   * A Deployment keeps the image it was created with. Adoption, wakes and
+   * refreshes never rebuild it, so a server created on the default base image
+   * stays on that exact image across platform upgrades — and stops starting
+   * once the old image is removed from its registry. Servers whose catalog
+   * names its own image (`localConfig.dockerImage`, or a custom deployment
+   * YAML that does not use the `${archestra.docker_image}` placeholder) are
+   * never touched.
+   *
+   * The change is a JSON patch that first tests the container's current name
+   * and image, so it lands only on the object this decision was made from and
+   * fails rather than overwrite a concurrent writer. Returns the Deployment
+   * now on the current base image, or null when it was not moved. A
+   * Kubernetes API error is logged and returns null: the caller carries on
+   * with the Deployment as it is.
+   */
+  private async followDefaultBaseImage(params: {
+    deployment: k8s.V1Deployment;
+    runFencedMutation?: LifecycleMutationOptions["runFencedMutation"];
+  }): Promise<k8s.V1Deployment | null> {
+    const containerName = this.defaultBaseImageContainerName();
+    if (!containerName) return null;
+    const containers = params.deployment.spec?.template?.spec?.containers;
+    const index =
+      containers?.findIndex((container) => container.name === containerName) ??
+      -1;
+    const container = index >= 0 ? containers?.[index] : undefined;
+    if (!container?.image || container.image === mcpServerBaseImage) {
+      return null;
+    }
+
+    const path = `/spec/template/spec/containers/${index}`;
+    const operations: object[] = [
+      { op: "test", path: `${path}/name`, value: containerName },
+      { op: "test", path: `${path}/image`, value: container.image },
+      { op: "replace", path: `${path}/image`, value: mcpServerBaseImage },
+    ];
+    // The generated spec derives its pull policy from the image (a local
+    // image name must use `Never`, a mutable tag `Always`), so re-derive it
+    // for the new image. A custom YAML's own policy is left as the author
+    // wrote it unless the catalog pins one.
+    const configuredPolicy = this.catalogItem?.localConfig?.imagePullPolicy;
+    if (!this.catalogItem?.deploymentSpecYaml || configuredPolicy) {
+      operations.push({
+        op: "add",
+        path: `${path}/imagePullPolicy`,
+        value: getMcpImagePullPolicy(mcpServerBaseImage, {
+          configured: configuredPolicy,
+        }),
+      });
+    }
+
+    const mutate = params.runFencedMutation ?? (async (fn) => fn());
+    try {
+      const applied = await mutate(() =>
+        this.k8sAppsApi.patchNamespacedDeployment(
+          {
+            name: this.deploymentName,
+            namespace: this.namespace,
+            body: operations,
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.JsonPatch),
+        ),
+      );
+      logger.info(
+        {
+          deploymentName: this.deploymentName,
+          fromImage: container.image,
+          toImage: mcpServerBaseImage,
+        },
+        "Moved an MCP server deployment to the current default base image",
+      );
+      return applied;
+    } catch (error) {
+      if (describeK8sApiError(error) === undefined) throw error;
+      // A failed test operation usually means another replica, or another
+      // install sharing this Deployment, moved it first.
+      const live = await this.readLiveDeployment().catch(() => null);
+      const liveImage = live?.spec?.template?.spec?.containers?.find(
+        (candidate) => candidate.name === containerName,
+      )?.image;
+      if (live && liveImage === mcpServerBaseImage) return live;
+      logger.warn(
+        {
+          err: error,
+          deploymentName: this.deploymentName,
+          fromImage: container.image,
+          toImage: mcpServerBaseImage,
+        },
+        "Could not move an MCP server deployment to the current default base image",
+      );
+      return null;
+    }
+  }
+
+  /**
+   * The container that runs the default base image, or null when the
+   * catalog configures its own image (or is not loaded).
+   */
+  private defaultBaseImageContainerName(): string | null {
+    const catalogItem = this.catalogItem;
+    if (!catalogItem?.localConfig || catalogItem.localConfig.dockerImage) {
+      return null;
+    }
+    if (catalogItem.deploymentSpecYaml) {
+      return findDockerImagePlaceholderContainer(
+        catalogItem.deploymentSpecYaml,
+      );
+    }
+    return "mcp-server";
   }
 
   private checkPodConditionsForFailure(pod: k8s.V1Pod): {
@@ -5507,15 +5748,13 @@ export default class K8sDeployment {
         let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
         let failureMessage: string | null = null;
         if (availableReplicas === 0 && desiredReplicas >= 1) {
-          const failureCheck = await this.checkPodContainerStatusesForFailure();
+          ({ podFailure, failureMessage } = await this.readPodFailureForRefresh(
+            {
+              deployment,
+              runFencedMutation: hibernationOptions?.runFencedMutation,
+            },
+          ));
           if (this.stateGeneration !== generation) return;
-          if (failureCheck.hasFailed) {
-            podFailure = {
-              failed: true,
-              transient: failureCheck.isTransientImagePull,
-            };
-            failureMessage = failureCheck.message;
-          }
         }
 
         const decision = deriveHibernationDeploymentState(
@@ -5580,19 +5819,15 @@ export default class K8sDeployment {
       let podFailure: OrdinaryDeploymentFacts["podFailure"] = null;
       let failureMessage: string | null = null;
       if (availableReplicas === 0) {
-        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        ({ podFailure, failureMessage } = await this.readPodFailureForRefresh({
+          deployment,
+          runFencedMutation: options?.runFencedMutation,
+        }));
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         if (this.stateGeneration !== generation) return;
         // SPDX-SnippetEnd
-        if (failureCheck.hasFailed) {
-          podFailure = {
-            failed: true,
-            transient: failureCheck.isTransientImagePull,
-          };
-          failureMessage = failureCheck.message;
-        }
       }
 
       let decision = deriveOrdinaryDeploymentState(

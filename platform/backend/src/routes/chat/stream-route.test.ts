@@ -548,6 +548,74 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     await app.close();
   });
 
+  test.for([
+    true,
+    false,
+  ])("an Auto selection follows changed normal tiers on the next turn (%s)", async (autoModel, {
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const { configureAutoRouting, setAutoRoutingTiers } = await import(
+      "@/test/auto-routing"
+    );
+    const { default: AutoRoutingSettingsModel } = await import(
+      "@/models/auto-routing-settings"
+    );
+    config.autoRouting.enabled = true;
+    const tiers = await configureAutoRouting(organizationId);
+    const old = await AutoRoutingSettingsModel.find(organizationId);
+    await ConversationModel.update(conversationId, user.id, organizationId, {
+      autoModel,
+      modelId: tiers[1].id,
+      chatApiKeyId: old?.normalApiKeyId,
+    });
+    await setAutoRoutingTiers(organizationId, { normal: tiers[2] });
+    const replacementKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret({ secret: { apiKey: "synthetic-current-normal" } })).id,
+      { provider: "openai", access: "org" },
+    );
+    const current = await AutoRoutingSettingsModel.find(organizationId);
+    if (!current?.fastApiKeyId || !current.smartApiKeyId)
+      throw new Error("missing tier keys");
+    await AutoRoutingSettingsModel.update(organizationId, {
+      enabled: false,
+      tiers: {
+        fast: { modelId: tiers[0].id, providerApiKeyId: current.fastApiKeyId },
+        normal: { modelId: tiers[2].id, providerApiKeyId: replacementKey.id },
+        smart: {
+          modelId: tiers[2].id,
+          providerApiKeyId: current.smartApiKeyId,
+        },
+      },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "auto-turn",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    await executionPromise;
+    expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: tiers[autoModel ? 2 : 1].modelId,
+        provider: "openai",
+        providerKeySelection: autoModel
+          ? { providerApiKeyId: replacementKey.id }
+          : undefined,
+      }),
+    );
+  });
+
   test("double onError yields deterministic payload and fires side effects once", async ({
     expect,
   }) => {

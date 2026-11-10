@@ -15,7 +15,7 @@ This is an execution skill, not only a guide. Use `git`, `gh`, and the GitHub AP
 - **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It moves only `archestra/platform:latest`; companion and agent images keep `latest` on the stable line.
 - **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. After all builds succeed, the workflow automatically publishes the release and updates the companion and agent images' `latest`. It moves `archestra/platform:latest` only when no newer release is published.
 
-Neither release channel uses a GitHub environment. Merging a release PR authorizes automatic publication after successful builds; finish qualification before that merge. Starting a new stable branch adds configuration steps and uses the same stable publication pipeline.
+Both channels publish only after a second Engineering member (not whoever merged or started it) approves it in archestra-ai/release-publisher's `stable-release` environment; the release run waits up to 6 hours for it, and an expired wait is retried by re-running the run's failed jobs. Finish qualification before merging a release PR. Starting a new stable branch adds configuration steps and uses the same stable publication pipeline.
 
 ## Backporting Fixes
 

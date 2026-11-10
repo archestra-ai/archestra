@@ -127,21 +127,48 @@ export const SelectRoutingPlanSchema = createSelectSchema(
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
 
-/** The tiers auto routing chooses between: the organization's default model trio. */
+/**
+ * A budget Archestra derives on every fit from the current usage, by how
+ * much of it each tier serves (`BUDGET_PRESET_TIER_SHARE`).
+ */
+export const AutoRoutingBudgetPresetSchema = z.enum([
+  "cost_efficient",
+  "balanced",
+  "intelligence",
+]);
+export type AutoRoutingBudgetPreset = z.infer<
+  typeof AutoRoutingBudgetPresetSchema
+>;
+
+/** The model of each tier auto routing chooses between, and the key it runs on. */
 const AutoRoutingTrioSchema = z.object({
   fastModelId: z.string().uuid().nullable(),
   normalModelId: z.string().uuid().nullable(),
   smartModelId: z.string().uuid().nullable(),
+  fastApiKeyId: z.string().uuid().nullable(),
+  normalApiKeyId: z.string().uuid().nullable(),
+  smartApiKeyId: z.string().uuid().nullable(),
 });
 export type AutoRoutingTrio = z.infer<typeof AutoRoutingTrioSchema>;
 
+/** A tier as it is set: a model and an organization-wide key serving it. */
+export const AutoRoutingTierSettingSchema = z.object({
+  modelId: z.string().uuid(),
+  providerApiKeyId: z.string().uuid(),
+});
+export type AutoRoutingTierSetting = z.infer<
+  typeof AutoRoutingTierSettingSchema
+>;
+
 /**
- * Auto-routing settings of an organization, stored on its LLM Proxy row. The
- * tiers are read from the organization's default model trio.
+ * Auto-routing settings of an organization, stored on its LLM Proxy row; its
+ * tiers are rows of `auto_routing_tiers`.
  */
 export const AutoRoutingSettingsSchema = AutoRoutingTrioSchema.extend({
   enabled: z.boolean(),
+  /** The custom budget; a fit uses it only while `budgetPreset` is null. */
   budgetUsdPerDay: z.string().nullable(),
+  budgetPreset: AutoRoutingBudgetPresetSchema.nullable(),
   scorerVersionId: z.string().uuid().nullable(),
   /** Bumped by every write of plan-relevant state; a fit publishes only at the generation it read. */
   generation: z.number().int(),
@@ -153,7 +180,16 @@ export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
 export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.pick({
   enabled: true,
   budgetUsdPerDay: true,
-}).partial();
+  budgetPreset: true,
+})
+  .extend({
+    tiers: z.object({
+      fast: AutoRoutingTierSettingSchema,
+      normal: AutoRoutingTierSettingSchema,
+      smart: AutoRoutingTierSettingSchema,
+    }),
+  })
+  .partial();
 export type UpdateAutoRoutingSettings = z.infer<
   typeof UpdateAutoRoutingSettingsSchema
 >;
@@ -181,7 +217,8 @@ export type RoutingFit = {
   generation: number;
   inputWatermark: Date;
   tiersFingerprint: RouterDocument;
-  budgetUsdPerDay: string;
+  /** Null when a budget preset resolved no budget: the fit failed or was a cold start. */
+  budgetUsdPerDay: string | null;
   scorerVersionId: string;
   coreVersion: string;
   planFormatVersion: number;

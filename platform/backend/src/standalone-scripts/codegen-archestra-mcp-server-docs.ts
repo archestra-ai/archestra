@@ -57,8 +57,9 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   tool_assignment: 13,
   openappa: 14,
   limits: 15,
-  teams: 16,
-  plugins: 17,
+  logs: 16,
+  teams: 17,
+  plugins: 18,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",
@@ -172,16 +173,15 @@ async function main() {
     fs.mkdirSync(docsDir, { recursive: true });
   }
 
-  let existingContent: string | null = null;
-  if (fs.existsSync(docsFilePath)) {
-    existingContent = fs.readFileSync(docsFilePath, "utf-8");
-  }
-
-  const markdownContent = generateMarkdownContent(existingContent);
-  const { index, pages } = splitToolReference(markdownContent);
-  fs.writeFileSync(docsFilePath, `${index.trimEnd()}\n`);
-  for (const [slug, body] of Object.entries(pages)) {
-    fs.writeFileSync(path.join(docsDir, `${slug}.md`), `${body.trimEnd()}\n`);
+  const files = generateDocsFiles({
+    readFile: (name) => {
+      const file = path.join(docsDir, name);
+      return fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : null;
+    },
+    today: new Date().toISOString().slice(0, 10),
+  });
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(docsDir, name), content);
   }
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
@@ -199,7 +199,47 @@ async function main() {
   logger.info(`   - ${groupCount} groups`);
 }
 
+/**
+ * Renders the index and topic pages, keyed by file name in the docs directory.
+ * The shared `lastUpdated` date moves to `today` only when some page's content
+ * changed, so a re-run with unchanged tools reproduces the committed pages on
+ * any day (CI checks that codegen leaves no diff).
+ */
+export function generateDocsFiles(params: {
+  readFile: (name: string) => string | null;
+  today: string;
+}): Record<string, string> {
+  const { readFile, today } = params;
+  const existingDate = extractLastUpdatedFromMarkdown(
+    readFile("index.md") ?? "",
+  );
+  if (existingDate) {
+    const files = renderDocsFiles(existingDate);
+    if (
+      Object.entries(files).every(
+        ([name, content]) => readFile(name) === content,
+      )
+    ) {
+      return files;
+    }
+  }
+  return renderDocsFiles(today);
+}
+
 // === Internal helpers ===
+
+function renderDocsFiles(lastUpdated: string): Record<string, string> {
+  const { index, pages } = splitToolReference(
+    generateMarkdownContent(lastUpdated),
+  );
+  return Object.fromEntries([
+    ["index.md", `${index.trimEnd()}\n`],
+    ...Object.entries(pages).map(([slug, body]) => [
+      `${slug}.md`,
+      `${body.trimEnd()}\n`,
+    ]),
+  ]);
+}
 
 function generateFrontmatter(lastUpdated: string): string {
   return `---
@@ -339,35 +379,13 @@ Assigning a tool does not grant access to the resources it manages. Each tool en
 ${referenceSections.join("\n")}`;
 }
 
-function extractBodyFromMarkdown(content: string): string {
-  const frontmatterEnd = content.indexOf("---", 4);
-  if (frontmatterEnd === -1) return content;
-  return content.slice(frontmatterEnd + 3).trim();
-}
-
 function extractLastUpdatedFromMarkdown(content: string): string | null {
   const match = content.match(/lastUpdated:\s*(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : null;
 }
 
-function generateMarkdownContent(existingContent: string | null): string {
+function generateMarkdownContent(lastUpdated: string): string {
   const newBody = linkPermissionMentions(generateMarkdownBody());
-
-  let lastUpdated: string;
-
-  if (existingContent) {
-    const existingBody = extractBodyFromMarkdown(existingContent);
-    const existingLastUpdated = extractLastUpdatedFromMarkdown(existingContent);
-
-    if (existingBody === newBody.trim() && existingLastUpdated) {
-      lastUpdated = existingLastUpdated;
-    } else {
-      lastUpdated = new Date().toISOString().split("T")[0];
-    }
-  } else {
-    lastUpdated = new Date().toISOString().split("T")[0];
-  }
-
   return `${generateFrontmatter(lastUpdated)}${newBody}`;
 }
 
@@ -403,6 +421,7 @@ const toolPageGroups: Record<string, { slug: string; title: string }> = {
   "Tool Assignment": { slug: "knowledge-and-mcp", title: "Knowledge and MCP" },
   Guardrails: { slug: "guardrails", title: "Guardrails" },
   Limits: { slug: "organization", title: "Organization" },
+  Logs: { slug: "organization", title: "Organization" },
   Teams: { slug: "organization", title: "Organization" },
   Plugins: { slug: "organization", title: "Organization" },
 };

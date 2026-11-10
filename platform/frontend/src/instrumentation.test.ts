@@ -10,11 +10,11 @@ describe("onRequestError filtering", () => {
   beforeEach(() => {
     vi.resetModules();
     captureRequestError.mockClear();
-    process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN =
-      "https://example.ingest.test";
+    vi.stubEnv("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN", "");
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "enabled");
     // Reporting is off on local environments, and the test runner is one, so
     // the deployed case has to say so explicitly.
-    process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT = "staging";
+    vi.stubEnv("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT", "staging");
   });
 
   async function loadHook() {
@@ -44,8 +44,8 @@ describe("onRequestError filtering", () => {
     expect(captureRequestError).toHaveBeenCalledWith(error, {}, {});
   });
 
-  it("skips reporting entirely when no DSN is configured", async () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
+  it("skips reporting entirely when the deployment opts out of analytics", async () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
     const onRequestError = await loadHook();
 
     await onRequestError(
@@ -60,8 +60,21 @@ describe("onRequestError filtering", () => {
   // A developer with the DSN in their local env file otherwise reported into
   // the same project as the deployments, with their own absolute paths in the
   // frames.
+  it("reports to a deployment's own DSN even when it opts out of analytics", async () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+    vi.stubEnv(
+      "NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN",
+      "https://key@sentry.example.com/2",
+    );
+    const onRequestError = await loadHook();
+
+    await onRequestError(new Error("boom"), {} as never, {} as never);
+
+    expect(captureRequestError).toHaveBeenCalledTimes(1);
+  });
+
   it("skips reporting from a local development environment", async () => {
-    process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT = "development";
+    vi.stubEnv("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT", "development");
     const onRequestError = await loadHook();
 
     await onRequestError(

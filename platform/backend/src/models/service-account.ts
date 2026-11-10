@@ -16,6 +16,7 @@ import {
   gt,
   inArray,
   isNull,
+  lte,
   max,
   or,
   sql,
@@ -72,6 +73,7 @@ class ServiceAccountModel {
       : null;
     const now = new Date();
     const tokens = schema.serviceAccountTokensTable;
+    const federated = schema.serviceAccountFederatedCredentialsTable;
     const rows = await db
       .select({
         serviceAccount: schema.serviceAccountsTable,
@@ -93,11 +95,28 @@ class ServiceAccountModel {
           sql<Date | null>`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`.mapWith(
             tokens.expiresAt,
           ),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        federatedCredentialCount:
+          sql<number>`(select count(*) from ${federated} where ${federated.serviceAccountId} = ${schema.serviceAccountsTable.id})`.mapWith(
+            Number,
+          ),
+        federatedLastUsedAt:
+          sql<Date | null>`(select max(${federated.lastUsedAt}) from ${federated} where ${federated.serviceAccountId} = ${schema.serviceAccountsTable.id})`.mapWith(
+            federated.lastUsedAt,
+          ),
+        // SPDX-SnippetEnd
       })
       .from(schema.serviceAccountsTable)
       .leftJoin(
         tokens,
-        eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
+        and(
+          eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
+          // Tokens an OIDC exchange issued are not keys: they neither count
+          // toward the account's keys nor decide its health.
+          isNull(tokens.federatedCredentialId),
+        ),
       )
       .where(
         and(
@@ -142,14 +161,20 @@ class ServiceAccountModel {
         activeTokenCount,
         lastUsedAt,
         soonestExpiryAt,
+        federatedCredentialCount,
+        federatedLastUsedAt,
       }) =>
         normalizeServiceAccount(
           serviceAccount,
           {
             tokenCount,
             activeTokenCount,
-            lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
+            lastUsedAt: latest(
+              lastUsedAt ? new Date(lastUsedAt) : null,
+              federatedLastUsedAt ?? null,
+            ),
             soonestExpiryAt: soonestExpiryAt ?? null,
+            federatedCredentialCount,
           },
           creators,
           labelsById.get(serviceAccount.id) ?? [],
@@ -177,13 +202,24 @@ class ServiceAccountModel {
     const tokens = await db
       .select()
       .from(schema.serviceAccountTokensTable)
-      .where(eq(schema.serviceAccountTokensTable.serviceAccountId, id))
+      .where(
+        and(
+          eq(schema.serviceAccountTokensTable.serviceAccountId, id),
+          isNull(schema.serviceAccountTokensTable.federatedCredentialId),
+        ),
+      )
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
+    const tokenStats = summarizeTokens(tokens);
+    const federated = await federatedStats(id);
 
     return {
       ...normalizeServiceAccount(
         serviceAccount,
-        summarizeTokens(tokens),
+        {
+          ...tokenStats,
+          lastUsedAt: latest(tokenStats.lastUsedAt, federated.lastUsedAt),
+          federatedCredentialCount: federated.count,
+        },
         await CreatedByModel.resolve([
           CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
         ]),
@@ -308,7 +344,7 @@ class ServiceAccountModel {
     return {
       ...normalizeServiceAccount(
         serviceAccount,
-        summarizeTokens([]),
+        { ...summarizeTokens([]), federatedCredentialCount: 0 },
         await CreatedByModel.resolve([
           CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
         ]),
@@ -423,6 +459,71 @@ class ServiceAccountModel {
 
     return { ...normalizeToken(created), token };
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The account an OIDC token exchange names. The exchange is public, so it
+   * learns the organization from the account, not from a session.
+   */
+  static async findForTokenExchange(
+    id: string,
+  ): Promise<Pick<
+    SelectServiceAccount,
+    "id" | "name" | "organizationId" | "disabled"
+  > | null> {
+    const [row] = await db
+      .select({
+        id: schema.serviceAccountsTable.id,
+        name: schema.serviceAccountsTable.name,
+        organizationId: schema.serviceAccountsTable.organizationId,
+        disabled: schema.serviceAccountsTable.disabled,
+      })
+      .from(schema.serviceAccountsTable)
+      .where(eq(schema.serviceAccountsTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * A short-lived token for an OIDC token exchange through one federated
+   * credential. It authenticates exactly like an API key of the account, so it
+   * carries the account's roles and stops working when the account is
+   * disabled. Expired tokens of the same credential are removed first, so the
+   * rows a busy CI pipeline leaves behind stay bounded.
+   */
+  static async createFederatedToken(params: {
+    serviceAccountId: string;
+    federatedCredentialId: string;
+    name: string;
+    expiresAt: Date;
+  }): Promise<{ token: string; expiresAt: Date }> {
+    const token = createTokenValue();
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.serviceAccountTokensTable)
+        .where(
+          and(
+            eq(
+              schema.serviceAccountTokensTable.federatedCredentialId,
+              params.federatedCredentialId,
+            ),
+            lte(schema.serviceAccountTokensTable.expiresAt, new Date()),
+          ),
+        );
+      await tx.insert(schema.serviceAccountTokensTable).values({
+        serviceAccountId: params.serviceAccountId,
+        federatedCredentialId: params.federatedCredentialId,
+        name: params.name,
+        tokenHash: hashToken(token),
+        tokenStart: token.slice(0, 16),
+        expiresAt: params.expiresAt,
+      });
+    });
+    return { token, expiresAt: params.expiresAt };
+  }
+  // SPDX-SnippetEnd
 
   static async deleteToken(params: {
     serviceAccountId: string;
@@ -655,7 +756,7 @@ export default ServiceAccountModel;
 
 function normalizeServiceAccount(
   serviceAccount: SelectServiceAccount,
-  stats: TokenStats,
+  stats: TokenStats & { federatedCredentialCount: number },
   creators: Map<string, CreatedBy>,
   labels: LabelWithDetails[] = [],
 ): ServiceAccountResponse {
@@ -678,6 +779,7 @@ function normalizeServiceAccount(
     activeTokenCount: stats.activeTokenCount,
     lastUsedAt: stats.lastUsedAt,
     soonestExpiryAt: stats.soonestExpiryAt,
+    federatedCredentialCount: stats.federatedCredentialCount,
   };
 }
 
@@ -722,6 +824,33 @@ function summarizeTokens(
     lastUsedAt,
     soonestExpiryAt,
   };
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function federatedStats(
+  serviceAccountId: string,
+): Promise<{ count: number; lastUsedAt: Date | null }> {
+  const federated = schema.serviceAccountFederatedCredentialsTable;
+  const [row] = await db
+    .select({
+      count: count(federated.id),
+      lastUsedAt: max(federated.lastUsedAt),
+    })
+    .from(federated)
+    .where(eq(federated.serviceAccountId, serviceAccountId));
+  return {
+    count: row?.count ?? 0,
+    lastUsedAt: row?.lastUsedAt ? new Date(row.lastUsedAt) : null,
+  };
+}
+// SPDX-SnippetEnd
+
+function latest(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
 }
 
 function normalizeToken(

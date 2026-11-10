@@ -27,7 +27,7 @@ const sha = /^[a-f0-9]{40}$/;
 export async function verifyBenchmarkDocs({ github, context }) {
   const source = context.payload.pull_request;
   if (
-    source?.user?.login !== "archestra-ci[bot]" ||
+    source?.user?.login !== "archestra-releaser[bot]" ||
     !isPlatformReleasePr(source, `${context.repo.owner}/${context.repo.repo}`)
   )
     return { ready: true, reason: "Not a platform release PR" };
@@ -196,7 +196,7 @@ export async function commitBenchmarkDocs({
       source,
       `${context.repo.owner}/${context.repo.repo}`,
     ) ||
-    source.user?.login !== "archestra-ci[bot]" ||
+    source.user?.login !== "archestra-releaser[bot]" ||
     benchmarkResult !== "success" ||
     !summary?.complete ||
     summary.diagnostic ||

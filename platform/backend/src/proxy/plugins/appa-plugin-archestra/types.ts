@@ -10,6 +10,10 @@ export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
   "archestra.appa.trusted-context",
 );
 
+export const APPA_PLUGIN_RETAINED_SHAPE: unique symbol = Symbol(
+  "archestra.appa.retained-shape",
+);
+
 export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
@@ -72,6 +76,13 @@ export type AppaTrustedContext = {
   thread?: "create" | "continue";
   /** Deferred until the adapter has authenticated the unchanged session lineage. */
   childReturnRefusal?: ApiError;
+};
+
+/** What a waived session's request needs to keep its governed shape. */
+export type AppaRetainedShape = {
+  adapter: AppaClientAdapter | undefined;
+  identity: AppaTrustedContext["toolIdentity"];
+  request: AppaPreparedRequest;
 };
 
 export type AppaMatchContext = {

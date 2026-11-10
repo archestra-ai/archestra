@@ -1186,6 +1186,7 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
+  autoModel: false,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,

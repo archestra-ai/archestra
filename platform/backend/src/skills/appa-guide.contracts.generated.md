@@ -70,12 +70,13 @@ effects = ["egress"]
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
+| `recorder` | A [recorder](#recorders) that receives each released call's records. |
 
 An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
 Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards`. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
 
 Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
 
@@ -854,7 +855,8 @@ For the customer request, the service returns this response to classify the resu
 
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
-- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards`. No other key is allowed.
+- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards` and `evidence`. No other key is allowed.
+- `evidence` is an opaque string of at most 1,024 bytes. OpenAPPA does not read it. It is part of the call's identity: the same call with different `evidence` is a different proposal. OpenAPPA sends it to the call's [recorder](#recorders).
 - `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
 - Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
@@ -868,6 +870,68 @@ OpenAPPA rejects unknown keys, `null` values, empty audience objects, duplicate 
 OpenAPPA uses the annotation only for the call it classified. Changing the call requires a new annotation. Rechecking or replaying the same recorded call reuses its annotation and membership responses.
 
 If the annotator fails or returns an invalid answer, the call does not run. The agent can propose it again. OpenAPPA checks that the answer uses permitted values; the annotator is responsible for classifying the call correctly.
+
+## Recorders
+
+A recorder stores what a released call publishes, so that a later call can read it. For example, a file tracker records the label of each file a `Write` call writes. When a later `Read` call reads that file, the file tracker's annotator returns the stored label as the read's `delta`.
+
+A tool selects one recorder with `recorder = "<name>"`, on a named contract or on the `"*"` wildcard. Configure the recorder under `[externals.recorders.<name>]` with `url` or `command`. The policy declares no `[[policy.recorder]]`; each recorder named on a tool MUST have a binding, and each binding MUST be named on a tool.
+
+```toml
+[[policy.annotator]]
+name = "file-tracker"
+
+[[policy.tool]]
+name = "host/claude-code/Write"
+annotator = "file-tracker"
+recorder = "file-tracker"
+
+[externals.annotators.file-tracker]
+command = ["appa", "file-tracker", "annotate"]
+
+[externals.recorders.file-tracker]
+command = ["appa", "file-tracker", "record"]
+```
+
+A recorder is not consulted. It cannot deny, delay, or approve a call, and OpenAPPA does not wait for it. A recorder needs the same trust as an annotator: a recorder that stores a wrong label makes a later annotation wrong.
+
+### Published label
+
+The label a call publishes is the trajectory's label when OpenAPPA released the call, combined with the tool's `forwards` and `delta`. A write publishes all that the agent could put in its arguments. A copy publishes the source's label through `delta`, even though the trajectory does not receive the bytes. For a call that an input sanitizer rewrote, the trajectory's label is the label after the rewrite.
+
+### Recorder protocol
+
+OpenAPPA sends a delivery after it records each batch of decisions and outcomes. A delivery is not a consult request, and it carries a label that OpenAPPA derived:
+
+```json
+{
+  "version": 1,
+  "kind": "recorder",
+  "name": "file-tracker",
+  "root": "cc:7f3a…",
+  "records": [
+    {
+      "record": "released",
+      "dispatch": "cc:7f3a…/9c1e…/0",
+      "tool": "host/claude-code/Write",
+      "arguments": { "file_path": "/work/notes.md", "content": "…" },
+      "label": { "trust": "suspicious", "audience": [["internal"]] },
+      "evidence": "absent"
+    },
+    { "record": "outcome", "dispatch": "cc:7f3a…/9c1e…/0", "outcome": "success" }
+  ]
+}
+```
+
+| Record | Fields | Meaning |
+|---|---|---|
+| `released` | `dispatch`, `tool`, `arguments`, `label`, `evidence` | OpenAPPA released the call. `label` is its published label. |
+| `outcome` | `dispatch`, `outcome` | The call ended: `success`, `failure`, or `indeterminate`. |
+| `unreleased` | `trajectory`, `batch`, `tool`, `arguments`, `evidence` | OpenAPPA decided the call's batch and did not release the call. |
+
+`label.audience` is `"public"` or a list of clauses. Each clause is a list of audience entries; a reader belongs to the audience when every clause includes the reader. A single clause has the same form as an annotator's audience answer. `evidence` is the annotator's `evidence`, or `null`.
+
+The recorder returns `{"version":1,"answer":{}}`. OpenAPPA delivers each family's records in log order, at least once. A failed delivery stays for the next one. After a restart, OpenAPPA delivers each family again from its start, so a recorder MUST ignore a `dispatch` it already recorded.
 
 ## Sanitizers
 
@@ -937,7 +1001,7 @@ When a tool result would restrict the agent, OpenAPPA can offer a sanitizer whos
 
 If the cleaned result still adds restrictions, the agent can accept them or select another compatible sanitizer. Cleaning a new result does not remove restrictions from data the agent has already read.
 
-Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` and the file content the call sends still enter the check.
+Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` still enters the check.
 
 OpenAPPA selects the contract that matches the new arguments and checks the call again, including its requirements, effects, and argument schema. If that contract uses an annotator, OpenAPPA requests a new annotation. Membership checks use the responses already recorded for this decision.
 
@@ -1344,6 +1408,7 @@ The available settings depend on the component's role:
 | `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required, except for `attest-schema`. |
 | `annotators` | Exactly one of `url` or `command`. | Required unless the declaration specifies a builtin. |
 | `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
+| `recorders` | Exactly one of `url` or `command`. | Required for each recorder a tool names. |
 | `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
 
 OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
@@ -1358,7 +1423,7 @@ If the service requires authentication, set `token_env` to an environment variab
 
 ### Local programs
 
-Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
+Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. An executable named `appa` is the runtime's own executable, which serves the plugins OpenAPPA ships, such as `appa file-tracker`. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
 
 The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` gives the program the milliseconds it has left: `timeout_ms` less the wait for a free slot. Each OpenAPPA instance runs at most eight such programs at once.
 
@@ -1409,7 +1474,7 @@ For an audience request, `declaration.templates` lists the selector templates th
 
 OpenAPPA records membership responses with the decision that requested them. If that decision requires an approval or remedy, OpenAPPA reuses those responses when it continues the decision. A new decision can request updated membership. Replaying a recorded decision uses its saved responses without calling the membership service. Responses from unrelated decisions cannot be substituted.
 
-A consult request does not include the agent's current audience, trust rank, previous actions, or user message. The component processes the request data in `artifact` using the instructions and limits in `declaration`. A `context` request alone carries `cwd`, and a `context` answer is the one answer OpenAPPA does not validate: it is data for the annotator, not a decision.
+A consult request does not include the agent's current audience, trust rank, previous actions, or user message. A [recorder delivery](#recorder-protocol) is not a consult request: it carries the label of each released call. The component processes the request data in `artifact` using the instructions and limits in `declaration`. A `context` request alone carries `cwd`, and a `context` answer is the one answer OpenAPPA does not validate: it is data for the annotator, not a decision.
 
 The service or program returns `{"version":1,"answer":{...}}`. The fields inside `answer` must match the component's response format. Extra fields in the surrounding response object are not allowed.
 
@@ -1454,6 +1519,8 @@ Supported providers are `anthropic`, `openai`, `gemini`, and `ollama`. `token_en
 A deployment in which any component uses `builtin = "llm"` opens only when the section's key is available: `token_env` names a variable that is set, or the provider is `ollama` and the section names no `token_env`. A section that no component uses loads without its key.
 
 An `llm` request that fails with a connection error, status 429, or a 5xx status is retried 500 ms later, at most three attempts in total. A retry starts only when `timeout_ms` leaves time for it. Other failures are not retried. Each attempt takes a free slot, and the wait before a retry holds none.
+
+An `llm` request sets no `temperature` or other sampling parameter. The model uses its default values, as it does for `claude-code`.
 
 `openai` uses the Chat Completions API, including when `url` points to a compatible service. `ollama` uses `http://localhost:11434` unless `url` specifies another endpoint, and requires no token.
 

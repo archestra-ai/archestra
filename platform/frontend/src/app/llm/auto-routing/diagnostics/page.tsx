@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRoutingDiagnostics,
   useAutoRoutingDiagnostics,
@@ -24,10 +25,48 @@ import {
 } from "../_parts/diagnostics-charts";
 import { parseFittedHistory } from "../_parts/plan-document";
 import { TIER_COLOR, TIER_NAMES } from "../_parts/tiers";
+import { TryPrompt } from "../_parts/try-prompt";
+import { WhatIf } from "../_parts/what-if";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
 
 export default function AutoRoutingDiagnosticsPage() {
+  return (
+    <div className="space-y-8">
+      <TryPromptSection />
+      <WhatIfSection />
+      <Charts />
+    </div>
+  );
+}
+
+/** Scores a prompt and shows the tier the active plan would send it to. */
+function TryPromptSection() {
+  const { data: settings } = useAutoRoutingSettings();
+  const { data: canUpdate = false } = useHasPermissions({
+    llmProxy: ["update"],
+  });
+  if (!settings) return null;
+  return <TryPrompt canUpdate={canUpdate} scorer={settings.status.scorer} />;
+}
+
+/** How the active plan would route under another budget or other tiers. */
+function WhatIfSection() {
+  const { data: settings } = useAutoRoutingSettings();
+  const { data: plan } = useAutoRoutingPlan(
+    settings?.status.activePlan?.id ?? null,
+  );
+  if (!settings || !plan || plan.budgetUsdPerDay === null) return null;
+  return (
+    <WhatIf
+      key={`${plan.id}-${plan.budgetUsdPerDay}`}
+      savedBudgetUsdPerDay={plan.budgetUsdPerDay}
+      savedTiers={settings.tiers}
+    />
+  );
+}
+
+function Charts() {
   const saved = useAutoRoutingDiagnostics(null);
 
   if (saved.isLoadingError) {

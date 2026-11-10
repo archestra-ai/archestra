@@ -74,6 +74,7 @@ export const DocsPage = {
   PlatformEnvironments: "admin/environments",
   PlatformFoundry: "integrations/ai-clients/foundry",
   PlatformIdentityProviders: "admin/identity",
+  PlatformWorkloadIdentity: "admin/identity/workload-identity",
   PlatformJira: "agents/triggers-and-channels/jira",
   PlatformKnowledge: "knowledge",
   PlatformKnowledgeConnectors: "knowledge/connectors",

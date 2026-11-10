@@ -84,6 +84,7 @@ export async function withTranscriptRecoveryPod(params: {
           enableServiceLinks: false,
           nodeSelector: template?.nodeSelector,
           tolerations: template?.tolerations,
+          runtimeClassName: template?.runtimeClassName,
           imagePullSecrets: template?.imagePullSecrets,
           securityContext: {
             runAsNonRoot: true,

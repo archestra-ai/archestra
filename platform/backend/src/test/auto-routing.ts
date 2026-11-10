@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { plan as fitPlan } from "@archestra/router-rs";
+import { and, eq } from "drizzle-orm";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
+import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
-import OrganizationModel from "@/models/organization";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
+import { accessGrants } from "@/test/access-grants";
 import type { Model } from "@/types";
 import {
   FEATURES_SCHEMA_VERSION,
@@ -177,7 +181,7 @@ export async function configureAutoRouting(organizationId: string) {
     await priced("normal", "3.00", "15.00"),
     await priced("smart", "15.00", "75.00"),
   ] as const satisfies Trio;
-  await setOrganizationTrio(organizationId, {
+  await setAutoRoutingTiers(organizationId, {
     fast: trio[0],
     normal: trio[1],
     smart: trio[2],
@@ -189,19 +193,64 @@ export async function configureAutoRouting(organizationId: string) {
   return trio;
 }
 
-/** Makes `trio` the organization's default model trio, which auto routing routes across. */
-export async function setOrganizationTrio(
+/**
+ * Makes `trio` the organization's auto-routing tiers, each on an
+ * organization-wide key of its provider; a null tier is removed.
+ */
+export async function setAutoRoutingTiers(
   organizationId: string,
   trio: {
-    fast?: Pick<Model, "id"> | null;
-    normal?: Pick<Model, "id"> | null;
-    smart?: Pick<Model, "id"> | null;
+    fast?: Pick<Model, "id" | "provider"> | null;
+    normal?: Pick<Model, "id" | "provider"> | null;
+    smart?: Pick<Model, "id" | "provider"> | null;
   },
 ) {
-  const { fast, normal, smart } = trio;
-  await OrganizationModel.patch(organizationId, {
-    ...(fast !== undefined && { defaultFastModelId: fast?.id ?? null }),
-    ...(normal !== undefined && { defaultModelId: normal?.id ?? null }),
-    ...(smart !== undefined && { defaultSmartModelId: smart?.id ?? null }),
-  });
+  for (const tier of ["fast", "normal", "smart"] as const) {
+    const model = trio[tier];
+    if (model === undefined) continue;
+    await db
+      .delete(schema.autoRoutingTiersTable)
+      .where(
+        and(
+          eq(schema.autoRoutingTiersTable.organizationId, organizationId),
+          eq(schema.autoRoutingTiersTable.tier, tier),
+        ),
+      );
+    if (model === null) continue;
+    const key = await organizationKey(organizationId, model.provider);
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    await db.insert(schema.autoRoutingTiersTable).values({
+      organizationId,
+      tier,
+      providerApiKeyId: key.id,
+      modelId: model.id,
+    });
+  }
+}
+
+/** An organization-wide key of `provider`, made on first use. */
+async function organizationKey(
+  organizationId: string,
+  provider: Model["provider"],
+) {
+  const existing = await LlmProviderApiKeyModel.findOrganizationWideKey(
+    organizationId,
+    provider,
+  );
+  if (existing) return existing;
+  return LlmProviderApiKeyModel.create(
+    {
+      organizationId,
+      secretId: null,
+      name: `Auto routing ${provider} ${randomUUID().slice(0, 8)}`,
+      provider,
+      scope: "org",
+      userId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    },
+    accessGrants("org"),
+  );
 }

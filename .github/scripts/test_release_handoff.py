@@ -244,7 +244,9 @@ class HandoffFixture(unittest.TestCase):
 
     def test_lookalike_registry_destinations_are_rejected_before_any_transfer(self):
         for image in ("dockerXio/archestra/platform", "docker.io.evil/archestra/platform",
-                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform"):
+                      "europe-west1-dockerXpkgXdev/friendly-path-465518-r6/archestra-public/platform",
+                      # Release names belong to the release publisher; runs stage in ci/.
+                      "ghcr.io/archestra-ai/mcp-server-base", "ghcr.io/archestra-ai/ci/nested/mcp-server-base"):
             with patch.object(HANDOFF.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "destination"):
                 HANDOFF.push(self.index["records"][0], image, "amd64")
             run.assert_not_called()
@@ -288,7 +290,10 @@ class WorkflowHandoffTests(unittest.TestCase):
             # Workload Identity trust for this file does not accept.
             self.assertIn("    permissions: {}", job)
             self.assertNotIn("id-token", job)
-            self.assertIn("APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}", job)
+            # The key lives only in the releaser environment (main, release/*).
+            self.assertIn("      environment: releaser\n", job)
+            self.assertIn("APP_ID: ${{ secrets.APP_ID }}", job)
+            self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", job)
             self.assertIn("target-branch: ${{ github.ref_name }}", job)
         self.assertIn("needs: [release-policy, release-please]", callers["release-pr"])
 
@@ -323,6 +328,7 @@ class WorkflowHandoffTests(unittest.TestCase):
         # Credentials stay in the original release job; native publishers use
         # only same-run artifact downloads, with no new App secrets or scopes.
         self.assertNotIn("ARCHESTRA_RELEASER_GITHUB_APP", native)
+        self.assertNotIn("APP_PRIVATE_KEY", native)
         self.assertNotIn("actions: read", native)
 
 

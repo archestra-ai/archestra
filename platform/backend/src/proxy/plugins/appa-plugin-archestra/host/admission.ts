@@ -22,7 +22,10 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import { stampedSessions } from "@/openappa/trajectory-stamp";
-import { isUnenforcedSession, startedUnenforced } from "@/openappa/unenforced";
+import {
+  isUnenforcedSession,
+  unenforcedSessionReason,
+} from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -37,7 +40,10 @@ import {
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
-import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
+import type {
+  AppaClientAdapter,
+  AppaTrustedContext,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import { withCallerScope } from "@/proxy/plugins/appa-plugin-archestra/utils";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -588,7 +594,8 @@ async function governedAdmission(params: {
       session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
       trajectory.session = session;
     }
-    if (await startedUnenforced(trajectory.session)) {
+    const unenforcedReason = await unenforcedSessionReason(trajectory.session);
+    if (unenforcedReason) {
       // The session started while enforcement was off, or a person
       // superyelled it. OpenAPPA never governs it: the request goes on as
       // if enforcement were off.
@@ -596,12 +603,26 @@ async function governedAdmission(params: {
         { sessionId: session.session_id },
         "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
       );
-      return {
-        kind: "ungoverned",
-        ...(trajectory.session.parent_id && !ingress.clientCompaction
+      const withdrawnChildReturn =
+        trajectory.session.parent_id && !ingress.clientCompaction
           ? { withdrawnChildReturn: true as const }
-          : {}),
-      };
+          : {};
+      // A child that inherited its waiver never had a governed shape to keep.
+      const ranGoverned =
+        unenforcedReason === "superyell" &&
+        (await OpenAppaSessionModel.find({
+          organizationId: trajectory.session.organization_id,
+          sessionId: trajectory.session.session_id,
+        })) !== null;
+      return ranGoverned
+        ? {
+            kind: "waived",
+            identity,
+            adapter: trajectory.adapter,
+            facts,
+            ...withdrawnChildReturn,
+          }
+        : { kind: "ungoverned", ...withdrawnChildReturn };
     }
     // A side review, such as a Codex auto-review, copies the history of the
     // session it reviews into a thread of its own. When that session is out
@@ -704,6 +725,15 @@ export type OpenappaAdmission =
   | {
       kind: "ungoverned";
       /** Verified waived child, whose earlier return instructions no longer apply. */
+      withdrawnChildReturn?: true;
+    }
+  /** Out of OpenAPPA for good, and keeps the request shape it had while governed. */
+  | {
+      kind: "waived";
+      identity: AppaSessionIdentity;
+      adapter: AppaClientAdapter | undefined;
+      facts: AdmissionFacts;
+      /** Earlier return instructions must be withdrawn even without a binding. */
       withdrawnChildReturn?: true;
     }
   /** Enforcement is off; OpenAPPA records the session for when it turns on. */

@@ -10,6 +10,8 @@ import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
+type Shares = { tier_session_share: [number, number, number] };
+
 type Summary = {
   expected_spend: number;
   value_size_weighted: number;
@@ -176,6 +178,79 @@ describe("POST /api/auto-routing/simulate", () => {
     expect(replanned.statusCode, replanned.body).toBe(200);
     const active = await RoutingPlanModel.findActive(ctx.organizationId);
     expect(active?.summary).toEqual(simulated);
+  });
+
+  test("presets keep two thirds of sessions on fast (Cost-efficient) or smart (Intelligence), and Balanced spends halfway", async () => {
+    // Sessions needing each tier, at a volume that spends dollars rather than cents.
+    const needs = [
+      [0.8, 0.15, 0.05],
+      [0.6, 0.3, 0.1],
+      [0.3, 0.5, 0.2],
+      [0.1, 0.4, 0.5],
+      [0.05, 0.15, 0.8],
+    ] as const;
+    const trio = await configureAutoRouting(ctx.organizationId);
+    const scorerVersionId = (await activeSourceVersion()).id;
+    await seedFitHistory({
+      organizationId: ctx.organizationId,
+      modelId: trio[2].id,
+      scorerVersionId,
+      sessions: 40,
+      session: (i) => ({
+        createdAt: new Date(Date.now() - (2 + (i % 30)) * 86_400_000),
+        features: {
+          signals: {
+            "jev-session": {
+              version: scorerVersionId,
+              tier_needed: [...needs[i % needs.length]],
+              p_long: 0,
+            },
+          },
+          client: "claude-code",
+        },
+      }),
+    });
+    const volume = 100;
+    const cheapest = await minBudget(volume);
+    const best = (await feasible(1_000_000, volume)).expected_spend;
+    const atPreset = async (budgetPreset: string) => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auto-routing/simulate",
+        payload: { budgetPreset, volumeMultiplier: volume },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe("feasible");
+      return body as { budgetUsdPerDay: number; summary: Shares };
+    };
+    const shares = async (budget: number) =>
+      (await feasible(budget, volume)) as unknown as Shares;
+
+    const cost = await atPreset("cost_efficient");
+    const balanced = await atPreset("balanced");
+    const intelligence = await atPreset("intelligence");
+
+    expect(cheapest).toBeLessThan(cost.budgetUsdPerDay);
+    expect(cost.budgetUsdPerDay).toBeLessThan(balanced.budgetUsdPerDay);
+    expect(balanced.budgetUsdPerDay).toBeLessThan(intelligence.budgetUsdPerDay);
+    expect(intelligence.budgetUsdPerDay).toBeLessThan(best);
+    // The most it can spend with two thirds on fast, to within the 0.5% stop.
+    expect(cost.summary.tier_session_share[0]).toBeGreaterThanOrEqual(2 / 3);
+    expect(
+      (await shares(cost.budgetUsdPerDay * 1.01)).tier_session_share[0],
+    ).toBeLessThan(2 / 3);
+    // The least it needs for two thirds on smart.
+    expect(intelligence.summary.tier_session_share[2]).toBeGreaterThanOrEqual(
+      2 / 3,
+    );
+    expect(
+      (await shares(intelligence.budgetUsdPerDay * 0.99)).tier_session_share[2],
+    ).toBeLessThan(2 / 3);
+    expect(balanced.budgetUsdPerDay).toBeCloseTo(
+      (cost.budgetUsdPerDay + intelligence.budgetUsdPerDay) / 2,
+      1,
+    );
   });
 
   test("below the session minimum it reports the cold-start progress", async () => {

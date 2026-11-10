@@ -1,5 +1,5 @@
 name: Release Please
-run-name: ${{ inputs.handoff-fixture && 'Non-publishing image handoff fixture' || 'Release Please' }}
+run-name: ${{ inputs.handoff-fixture && 'Non-publishing image handoff fixture' || inputs.publisher-smoke-version && 'Publisher dry run' || 'Release Please' }}
 
 on:
   push:
@@ -16,6 +16,10 @@ on:
         description: "Tiny scratch-image fixture artifact from this branch's PR workflow"
         type: string
         default: ""
+      publisher-smoke-version:
+        description: "Run only a release-publisher dry run with this published version's images (main only; writes scratch names only)"
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -27,7 +31,7 @@ concurrency:
 jobs:
   release-policy:
     name: Check release policy
-    if: ${{ !inputs.handoff-fixture && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+    if: ${{ !inputs.handoff-fixture && !inputs.publisher-smoke-version && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Check out the repository and its release refs.
@@ -97,13 +101,16 @@ jobs:
     name: Create releases for merged release PRs
     needs: release-policy
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-pull-request: true
+      # The archestra-releaser App's key lives only in this environment, which
+      # main and release/* alone can deploy to.
+      environment: releaser
     secrets:
-      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   release-please:
     name: Release Please
@@ -111,6 +118,11 @@ jobs:
     # The fixture skips release-policy and create-releases.
     if: ${{ !cancelled() && (inputs.handoff-fixture || needs.create-releases.result == 'success') }}
     runs-on: ubuntu-latest
+    # Holds the archestra-releaser App's key; main and release/* only, so the
+    # handoff fixture is dispatched from one of those branches too.
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
     permissions:
       contents: read # Check out the repository; the App token makes every write.
       id-token: write # Required for Workload Identity Federation in downstream release jobs.
@@ -130,17 +142,17 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           # Read scanned queue artifacts from other runs.
           permission-actions: read
           # Read draft releases and create release tags; the fixture only reads.
           permission-contents: ${{ inputs.handoff-fixture && 'read' || 'write' }}
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # All releases start as drafts. Both channels publish automatically after
-      # all artifacts are ready.
+      # All releases start as drafts. Both channels publish after all artifacts
+      # are ready and release-publisher's approval (every release, RCs included).
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -380,13 +392,16 @@ jobs:
     needs: [release-policy, release-please]
     if: ${{ !inputs.handoff-fixture && needs.release-policy.outputs.create_pr == 'true' }}
     permissions: {} # The shared workflow writes with the release App token only.
-    uses: archestra-ai/.github/.github/workflows/release-please.yml@da5a22fd61f56b4a7fa6bd888292018982e1139e # v1.15.0
+    uses: archestra-ai/.github/.github/workflows/release-please.yml@dc1baa65f528a62f6623c86a748824c9c4c925a7 # v1.17.0
     with:
       target-branch: ${{ github.ref_name }}
       skip-github-release: true
+      # The archestra-releaser App's key lives only in this environment, which
+      # main and release/* alone can deploy to.
+      environment: releaser
     secrets:
-      APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
@@ -399,6 +414,8 @@ jobs:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
+      # Stage in ci/; only the release publisher writes release names.
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
@@ -418,6 +435,8 @@ jobs:
       contents: read # Required to invoke the reusable Agent image workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
+      # Stage in ci/; only the release publisher writes release names.
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
@@ -439,6 +458,8 @@ jobs:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
+      # Stage in ci/; only the release publisher writes release names.
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
@@ -460,6 +481,8 @@ jobs:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
+      # Stage in ci/; only the release publisher writes release names.
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
@@ -468,21 +491,21 @@ jobs:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-  build-and-push-platform-docker-image-to-dockerhub:
-    name: Build and push platform Docker image to Docker Hub
+  build-and-push-platform-docker-image:
+    name: Build and stage platform Docker image
     # The platform Docker image references the MCP server base image tag via
     # ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var, but does NOT use it as a FROM base image.
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
-    # exist yet. Both images are built in parallel and the publish-github-release job gates on
-    # all artifacts being ready before un-drafting the release.
+    # exist yet. Both images are built in parallel; the release is handed to the publisher only
+    # after every artifact is ready, and release-finalize.yml un-drafts it after publication.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: $/.github/workflows/build-dockerhub-image.yml
+    uses: $/.github/workflows/build-platform-release-image.yml
     needs:
       - release-please
     permissions:
       contents: read # Required to invoke the reusable Docker build workflow.
-      packages: write # Required by the reusable GHCR-capable publisher.
-      id-token: write # Required for Workload Identity Federation.
+      packages: write # Stage the image in ghcr.io/archestra-ai/ci.
+      id-token: write # Docker Hub OIDC login for the release scan.
     with:
       image_directory: ./platform
       image_name: platform
@@ -493,51 +516,54 @@ jobs:
       environment: release-publish
 
   publish-platform-helm-chart:
-    name: Publish platform Helm chart
-    # The Helm chart only references the version tag (not image content), so it can run
-    # in parallel with Docker image builds. The publish-github-release job ensures all
-    # artifacts are ready before the release is made visible.
+    name: Package platform Helm chart
+    # The chart pins the platform and its default images to the staged
+    # digests: the ones publish-release-images attests and publishes unchanged.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: $/.github/workflows/publish-platform-helm-chart.yml
-    needs:
-      - release-please
-    permissions:
-      contents: write # Required to publish Helm chart metadata from the repository.
-      id-token: write # Required for Workload Identity Federation.
-    with:
-      version: ${{ needs.release-please.outputs.platform_version }}
-      # Stable charts remain workflow artifacts until the publication job.
-      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-') }}
-      checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-    secrets:
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-  publish-github-release:
-    name: Publish release
-    # No failed or skipped build is acceptable. Publish automatically after all builds.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    runs-on: ubuntu-latest
-    # Docker Hub OIDC grants push only to this environment (main, release/*).
-    environment: release-publish
-    concurrency:
-      # Serialize publication within each release channel.
-      group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
-      cancel-in-progress: false
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
       - build-and-push-agent-catalog-images
       - build-and-push-p4-shim-docker-image
       - build-and-push-sandbox-base-docker-image
-      - build-and-push-platform-docker-image-to-dockerhub
+      - build-and-push-platform-docker-image
+    permissions:
+      contents: read # Package the chart from the repository.
+    with:
+      version: ${{ needs.release-please.outputs.platform_version }}
+      checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+      pin_release_images: true
+
+  attest-release-images:
+    name: Attest release images and chart
+    # This repository cannot write release names (only ci/ staging). Attest
+    # the staged digests under their public names and the chart by file name;
+    # publish-release-images then asks the release publisher to publish
+    # exactly those, and it verifies the attestations first.
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    runs-on: ubuntu-latest
+    # Holds the archestra-releaser App's key; main and release/* only.
+    environment:
+      name: releaser
+      deployment: false # A secrets and branch gate; nothing is deployed.
+    timeout-minutes: 30
+    needs:
+      - release-please
+      - build-and-push-mcp-server-docker-image
+      - build-and-push-agent-catalog-images
+      - build-and-push-p4-shim-docker-image
+      - build-and-push-sandbox-base-docker-image
+      - build-and-push-platform-docker-image
       - publish-platform-helm-chart
     permissions:
-      contents: write # Attach the saved chart and publish the release.
-      packages: write # Publish new release images to GHCR.
-      id-token: write # Keep publishing the Helm chart at its existing GAR URL.
+      contents: read # Check out the publication policy script.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    outputs:
+      images: ${{ steps.request.outputs.images }}
+      latest: ${{ steps.request.outputs.latest }}
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release-please.outputs.platform_version }}
       TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
@@ -548,43 +574,22 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Generate a release token
+        id: release-token
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        with:
+          # Draft releases are listed only with push access.
+          permission-contents: write
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Check publication is still allowed
         id: publication-policy
         shell: bash
         env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
-        run: |
-          test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
-          PRESERVE_LATEST=false
-          if [[ "$VERSION" != *-* ]]; then
-            RELEASE_LINE=${VERSION%.*}
-            test "${GITHUB_REF_NAME:-}" = "release/$RELEASE_LINE" \
-              || { echo "::error::Stable version does not match its release branch"; exit 1; }
-            # Fetch every page before comparing: process substitution hides API failures.
-            # Include drafts so a partially published newer patch still blocks a downgrade.
-            STABLE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.prerelease | not) | .tag_name') \
-              || { echo "::error::Cannot verify stable release ordering; retry when the release list is available"; exit 1; }
-            while IFS= read -r RELEASE_TAG; do
-              [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-              RELEASE_VERSION=${RELEASE_TAG#platform-v}
-              [ "$RELEASE_VERSION" != "$VERSION" ] || continue
-              # Ubuntu's GNU sort -V compares numeric stable versions.
-              if [ "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$RELEASE_VERSION" ]; then
-                if [ "${RELEASE_VERSION%.*}" = "$RELEASE_LINE" ]; then
-                  echo "::error::Newer stable release ${RELEASE_TAG} exists on this line (published or draft); cannot publish ${TAG_NAME}"
-                  exit 1
-                fi
-                # Older lines may ship patches without taking over a newer channel.
-                PRESERVE_LATEST=true
-              fi
-            done <<< "$STABLE_TAGS"
-          fi
-          echo "preserve_latest=$PRESERVE_LATEST" >> "$GITHUB_OUTPUT"
-
-      - name: Download saved chart
-        uses: $/.github/actions/github-download-artifact
-        with:
-          name: release-helm-chart
+        run: bash .github/scripts/release-publication-policy.sh
 
       - name: Download saved image references
         uses: $/.github/actions/github-download-artifact
@@ -593,59 +598,34 @@ jobs:
           path: release-images
           merge-multiple: true
 
-      - name: Authenticate to artifact registry
-        if: ${{ github.ref_name != 'main' }}
-        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+      - name: Download saved chart
+        uses: $/.github/actions/github-download-artifact
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          name: release-helm-chart
 
-      - name: Log in to Docker Hub
-        uses: $/.github/actions/docker-login
+      - name: Collect release subjects
+        shell: bash
+        run: bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+
+      - name: Attest release images and chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          username: archestra
-          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+          subject-checksums: release-subjects.txt
 
-      - name: Log in to GHCR
-        uses: $/.github/actions/docker-login
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Publish stable artifacts without rebuilding
-        if: ${{ github.ref_name != 'main' }}
+      - name: Decide whether the platform latest tag moves
+        id: platform-latest
         shell: bash
         env:
-          PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
-        run: |
-          test -s release-images/mcp-server-base
-          helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
-          if [ "$PRESERVE_LATEST" = true ]; then
-            echo "Published the older-line patch chart; preserving newer image latest tags."
-            exit 0
-          fi
-          for file in release-images/*; do
-            [ "${file##*/}" = platform ] && continue
-            IMAGE=$(cat "$file")
-            # supply-chain-policy: allow-latest stable release channel
-            docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
-          done
-
-      - name: Move the platform latest tag
-        shell: bash
-        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
         run: |
           # Quickstart pulls archestra/platform:latest, so it follows the newest
           # published release, release candidates included. Companion and agent
-          # images keep :latest on the stable line: stable platforms reference
-          # the agent images by that tag. This step runs after the companion
-          # images are tagged, so a stable platform never points ahead of them.
-          PLATFORM_IMAGE=$(cat release-images/platform)
+          # images keep :latest on the stable line for anyone who pulls them by
+          # hand; platforms reference their own version's images.
           if [ "$PRESERVE_LATEST" = true ]; then
             echo "Preserving the newer platform latest tag."
+            echo "move=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           version_is_newer() {
@@ -672,121 +652,142 @@ jobs:
             [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || continue
             if version_is_newer "${RELEASE_TAG#platform-v}" "$VERSION"; then
               echo "Newer release ${RELEASE_TAG} may already hold the platform latest tag"
+              echo "move=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           done <<< "$RELEASE_TAGS"
-          # supply-chain-policy: allow-latest newest published platform release
-          docker buildx imagetools create --tag "${PLATFORM_IMAGE%@*}:latest" "$PLATFORM_IMAGE"
+          echo "move=true" >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub release
+      - name: Collect the publisher request
+        id: request
         shell: bash
         env:
           PRESERVE_LATEST: ${{ steps.publication-policy.outputs.preserve_latest }}
-        run: |
-          # A retry may find an already published immutable release.
-          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
-          [ "$IS_DRAFT" = true ] || exit 0
-          gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
-          if [[ "$VERSION" == *-* ]]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
-          elif [ "$PRESERVE_LATEST" = true ]; then
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest=false
-          else
-            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
-          fi
+          PLATFORM_LATEST: ${{ steps.platform-latest.outputs.move }}
+        run: bash .github/scripts/release-request.sh release-images.json
 
-  update-terraform-provider:
-    name: Start Terraform provider update
-    # Propose each release from main to the Terraform provider as soon as it is
-    # published, instead of at the updater's next daily run. A workflow_dispatch
-    # sent with GITHUB_TOKEN starts a run; the release event it caused does not.
-    if: ${{ github.ref == 'refs/heads/main' && needs.publish-github-release.result == 'success' }}
-    needs:
-      - publish-github-release
-    runs-on: ubuntu-latest
+  # Hands the request to release-publisher and ends once its run exists. The
+  # release waits for its approval (every release, RCs too) in the publisher,
+  # for up to GitHub's 30 days; release-finalize.yml publishes the GitHub
+  # release after the publisher run succeeds (dispatched by Release Gate, or
+  # its schedule).
+  publish-release-images:
+    name: Publish release images and chart
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    concurrency:
+      group: release-ghcr-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
+      cancel-in-progress: false
+    needs: [release-please, attest-release-images]
     permissions:
-      actions: write # Start the Update Terraform Provider workflow.
-    steps:
-      - name: Start Update Terraform Provider
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: gh workflow run update-terraform-provider.yml --ref main
+      actions: read # Download the saved chart.
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
+    with:
+      # Holds the archestra-releaser App's key; main and release/* only.
+      environment: releaser
+      project: archestra
+      version: ${{ needs.release-please.outputs.platform_version }}
+      images: ${{ needs.attest-release-images.outputs.images }}
+      latest: ${{ needs.attest-release-images.outputs.latest }}
+      chart-artifact: release-helm-chart
+      wait: false
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-  notify-release-failure:
-    name: Notify release failure
-    # Pages #alerting when a release that was ACTUALLY being published fails, so a broken
-    # release (e.g. an image or chart that never published) is surfaced immediately
-    # instead of failing silently.
-    #
-    # The release-please job runs in two contexts: on release branch pushes it rebuilds
-    # the release PR (should_publish=false), and only when a release PR is merged does it
-    # actually cut a release (should_publish=true). We gate on platform_should_publish so
-    # transient flakes in the former context (e.g. release-please's "other side closed"
-    # API blips, which self-heal on the next commit) don't page anyone. Real publish
-    # failures set should_publish=true before any downstream step can fail, so they still
-    # alert.
-    needs:
-      - release-please
-      - build-and-push-mcp-server-docker-image
-      - build-and-push-agent-catalog-images
-      - build-and-push-p4-shim-docker-image
-      - build-and-push-sandbox-base-docker-image
-      - build-and-push-platform-docker-image-to-dockerhub
-      - publish-platform-helm-chart
-      - publish-github-release
-    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
+  publisher-smoke:
+    name: Publisher dry run
+    # Proves the release-publisher path before a release depends on it: the same
+    # attestation, verification, registry logins and copies, to scratch names
+    # only (publisher-smoke-<request> tags, archestra-public/publisher-smoke).
+    if: ${{ inputs.publisher-smoke-version != '' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      id-token: write # Workload Identity Federation to read the webhook from Secret Manager.
+      contents: read # Check out the chart and publication scripts.
+      packages: write # Stage the smoke digests in ghcr.io/archestra-ai/ci.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the build provenance attestation.
+    outputs:
+      images: ${{ steps.subjects.outputs.images }}
+    env:
+      SOURCE_VERSION: ${{ inputs.publisher-smoke-version }}
+      VERSION: 0.0.0-smoke.${{ github.run_id }}
     steps:
-      # The webhook lives in GCP Secret Manager. A dedicated service account
-      # reads only the alerting secrets, so no repository secret holds it.
-      - name: Authenticate to read the alerting webhook
-        uses: archestra-ai/.github/actions/google-auth@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          service_account: ${{ vars.CI_ALERTS_SECRETS_SERVICE_ACCOUNT }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Read the alerting webhook
-        id: alerting
-        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
-        with:
-          secrets: |-
-            slack_webhook_url:friendly-path-465518-r6/ci-alerts-slack-webhook-url
-
-      - name: Post failure alert to Slack
+      # Real release digests, already public, staged like a release stages them.
+      - name: Stage the published images
+        shell: bash
         env:
-          SLACK_WEBHOOK_URL: ${{ steps.alerting.outputs.slack_webhook_url }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          VERSION: ${{ needs.release-please.outputs.platform_version }}
-          RP_RESULT: ${{ needs.release-please.result }}
-          MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
-          AGENT_CATALOG_RESULT: ${{ needs.build-and-push-agent-catalog-images.result }}
-          P4_SHIM_RESULT: ${{ needs.build-and-push-p4-shim-docker-image.result }}
-          SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
-          PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
-          HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
-          PUBLISH_RESULT: ${{ needs.publish-github-release.result }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            echo "::warning::The alerting webhook secret is empty; skipping Slack alert."
-            exit 0
-          fi
-          TEXT=":rotating_light: *Platform release failed* — \`${VERSION:-unknown}\`
-          A job in the release pipeline failed, so release artifacts may not have published.
-          • release-please: \`${RP_RESULT}\`
-          • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
-          • MCP server image: \`${MCP_RESULT}\`
-          • agent catalog images: \`${AGENT_CATALOG_RESULT}\`
-          • p4 shim image: \`${P4_SHIM_RESULT}\`
-          • sandbox base image: \`${SANDBOX_RESULT}\`
-          • Helm chart: \`${HELM_RESULT}\`
-          • publish GitHub release: \`${PUBLISH_RESULT}\`
-          Check whether \`platform-v${VERSION}\` is already published. If it is still a draft, start a *new* Release Please workflow run on this branch to recover the complete artifact set. 'Rerun failed jobs' cannot regenerate artifacts from successful jobs.
-          <${RUN_URL}|View failed CI run> · <https://github.com/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml|Start a new release run>"
-          jq -n --arg text "$TEXT" '{text: $text}' \
-            | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"
+          [[ "$SOURCE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] \
+            || { echo "::error::publisher-smoke-version must be a published release version"; exit 1; }
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
+          mkdir -p release-images
+          while read -r name source; do
+            skopeo copy --all --preserve-digests --retry-times 3 --digestfile digest \
+              "docker://$source:$SOURCE_VERSION" "docker://ghcr.io/archestra-ai/ci/$name:publisher-smoke-$GITHUB_RUN_ID"
+            echo "ghcr.io/archestra-ai/ci/$name@$(cat digest)" > "release-images/$name"
+          done <<'IMAGES'
+          platform docker.io/archestra/platform
+          mcp-server-base ghcr.io/archestra-ai/mcp-server-base
+          IMAGES
+          skopeo logout ghcr.io
+
+      - name: Package a smoke chart
+        working-directory: platform/helm/archestra
+        run: helm package . --version "$VERSION" --app-version "$VERSION" --destination "$GITHUB_WORKSPACE"
+
+      - name: Preserve the smoke chart for the publisher
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-helm-chart
+          path: archestra-platform-${{ env.VERSION }}.tgz
+          if-no-files-found: error
+
+      # One destination per registry: Docker Hub (platform), GHCR and
+      # Artifact Registry (mcp-server-base).
+      - name: Collect smoke subjects
+        id: subjects
+        shell: bash
+        run: |
+          bash .github/scripts/release-subjects.sh release-images ghcr.io/archestra-ai "archestra-platform-${VERSION}.tgz"
+          mv release-subjects.txt smoke-subjects.txt
+          mv release-images.json smoke-ghcr.json
+          bash .github/scripts/release-subjects.sh release-images europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+          grep ' europe-west1-docker.pkg.dev/' release-subjects.txt >> smoke-subjects.txt
+          jq -s add smoke-ghcr.json release-images.json > smoke-images.json
+          cat smoke-images.json
+          echo "images=$(jq -c . smoke-images.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Attest smoke images and chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: smoke-subjects.txt
+
+  publisher-smoke-publish:
+    name: Publisher dry run (publish)
+    needs: publisher-smoke
+    permissions:
+      actions: read # Download the smoke chart.
+    uses: archestra-ai/.github/.github/workflows/release-publish.yml@dece2adc8ef7600e4654648e045e7d85ddf3338d # v1.23.0
+    with:
+      # Holds the archestra-releaser App's key; main and release/* only.
+      environment: releaser
+      project: archestra
+      version: 0.0.0-smoke.${{ github.run_id }}
+      images: ${{ needs.publisher-smoke.outputs.images }}
+      chart-artifact: release-helm-chart
+      smoke: true
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   verify-handoff-fixture:
     name: Verify non-publishing artifact handoff

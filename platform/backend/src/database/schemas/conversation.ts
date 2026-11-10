@@ -58,6 +58,12 @@ const conversationsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
+     * The chat runs on auto routing. `modelId` on `chatApiKeyId` then hold the
+     * normal tier, for everything that needs a single model (context size,
+     * attachments, titles), and what the turns run on while auto routing is off.
+     */
+    autoModel: boolean("auto_model").notNull().default(false),
+    /**
      * How hard the model should reason before answering. Each provider decides
      * what the three levels mean for a given model, and a model with no such
      * control ignores it — so the value survives a switch to one of those and

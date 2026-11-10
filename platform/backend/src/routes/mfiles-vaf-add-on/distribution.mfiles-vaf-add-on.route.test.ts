@@ -148,6 +148,15 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
     expect(response.body).toContain(`Ref = '${ADD_ON_TAG}'`);
   });
 
+  test("package route 404s when the image carries no package, even if a release does", async () => {
+    stubGitHubReleases({ listed: [ADD_ON_RELEASE] });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mfiles-vaf-add-on/package",
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("script bootstrap runs installer defaults when nothing resolves", async () => {
     const response = await fetchBootstrap();
     expect(response.statusCode).toBe(200);

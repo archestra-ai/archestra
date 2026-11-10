@@ -3,7 +3,7 @@ import {
   AGENT_CATALOG_IMAGE_REGISTRY,
   followAgentCatalogImage,
   getAgentCatalogImages,
-  getAgentCatalogImageTag,
+  pinReleaseImage,
   resolveAgentCatalogId,
 } from "./agent-catalog-images";
 
@@ -42,13 +42,6 @@ describe("resolveAgentCatalogId", () => {
 });
 
 describe("popular Agent images", () => {
-  test("uses the stable alias on stable releases and matching tags otherwise", () => {
-    expect(getAgentCatalogImageTag("1.3.65")).toBe("latest");
-    expect(getAgentCatalogImageTag("1.4.0-rc.17")).toBe("1.4.0-rc.17");
-    const commit = "0123456789abcdef0123456789abcdef01234567";
-    expect(getAgentCatalogImageTag(commit)).toBe(commit);
-  });
-
   test("builds every maintained image from one registry and tag", () => {
     expect(
       getAgentCatalogImages({
@@ -79,7 +72,57 @@ describe("popular Agent images", () => {
   });
 });
 
+describe("pinReleaseImage", () => {
+  const digests = {
+    version: "1.5.0",
+    images: { "agent-codex": `sha256:${"b".repeat(64)}` },
+  };
+
+  test("pins a release image of the shipped version to its digest", () => {
+    expect(
+      pinReleaseImage({
+        image: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.0`,
+        digests,
+      }),
+    ).toBe(
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.0@sha256:${"b".repeat(64)}`,
+    );
+  });
+
+  test("leaves mirrors, other tags, unknown images and builds without digests on their tag", () => {
+    for (const image of [
+      "registry.example:5000/team/agent-codex:1.5.0",
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.1`,
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-hermes:1.5.0`,
+      `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.0@sha256:${"c".repeat(64)}`,
+    ]) {
+      expect(pinReleaseImage({ image, digests })).toBe(image);
+    }
+    const image = `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.0`;
+    expect(pinReleaseImage({ image, digests: null })).toBe(image);
+  });
+});
+
 describe("followAgentCatalogImage", () => {
+  test("moves a release digest pin to this release's pin", () => {
+    const current = getAgentCatalogImages({
+      registry: AGENT_CATALOG_IMAGE_REGISTRY,
+      tag: "1.5.1",
+    });
+    const pinnedCurrent = {
+      ...current,
+      codex: `${current.codex}@sha256:${"d".repeat(64)}`,
+    };
+    const saved = `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-codex:1.5.0@sha256:${"b".repeat(64)}`;
+    expect(
+      followAgentCatalogImage({ image: saved, catalogImages: pinnedCurrent }),
+    ).toBe(pinnedCurrent.codex);
+    // A development build ships no digests: the pin moves to the tag.
+    expect(
+      followAgentCatalogImage({ image: saved, catalogImages: current }),
+    ).toBe(current.codex);
+  });
+
   test("moves maintained legacy registry tags to this release while preserving digest pins", () => {
     const legacy =
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-codex";

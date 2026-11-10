@@ -282,7 +282,10 @@ function isSettingsRecordPath(pathname: string) {
   return SETTINGS_RECORD_PATHS.some((pattern) => pattern.test(pathname));
 }
 
-const SETTINGS_RECORD_PATHS = [/^\/settings\/roles\/[^/]+/];
+const SETTINGS_RECORD_PATHS = [
+  /^\/settings\/roles\/[^/]+/,
+  /^\/settings\/service-accounts\/[^/]+/,
+];
 
 function GuardrailsDescription() {
   const appName = useAppName();

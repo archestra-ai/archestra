@@ -26,7 +26,7 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import { exportAuditLog } from "@/observability/audit-log-export";
+import { auditLogExporter } from "@/observability/audit-log-export";
 import type {
   AuditActorType,
   AuditEventName,
@@ -63,7 +63,7 @@ class AuditLogModel {
       .insert(schema.auditLogsTable)
       .values(input)
       .returning();
-    exportAuditLog(row);
+    auditLogExporter.export(row);
     return row;
   }
 

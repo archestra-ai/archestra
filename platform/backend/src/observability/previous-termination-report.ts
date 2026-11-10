@@ -4,7 +4,6 @@ import path from "node:path";
 import * as k8s from "@kubernetes/client-node";
 import * as Sentry from "@sentry/node";
 import logger from "@/logging";
-import { posthogErrorTrackingService } from "@/services/error-tracking";
 
 /**
  * Report this pod's previous container termination when it was abnormal.
@@ -14,8 +13,7 @@ import { posthogErrorTrackingService } from "@/services/error-tracking";
  * never reaches error tracking and shows up only as a silent RestartCount
  * bump (T-1015: /llm/logs OOM-killed staging pods for weeks unnoticed). On
  * boot, the replacement process reads its own pod's `lastState.terminated`
- * from the Kubernetes API and reports any abnormal termination through the
- * existing error-tracking integrations.
+ * from the Kubernetes API and reports any abnormal termination to Sentry.
  *
  * Two deliberate design points:
  * - The pod is resolved from the service-account namespace file plus an
@@ -106,14 +104,6 @@ export async function reportAbnormalPreviousTermination(): Promise<void> {
           exit_code: String(terminated.exitCode),
         },
         extra: context,
-      });
-
-      posthogErrorTrackingService.captureException({
-        error,
-        properties: {
-          $exception_fingerprint: fingerprint.join("/"),
-          ...context,
-        },
       });
     }
 

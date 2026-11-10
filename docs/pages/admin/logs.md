@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
 order: 7
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,8 @@ To forward events from the **Audit** tab to your SIEM, configure [audit log expo
 | **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Activity** | Drill into a group to see which agents and gateways it used |
 
 Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
+
+When your coding agent [hands a task to a Remote Agent](/docs/agents/runtime/handoff) and brings it back, the run's requests join the session's timeline. **Ran on** shows when the work was in your client and when it was in Agent Runtime. Click an Agent Runtime stretch to open the run.
 
 If a model response stream ends cleanly before its provider reports token counts, the request still appears in the session with any response received so far. Its token count shows **Unknown** rather than zero; zero means the provider actually reported zero.
 

@@ -2,7 +2,7 @@
 title: Secret Storage
 description: Choose database or Vault storage and rotate credential encryption keys
 order: 6
-lastUpdated: 2026-10-27
+lastUpdated: 2026-11-09
 ---
 
 Archestra encrypts saved credentials in PostgreSQL by default. Use HashiCorp Vault to keep their values outside the database. This storage protects [credentials](/docs/admin/credentials); [content encryption](/docs/admin/content-encryption) protects messages and tool results separately.
@@ -17,15 +17,24 @@ Keep the default database storage unless you need Vault. Archestra encrypts save
 
 ### Key Rotation
 
-Rotate during a maintenance window. All web pods, workers, and other processes using the database secret store must stop before any process starts with the new key. The previous key is used by the startup migration, not by ordinary secret reads; a rolling restart would mix incompatible readers and writers.
+Rotate during a maintenance window. Every process that reads stored secrets must stop before any process starts with the new key. The first process that starts with both keys re-encrypts every stored secret, then serves traffic. A rolling restart would let old pods keep writing under the old key.
 
-1. Back up PostgreSQL and preserve the current key.
-2. Stop all application processes that read or write stored secrets.
-3. Set [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) to the new key and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) to the old key for every process.
-4. Start one application instance. Confirm its startup migration succeeds and an integration can read its credential before restoring the remaining replicas with the same configuration.
-5. Remove the previous key in a later deployment, after rotation has completed.
+With Helm:
 
-Startup refuses a key that cannot decrypt existing secrets. Preserve the old key until rotation finishes.
+1. Back up PostgreSQL and the current key. The chart keeps the key under `secrets-encryption-secret` in the `<release>-auth` Secret:
+
+   ```bash
+   kubectl -n archestra get secret archestra-platform-auth \
+     -o jsonpath='{.data.secrets-encryption-secret}' | base64 -d
+   ```
+
+2. Under `archestra.env`, set [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) to the new key and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) to the old one. Run `helm upgrade` with `--set archestra.replicaCount=0 --set archestra.worker.replicaCount=0`, so every pod stops.
+3. Run `helm upgrade` again without those two flags. One pod's log shows `Re-encrypted stored secrets under the new ARCHESTRA_SECRETS_ENCRYPTION_SECRET`. Check that an integration can still read its credential.
+4. Remove the previous key in a later upgrade.
+
+Outside Helm, stop every process, set both variables on all of them, and start one. Start the rest once its log shows the re-encryption.
+
+Startup refuses a key that cannot decrypt existing secrets. Preserve the old key until rotation finishes. For every other secret, see [Secret Rotation](/docs/admin/deployment/secret-rotation).
 
 ## HashiCorp Vault
 

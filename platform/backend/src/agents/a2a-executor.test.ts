@@ -1,8 +1,9 @@
 import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
-import { describe, vi } from "vitest";
+import { describe, onTestFinished, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import appConfig from "@/config";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import type { A2AAttachment } from "@/types/a2a-attachment";
@@ -863,6 +864,12 @@ describe("executeA2AMessage current turn assembly", () => {
       organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
+      autoModel: true,
+    });
+    const deployed = appConfig.autoRouting.enabled;
+    appConfig.autoRouting.enabled = true;
+    onTestFinished(() => {
+      appConfig.autoRouting.enabled = deployed;
     });
     const routable: Record<string, boolean> = {};
     for (const tier of [undefined, "normal", "fast", "smart"] as const) {
@@ -1091,11 +1098,14 @@ describe("executeA2AMessage model selection", () => {
 
     expect(mockResolveForkParentSelection).toHaveBeenCalledWith({
       agent: {
+        autoModel: false,
         llmApiKeyId: null,
         modelId: null,
       },
       organizationId: org.id,
       userId: user.id,
+      allowAutoModel: true,
+      parentLlm: undefined,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1421,6 +1431,7 @@ describe("executeA2AMessage skill catalog", () => {
       userId: actor.id,
       agentId: agent.id,
       catalogSkills: [],
+      promptBudget: { canSearchCatalog: false },
     });
     const system = mockStreamText.mock.calls[0]?.[0].system;
     expect(system).toContain("Handle the task.");

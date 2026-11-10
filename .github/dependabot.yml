@@ -54,6 +54,26 @@ updates:
     cooldown:
       default-days: 7
 
+  # The Docker compatibility module that platform/Dockerfile swaps into the
+  # Dagger engine build in place of github.com/docker/docker.
+  - package-ecosystem: gomod
+    directory: platform/docker/dagger-dockercompat
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directories:
       - /

@@ -2,7 +2,7 @@
 title: Audit log export
 description: Send administrative audit events to your SIEM through an OpenTelemetry Collector
 order: 3
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-07
 ---
 
 Send key changes, permission updates, and other recorded administrative actions to your security monitoring stack. Archestra exports metadata from the same persisted events available through its audit API as OpenTelemetry logs. To inspect these events in Archestra's **Audit** tab, see [Logs and Auditing](/docs/admin/logs).
@@ -18,8 +18,8 @@ Use a collector that accepts OTLP over HTTP and forwards logs to your destinatio
    ARCHESTRA_AUDIT_LOG_OTEL_ENABLED=true
    ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
    ```
-   [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED) enables audit export. The [OTLP endpoint](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT) is shared with backend logs and traces; audit records go to `/v1/logs`.
-2. For authentication, set the [bearer token](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER), or the [username](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME) and [password](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD). Use HTTPS for a remote collector.
+   [`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENABLED) enables audit export. The [OTLP endpoint](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT) is shared with backend logs and traces; audit records go to `/v1/logs`. To send audit records to a collector of their own, set [`ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT) instead.
+2. For authentication, set the [bearer token](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER), or the [username](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME) and [password](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD). A dedicated audit endpoint takes its own [bearer token](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER) or [username](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_USERNAME) and [password](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_AUTH_PASSWORD). Use HTTPS for a remote collector.
 3. Enable a logs pipeline in your collector, configure its destination, and restart the backend.
 
 For example, this diagnostic collector configuration prints incoming log records:
@@ -40,7 +40,7 @@ service:
       exporters: [debug]
 ```
 
-Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs). Backend logs also use this endpoint; filter by the audit scope to separate them.
+Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api/operations#tag/audit-log/GET/api/audit-logs). On the shared endpoint, backend logs arrive too; filter by the audit scope to separate them.
 
 ## Route Events to Your SIEM
 
@@ -57,6 +57,7 @@ Receiving OTLP does not configure security detections. Verify that a test event 
 Audit records identify the action and its outcome; the attribute table below lists the exported fields. All records have INFO severity, including denied and failed actions: write security rules against `archestra.audit.outcome`.
 
 - Snapshots, names, emails, raw request URLs, user agents, prompts and responses are excluded. Actor and resource IDs and IP addresses can still identify people; restrict destination access and retention. Some events, including service-account events, have no actor ID.
+- To name who acted, set [`ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY`](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY). Records then carry the actor's email and display name, never the resource's name or other free text.
 - Export runs independently of application log levels and trace sampling. Active trace context may accompany a record; it is optional, and the associated trace may not have been retained. Audit export does not add LLM request or MCP tool-call payloads.
 - Delivery uses an in-memory batch and is best-effort. Outages, full queues or abrupt shutdown can lose exports. Enabling export does not replay earlier events or guarantee that every action produced an audit row.
 
@@ -67,7 +68,7 @@ Collector transforms can use these attribute keys:
 | Event identity | `log.record.uid`, `archestra.audit.event_sequence` |
 | Schema and organization | `archestra.audit.schema_version`, `archestra.organization.id` |
 | Action and outcome | `archestra.audit.action`, `archestra.audit.outcome` |
-| Actor | `archestra.audit.actor_type`, `archestra.audit.actor_id`, `archestra.audit.impersonated_by` |
+| Actor | `archestra.audit.actor_type`, `archestra.audit.actor_id`, `archestra.audit.impersonated_by`, and with actor identity on, `archestra.audit.actor_email`, `archestra.audit.actor_name` |
 | Resource | `archestra.audit.resource_type`, `archestra.audit.resource_id` |
 | Request | `archestra.audit.request_id`, `http.request.method`, `http.route`, `http.response.status_code`, `client.address` |
 

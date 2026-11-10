@@ -80,10 +80,10 @@ entries, age and GitHub artifact checksums. Each image archive must also match
 its recorded payload checksum and build metadata. Synthetic and final commit IDs
 can differ; their trees and explicit build inputs must agree.
 
-The existing `archestra-ci` release App already has `actions: read`. This was
-confirmed using read-only installation metadata (App ID 1667068, matching the
-release PR author), not by changing the installation or requesting extra token
-permissions. Its token remains in the original release job. That job relays one
+The `archestra-releaser` App (App ID 5655681, the release PR author) has
+`actions: read`. Its key lives only in the `releaser` environment, which only
+`main` and `release/*` can deploy to. Its token remains in the original release
+job. That job relays one
 verified architecture archive at a time into same-run artifacts, limiting disk
 usage and keeping App credentials out of publisher jobs, outputs and artifacts.
 Publisher token permissions are unchanged. Relay, digest and image-reference

@@ -15,7 +15,6 @@ import { ApiError } from "@/types";
 import { FAILED_QUERY_CLIENT_MESSAGE, hasFailedQueryText } from "@/utils/db";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { isFetchConnectivityError } from "@/utils/network-errors";
-import { captureServerException } from "./exception-capture";
 
 export function handleServerError(
   this: FastifyInstance,
@@ -77,11 +76,6 @@ export function handleServerError(
       tags: {
         error_type: "response_serialization",
       },
-    });
-
-    captureServerException(request, error, {
-      error_type: "response_serialization",
-      validation_errors: validationErrors,
     });
 
     return reply.status(500).send({
@@ -206,12 +200,6 @@ export function handleServerError(
       "HTTP 503 database temporarily unavailable",
     );
 
-    captureServerException(request, error, {
-      error_type: "db_unavailable",
-      db_error_code: transientDbErrorCode,
-      status_code: 503,
-    });
-
     return reply.status(503).send({
       error: {
         message:
@@ -241,13 +229,6 @@ export function handleServerError(
       },
       "HTTP 503 database unavailable",
     );
-    captureServerException(request, error, {
-      error_type: resourceExhaustionCode
-        ? "db_resource_exhaustion"
-        : "db_statement_timeout",
-      db_error_code: resourceExhaustionCode ?? "57014",
-      status_code: 503,
-    });
     return reply.status(503).send({
       error: { message, type: "api_service_unavailable_error" },
     });
@@ -287,15 +268,10 @@ export function handleServerError(
     };
 
     if (statusCode >= 500) {
-      this.log.error(logPayload, "HTTP 50x request error occurred");
-      // Capture is centrally filtered and grouped by
+      // Sentry's Fastify error hook reports it, filtered and grouped by
       // classifyErrorForTracking: 502/504 upstream failures are dropped as
       // noise, and a secrets-backend outage is grouped by root cause.
-      captureServerException(request, error, {
-        error_type: "api_error",
-        status_code: statusCode,
-        ...(internalCode && { internal_code: internalCode }),
-      });
+      this.log.error(logPayload, "HTTP 50x request error occurred");
     } else if (statusCode >= 400) {
       this.log.info(logPayload, "HTTP 40x request error occurred");
     } else {
@@ -347,16 +323,10 @@ export function handleServerError(
     "HTTP 50x request error occurred",
   );
 
-  captureServerException(request, error, {
-    error_type: "unhandled_error",
-    status_code: statusCode,
-    ...(errorCode && { code: errorCode }),
-  });
-
   return reply.status(statusCode).send({
     error: {
       // A failed query's message holds its SQL and parameter values. Keep it
-      // in the log and the error report above, not in the response.
+      // in the log, not in the response.
       message: hasFailedQueryText(error)
         ? FAILED_QUERY_CLIENT_MESSAGE
         : message,

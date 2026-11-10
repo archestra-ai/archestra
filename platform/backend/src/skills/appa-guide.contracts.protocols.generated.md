@@ -89,7 +89,8 @@ For the customer request, the service returns this response to classify the resu
 
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
-- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards`. No other key is allowed.
+- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards` and `evidence`. No other key is allowed.
+- `evidence` is an opaque string of at most 1,024 bytes. OpenAPPA does not read it. It is part of the call's identity: the same call with different `evidence` is a different proposal. OpenAPPA sends it to the call's [recorder](references/contracts/annotators.md#recorders).
 - `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
 - Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
@@ -103,6 +104,40 @@ OpenAPPA rejects unknown keys, `null` values, empty audience objects, duplicate 
 OpenAPPA uses the annotation only for the call it classified. Changing the call requires a new annotation. Rechecking or replaying the same recorded call reuses its annotation and membership responses.
 
 If the annotator fails or returns an invalid answer, the call does not run. The agent can propose it again. OpenAPPA checks that the answer uses permitted values; the annotator is responsible for classifying the call correctly.
+
+### Recorder protocol
+
+OpenAPPA sends a delivery after it records each batch of decisions and outcomes. A delivery is not a consult request, and it carries a label that OpenAPPA derived:
+
+```json
+{
+  "version": 1,
+  "kind": "recorder",
+  "name": "file-tracker",
+  "root": "cc:7f3a…",
+  "records": [
+    {
+      "record": "released",
+      "dispatch": "cc:7f3a…/9c1e…/0",
+      "tool": "host/claude-code/Write",
+      "arguments": { "file_path": "/work/notes.md", "content": "…" },
+      "label": { "trust": "suspicious", "audience": [["internal"]] },
+      "evidence": "absent"
+    },
+    { "record": "outcome", "dispatch": "cc:7f3a…/9c1e…/0", "outcome": "success" }
+  ]
+}
+```
+
+| Record | Fields | Meaning |
+|---|---|---|
+| `released` | `dispatch`, `tool`, `arguments`, `label`, `evidence` | OpenAPPA released the call. `label` is its published label. |
+| `outcome` | `dispatch`, `outcome` | The call ended: `success`, `failure`, or `indeterminate`. |
+| `unreleased` | `trajectory`, `batch`, `tool`, `arguments`, `evidence` | OpenAPPA decided the call's batch and did not release the call. |
+
+`label.audience` is `"public"` or a list of clauses. Each clause is a list of audience entries; a reader belongs to the audience when every clause includes the reader. A single clause has the same form as an annotator's audience answer. `evidence` is the annotator's `evidence`, or `null`.
+
+The recorder returns `{"version":1,"answer":{}}`. OpenAPPA delivers each family's records in log order, at least once. A failed delivery stays for the next one. After a restart, OpenAPPA delivers each family again from its start, so a recorder MUST ignore a `dispatch` it already recorded.
 
 ### Sanitizer protocol
 
@@ -189,7 +224,7 @@ For an audience request, `declaration.templates` lists the selector templates th
 
 OpenAPPA records membership responses with the decision that requested them. If that decision requires an approval or remedy, OpenAPPA reuses those responses when it continues the decision. A new decision can request updated membership. Replaying a recorded decision uses its saved responses without calling the membership service. Responses from unrelated decisions cannot be substituted.
 
-A consult request does not include the agent's current audience, trust rank, previous actions, or user message. The component processes the request data in `artifact` using the instructions and limits in `declaration`. A `context` request alone carries `cwd`, and a `context` answer is the one answer OpenAPPA does not validate: it is data for the annotator, not a decision.
+A consult request does not include the agent's current audience, trust rank, previous actions, or user message. A [recorder delivery](#recorder-protocol) is not a consult request: it carries the label of each released call. The component processes the request data in `artifact` using the instructions and limits in `declaration`. A `context` request alone carries `cwd`, and a `context` answer is the one answer OpenAPPA does not validate: it is data for the annotator, not a decision.
 
 The service or program returns `{"version":1,"answer":{...}}`. The fields inside `answer` must match the component's response format. Extra fields in the surrounding response object are not allowed.
 

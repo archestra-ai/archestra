@@ -16,11 +16,16 @@ import {
 } from "@archestra/shared";
 import { beforeEach, vi } from "vitest";
 import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  ConversationEnabledToolModel,
+  ToolModel,
+  ToolSearchTextModel,
+} from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
+import { hashToolDefinition } from "./search-text";
 import { __test } from "./search-tools";
 
 const {
@@ -72,6 +77,123 @@ describe("search_tools", () => {
     // Search ranking tests control their candidate set; OpenAPPA tests opt in.
     config.openappa.enabled = false;
   });
+
+  describe("generated search text", () => {
+    test("finds a tool through a term only its generated text contains", () => {
+      expect(
+        rank(
+          [
+            {
+              toolName: "calendar__check_slots",
+              description: "List open slots.",
+              generatedText: "Booking reservation",
+            },
+            { toolName: "calendar__delete", description: "Remove a slot." },
+          ],
+          "booking",
+        ),
+      ).toEqual(["calendar__check_slots"]);
+    });
+
+    test("adds no weight for terms the tool's own fields already contain", () => {
+      const plain = { toolName: "a__tool", description: "Send invoice." };
+      const padded = {
+        toolName: "b__tool",
+        description: "Send invoice.",
+        generatedText: "INVOICE invoice",
+      };
+
+      // Ties break by name, so an inflated b__tool would come first if reversed.
+      expect(rank([padded, plain], "invoice")).toEqual(["a__tool", "b__tool"]);
+    });
+
+    test("does not report a generated-only term as unmatched", () => {
+      expect(
+        findUnmatchedQueryTerms(
+          [
+            makeRankingCandidate({
+              toolName: "calendar__check_slots",
+              generatedText: "booking",
+            }),
+          ],
+          prepareSearchQuery("booking zebra"),
+        ),
+      ).toEqual(["zebra"]);
+    });
+
+    test("ranks stored text for a catalog tool and leaves others on source fields", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+      seedAndAssignArchestraTools,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      await seedAndAssignArchestraTools(agent.id);
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const parameters = { type: "object", properties: {} };
+      const enriched = await makeTool({
+        name: "calendar__check_slots",
+        description: "List open slots.",
+        catalogId: catalog.id,
+        parameters,
+      });
+      const stale = await makeTool({
+        name: "calendar__stale",
+        description: "Current description.",
+        catalogId: catalog.id,
+        parameters,
+      });
+      await makeAgentTool(agent.id, enriched.id);
+      await makeAgentTool(agent.id, stale.id);
+      await ToolSearchTextModel.recordAttempt({
+        definitionHash: hashToolDefinition({
+          name: "calendar__check_slots",
+          description: "List open slots.",
+          parameters,
+        }),
+        promptVersion: 1,
+        generator: "openai/test",
+        result: { status: "ready", searchText: "booking zebrafish" },
+      });
+      await ToolSearchTextModel.recordAttempt({
+        definitionHash: hashToolDefinition({
+          name: "calendar__stale",
+          description: "Previous description.",
+          parameters,
+        }),
+        promptVersion: 1,
+        generator: "openai/test",
+        result: { status: "ready", searchText: "zebrafish" },
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "zebrafish" },
+        {
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(
+        (result.structuredContent as SearchToolsStructuredContent).tools.map(
+          ({ toolName }) => toolName,
+        ),
+      ).toEqual(["calendar__check_slots"]);
+    });
+  });
+
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
     makeInternalMcpCatalog,

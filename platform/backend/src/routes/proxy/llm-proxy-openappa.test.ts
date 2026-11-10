@@ -49,7 +49,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OrganizationModel from "@/models/organization";
-import { openappaActor } from "@/openappa/actor";
+import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import {
   mintChildTrajectoryReceipt,
@@ -420,6 +420,126 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     OrganizationModel.patch(agent.organizationId, {
       allowUnauthenticatedLlmProxyRequests: true,
     });
+
+  describe("a waived session keeps its governed request shape", () => {
+    const refusal =
+      "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)";
+    const send = (messages?: unknown[]) =>
+      post(payload(false, messages), { "x-archestra-source": "api" });
+    const shapeOf = (index: number) => {
+      const { tools, system } = providerRequests[index] as {
+        tools: unknown;
+        system: unknown;
+      };
+      return { tools, system };
+    };
+    const toolNames = (index: number) =>
+      (providerRequests[index] as { tools: { name: string }[] }).tools.map(
+        (tool) => tool.name,
+      );
+    const expectSuperyelled = async () => {
+      const started = events.find((event) => event.event === "session_start");
+      expect(
+        await OpenAppaUnenforcedModel.findSessions({
+          organizationId: agent.organizationId,
+          sessionIds: [String(started?.session_id)],
+        }),
+      ).toEqual([expect.objectContaining({ reason: "superyell" })]);
+    };
+    let restoreConfig: () => void;
+
+    beforeEach(() => {
+      const overrides = config.openappa.breakTheGlassOverrides;
+      const yellEnabled = config.openappa.yellEnabled;
+      config.openappa.breakTheGlassOverrides = {
+        ...overrides,
+        unapprovableBlockMode: "allow",
+      };
+      config.openappa.yellEnabled = false;
+      restoreConfig = () => {
+        config.openappa.breakTheGlassOverrides = overrides;
+        config.openappa.yellEnabled = yellEnabled;
+      };
+    });
+
+    afterEach(() => restoreConfig());
+
+    test("after a tool call is waived", async () => {
+      expect((await send()).statusCode).toBe(200);
+      block = true;
+      expect((await send()).statusCode).toBe(200);
+      await expectSuperyelled();
+      block = false;
+      expect((await send()).statusCode).toBe(200);
+
+      expect(toolNames(0)).toEqual([
+        "get_weather",
+        "archestra__execute_remedy_plan",
+      ]);
+      expect(shapeOf(0).system).toBeDefined();
+      expect(shapeOf(2)).toEqual(shapeOf(0));
+
+      const threadCreate = await post(
+        { ...payload(false), thread: { type: "create" } },
+        { "x-archestra-source": "api" },
+      );
+      expect(threadCreate.statusCode, threadCreate.body).toBe(200);
+      expect(shapeOf(3)).toEqual(shapeOf(0));
+    });
+
+    test("not for a session that inherited its waiver and never ran governed", async () => {
+      await OpenAppaUnenforcedModel.recordSession({
+        organizationId: agent.organizationId,
+        sessionId: scopedSessionId(`user:${userId}`, sessionId),
+        parentId: undefined,
+        reason: "superyell",
+      });
+
+      expect((await send()).statusCode).toBe(200);
+
+      expect(events).toEqual([]);
+      expect(toolNames(0)).toEqual([
+        "get_weather",
+        "archestra__execute_remedy_plan",
+        "archestra__get_remedy_plans",
+      ]);
+      expect(shapeOf(0).system).toBeUndefined();
+    });
+
+    test("on the request whose tool result is waived", async () => {
+      const first = await send();
+      expect(first.statusCode, first.body).toBe(200);
+      const toolUse = first
+        .json()
+        .content.find((item: { type: string }) => item.type === "tool_use");
+      const dispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) =>
+        JSON.parse(raw).event === "tool_result"
+          ? JSON.stringify({
+              decision: "deny_call",
+              feedback: refusal,
+              approved_output: refusal,
+              output_source: "runtime",
+            })
+          : dispatch?.(raw),
+      );
+
+      const second = await send([
+        { role: "user", content: "Check the weather" },
+        { role: "assistant", content: [toolUse] },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: toolUse.id, content: "Sunny" },
+          ],
+        },
+      ]);
+
+      expect(second.statusCode, second.body).toBe(200);
+      await expectSuperyelled();
+      expect(shapeOf(1)).toEqual(shapeOf(0));
+    });
+  });
 
   test.for([
     { outcome: "review_unanswered", answer: { status: "unanswered" } },

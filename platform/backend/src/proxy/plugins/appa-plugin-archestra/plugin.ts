@@ -281,6 +281,8 @@ type AppaPluginBinding = {
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
   requiresRemedyContinuation: boolean;
+  /** The ruling that continuation answers, recorded once the guidance goes out. */
+  pendingRemedyContinuation?: RemedyContinuation;
   /** Offers whose first control call requested a native client review. */
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
@@ -932,13 +934,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           offers: [],
         };
     }
-    binding.requiresRemedyContinuation = await hasRemedyOfferResult({
+    binding.pendingRemedyContinuation = await hasRemedyOfferResult({
       binding,
+      session: this.governedSession(binding),
       interactionType: context.interactionType,
       results: toolResults,
       toolResultUpdates: result.toolResultUpdates,
       verifiedNativeQuestionResults,
     });
+    binding.requiresRemedyContinuation =
+      binding.pendingRemedyContinuation !== undefined;
     // A denied call's receipt is history, not withheld output: waiving it
     // would disable enforcement just because a client replayed an old block.
     // Keep those receipts even when a separate result admission is waived.
@@ -1149,6 +1154,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
+      const delivered = binding.pendingRemedyContinuation;
+      binding.pendingRemedyContinuation = undefined;
+      if (delivered) {
+        await recordRemedyContinuation({
+          session: this.governedSession(binding),
+          continuation: delivered,
+        });
+      }
     }
     if (binding && binding.nativeHitlRulings.length > 0) {
       const rulings = binding.nativeHitlRulings;
@@ -3278,6 +3291,110 @@ function unansweredNoticeKey(params: {
 }): AllowedCacheKey {
   return sessionScopedCacheKey(
     CacheKey.OpenAppaUnansweredAnnotationNotice,
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  );
+}
+
+/** A ruling whose remedy continuation is due, and how much history followed it. */
+type RemedyContinuation = {
+  callId: string;
+  /** Results after the ruling in the request that carried it. */
+  laterResults: number;
+};
+
+/**
+ * Result counts after a ruling at which its continuation was delivered, as
+ * sorted, disjoint, non-adjacent `[first, last]` ranges. A request is only
+ * guided at a count below every guided one (or at a guided one), so replays
+ * of ever shorter histories form one range: the record stays small without
+ * dropping any guided history.
+ */
+type GuidedHistories = Array<[number, number]>;
+
+/**
+ * Records that the history `continuation` describes was told to apply the
+ * ruling's plan. Every guided history is kept, so a replay of any of them is
+ * guided again, and overlapping requests cannot drop each other's record.
+ */
+async function recordRemedyContinuation(params: {
+  session: OpenAppaSession;
+  continuation: RemedyContinuation;
+}): Promise<void> {
+  const key = remedyContinuationDeliveredKey({
+    session: params.session,
+    callId: params.continuation.callId,
+  });
+  const { laterResults } = params.continuation;
+  try {
+    await cacheManager.withLock(key, async (cache) => {
+      const guided = guidedHistories(await cache.get<unknown>(key));
+      if (isGuidedHistory(guided, laterResults)) return;
+      await cache.set(
+        key,
+        withGuidedHistory(guided, laterResults),
+        TimeInMs.Day,
+      );
+    });
+  } catch (err) {
+    // Without the record the next request is guided once more, as before.
+    logger.warn(
+      { err, sessionId: params.session.session_id },
+      "OpenAPPA could not record a delivered remedy continuation",
+    );
+  }
+}
+
+/** Reads a stored record; anything malformed counts as no record. */
+function guidedHistories(value: unknown): GuidedHistories {
+  if (!Array.isArray(value)) return [];
+  const ranges: GuidedHistories = [];
+  for (const range of value) {
+    if (
+      !Array.isArray(range) ||
+      range.length !== 2 ||
+      !Number.isInteger(range[0]) ||
+      !Number.isInteger(range[1]) ||
+      range[0] < 0 ||
+      range[1] < range[0]
+    )
+      return [];
+    ranges.push([range[0], range[1]]);
+  }
+  return ranges.reduce(withGuidedRange, []);
+}
+
+function isGuidedHistory(guided: GuidedHistories, count: number): boolean {
+  return guided.some(([first, last]) => first <= count && count <= last);
+}
+
+function withGuidedHistory(
+  guided: GuidedHistories,
+  count: number,
+): GuidedHistories {
+  return withGuidedRange(guided, [count, count]);
+}
+
+/** Inserts `range`, merging it with ranges it overlaps or touches. */
+function withGuidedRange(
+  guided: GuidedHistories,
+  range: [number, number],
+): GuidedHistories {
+  const merged: GuidedHistories = [];
+  for (const [first, last] of [...guided, range].sort((a, b) => a[0] - b[0])) {
+    const previous = merged.at(-1);
+    if (previous && first <= previous[1] + 1)
+      previous[1] = Math.max(previous[1], last);
+    else merged.push([first, last]);
+  }
+  return merged;
+}
+
+function remedyContinuationDeliveredKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaRemedyContinuationDelivered,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   );
 }
@@ -7861,15 +7978,23 @@ async function reviewQuestionAskedBefore(params: {
   return false;
 }
 
+/**
+ * The ruling the next request must answer with a remedy call, if any: the
+ * latest blocked result with an offer, unless a control call or a user
+ * answer already followed it, or the model already went on after reading
+ * it. Without that last check a declined offer would be put to the model
+ * again on every later request of the turn.
+ */
 async function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
+  session: OpenAppaSession;
   interactionType: string;
   results: LlmProxyToolResultsContext["toolResults"];
   toolResultUpdates: Awaited<
     ReturnType<typeof processProxyResults>
   >["toolResultUpdates"];
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<boolean> {
+}): Promise<RemedyContinuation | undefined> {
   // Restored notice IDs are client-carried structure, not proof of issuance.
   // The runtime must supply the ruling and this session must own its call.
   const session = params.binding.session;
@@ -7982,7 +8107,7 @@ async function hasRemedyOfferResult(params: {
     return [index];
   });
   const latestBlockedResult = blocked.at(-1) ?? -1;
-  if (latestBlockedResult < 0) return false;
+  if (latestBlockedResult < 0) return undefined;
 
   const control = params.binding.request.tools?.control;
   for (
@@ -7995,7 +8120,7 @@ async function hasRemedyOfferResult(params: {
       params.verifiedNativeQuestionResults.has(result) ||
       isUserQuestionResult({ binding: params.binding, answer: result })
     )
-      return false;
+      return undefined;
     if (!control) continue;
     if (
       isSpecialToolMember(
@@ -8009,10 +8134,42 @@ async function hasRemedyOfferResult(params: {
         "control",
       )
     ) {
-      return false;
+      return undefined;
     }
   }
-  return true;
+  const continuation = {
+    callId: withoutTrajectoryStamp(params.results[latestBlockedResult].id),
+    laterResults: params.results.length - 1 - latestBlockedResult,
+  };
+  const guided = guidedHistories(
+    await cacheManager.get<unknown>(
+      remedyContinuationDeliveredKey({
+        session: params.session,
+        callId: continuation.callId,
+      }),
+    ),
+  );
+  if (
+    guided.length > 0 &&
+    !isGuidedHistory(guided, continuation.laterResults) &&
+    continuation.laterResults > guided[0][0]
+  ) {
+    // The model read the guided ruling and went on with other calls: the
+    // plan it declined is not put to it again. A history that was guided
+    // before, or one shorter than any guided one, is guided (again), so a
+    // client retry gets the same request it sent. A new ruling arms the
+    // nudge again.
+    logger.debug(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: continuation.callId,
+        laterResults: continuation.laterResults,
+      },
+      "OpenAPPA remedy continuation already answered; the model went on",
+    );
+    return undefined;
+  }
+  return continuation;
 }
 
 function reviewStatusInstruction(

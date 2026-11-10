@@ -297,6 +297,7 @@ function validateIncomingEmailDomain(
 const AUTO_ROUTING_COLUMNS = {
   autoRoutingEnabled: true,
   autoRoutingBudgetUsdPerDay: true,
+  autoRoutingBudgetPreset: true,
   autoRoutingScorerVersionId: true,
   autoRoutingGeneration: true,
   autoRoutingPlannedGeneration: true,
@@ -420,6 +421,7 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   modelId: true,
   llmApiKeyId: true,
   modelPoolId: true,
+  autoModel: true,
 }).extend({
   /**
    * Another user's agent whose own policy grants the caller read by name. A

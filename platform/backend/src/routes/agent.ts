@@ -842,6 +842,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      applyAgentAutoModel(body, { runtime: body.runtime ?? null });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
@@ -2271,6 +2272,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      applyAgentAutoModel(body, {
+        runtime:
+          body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+        builtIn: existingAgent.builtInAgentConfig !== null,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
 
       // Built-in agent guard: restrict which fields can be modified
@@ -3347,4 +3353,38 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
     ids: params.ids,
   } satisfies Parameters<typeof AgentModel.findAll>[2];
   return { userId, isAgentAdmin: isAdmin, options };
+}
+
+/**
+ * `auto` replaces the agent's model, key and pool; picking any of them leaves
+ * `auto`. Agent Runtime agents and built-in agents cannot run on `auto`.
+ */
+function applyAgentAutoModel(
+  body: {
+    autoModel?: boolean;
+    modelPoolId?: string | null;
+    llmApiKeyId?: string | null;
+    modelId?: string | null;
+  },
+  agent: { runtime: unknown; builtIn?: boolean },
+): void {
+  const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
+  if (body.autoModel) {
+    if (hasRuntime) {
+      throw new ApiError(400, "Agent Runtime agents cannot run on auto.");
+    }
+    if (agent.builtIn) {
+      throw new ApiError(400, "Built-in agents cannot run on auto.");
+    }
+    body.modelId = null;
+    body.llmApiKeyId = null;
+    body.modelPoolId = null;
+  } else if (
+    hasRuntime ||
+    (body.autoModel === undefined &&
+      (body.modelPoolId || body.llmApiKeyId || body.modelId))
+  ) {
+    // An agent that becomes an Agent Runtime agent leaves `auto` too.
+    body.autoModel = false;
+  }
 }

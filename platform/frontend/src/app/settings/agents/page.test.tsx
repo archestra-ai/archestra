@@ -171,6 +171,15 @@ const saveTiers = vi.fn();
 
 vi.mock("@/lib/organization.query");
 
+vi.mock("@/lib/hooks/use-organization-default-model", () => ({
+  useOrganizationDefaultModel: () => ({
+    model: null,
+    label: null,
+    auto: null,
+    defaultAutoModel: false,
+  }),
+}));
+
 import {
   useAgentRuntimeTiers,
   useAppearanceSettings,

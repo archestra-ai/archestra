@@ -57,12 +57,13 @@ effects = ["egress"]
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
+| `recorder` | A [recorder](references/contracts/annotators.md#recorders) that receives each released call's records. |
 
 An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
 Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards`. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
 
 Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
 

@@ -22,6 +22,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     scope: "personal",
     name: "test-agent",
     slug: null,
+    autoModel: false,
     isDefault: false,
     isPersonalGateway: false,
     isPersonalProxy: false,

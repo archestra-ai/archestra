@@ -19,7 +19,7 @@ describe("AutoRoutedModelTrigger", () => {
     const user = userEvent.setup();
     render(<AutoRoutedModelTrigger tiers={tiers} />);
 
-    const trigger = screen.getByRole("button", { name: /Auto routed/ });
+    const trigger = screen.getByRole("button", { name: /Auto/ });
     expect(trigger).toHaveAttribute("aria-disabled", "true");
     expect(trigger).not.toHaveTextContent("Claude");
 
@@ -34,7 +34,7 @@ describe("AutoRoutedModelTrigger", () => {
       expect(tooltip).toHaveTextContent(model);
       expect(tooltip).toHaveTextContent(tier);
     }
-    expect(tooltip).toHaveTextContent("Add a provider API key to pick one.");
+    expect(tooltip).not.toHaveTextContent("provider API key");
   });
 
   test("does not submit the surrounding agent form when clicked or pressed", async () => {
@@ -46,7 +46,7 @@ describe("AutoRoutedModelTrigger", () => {
       </form>,
     );
 
-    const trigger = screen.getByRole("button", { name: /Auto routed/ });
+    const trigger = screen.getByRole("button", { name: /Auto/ });
     await user.click(trigger);
     trigger.focus();
     await user.keyboard("{Enter}");

@@ -4063,19 +4063,6 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
     /**
-     * Development override for where the Archestra VAF Add On install script
-     * gets the add-on from. Set to a git ref of archestra-ai/archestra (a
-     * pushed commit SHA, branch, or tag) to have the script compile the
-     * add-on from that source instead of downloading a release package, or
-     * to the special value `local` to use this backend checkout's HEAD
-     * commit. Unset (the default, and the right value for production), the
-     * script downloads the package of the release matching this platform
-     * version, falling back to the latest release.
-     */
-    mfilesVafAddOnSourceRef:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
-      null,
-    /**
      * Directory holding the VAF Add On package compiled into the platform
      * image (a versioned `archestra-m-files-vaf-add-on-<version>.mfappx`
      * plus a stable-named copy — see the vaf-add-on-builder stage in
@@ -4083,21 +4070,11 @@ const config = {
      * connector form's download from it, with no GitHub dependency. The
      * default matches where the image puts it; deployments running outside
      * the image (dev stacks) simply have no such directory and fall back to
-     * the source-ref override or the newest add-on release.
+     * the newest add-on release.
      */
     mfilesVafAddOnPackageDir:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR?.trim() ||
       "/app/mfiles-vaf-add-on",
-    /**
-     * GitHub token used to download the source ref's CI-built add-on package
-     * (GitHub requires authentication for Actions artifact downloads even on
-     * public repositories). Only read when the source-ref override above is
-     * set; without it the install script compiles the add-on from source
-     * instead. Never sent to clients — the backend proxies the package.
-     */
-    mfilesVafAddOnGithubToken:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN?.trim() ||
-      null,
     // A document still `pending`/`processing` this long after its last touch has
     // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
     // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the

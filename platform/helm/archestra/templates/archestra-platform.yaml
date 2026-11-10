@@ -132,13 +132,23 @@ spec:
         {{- with .Values.archestra.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.archestra.podAnnotations }}
+      {{- $authSecretChecksum := include "archestra-platform.authSecretChecksum" . }}
+      {{- if or .Values.archestra.podAnnotations $authSecretChecksum }}
       annotations:
+        {{- with .Values.archestra.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $authSecretChecksum }}
+        checksum/auth-secret: {{ . }}
+        {{- end }}
       {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- with .Values.archestra.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
@@ -147,6 +157,7 @@ spec:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           {{- include "archestra-platform.vaultSecretsCommand" (.Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh") | nindent 10 }}
           {{- end }}

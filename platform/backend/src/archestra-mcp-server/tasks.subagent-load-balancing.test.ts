@@ -1,4 +1,5 @@
 import {
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
@@ -2380,5 +2381,166 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
       claudeRuntimeSubagent.id,
       grokSubagent.id,
     ]);
+  });
+
+  test("dispatches start_agent_run and transfer_credential through a delegated foreground load-balanced router agent on a single manual gateway", async ({
+    makeAgent,
+  }) => {
+    const reviewSubagentA = await createRuntimeSubagent(
+      makeAgent,
+      "Code Review Subagent A",
+      false,
+    );
+    const reviewSubagentB = await createRuntimeSubagent(
+      makeAgent,
+      "Code Review Subagent B",
+      false,
+    );
+
+    // Foreground router agent (`runtime: null`, `subagentLoadBalancing.enabled: true`)
+    const reviewRouter = await makeAgent({
+      name: "Code Review Router",
+      agentType: "agent",
+      organizationId,
+      authorId: actorId,
+      environmentId: gateway.environmentId,
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+    });
+    for (const subagent of [reviewSubagentA, reviewSubagentB]) {
+      const tool = await ToolModel.findOrCreateDelegationTool(subagent.id);
+      await AgentToolModel.create(reviewRouter.id, tool.id);
+    }
+
+    // Manual gateway (`accessAllSubagents: false`, `subagentLoadBalancing: null`)
+    // delegates ONLY to the foreground router agent, not directly to the 2 runtime subagents.
+    await AgentModel.update(gateway.id, {
+      accessAllSubagents: false,
+      subagentLoadBalancing: null,
+    });
+    const routerDelegationTool = await ToolModel.findOrCreateDelegationTool(
+      reviewRouter.id,
+    );
+    await AgentToolModel.create(gateway.id, routerDelegationTool.id);
+
+    // OpenAPPA runtime target discovery includes load-balanced router agents
+    const runtimeTargets = await AgentModel.findRuntimeTargets(organizationId);
+    expect(runtimeTargets.map((t) => t.id)).toContain(reviewRouter.id);
+
+    const sendSpy = await mockDetachedTaskStart();
+
+    // 1. Dispatch via router UUID and via `agent__code_review_router` tool name
+    const expectedOrder = [reviewSubagentA.id, reviewSubagentB.id];
+    const run1 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: reviewRouter.id,
+        message: "Review PR #101 via router UUID",
+      },
+      context,
+    );
+    expect(run1.isError).toBeFalsy();
+    const run1Data = run1.structuredContent as {
+      run: { run_id: string; agent_id: string };
+    };
+    expect(run1Data.run.agent_id).toBe(expectedOrder[0]);
+
+    const run2 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: "agent__code_review_router",
+        message: "Review PR #102 via router slug",
+      },
+      context,
+    );
+    expect(run2.isError).toBeFalsy();
+    const run2Data = run2.structuredContent as {
+      run: { run_id: string; agent_id: string };
+    };
+    expect(run2Data.run.agent_id).toBe(expectedOrder[1]);
+
+    // 2. Calling get_agent_run from the manual gateway succeeds via 1-hop router delegation access
+    const getRun1 = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: run1Data.run.run_id },
+      context,
+    );
+    expect(getRun1.isError).toBeFalsy();
+
+    // 3. Minting an ephemeral credential grant targeting the router agent binds to the winning subagent
+    const grantRes = await executeArchestraTool(
+      TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
+      {
+        agent_id: "agent__code_review_router",
+        ephemeral: true,
+        environment: [
+          {
+            key: "CODE_REVIEW_TOKEN",
+            type: "secret",
+            value: "ghs_ephemeral_router_secret",
+          },
+        ],
+      },
+      context,
+    );
+    expect(grantRes.isError).toBeFalsy();
+    const grantId = (
+      grantRes.structuredContent as { credential_grant_id: string }
+    ).credential_grant_id;
+    expect(grantId).toBeTruthy();
+
+    const run3 = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: "agent__code_review_router",
+        credential_grant_ids: [grantId],
+        message: "Review PR #103 with ephemeral credential",
+      },
+      context,
+    );
+    expect(run3.isError).toBeFalsy();
+    expect(sendSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentId: expectedOrder[0],
+        systemParams: expect.objectContaining({
+          ephemeralCredentials: {
+            CODE_REVIEW_TOKEN: "ghs_ephemeral_router_secret",
+          },
+        }),
+      }),
+    );
+
+    // 4. An unassigned router agent is refused when the caller gateway has accessAllSubagents: false
+    const unassignedRouter = await makeAgent({
+      name: "Unassigned Router",
+      agentType: "agent",
+      organizationId,
+      authorId: actorId,
+      environmentId: gateway.environmentId,
+      accessAllSubagents: false,
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const refusedRun = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: unassignedRouter.id,
+        message: "Should be refused",
+      },
+      context,
+    );
+    expect(refusedRun.isError).toBe(true);
+    expect((refusedRun.content[0] as { text: string }).text).toContain(
+      "is not an allowed subagent",
+    );
   });
 });

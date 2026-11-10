@@ -1608,20 +1608,15 @@ class AgentModel {
       );
   }
 
-  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
-  static async countFollowingOrganizationRouting(
-    organizationId: string,
-  ): Promise<number> {
+  /** Agents set to `auto` themselves (not through the organization default). */
+  static async countOnAutoModel(organizationId: string): Promise<number> {
     const [row] = await db
       .select({ total: count() })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "agent"),
-          isNull(schema.agentsTable.llmApiKeyId),
-          isNull(schema.agentsTable.modelId),
-          isNull(schema.agentsTable.modelPoolId),
+          eq(schema.agentsTable.autoModel, true),
           isNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
         ),
@@ -1636,7 +1631,10 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          isNotNull(schema.agentsTable.runtime),
+          or(
+            isNotNull(schema.agentsTable.runtime),
+            sql`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
+          ),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -4086,7 +4084,12 @@ class AgentModel {
     id: string,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
+  ): Promise<{
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoModel: boolean;
+    runtime: Agent["runtime"];
+  } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
       return null;
     }
@@ -4095,6 +4098,8 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        autoModel: schema.agentsTable.autoModel,
+        runtime: schema.agentsTable.runtime,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -6776,6 +6781,7 @@ const CHAT_ROSTER_COLUMNS = {
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
   modelPoolId: schema.agentsTable.modelPoolId,
+  autoModel: schema.agentsTable.autoModel,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

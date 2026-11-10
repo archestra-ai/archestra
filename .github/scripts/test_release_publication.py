@@ -11,6 +11,7 @@ import unittest
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / "workflows/release-please.yml"
+FINALIZE = WORKFLOW.with_name("release-finalize.yml")
 POLICY = Path(__file__).resolve().parent / "release-publication-policy.sh"
 
 
@@ -143,7 +144,7 @@ gh() {
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
 
     def test_github_publication_marks_prereleases_without_latest(self):
-        section = WORKFLOW.read_text().split(
+        section = FINALIZE.read_text().split(
             "      - name: Publish GitHub release\n", 1
         )[1]
         # The publish step can be the last step in its job.
@@ -224,7 +225,7 @@ gh() {
     def test_release_jobs_write_no_public_registry_names(self):
         # Only the release publisher writes public names; this
         # repository stages in ghcr.io/archestra-ai/ci and attests.
-        for workflow in (WORKFLOW, WORKFLOW.with_name("publish-platform-helm-chart.yml"),
+        for workflow in (WORKFLOW, FINALIZE, WORKFLOW.with_name("publish-platform-helm-chart.yml"),
                          WORKFLOW.with_name("build-platform-release-image.yml")):
             source = workflow.read_text()
             with self.subTest(workflow=workflow.name):
@@ -361,7 +362,7 @@ gh() {
         self.assertEqual(result.decision, ["move=false"])
 
     def test_older_line_patch_publishes_github_release_without_latest(self):
-        section = WORKFLOW.read_text().split("      - name: Publish GitHub release\n", 1)[1]
+        section = FINALIZE.read_text().split("      - name: Publish GitHub release\n", 1)[1]
         lines = section.split("        run: |\n", 1)[1].splitlines()
         script_lines = []
         for line in lines:

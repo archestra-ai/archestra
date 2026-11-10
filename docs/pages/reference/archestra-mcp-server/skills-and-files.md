@@ -20,7 +20,11 @@ lastUpdated: 2026-11-09
 
 Required RBAC permission: [`skill:read`](/docs/reference/permissions#skill:read)
 
-This tool takes no arguments.
+#### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | `string` | No | Words describing the task or the skill. Returns the best matches with their full descriptions. Required when the catalog is too large to list. The exact value "*" returns the entire catalog and can be very long, so use it only when search has not found the skill. |
 
 
 ### load_skill

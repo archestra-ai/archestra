@@ -53,10 +53,10 @@ crate-type = ["cdylib"]
 # v0.42.0 and empty child turns settled under their recorded return contract (#807);
 # then an authority's `except_tags`, and plans that need only stock `approve`
 # authorities applied at the block and recorded (#889).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c269275680957b52891d0c722715d520d96a8ca", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c269275680957b52891d0c722715d520d96a8ca" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c269275680957b52891d0c722715d520d96a8ca", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "7c269275680957b52891d0c722715d520d96a8ca" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d516fcf28c926d25e9af0341c4ed8227572ee96b", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d516fcf28c926d25e9af0341c4ed8227572ee96b" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d516fcf28c926d25e9af0341c4ed8227572ee96b", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d516fcf28c926d25e9af0341c4ed8227572ee96b" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

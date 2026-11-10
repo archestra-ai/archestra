@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Entra Agent ID"
-description: "Give each agent its own Microsoft Entra identity, so consent, Conditional Access, and sign-in logs apply per agent"
+description: "Give each agent its own Microsoft Entra identity, so consent and sign-in logs apply per agent"
 order: 3
 lastUpdated: 2026-11-09
 ---
@@ -13,7 +13,12 @@ This builds on [Entra On-Behalf-Of](/docs/admin/identity/entra-obo). Set that up
 
 ## What Downstream APIs See
 
-Each tool call gets a token issued to the calling agent's [Entra agent identity](https://learn.microsoft.com/entra/agent-id/identity-platform/what-is-agent-id), on the person's behalf. The API sees the person as the user (`oid`) and the agent identity as the client (`azp`), so Entra consent, Conditional Access, and sign-in logs apply per agent.
+Each tool call gets a token issued to the calling agent's [Entra agent identity](https://learn.microsoft.com/entra/agent-id/identity-platform/what-is-agent-id), on the person's behalf. The API sees the person as the user (`oid`) and the agent identity as the client (`azp`), so Entra consent and sign-in logs apply per agent.
+
+What to know:
+
+- The API grants the person's access, not less. An agent that should see only part of the data needs an API that limits it by `azp`, such as an MCP server that maps each agent to the rows or tools it allows.
+- Conditional Access evaluates the person on these calls, not the agent. To stop one agent, revoke its consent or disable its agent identity.
 
 ## Before You Start
 

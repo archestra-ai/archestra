@@ -6,8 +6,7 @@ import { ApiError } from "@/types";
 /**
  * Guards a change to an agent's Microsoft Entra agent identity binding.
  *
- * The binding decides which Entra consents and Conditional Access policies a
- * tool call runs under, so it is an identity decision, not an agent edit:
+ * The binding decides which Entra consents a tool call runs under, so it is an identity decision, not an agent edit:
  * changing it takes `identityProvider:update`. An agent identity also belongs
  * to one agent, or downstream audit could not tell the agents apart.
  */

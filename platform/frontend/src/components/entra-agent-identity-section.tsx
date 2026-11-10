@@ -39,8 +39,8 @@ export function EntraAgentIdentitySection({
         <FieldDescription>
           Tools that exchange the user&apos;s Entra token then run as the user,
           through this agent. Downstream tokens name the agent identity as the
-          client, so Entra consent, Conditional Access, and sign-in logs apply
-          to this agent alone. Leave empty to use the shared client.
+          client, so Entra consent and sign-in logs apply to this agent alone.
+          Leave empty to use the shared client.
           {docsUrl && (
             <ExternalDocsLink
               href={docsUrl}

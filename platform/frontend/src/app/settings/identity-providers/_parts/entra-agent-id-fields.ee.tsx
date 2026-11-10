@@ -45,9 +45,9 @@ export function EntraAgentIdFields(props: {
     <div className="space-y-4">
       <IdentityProviderSectionHeader title="Entra Agent ID">
         Give each agent its own Microsoft Entra identity. Tools then call
-        downstream APIs as the user, through that agent, so Entra consent,
-        Conditional Access, and sign-in logs apply per agent. Bind an agent to
-        its identity in the agent&apos;s settings.
+        downstream APIs as the user, through that agent, so Entra consent and
+        sign-in logs apply per agent. Bind an agent to its identity in the
+        agent&apos;s settings.
         {docsUrl && (
           <ExternalDocsLink
             href={docsUrl}

@@ -42,7 +42,7 @@ To check it works, call one of the server's tools. The call succeeds, and the se
 
 ## Which App the Token Is Issued To
 
-With Entra, every downstream token names a person and an app, and Entra consent, Conditional Access, and the API's own logs all see that app. Archestra picks the app in this order:
+With Entra, every downstream token names a person and an app, and Entra consent, sign-in logs, and the API's own logs all see that app. Archestra picks the app in this order:
 
 1. **Entra agent identity:** the calling agent's own identity, when it has one. See [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id).
 2. **MCP server's client:** the server's exchange client, when it sets one. See [Give a Server Its Own Exchange Client](#give-a-server-its-own-exchange-client).

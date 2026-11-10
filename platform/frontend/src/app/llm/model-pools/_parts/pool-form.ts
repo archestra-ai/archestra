@@ -223,10 +223,6 @@ export function usePoolOptions() {
 
 export type PoolOptions = ReturnType<typeof usePoolOptions>;
 
-/**
- * Why the form can't be saved yet, or null when it can. The name is what a
- * request asks for, so it takes one pool.
- */
 /** A retry setting a field edits, by its key in the settings or retry policy. */
 export type RetryKey =
   | "numRetries"
@@ -275,6 +271,10 @@ export function withRetryValue(
   return Object.keys(next).length > 0 ? next : null;
 }
 
+/**
+ * Why the form can't be saved yet, or null when it can. The name is what a
+ * request asks for, so it takes one pool.
+ */
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,

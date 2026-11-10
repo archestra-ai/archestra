@@ -512,7 +512,9 @@ export async function openThroughModelPool<T>(params: {
           "Failed to prepare a failed model pool attempt",
         );
       }
-      if (delayMs !== undefined) {
+      // A remaining budget alone is not a retry: benching may have removed
+      // the final eligible member. Return its failure without a pointless wait.
+      if (delayMs !== undefined && (await selection.hasRetryCandidate())) {
         params.onRetry?.({
           attempt: selection.retryCount,
           delayMs,
@@ -701,6 +703,22 @@ class PoolRetrySelection {
       });
       return eligible.find((member) => member.memberId === id);
     }
+  }
+
+  /** Inspect the next selection without advancing its order or retry budget. */
+  async hasRetryCandidate(): Promise<boolean> {
+    const benches = await readBenches({
+      id: this.plan.poolId,
+      members: this.plan.members.map((member) => ({ id: member.memberId })),
+    });
+    return this.plan.members.some(
+      (member) =>
+        !this.skipped.has(member.memberId) &&
+        (benches.get(member.memberId)?.until ?? 0) <= Date.now() &&
+        (this.order === undefined ||
+          member.priority === this.order ||
+          this.fallbackOrders.includes(member.priority)),
+    );
   }
 
   /** A weighted retry can reach any member, including the old plan's tail. */

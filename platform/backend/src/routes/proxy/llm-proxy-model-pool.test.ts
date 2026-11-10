@@ -124,6 +124,9 @@ describe("Model pools - LLM Proxy", () => {
           organizationId: proxy.organizationId,
           input: {
             name: "pool-alias",
+            // Exercise later-order fallback without retry waits, which drain
+            // the real throughput bucket while this checks quota accounting.
+            retrySettings: { numRetries: 0 },
             members: modelIds.map((modelId, index) => ({
               providerApiKeyId: key.id,
               modelId,

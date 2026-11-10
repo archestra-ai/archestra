@@ -516,6 +516,56 @@ describe("openThroughModelPool", () => {
     }
   });
 
+  test("does not wait after the last eligible member enters cooldown", async () => {
+    // A previous request has already benched the later-order sibling.
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          members: [plan.members[1]],
+          retrySettings: { numRetries: 0 },
+        },
+        attempt: {},
+        ...openKey(() => httpError(503)),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        prepareFailedAttempt: async () => async () => {},
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+
+    const opened: string[] = [];
+    const delays: number[] = [];
+    const recorded: UpstreamAttempt[] = [];
+    const attempt: UpstreamAttempt = {};
+    await expect(
+      openThroughModelPool({
+        plan: {
+          ...plan,
+          retrySettings: { numRetries: 2, initialDelayMs: 100 },
+        },
+        attempt,
+        ...openKey((key) => {
+          opened.push(key);
+          return httpError(503);
+        }),
+        isRetryable: () => false,
+        shouldContinue: () => true,
+        onRetry: ({ delayMs }) => delays.push(delayMs),
+        prepareFailedAttempt: async (failed) => async (outcome) => {
+          recorded.push({ ...failed, attemptOutcome: outcome });
+        },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(opened).toEqual([keyA]);
+    expect(delays).toEqual([]);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      providerApiKeyId: keyA,
+      attemptOutcome: "failed",
+    });
+    expect(attempt.interactionRecorded).toBe(true);
+  });
+
   test("configured retries stop after a disconnect during backoff", async () => {
     const abort = new AbortController();
     let dispatched = 0;

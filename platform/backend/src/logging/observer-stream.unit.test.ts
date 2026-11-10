@@ -243,6 +243,7 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
           originalError: { message: marker, statusCode: 503, raw: marker },
         },
         originalErrorType: marker,
+        lastErrorType: marker,
         willBeSentToFrontend: true,
       },
       "Returning mapped error to frontend via stream",

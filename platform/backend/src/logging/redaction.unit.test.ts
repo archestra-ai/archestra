@@ -414,3 +414,24 @@ test("metadata-only sanitizes mapped chat errors and renamed error carriers", ()
   });
   expect(mappedError.message).toBe(marker);
 });
+
+test("metadata-only withholds standalone error aliases while retaining numeric and boolean metadata", () => {
+  const { logger, records } = createCapturingLogger("metadata_only");
+  const marker = "SYNTHETIC_PRIVATE_PROVIDER_NAME";
+  logger.info(
+    {
+      lastErrorType: marker,
+      providerErrorDetails: { message: marker, statusCode: 400 },
+      error_description: marker,
+      errorCount: 2,
+      hasError: true,
+    },
+    "Provider retry diagnostic",
+  );
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({
+    errorCount: 2,
+    hasError: true,
+    providerErrorDetails: { statusCode: 400 },
+  });
+});

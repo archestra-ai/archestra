@@ -99,12 +99,14 @@ export function withholdErrorContent(
   record: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...record };
-  // Mapped chat errors and other named error carriers are ordinary objects,
-  // so Pino's err/error serializers never see them. Apply the same metadata
-  // policy instead of letting a renamed or nested error bypass it.
+  // Pino's err/error serializers miss ordinary mapped errors and standalone
+  // diagnostics such as lastErrorType. Apply one policy to error-named fields
+  // rather than trusting text because a call site gave it a different alias.
+  // The exact `error` key is handled by its serializer below.
   for (const [key, value] of Object.entries(result)) {
     if (
-      key.endsWith("Error") &&
+      key !== "error" &&
+      key.toLowerCase().includes("error") &&
       value !== null &&
       typeof value !== "boolean" &&
       typeof value !== "number"
@@ -124,14 +126,6 @@ export function withholdErrorContent(
   }
   for (const key of [
     "stack",
-    "rawErrorJson",
-    "parsedError",
-    "errorBody",
-    "upstreamError",
-    "errorMessage",
-    "errorCode",
-    "errorType",
-    "originalErrorType",
     "incompleteReason",
     "rawFinishReason",
     "responseBody",

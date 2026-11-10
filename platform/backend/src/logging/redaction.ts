@@ -99,6 +99,19 @@ export function withholdErrorContent(
   record: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...record };
+  // Mapped chat errors and other named error carriers are ordinary objects,
+  // so Pino's err/error serializers never see them. Apply the same metadata
+  // policy instead of letting a renamed or nested error bypass it.
+  for (const [key, value] of Object.entries(result)) {
+    if (
+      key.endsWith("Error") &&
+      value !== null &&
+      typeof value !== "boolean" &&
+      typeof value !== "number"
+    ) {
+      result[key] = serializeErrorMetadata(value);
+    }
+  }
   // Codex terminal diagnostics copy these fields from the upstream response.
   // Only the protocol's terminal classifications are metadata; an unexpected
   // status can be arbitrary provider text just like its code and reason.
@@ -118,6 +131,7 @@ export function withholdErrorContent(
     "errorMessage",
     "errorCode",
     "errorType",
+    "originalErrorType",
     "incompleteReason",
     "rawFinishReason",
     "responseBody",
@@ -219,7 +233,7 @@ function errorMetadata({
     if (typeof field === "number" || typeof field === "boolean")
       metadata[key] = field;
   }
-  for (const key of ["cause", "lastError"]) {
+  for (const key of ["cause", "lastError", "originalError"]) {
     if (error[key] !== undefined)
       metadata[key] = errorMetadata({
         value: error[key],

@@ -235,11 +235,23 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
       },
       "Codex subscription response ended without completing",
     );
+    logger.info(
+      {
+        mappedError: {
+          message: marker,
+          isRetryable: true,
+          originalError: { message: marker, statusCode: 503, raw: marker },
+        },
+        originalErrorType: marker,
+        willBeSentToFrontend: true,
+      },
+      "Returning mapped error to frontend via stream",
+    );
     await provider.forceFlush();
     const exported = exporter.getFinishedLogRecords();
-    expect(stdout).toHaveLength(5);
-    expect(retained).toHaveLength(5);
-    expect(exported).toHaveLength(5);
+    expect(stdout).toHaveLength(6);
+    expect(retained).toHaveLength(6);
+    expect(exported).toHaveLength(6);
     expect(JSON.stringify([stdout, retained, exported])).not.toContain(marker);
     expect(exported[0].attributes.err).toMatchObject({ statusCode: 400 });
   } finally {

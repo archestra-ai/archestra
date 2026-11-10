@@ -375,3 +375,42 @@ test("metadata-only classifies terminal status and withholds provider diagnostic
   expect(records[0]).toMatchObject({ status: "failed", usagePresent: true });
   expect(records[1].status).toBe("incomplete");
 });
+
+test("metadata-only sanitizes mapped chat errors and renamed error carriers", () => {
+  const { logger, records } = createCapturingLogger("metadata_only");
+  const marker = "synthetic-private-echoed-chat-error";
+  const mappedError = {
+    code: "server_error",
+    message: marker,
+    isRetryable: true,
+    originalError: {
+      message: marker,
+      type: marker,
+      statusCode: 503,
+      raw: { responseBody: marker },
+    },
+  };
+  logger.info(
+    {
+      mappedError,
+      originalErrorType: marker,
+      willBeSentToFrontend: true,
+      trace_id: "synthetic-trace",
+    },
+    "Returning mapped error to frontend via stream",
+  );
+  logger.error(
+    { stringifyError: new Error(marker), hasError: true },
+    "Failed to stringify mapped error",
+  );
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({
+    mappedError: { isRetryable: true, originalError: { statusCode: 503 } },
+    trace_id: "synthetic-trace",
+  });
+  expect(records[1]).toMatchObject({
+    stringifyError: { type: "Error" },
+    hasError: true,
+  });
+  expect(mappedError.message).toBe(marker);
+});

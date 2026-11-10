@@ -38,6 +38,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -925,7 +926,7 @@ export const AUDIT_DECISIONS = {
   chatopsMsTeamsUserConnectionsTable: {
     audited: false,
     reason:
-      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+      "a Teams user's own sign-in for reading the files they share with the bot, created and removed only by that user from Teams; tokens live in the secrets manager",
   },
   chatopsUserAdmissionsTable: {
     audited: false,
@@ -980,6 +981,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountsTable: {
     audited: true,
     model: ServiceAccountModel,
+  },
+  serviceAccountFederatedCredentialsTable: {
+    audited: true,
+    model: ServiceAccountFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,
@@ -1130,10 +1135,6 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
-  orgTrioPendingNormalTierTable: {
-    audited: false,
-    reason: "migration-written normal tiers the startup check consumes once",
-  },
   interactionUserActivityTable: {
     audited: false,
     reason: "derived log user activity counts",
@@ -1194,6 +1195,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "auto-routing usage written with each interaction",
   },
+  autoRoutingTiersTable: {
+    audited: false,
+    reason:
+      "child of the auto-routing settings on the organization's LLM Proxy row",
+  },
   routingPlansTable: {
     audited: false,
     reason: "system-written auto-routing fit outcomes",
@@ -1218,6 +1224,10 @@ export const AUDIT_DECISIONS = {
   routingHistoryScoresTable: {
     audited: false,
     reason: "worker-written scorer readings of past sessions",
+  },
+  toolSearchTextsTable: {
+    audited: false,
+    reason: "worker-written search vocabulary derived from tool definitions",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

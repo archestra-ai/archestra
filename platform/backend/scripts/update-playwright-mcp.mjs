@@ -13,6 +13,9 @@ const { values } = parseArgs({
       ),
     },
     "cooldown-days": { type: "string", default: "7" },
+    // How long an npm release may go without an upstream image before the job
+    // fails: Microsoft may have stopped publishing images.
+    "missing-image-days": { type: "string", default: "30" },
     now: { type: "string" },
     check: { type: "boolean", default: false },
   },
@@ -46,7 +49,10 @@ async function request(url) {
     headers: { Accept: accept },
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
+  if (!response.ok)
+    throw Object.assign(new Error(`HTTP ${response.status} fetching ${url}`), {
+      status: response.status,
+    });
   const bytes = Buffer.from(await response.arrayBuffer());
   return {
     json: JSON.parse(bytes.toString()),
@@ -55,7 +61,14 @@ async function request(url) {
 }
 async function upstreamImage(version) {
   const base = `${(process.env.PLAYWRIGHT_MCR_REGISTRY || "https://mcr.microsoft.com").replace(/\/$/, "")}/v2/playwright/mcp`;
-  const index = await request(`${base}/manifests/v${version}`);
+  let index;
+  try {
+    index = await request(`${base}/manifests/v${version}`);
+  } catch (error) {
+    // npm can publish a release that Microsoft never ships an image for.
+    if (error.status === 404) return null;
+    throw error;
+  }
   const versions = [];
   for (const architecture of ["amd64", "arm64"]) {
     const entries = index.json.manifests?.filter(
@@ -102,8 +115,15 @@ try {
     console.log("Upstream Playwright MCP image metadata is valid");
   else {
     const days = Number(values["cooldown-days"]),
+      missingImageDays = Number(values["missing-image-days"]),
       now = values.now ? Date.parse(values.now) : Date.now();
-    if (!Number.isFinite(days) || days < 0 || !Number.isFinite(now))
+    if (
+      !Number.isFinite(days) ||
+      days < 0 ||
+      !Number.isFinite(missingImageDays) ||
+      missingImageDays < 0 ||
+      !Number.isFinite(now)
+    )
       throw new Error("Invalid cooldown or clock");
     const registry = (
       process.env.NPM_CONFIG_REGISTRY || "https://registry.npmjs.org"
@@ -112,7 +132,7 @@ try {
     const latest = packument["dist-tags"]?.latest;
     if (!stable.test(latest))
       throw new Error("MCP latest channel is not a stable version");
-    const mcpVersion = Object.keys(packument.versions)
+    const candidates = Object.keys(packument.versions)
       .filter(
         (version) =>
           stable.test(version) &&
@@ -122,18 +142,47 @@ try {
           Date.parse(packument.time[version]) <= now - days * 86_400_000,
       )
       .sort(compare)
-      .at(-1);
-    if (!mcpVersion)
+      .reverse();
+    if (!candidates.length)
       throw new Error("No non-downgrading MCP release outside the cooldown");
-    const deps = packument.versions[mcpVersion].dependencies;
-    if (!deps?.playwright || deps.playwright !== deps["playwright-core"])
-      throw new Error("MCP Playwright dependencies disagree");
-    const next = {
-      ...previous,
-      mcpVersion,
-      ...(await upstreamImage(mcpVersion)),
-      playwrightVersion: deps.playwright,
-    };
+    // Take the newest release that has an upstream image. A missing image is
+    // skipped, not a failure: the next run picks the release up once
+    // Microsoft publishes it.
+    let next;
+    const skipped = [];
+    for (const mcpVersion of candidates) {
+      const deps = packument.versions[mcpVersion].dependencies;
+      if (!deps?.playwright || deps.playwright !== deps["playwright-core"])
+        throw new Error("MCP Playwright dependencies disagree");
+      const image = await upstreamImage(mcpVersion);
+      if (!image) {
+        console.log(
+          `Skipping Playwright MCP ${mcpVersion}: no upstream image published`,
+        );
+        skipped.push(mcpVersion);
+        continue;
+      }
+      next = {
+        ...previous,
+        mcpVersion,
+        ...image,
+        playwrightVersion: deps.playwright,
+      };
+      break;
+    }
+    if (!next)
+      throw new Error(
+        `No upstream Playwright MCP image for ${candidates.join(", ")}`,
+      );
+    const overdue = skipped.find(
+      (version) =>
+        Date.parse(packument.time[version]) <=
+        now - missingImageDays * 86_400_000,
+    );
+    if (overdue)
+      throw new Error(
+        `Playwright MCP ${overdue} has had no upstream image for over ${missingImageDays} days since its npm release; Microsoft may have stopped publishing images to mcr.microsoft.com/playwright/mcp`,
+      );
     validate(next);
     if (JSON.stringify(next) === JSON.stringify(previous))
       console.log("Upstream Playwright MCP image already current");

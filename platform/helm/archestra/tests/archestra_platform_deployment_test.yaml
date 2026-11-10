@@ -509,7 +509,7 @@ tests:
           value: wait-for-postgres
       - equal:
           path: spec.template.spec.initContainers[1].image
-          value: docker.io/library/busybox:1.36
+          value: docker.io/library/busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 
   - it: gives wait-for-postgres the envFrom sources that supply the database URL
     documentIndex: 1
@@ -525,6 +525,97 @@ tests:
           value:
             - secretRef:
                 name: external-db-env
+
+  - it: gives wait-for-postgres only the bundled database URL, never the platform's other secrets
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_ADMIN_PASSWORD: example-admin-password
+        ARCHESTRA_BETA: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].env
+          value:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-postgresql
+                  key: password
+            - name: ARCHESTRA_DATABASE_URL
+              value: postgresql://archestra:$(PGPASSWORD)@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+
+  - it: gives wait-for-postgres a secret-sourced database URL but not its sibling secrets
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.envFrom:
+        - secretRef:
+            name: platform-runtime
+      archestra.envFromSecrets:
+        - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+          secretName: platform-runtime
+          secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+        - name: ARCHESTRA_DATABASE_URL
+          secretName: platform-db
+          secretKey: url
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].env
+          value:
+            - name: ARCHESTRA_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-db
+                  key: url
+      - notExists:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].envFrom
+
+  - it: gives wait-for-postgres the variables a literal database URL expands
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://app:$(DB_PASSWORD)@db.example.com:5432/archestra
+      archestra.envFromSecrets:
+        - name: DB_PASSWORD
+          secretName: platform-db
+          secretKey: password
+        - name: ARCHESTRA_AUTH_SECRET
+          secretName: platform-runtime
+          secretKey: auth
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].env
+          value:
+            - name: ARCHESTRA_DATABASE_URL
+              value: postgresql://app:$(DB_PASSWORD)@db.example.com:5432/archestra
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-db
+                  key: password
+
+  - it: pins the default busybox digest when busyboxImage is blanked
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].image
+          value: docker.io/library/busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+
+  - it: pins the default pre-pull bootstrap digest when bootstrapImage is blanked
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.bootstrapImage: ""
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "docker.io/library/busybox:1.36-musl@sha256:3c6ae8008e2c2eedd141725c30b20d9c36b026eb796688f88205845ef17aa213"
 
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
@@ -867,6 +958,69 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "NAMESPACE"
 
+  - it: should pass the release image digests the release pipeline recorded
+    documentIndex: 1
+    set:
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          mcp-server-base: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+            value: '{"images":{"mcp-server-base":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"version":"1.6.0"}'
+
+  - it: should pin the default platform image to its release digest
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  - it: should use another platform image or tag as configured despite a release digest
+    documentIndex: 1
+    set:
+      archestra.image: registry.example.com/archestra/platform
+      archestra.imageTag: "1.6.0"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry.example.com/archestra/platform:1.6.0"
+
+  - it: should not pin the platform image when its tag differs from the released version
+    documentIndex: 1
+    set:
+      archestra.imageTag: "1.6.1"
+      archestra.releaseImageDigests:
+        version: "1.6.0"
+        images:
+          platform: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "archestra/platform:1.6.1"
+
+  - it: should not set ARCHESTRA_RELEASE_IMAGE_DIGESTS for a chart built outside a release
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_RELEASE_IMAGE_DIGESTS
+          any: true
+
   - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1
     set:
@@ -1134,7 +1288,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
-            value: "docker.io/library/busybox:1.36-musl"
+            value: "docker.io/library/busybox:1.36-musl@sha256:3c6ae8008e2c2eedd141725c30b20d9c36b026eb796688f88205845ef17aa213"
 
   - it: should let an explicit static pre-pull bootstrap image win
     documentIndex: 1
@@ -1982,7 +2136,7 @@ tests:
     set:
       archestra.env:
         ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET: "outlook-client-secret-value"
-        ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN: "mfiles-token-value"
+        ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET: "drive-client-secret-value"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -1995,11 +2149,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
+            name: ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
-                key: archestra-knowledge-base-mfiles-vaf-add-on-github-token
+                key: archestra-knowledge-base-google-drive-oauth-client-secret
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
@@ -2008,8 +2162,8 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
-            value: "mfiles-token-value"
+            name: ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET
+            value: "drive-client-secret-value"
 
   - it: should set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET from the generated offer-signing-secret key
     documentIndex: 1
@@ -2266,10 +2420,21 @@ tests:
           value: "4Gi"
 
   # Pod annotations tests
-  - it: should not have pod annotations when archestra.podAnnotations is empty
+  - it: should have only the auth Secret checksum when archestra.podAnnotations is empty
     documentIndex: 1
     set:
       archestra.podAnnotations: {}
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            checksum/auth-secret: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+  - it: should not have pod annotations when archestra.podAnnotations is empty and an external auth Secret is used
+    documentIndex: 1
+    set:
+      archestra.podAnnotations: {}
+      archestra.authSecret.existingSecretName: my-auth
     asserts:
       - isNull:
           path: spec.template.metadata.annotations
@@ -2362,6 +2527,21 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-archestra-platform-auth
                 key: archestra-otel-exporter-otlp-auth-bearer
+
+  - it: should use secretKeyRef for ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER when provided
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER: "audit-bearer-token"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-audit-log-otel-auth-bearer
 
   - it: should use secretKeyRef for ARCHESTRA_METRICS_SECRET when provided
     documentIndex: 1
@@ -3512,6 +3692,23 @@ tests:
                     audience: sts.amazonaws.com
                     expirationSeconds: 3600
                     path: token
+
+  - it: references ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN from the auth Secret instead of plaintext
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN: example-identity-token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: archestra-anthropic-identity-token
+                # The pre-upgrade migration Job runs before the Secret gains this key.
+                optional: true
 
   - it: references AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN from auth Secret instead of plaintext
     documentIndex: 1

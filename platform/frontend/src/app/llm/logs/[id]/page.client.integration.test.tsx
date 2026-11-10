@@ -1158,6 +1158,68 @@ it("shows a request logged without a session as a session of its own", async () 
   expect(screen.queryByText("Session unavailable")).not.toBeInTheDocument();
 });
 
+it("says which handed-off run's records failed to load, and retries them", async () => {
+  serveSession({
+    rows: [summary({ id: "client-1", createdAt: "2026-01-01T00:00:05.000Z" })],
+  });
+  let runtimeFails = true;
+  server.use(
+    http.get(`${origin}/api/llm-proxy-logs/sessions/:id/handoffs`, () =>
+      HttpResponse.json({
+        handedTo: [
+          {
+            runId: "8c1f2e3d-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+            llmSessionId: "agent-run-docs",
+            originLlmSessionId: "test-session",
+            agentName: "Docs Writer",
+            title: "Update the docs",
+            startedAt: "2026-01-01T00:00:06.000Z",
+          },
+        ],
+        handedToTruncated: false,
+        handedFrom: null,
+        moves: [],
+      }),
+    ),
+    http.get(`${origin}/api/llm-proxy-logs/summaries`, ({ request }) => {
+      if (
+        new URL(request.url).searchParams.get("sessionId") !== "agent-run-docs"
+      ) {
+        return;
+      }
+      return runtimeFails
+        ? HttpResponse.json(
+            { error: { message: "boom", type: "api_internal_server_error" } },
+            { status: 500 },
+          )
+        : HttpResponse.json(
+            paginated([
+              summary({
+                id: "runtime-1",
+                sessionId: "agent-run-docs",
+                createdAt: "2026-01-01T00:00:08.000Z",
+              }),
+            ]),
+          );
+    }),
+    http.get(`${origin}/api/mcp-tool-calls`, () =>
+      HttpResponse.json({ data: [], pagination: { hasNext: false } }),
+    ),
+  );
+  await renderPage();
+
+  const notice = (await screen.findByText("Agent Runtime records didn't load"))
+    .parentElement as HTMLElement;
+  expect(notice).toHaveTextContent("Docs Writer");
+  runtimeFails = false;
+  fireEvent.click(within(notice).getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByText("Agent Runtime records didn't load"),
+    ).not.toBeInTheDocument(),
+  );
+});
+
 async function renderPage(id = "test-session") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },

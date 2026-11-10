@@ -15,7 +15,7 @@ Archestra handles the hard part: signing in to each server for each person.
 
 - [Each person's own account](/docs/mcp/servers/installing), through OAuth 2.1 or an API key they enter once. OAuth tokens refresh when the provider allows it.
 - **[A shared service account](/docs/mcp/servers/installing#shared-service-accounts)** for a team or the whole organization, such as a bot.
-- [Your company identity](/docs/mcp/authentication/servers#identity-provider-token-exchange), with no install at all. Archestra trades the person's identity provider token for one the server accepts, through Entra On-Behalf-Of, Okta, RFC 8693, or ID-JAG.
+- [Your company identity](/docs/mcp/authentication/idp-token-exchange), with no install at all. Archestra trades the person's identity provider token for one the server accepts, through Entra On-Behalf-Of, Okta, RFC 8693, or ID-JAG.
 
 Archestra picks the right account for each call. See [Whose Account a Call Uses](/docs/mcp/authentication/servers#credential-resolution).
 

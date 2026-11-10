@@ -29,6 +29,7 @@ import type {
   OpenAi,
   UsageView,
 } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
@@ -493,17 +494,16 @@ function memberTransportOnWire(params: {
  * undefined when it sets no limit (allowed on OpenAI chat and Converse).
  */
 export function requestedMaxOutputTokens(request: unknown): number | undefined {
-  const body = request as {
-    max_completion_tokens?: unknown;
-    max_tokens?: unknown;
-    inferenceConfig?: { maxTokens?: unknown };
-    generationConfig?: { maxOutputTokens?: unknown };
-  } | null;
+  const body = asRecord(request);
+  const generation = asRecord(
+    body?.generationConfig ?? body?.generation_config,
+  );
   const limit =
     body?.max_completion_tokens ??
     body?.max_tokens ??
-    body?.inferenceConfig?.maxTokens ??
-    body?.generationConfig?.maxOutputTokens;
+    asRecord(body?.inferenceConfig)?.maxTokens ??
+    generation?.maxOutputTokens ??
+    generation?.max_output_tokens;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? limit
     : undefined;

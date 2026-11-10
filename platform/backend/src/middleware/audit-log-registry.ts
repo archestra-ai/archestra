@@ -45,6 +45,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
@@ -506,6 +507,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "serviceAccount.updated",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Trust policies for workload identity federation. `:id` is the account,
+  // so both entries name `credentialId`: the POST, which has none in its
+  // path, then takes the new credential's id from the response body.
+  "/api/service-accounts/:id/federated-credentials": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id/federated-credentials/:credentialId": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  // SPDX-SnippetEnd
 
   // LLM Provider API Keys (REDACTED — secretId and key material excluded)
   "/api/llm-provider-api-keys": {

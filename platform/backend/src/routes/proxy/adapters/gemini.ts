@@ -1159,7 +1159,9 @@ class GeminiStreamAdapter
       // above, which subtracts `cachedContentTokenCount`), so this recombines
       // it into a gross `promptTokenCount` and republishes the cache read via
       // `cachedContentTokenCount` — otherwise a heavily cached turn reports
-      // only the uncached remainder as its entire prompt.
+      // only the uncached remainder as its entire prompt. Built-in tool
+      // tokens (`toolUsePromptTokenCount`) are folded into the input too, so
+      // they land in `promptTokenCount` here and `totalTokenCount` stays whole.
       usageMetadata: this.state.usage
         ? {
             ...(this.trafficType ? { trafficType: this.trafficType } : {}),

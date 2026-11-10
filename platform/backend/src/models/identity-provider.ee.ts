@@ -1119,8 +1119,17 @@ async function discoverOidcConfig(
       authorizationEndpoint: discoveryDocument.authorization_endpoint,
       tokenEndpoint: discoveryDocument.token_endpoint,
       jwksEndpoint: discoveryDocument.jwks_uri,
+      /**
+       * Entra On-Behalf-Of signs in with the app's own API scope, so the
+       * access token is not one Graph's userinfo endpoint accepts: sign-in
+       * reads the ID token instead, unless a userinfo endpoint was set.
+       */
       userInfoEndpoint:
-        discoveryDocument.userinfo_endpoint ?? oidcConfig.userInfoEndpoint,
+        oidcConfig.enterpriseManagedCredentials?.exchangeStrategy ===
+        "entra_obo"
+          ? oidcConfig.userInfoEndpoint
+          : (discoveryDocument.userinfo_endpoint ??
+            oidcConfig.userInfoEndpoint),
       tokenEndpointAuthentication:
         oidcConfig.tokenEndpointAuthentication ||
         selectTokenEndpointAuthentication(

@@ -89,6 +89,10 @@ describe("entraOboStrategy", () => {
       expiresInSeconds: 3599,
       value: "downstream-graph-access-token",
       issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      issuedTo: {
+        clientId: "middle-tier-client-id",
+        clientType: "identity_provider",
+      },
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];
@@ -347,6 +351,303 @@ describe("entraOboStrategy", () => {
     fetchMock.mockRestore();
   });
 });
+
+describe("entraOboStrategy with Entra Agent ID", () => {
+  test("exchanges as the agent identity: hop to the blueprint, exchange token with fmi_path, then OBO", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    const result = await entraOboStrategy.exchangeCredential({
+      identityProvider: makeAgentIdIdentityProvider(),
+      assertion: makeJwt({ aud: SSO_CLIENT_ID, oid: "user-1" }),
+      enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+      entraAgentIdentityId: AGENT_IDENTITY_ID,
+    });
+
+    expect(result).toMatchObject({
+      credentialType: "bearer_token",
+      value: `downstream-token-for-${AGENT_IDENTITY_ID}`,
+      issuedTo: {
+        clientId: AGENT_IDENTITY_ID,
+        clientType: "entra_agent_identity",
+      },
+    });
+    const [hop, exchangeToken, onBehalfOf] = requestBodies(fetchMock);
+    expect(hop).toMatchObject({
+      client_id: SSO_CLIENT_ID,
+      client_secret: "sso-secret",
+      requested_token_use: "on_behalf_of",
+      scope: `api://${BLUEPRINT_CLIENT_ID}/.default`,
+    });
+    expect(exchangeToken).toMatchObject({
+      client_id: BLUEPRINT_CLIENT_ID,
+      client_secret: "blueprint-secret",
+      grant_type: "client_credentials",
+      scope: "api://AzureADTokenExchange/.default",
+      fmi_path: AGENT_IDENTITY_ID,
+    });
+    expect(onBehalfOf).toMatchObject({
+      client_id: AGENT_IDENTITY_ID,
+      client_assertion_type: OAUTH_CLIENT_ASSERTION_TYPE.JwtBearer,
+      client_assertion: `exchange-token-for-${AGENT_IDENTITY_ID}`,
+      assertion: "blueprint-audience-user-token",
+      requested_token_use: "on_behalf_of",
+      scope: "api://downstream-api/.default",
+    });
+    expect(onBehalfOf).not.toHaveProperty("client_secret");
+    fetchMock.mockRestore();
+  });
+
+  test("skips the hop when the user's token already has the blueprint as audience, and reuses the agent's exchange token across users", async () => {
+    const fetchMock = mockTokenEndpoint();
+    const agentIdentityId = "11111111-2222-3333-4444-555555555555";
+
+    for (const oid of ["user-1", "user-2"]) {
+      await entraOboStrategy.exchangeCredential({
+        identityProvider: makeAgentIdIdentityProvider(),
+        assertion: makeJwt({ aud: BLUEPRINT_CLIENT_ID, oid }),
+        enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+        entraAgentIdentityId: agentIdentityId,
+      });
+    }
+
+    const bodies = requestBodies(fetchMock);
+    expect(bodies.map((body) => body.client_id)).toEqual([
+      BLUEPRINT_CLIENT_ID,
+      agentIdentityId,
+      agentIdentityId,
+    ]);
+    fetchMock.mockRestore();
+  });
+
+  test("signs the blueprint's client assertion with the certificate thumbprint as x5t", async () => {
+    const fetchMock = mockTokenEndpoint();
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const thumbprint = "0123456789abcdef0123456789abcdef01234567";
+
+    await entraOboStrategy.exchangeCredential({
+      identityProvider: makeAgentIdIdentityProvider({
+        clientSecret: undefined,
+        privateKeyPem: privateKey
+          .export({ format: "pem", type: "pkcs8" })
+          .toString(),
+        certificateThumbprint: thumbprint,
+      }),
+      assertion: makeJwt({ aud: BLUEPRINT_CLIENT_ID }),
+      enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+      entraAgentIdentityId: "99999999-2222-3333-4444-555555555555",
+    });
+
+    const [exchangeToken] = requestBodies(fetchMock);
+    expect(exchangeToken).not.toHaveProperty("client_secret");
+    const header = JSON.parse(
+      Buffer.from(
+        String(exchangeToken?.client_assertion).split(".")[0] ?? "",
+        "base64url",
+      ).toString("utf8"),
+    );
+    expect(header).toMatchObject({
+      alg: "RS256",
+      x5t: Buffer.from(thumbprint, "hex").toString("base64url"),
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("fails closed for an agent without an identity when the blueprint requires one", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider: makeAgentIdIdentityProvider({
+          requireAgentIdentity: true,
+        }),
+        assertion: makeJwt({ aud: SSO_CLIENT_ID }),
+        enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+        entraAgentIdentityId: null,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  test("install-time discovery, with no calling agent, still uses the identity provider's client", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    const result = await entraOboStrategy.exchangeCredential({
+      identityProvider: makeAgentIdIdentityProvider({
+        requireAgentIdentity: true,
+      }),
+      assertion: makeJwt({ aud: SSO_CLIENT_ID }),
+      enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+    });
+
+    expect(result.issuedTo).toEqual({
+      clientId: SSO_CLIENT_ID,
+      clientType: "identity_provider",
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("refuses an agent bound to an identity when the identity provider has no blueprint", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider: makeAgentIdIdentityProvider(null),
+        assertion: makeJwt({ aud: SSO_CLIENT_ID }),
+        enterpriseManagedConfig: DOWNSTREAM_CONFIG,
+        entraAgentIdentityId: AGENT_IDENTITY_ID,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+});
+
+describe("entraOboStrategy with an MCP server override client", () => {
+  test("addresses the user's token to the override client, then exchanges with the override's own secret", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    const result = await entraOboStrategy.exchangeCredential({
+      identityProvider: makeAgentIdIdentityProvider(null),
+      assertion: makeJwt({ aud: SSO_CLIENT_ID }),
+      enterpriseManagedConfig: {
+        ...DOWNSTREAM_CONFIG,
+        clientIdOverride: OVERRIDE_CLIENT_ID,
+        clientSecretOverride: "override-secret",
+      },
+      entraAgentIdentityId: null,
+    });
+
+    expect(result.issuedTo).toEqual({
+      clientId: OVERRIDE_CLIENT_ID,
+      clientType: "mcp_server",
+    });
+    const [hop, onBehalfOf] = requestBodies(fetchMock);
+    expect(hop).toMatchObject({
+      client_id: SSO_CLIENT_ID,
+      scope: `api://${OVERRIDE_CLIENT_ID}/.default`,
+    });
+    expect(onBehalfOf).toMatchObject({
+      client_id: OVERRIDE_CLIENT_ID,
+      client_secret: "override-secret",
+      assertion: "override-audience-user-token",
+      scope: "api://downstream-api/.default",
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("an agent identity takes precedence over the server's override client", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    const result = await entraOboStrategy.exchangeCredential({
+      identityProvider: makeAgentIdIdentityProvider(),
+      assertion: makeJwt({ aud: BLUEPRINT_CLIENT_ID }),
+      enterpriseManagedConfig: {
+        ...DOWNSTREAM_CONFIG,
+        clientIdOverride: OVERRIDE_CLIENT_ID,
+        clientSecretOverride: "override-secret",
+      },
+      entraAgentIdentityId: "77777777-2222-3333-4444-555555555555",
+    });
+
+    expect(result.issuedTo?.clientType).toBe("entra_agent_identity");
+    fetchMock.mockRestore();
+  });
+
+  test("refuses an override client that has no credential", async () => {
+    const fetchMock = mockTokenEndpoint();
+
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider: makeAgentIdIdentityProvider(null),
+        assertion: makeJwt({ aud: SSO_CLIENT_ID }),
+        enterpriseManagedConfig: {
+          ...DOWNSTREAM_CONFIG,
+          clientIdOverride: OVERRIDE_CLIENT_ID,
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+});
+
+const SSO_CLIENT_ID = "sso-client-id";
+const BLUEPRINT_CLIENT_ID = "blueprint-client-id";
+const OVERRIDE_CLIENT_ID = "override-client-id";
+const AGENT_IDENTITY_ID = "aaaaaaaa-2222-3333-4444-555555555555";
+const TOKEN_ENDPOINT =
+  "https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token";
+const DOWNSTREAM_CONFIG = {
+  requestedCredentialType: "bearer_token",
+  tokenInjectionMode: "authorization_bearer",
+  resourceIdentifier: "api://downstream-api",
+} as const;
+
+function makeAgentIdIdentityProvider(
+  entraAgentId: Record<string, unknown> | null = {},
+): ExternalIdentityProviderConfig {
+  return makeIdentityProvider({
+    oidcConfig: {
+      clientId: SSO_CLIENT_ID,
+      clientSecret: "sso-secret",
+      tokenEndpoint: TOKEN_ENDPOINT,
+      enterpriseManagedCredentials: {
+        exchangeStrategy: "entra_obo",
+        subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        ...(entraAgentId
+          ? {
+              entraAgentId: {
+                blueprintClientId: BLUEPRINT_CLIENT_ID,
+                clientSecret: "blueprint-secret",
+                ...entraAgentId,
+              },
+            }
+          : {}),
+      },
+    },
+  } as Partial<ExternalIdentityProviderConfig>);
+}
+
+/** A fake Entra token endpoint that answers each grant with a recognizable token. */
+function mockTokenEndpoint() {
+  return vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (_url, init) => {
+      const body = Object.fromEntries(new URLSearchParams(String(init?.body)));
+      let accessToken: string;
+      if (body.grant_type === "client_credentials") {
+        accessToken = `exchange-token-for-${body.fmi_path}`;
+      } else if (body.client_id === SSO_CLIENT_ID) {
+        accessToken =
+          body.scope === `api://${BLUEPRINT_CLIENT_ID}/.default`
+            ? "blueprint-audience-user-token"
+            : body.scope === `api://${OVERRIDE_CLIENT_ID}/.default`
+              ? "override-audience-user-token"
+              : `downstream-token-for-${body.client_id}`;
+      } else {
+        accessToken = `downstream-token-for-${body.client_id}`;
+      }
+      return new Response(
+        JSON.stringify({ access_token: accessToken, expires_in: 3600 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+}
+
+function requestBodies(
+  fetchMock: ReturnType<typeof mockTokenEndpoint>,
+): Array<Record<string, string>> {
+  return fetchMock.mock.calls.map(([, init]) =>
+    Object.fromEntries(new URLSearchParams(String(init?.body))),
+  );
+}
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const encode = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "none" })}.${encode(payload)}.signature`;
+}
 
 function makeIdentityProvider(
   overrides: Partial<ExternalIdentityProviderConfig>,

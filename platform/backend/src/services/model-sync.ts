@@ -105,13 +105,14 @@ class ModelSyncService {
     }
 
     const credentialRow = await LlmProviderApiKeyModel.findById(apiKeyId);
-    const configurationHash = credentialRow
-      ? azureCapabilityConfigurationHash({
-          ...credentialRow,
-          baseUrl: baseUrl || config.llm.azure.baseUrl,
-          extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
-        })
-      : null;
+    const configurationHash =
+      provider === "azure" && credentialRow
+        ? azureCapabilityConfigurationHash({
+            ...credentialRow,
+            baseUrl: baseUrl || config.llm.azure.baseUrl,
+            extraHeaders: extraHeaders ?? credentialRow.extraHeaders,
+          })
+        : null;
     const azureConfiguration =
       provider === "azure" && configurationHash
         ? { hash: configurationHash, defaultBaseUrl: config.llm.azure.baseUrl }

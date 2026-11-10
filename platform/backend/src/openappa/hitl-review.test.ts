@@ -345,6 +345,40 @@ test("asks Claude Code one line and previews the call in full", async () => {
   });
 });
 
+test("MCP forms preserve full Windows paths and typed argument values even when the client removes line breaks", async () => {
+  const args = {
+    file_path: String.raw`C:\Users\synthetic\AppData\Local\Temp\grok-guardrails-manual\review-child-02.txt`,
+    content: "A literal ``` fence.\n# Not a heading\n**Not emphasis**",
+  };
+  const active = session("mcp-literal-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool: "Write",
+      arguments: JSON.stringify(args),
+    },
+  });
+  const review = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+    presentation: "form",
+  });
+  if (!review) throw new Error("Missing review");
+  const message = review.question;
+  expect(message).toContain(args.file_path);
+  expect(message).not.toContain("\n");
+  expect(message).toContain(
+    'Also accepts: "the readers must be the public audience"',
+  );
+  const yaml = message
+    .split("  •  Arguments: ")[1]
+    .split("  •  Also accepts:")[0];
+  expect(loadYaml(yaml)).toEqual(args);
+  expect(message).toContain("Approve allows only this exact call.");
+});
+
 test("describes a call without a summary by its tool's first sentence", async () => {
   const active = session("tool-description");
   await stageHitlReview({
@@ -1432,12 +1466,14 @@ function interceptLockedCache(
   vi.spyOn(cacheManager, "withLock").mockImplementation(
     <T>(
       scope: AllowedCacheKey,
-      callback: (cache: LockedCache) => Promise<T>,
+      callback: (
+        ...args: Parameters<Parameters<typeof cacheManager.withLock>[1]>
+      ) => Promise<T>,
     ) => {
       entered();
-      return lock(scope, async (cache) => {
+      return lock(scope, async (cache, tx) => {
         intercept(cache);
-        return callback(cache);
+        return callback(cache, tx);
       });
     },
   );

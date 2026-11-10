@@ -57,6 +57,7 @@ import { handleServerError } from "@/server/error-handler";
 import { buildAgentRunLaunchSpec } from "@/services/agent-runtime/launch-spec";
 import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { buildClaudeMcpToolDefinitions } from "@/services/mcp-tool-token-estimate";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -2383,5 +2384,80 @@ describe("Claude Code subscription run one-off virtual key resolution", () => {
       await app.close();
       await customUpstream.close();
     }
+  });
+});
+
+describe("Anthropic tool call sessions for the MCP gateway", () => {
+  setupTestCacheManager();
+
+  let anthropicStubOptions: Parameters<typeof createAnthropicTestClient>[0];
+
+  beforeEach(() => {
+    anthropicStubOptions = {};
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient(anthropicStubOptions) as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test.for([
+    { stream: true },
+    { stream: false },
+  ])("records the Claude Code session of an MCP tool call it hands the client (stream: $stream)", async ({
+    stream,
+  }, { makeAgent, makeMember, makeUser }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+
+    const agent = await makeAgent({ name: "Tool Call Session Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const send = async (call: { id: string; name: string }) => {
+      const toolUse = { ...call, input: {} };
+      anthropicStubOptions = stream
+        ? { includeToolUse: true, streamingToolUse: toolUse }
+        : { nonStreamingToolUse: toolUse };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-archestra-virtual-key": platformCredential,
+          "x-claude-code-session-id": "claude-session",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "test-anthropic-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Who am I?" }],
+          max_tokens: 1024,
+          stream,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(call.id);
+    };
+    const sessionOf = (toolCallId: string) =>
+      llmToolCallSessions.resolve({
+        organizationId: agent.organizationId,
+        userId: owner.id,
+        toolCallId,
+      });
+
+    await send({ id: "toolu_gateway", name: "mcp__archestra__whoami" });
+    await send({ id: "toolu_builtin", name: "get_weather" });
+
+    expect(await sessionOf("toolu_gateway")).toBe("claude-session");
+    // A client's own tool never reaches the gateway, so it leaves nothing.
+    expect(await sessionOf("toolu_builtin")).toBeUndefined();
   });
 });

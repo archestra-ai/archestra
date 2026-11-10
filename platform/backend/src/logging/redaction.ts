@@ -40,6 +40,8 @@ export const REDACTED_LOG_PATHS = [
       "API-Key",
       "x-api-key",
       "x-archestra-virtual-key",
+      "x-authenticateresponse",
+      "X-AuthenticateResponse",
     ].flatMap((key) => [`["${key}"]`, `*["${key}"]`, `*.headers["${key}"]`]),
     // The browser-held encrypted chat key rides this request header;
     // the server must never persist it, logs included. Hyphenated keys need

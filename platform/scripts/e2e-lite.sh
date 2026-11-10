@@ -44,6 +44,7 @@ REPO_ROOT="$(dirname "${PLATFORM_DIR}")"
 
 REGISTRY="ghcr.io/archestra-ai"
 CI_REGISTRY="${REGISTRY}/ci"
+# supply-chain-policy: allow-latest published stable fallback when no image is passed (local runs, fork PRs)
 MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-${REGISTRY}/mcp-server-base:latest}"
 
 NETWORK="archestra-lite-net"

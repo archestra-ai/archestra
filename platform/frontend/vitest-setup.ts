@@ -69,6 +69,7 @@ afterAll(async () => {
 
 // Disable Sentry for tests - prevent sending test data to Sentry
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
+process.env.ARCHESTRA_ANALYTICS = "disabled";
 
 function createTestStorage(): Storage {
   const entries = new Map<string, string>();

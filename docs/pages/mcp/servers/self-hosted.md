@@ -30,7 +30,7 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
 - **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
 - **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. Everyone else edits only the name, icon, description, and labels.
-- A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/servers#identity-provider-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
+- A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/idp-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 
 <span id="logs-and-recovery"></span>
 

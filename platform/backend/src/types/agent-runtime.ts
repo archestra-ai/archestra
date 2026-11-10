@@ -396,6 +396,8 @@ export type AgentRunFailure = z.infer<typeof AgentRunFailureSchema>;
 
 export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   logs: true,
+  // Read through the session-handoffs route, which checks log access.
+  originLlmSessionId: true,
   completionTarget: true,
   completionNotificationClaimedAt: true,
   completionNotifiedAt: true,

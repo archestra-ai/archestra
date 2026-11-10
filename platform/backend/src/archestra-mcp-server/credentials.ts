@@ -1,11 +1,12 @@
 import {
   type BatteryCredentialRequest,
   BatteryCredentialRequestSchema,
+  normalizeSubagentLoadBalancingConfig,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { AgentModel } from "@/models";
+import { AgentExcludedSubagentModel, AgentModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
@@ -41,6 +42,7 @@ import {
   checkCallerSubagentAccess,
   requireActor,
   resolveCandidateRuntimeSubagentIds,
+  resolveTargetAgentId,
 } from "./tasks";
 
 /**
@@ -312,7 +314,7 @@ const registry = defineArchestraTools([
         .string()
         .optional()
         .describe(
-          "The Agent to give the credential to. Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway.",
+          "The Agent to give the credential to (UUID or agent__<slug> tool name). Omit when calling through an MCP gateway to transfer the credential to all runtime subagents assigned to the gateway, or pass a load-balanced router agent to target its assigned runtime subagents.",
         ),
       environment: z
         .array(TransferCredentialEnvVarSchema)
@@ -348,22 +350,96 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const explicitAgentId = args.agent_id?.trim();
-        const callerAgent =
-          !explicitAgentId && context.agent?.id
-            ? await AgentModel.findById(context.agent.id)
-            : null;
-        const candidateAgentIds = explicitAgentId
-          ? [explicitAgentId]
-          : callerAgent
-            ? await resolveCandidateRuntimeSubagentIds({
-                callerAgent,
-                actorUserId: actor.id,
-              })
-            : [];
-        if (!explicitAgentId && candidateAgentIds.length === 0) {
+        const rawAgentId = args.agent_id?.trim();
+        const callerAgent = context.agent?.id
+          ? await AgentModel.findById(context.agent.id)
+          : null;
+        let explicitAgentId: string | undefined;
+        if (rawAgentId) {
+          const resolvedId = await resolveTargetAgentId({
+            agentIdOrToolName: rawAgentId,
+            callerAgent,
+            context,
+          });
+          if (!resolvedId) {
+            return errorResult("Agent not found");
+          }
+          explicitAgentId = resolvedId;
+        }
+
+        let isRouterPoolTarget = false;
+        let candidateAgentIds: string[] = [];
+        if (explicitAgentId) {
+          const explicitTargetAgent =
+            await AgentModel.findById(explicitAgentId);
+          const targetLbConfig = explicitTargetAgent
+            ? normalizeSubagentLoadBalancingConfig(
+                explicitTargetAgent.subagentLoadBalancing,
+              )
+            : undefined;
+          if (
+            explicitTargetAgent &&
+            !resolveAgentRuntime(explicitTargetAgent) &&
+            targetLbConfig?.enabled
+          ) {
+            if (explicitTargetAgent.organizationId !== actor.organizationId) {
+              return errorResult("Agent not found");
+            }
+            if (
+              !(await ResourcePermissions.allows({
+                organizationId: actor.organizationId,
+                userId: actor.id,
+                resource: "agent",
+                scope: explicitTargetAgent.id,
+                action: "read",
+              }))
+            ) {
+              return errorResult("Agent not found");
+            }
+            const subagentAccess = await checkCallerSubagentAccess(
+              context.agent.id,
+              explicitTargetAgent,
+            );
+            if (!subagentAccess.allowed) {
+              return errorResult(
+                subagentAccess.reason === "agent_not_found"
+                  ? "Agent not found"
+                  : subagentAccess.message,
+              );
+            }
+            candidateAgentIds = await resolveCandidateRuntimeSubagentIds({
+              callerAgent: explicitTargetAgent,
+              actorUserId: actor.id,
+            });
+            if (callerAgent && callerAgent.id !== explicitTargetAgent.id) {
+              const callerExcludedIds =
+                await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+                  callerAgent.id,
+                );
+              if (callerExcludedIds.length > 0) {
+                const callerExcludedSet = new Set(callerExcludedIds);
+                candidateAgentIds = candidateAgentIds.filter(
+                  (id) => !callerExcludedSet.has(id),
+                );
+              }
+            }
+            isRouterPoolTarget = true;
+          } else {
+            candidateAgentIds = [explicitAgentId];
+          }
+        } else if (callerAgent) {
+          candidateAgentIds = await resolveCandidateRuntimeSubagentIds({
+            callerAgent,
+            actorUserId: actor.id,
+          });
+        }
+
+        const isSingleExplicitTarget = Boolean(
+          explicitAgentId && !isRouterPoolTarget,
+        );
+        if (!isSingleExplicitTarget && candidateAgentIds.length === 0) {
           return errorResult(
-            callerAgent
+            callerAgent || isRouterPoolTarget
               ? "No runtime subagents are assigned to this gateway."
               : "agent_id is required.",
           );
@@ -377,7 +453,7 @@ const registry = defineArchestraTools([
         for (const candidateId of candidateAgentIds) {
           const agent = await AgentModel.findById(candidateId);
           if (!agent || agent.organizationId !== actor.organizationId) {
-            if (explicitAgentId) return errorResult("Agent not found");
+            if (isSingleExplicitTarget) return errorResult("Agent not found");
             continue;
           }
           // SPDX-SnippetBegin
@@ -392,7 +468,7 @@ const registry = defineArchestraTools([
               action: "read",
             }))
           ) {
-            if (explicitAgentId) return errorResult("Agent not found");
+            if (isSingleExplicitTarget) return errorResult("Agent not found");
             continue;
           }
           // SPDX-SnippetEnd
@@ -401,7 +477,7 @@ const registry = defineArchestraTools([
             agent,
           );
           if (!subagentAccess.allowed) {
-            if (explicitAgentId) {
+            if (isSingleExplicitTarget) {
               return errorResult(
                 subagentAccess.reason === "agent_not_found"
                   ? "Agent not found"
@@ -413,7 +489,7 @@ const registry = defineArchestraTools([
 
           const runtime = resolveAgentRuntime(agent);
           if (!runtime) {
-            if (explicitAgentId) {
+            if (isSingleExplicitTarget) {
               return errorResult(
                 "This Agent has no Agent Runtime configured, so it has no workspace to receive a credential.",
               );

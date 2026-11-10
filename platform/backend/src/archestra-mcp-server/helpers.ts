@@ -17,6 +17,7 @@ import {
 } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { isUniqueConstraintError } from "@/utils/db";
+import { levenshtein } from "@/utils/levenshtein";
 import type { ArchestraContext } from "./types";
 
 export { fencedBlock } from "./fenced-block";
@@ -695,19 +696,6 @@ function suggestClosestKey(badKey: string, validKeys: string[]): string | null {
     }
   }
   return best?.key ?? null;
-}
-
-function levenshtein(a: string, b: string): number {
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i];
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-    }
-    prev = curr;
-  }
-  return prev[b.length];
 }
 
 function formatIssuePath(path: PropertyKey[] | undefined): string {

@@ -9,9 +9,10 @@
  * every DB-encrypted `secret` row must be decrypted under the previous key and
  * re-encrypted under the new one, or it becomes unreadable.
  *
- * This runs as a one-shot before the app (the Helm pre-upgrade migration Job,
- * chained after `drizzle-kit migrate`). It is idempotent and a no-op when the
- * key is unchanged, so it is safe to run on every deploy.
+ * The server runs the same re-encryption on startup (secrets-manager/
+ * encryption-key-guard.ts); the Helm migration Job does not run this script.
+ * Run it by hand to re-encrypt or check stored secrets ahead of a restart. It
+ * is idempotent and a no-op when the key is unchanged.
  *
  *   new  = HKDF(ARCHESTRA_SECRETS_ENCRYPTION_SECRET ?? ARCHESTRA_AUTH_SECRET)
  *   prev = HKDF(ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS ?? ARCHESTRA_AUTH_SECRET)

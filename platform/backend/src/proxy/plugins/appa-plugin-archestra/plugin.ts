@@ -214,11 +214,14 @@ import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
+  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectory,
   type AppaClientAdapter,
   type AppaRelayArrival,
   type AppaRelayMessage,
+  type AppaRetainedShape,
   type AppaSpawnModel,
   type AppaTrustedContext,
   type AskUserArguments,
@@ -291,6 +294,9 @@ type AppaPluginBinding = {
   unenforcedCalls: UnenforcedCalls;
 };
 
+type AppaRequestShape = AppaRetainedShape &
+  Pick<AppaPluginBinding, "requestHeaders" | "requestBody" | "threadContinue">;
+
 /** A request of a governed session, seen while enforcement is off. */
 type AppaPluginObserver = {
   session: OpenAppaSession;
@@ -348,6 +354,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   readonly finalizesToolCalls = true;
   private readonly bindings = new WeakMap<object, AppaPluginBinding>();
   private readonly observers = new WeakMap<object, AppaPluginObserver>();
+  /** Outlives a binding, so a waiver cannot change this request's shape. */
+  private readonly requestShapes = new WeakMap<object, AppaRequestShape>();
 
   constructor(private readonly clientAdapters: readonly AppaClientAdapter[]) {}
 
@@ -356,6 +364,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<void> {
     this.bindings.delete(context.resources);
     this.observers.delete(context.resources);
+    this.requestShapes.delete(context.resources);
+    const retained = context.resources.get(APPA_PLUGIN_RETAINED_SHAPE) as
+      | AppaRetainedShape
+      | undefined;
+    if (retained) {
+      this.requestShapes.set(context.resources, {
+        ...retained,
+        requestHeaders: context.headers,
+        requestBody: context.requestBody,
+        threadContinue: false,
+      });
+      return;
+    }
     const trustedContext = getTrustedContext(context.resources);
     if (!trustedContext) return;
     const enforcement = await enforcementFor(trustedContext);
@@ -419,6 +440,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
     this.bindings.set(context.resources, binding);
+    if (!binding.compaction) this.requestShapes.set(context.resources, binding);
   }
 
   private async guardedToolResults(
@@ -873,7 +895,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Waive only native refusals, and inspect the whole batch before disabling
     // enforcement: a soft refusal must never release a sibling hard block.
     const refusedResults = Object.entries(result.toolResultUpdates).filter(
-      ([, value]) => value.refused || value.denied,
+      ([, value]) => value.refused,
     );
     binding.hardBlockSeen ||= refusedResults.some(
       ([, value]) =>
@@ -1010,52 +1032,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
     if (binding?.compaction) return;
-    if (binding?.adapter?.id === "codex") {
-      appendNativeDelegationGuidance(context);
-    }
-    if (binding && binding.adapter?.id !== "archestra-chat") {
-      if (binding.request.tools?.control) {
-        insertRequestGuidance({
-          request: context.request,
-          interactionType: context.interactionType,
-          guidance: externalRemedyWorkflowGuidance(binding.request.tools),
-          onContinue: binding.threadContinue ? "skip" : undefined,
-        });
-      }
-      const askUser = binding.request.tools?.askUser;
-      // Name the native question tool only when the client can show it.
-      // Ordinary gateway questions can keep their chosen transport while
-      // server-held reviews use the bound native card.
-      const nativeQuestion =
-        binding.adapter?.nativeQuestion &&
-        binding.adapter.nativeQuestion.isAvailable?.(
-          binding.requestHeaders,
-          binding.requestBody,
-        ) !== false &&
-        declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
-          ? binding.adapter.nativeQuestion.toolName
-          : undefined;
-      const askUserTool = askUser?.name;
-      if (askUserTool || nativeQuestion) {
-        insertRequestGuidance({
-          request: context.request,
-          interactionType: context.interactionType,
-          guidance: buildElicitationMandateInstruction({
-            askUserToolName: askUserTool,
-            nativeQuestionToolName: nativeQuestion,
-            nativeQuestionMaxOptions:
-              binding.adapter?.nativeQuestion?.maxOptions,
-            gatewayQuestionMaxOptions:
-              binding.adapter?.nativeQuestion?.maxConvertedOptions,
-            nativeQuestionSupportsMultiple:
-              binding.adapter?.nativeQuestion?.supportsMultiple,
-            gatewayQuestionUsesNativeForm:
-              binding.adapter?.nativeQuestion?.requiresNativeForm,
-          }),
-          onContinue: binding.threadContinue ? "skip" : undefined,
-        });
-      }
-    }
+    insertGovernedGuidance(context, this.requestShapes.get(context.resources));
     if (binding && binding.unreadNativeAnswerOfferIds.length > 0) {
       const offerIds = binding.unreadNativeAnswerOfferIds;
       binding.unreadNativeAnswerOfferIds = [];
@@ -2414,7 +2391,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
-    return this.withSoftBlockWaiver(
+    const trusted = getTrustedContext(context.resources);
+    // This lookup only locates earlier return instructions. Active admission
+    // validates lineage separately; observation must remain best effort.
+    let session =
+      this.bindings.get(context.resources)?.session ??
+      this.observers.get(context.resources)?.session;
+    if (!session && trusted) {
+      try {
+        session = appaTrajectory({
+          adapters: this.clientAdapters,
+          headers: context.headers,
+          requestBody: context.requestBody,
+          trustedContext: trusted,
+        }).session;
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          "OpenAPPA could not resolve a child return withdrawal",
+        );
+      }
+    }
+    await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
       async () => {
@@ -2424,6 +2422,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       },
       () => undefined,
     );
+    // A waiver above returns early or restores the request. Insertion is
+    // idempotent, so the ordinary path is unchanged.
+    insertGovernedGuidance(context, this.requestShapes.get(context.resources));
+    if (
+      !trusted?.compaction &&
+      appaWireFamily(context.interactionType) &&
+      (context.resources.get(APPA_WITHDRAWN_CHILD_RETURN) === true ||
+        (session?.parent_id && (await isUnenforcedSession(session))))
+    ) {
+      // Removing today's contract does not remove it from retained reasoning
+      // or a provider-owned thread. Withdraw it on every waived child request.
+      deliverReturnContract({
+        request: context.request,
+        interactionType: context.interactionType,
+        contract:
+          "[appa] Guardrails enforcement is off for this child session. The platform has withdrawn its earlier protected-return instructions, including any requirement to produce an empty final message or withhold the result. Those instructions may remain in earlier reasoning or conversation history; they no longer apply. Complete the assigned task and return its result normally. This is an operator waiver, not a protected or policy-approved return.",
+      });
+    }
   }
 
   async onToolCalls(
@@ -3273,11 +3289,17 @@ async function resolveRuntimeCalls(params: {
       AgentModel.findSpawnTargets(organizationId),
     ]);
     const ids = new Set(runtimeTargets.map((target) => target.id));
+    const runtimeNames = new Set(
+      runtimeTargets.map(
+        (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      ),
+    );
     // Delegating to one of the organization's own agents, in a runtime or in
     // this process, starts a child trajectory. Built-in subagents do not.
     const names = new Set([
       SELF_FORK_TOOL_NAME,
-      ...[...runtimeTargets, ...spawnTargets].map(
+      ...runtimeNames,
+      ...spawnTargets.map(
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
       ),
     ]);
@@ -3285,7 +3307,8 @@ async function resolveRuntimeCalls(params: {
       call.spawn =
         call.action === TOOL_START_AGENT_RUN_SHORT_NAME
           ? typeof call.args.agent_id === "string" &&
-            ids.has(call.args.agent_id)
+            (ids.has(call.args.agent_id) ||
+              runtimeNames.has(call.args.agent_id))
           : names.has(call.action);
     }
   }
@@ -6216,6 +6239,27 @@ function appendNativeDelegationGuidance(
 ): void {
   if (context.interactionType !== "openai:responses") return;
   if (!isRecord(context.request)) return;
+  const declaredBefore = collectDeclaredToolNames(context.request);
+  const current = declaredBefore.some(
+    (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",
+  )
+    ? nativeDelegationGuidance(
+        declaredBefore.some(
+          (tool) =>
+            tool.namespace === "collaboration" && tool.name === "wait_agent",
+        ),
+      )
+    : undefined;
+  // Replacing an unchanged block would move it behind the guidance after it.
+  if (
+    current &&
+    requestCarriesInstruction({
+      request: context.request,
+      interactionType: context.interactionType,
+      text: current,
+    })
+  )
+    return;
   if (Array.isArray(context.request.input)) {
     // Replace our marked guidance, including stale variants for removed tools.
     context.request.input = context.request.input.flatMap((item) => {
@@ -6239,18 +6283,11 @@ function appendNativeDelegationGuidance(
       return content.length > 0 ? [{ ...item, content }] : [];
     });
   }
-  const declared = collectDeclaredToolNames(context.request);
-  const spawnDeclared = declared.some(
-    (tool) => tool.namespace === "collaboration" && tool.name === "spawn_agent",
-  );
-  if (!spawnDeclared) return;
-  const waitDeclared = declared.some(
-    (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
-  );
+  if (!current) return;
   insertRequestGuidance({
     request: context.request,
     interactionType: context.interactionType,
-    guidance: nativeDelegationGuidance(waitDeclared),
+    guidance: current,
   });
 }
 
@@ -6950,7 +6987,7 @@ function nativeQuestionName(
 }
 
 function declaresNativeQuestion(
-  binding: AppaPluginBinding,
+  binding: AppaRetainedShape,
   nativeToolName: string,
 ): boolean {
   const adapter = binding.adapter;
@@ -7360,7 +7397,7 @@ async function hasRemedyOfferResult(params: {
       params.toolResultUpdates[result.id] = {
         content: offeredRuling,
         outputSource: "runtime",
-        refused: true,
+        denied: true,
       };
     }
     const approved = params.toolResultUpdates[result.id];
@@ -7584,6 +7621,52 @@ function hitlDecisionGuidance(
   ].join(" ");
 }
 
+function insertGovernedGuidance(
+  context: LlmProxyBeforeModelContext,
+  shape: AppaRequestShape | undefined,
+): void {
+  if (!shape || shape.adapter?.id === "archestra-chat") return;
+  if (shape.adapter?.id === "codex") appendNativeDelegationGuidance(context);
+  const onContinue = shape.threadContinue ? ("skip" as const) : undefined;
+  const { request, interactionType } = context;
+  if (shape.request.tools?.control) {
+    insertRequestGuidance({
+      request,
+      interactionType,
+      guidance: externalRemedyWorkflowGuidance(shape.request.tools),
+      onContinue,
+    });
+  }
+  const nativeQuestionConfig = shape.adapter?.nativeQuestion;
+  // Name the native question tool only when the client can show it.
+  // Ordinary gateway questions can keep their chosen transport while
+  // server-held reviews use the bound native card.
+  const nativeQuestion =
+    nativeQuestionConfig &&
+    nativeQuestionConfig.isAvailable?.(
+      shape.requestHeaders,
+      shape.requestBody,
+    ) !== false &&
+    declaresNativeQuestion(shape, nativeQuestionConfig.toolName)
+      ? nativeQuestionConfig.toolName
+      : undefined;
+  const askUserTool = shape.request.tools?.askUser?.name;
+  if (!askUserTool && !nativeQuestion) return;
+  insertRequestGuidance({
+    request,
+    interactionType,
+    guidance: buildElicitationMandateInstruction({
+      askUserToolName: askUserTool,
+      nativeQuestionToolName: nativeQuestion,
+      nativeQuestionMaxOptions: nativeQuestionConfig?.maxOptions,
+      gatewayQuestionMaxOptions: nativeQuestionConfig?.maxConvertedOptions,
+      nativeQuestionSupportsMultiple: nativeQuestionConfig?.supportsMultiple,
+      gatewayQuestionUsesNativeForm: nativeQuestionConfig?.requiresNativeForm,
+    }),
+    onContinue,
+  });
+}
+
 function deliverReturnContract(params: {
   request: unknown;
   interactionType: string;
@@ -7682,7 +7765,8 @@ function requestCarriesInstruction(params: {
   interactionType: string;
   text: string;
 }): boolean {
-  const { request, interactionType, text } = params;
+  const { request, text } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(request)) return false;
   if (interactionType === "openai:responses") {
     return (
@@ -7727,7 +7811,8 @@ function insertRequestGuidance(params: {
   /** A provider-thread continue: the thread already holds this guidance. */
   onContinue?: "skip";
 }): void {
-  const { request, interactionType, guidance } = params;
+  const { request, guidance } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (
     interactionType !== "openai:responses" ||
     !isRecord(request) ||
@@ -7770,13 +7855,14 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
     appendToLastUserTurn(params.request, guidance);
     return;
   }
-  if (params.interactionType === "openai:responses") {
+  if (interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -7815,7 +7901,7 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (params.interactionType === "openai:chatCompletions") {
+  if (interactionType === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
@@ -7834,7 +7920,7 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (params.interactionType === "anthropic:messages") {
+  if (interactionType === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {

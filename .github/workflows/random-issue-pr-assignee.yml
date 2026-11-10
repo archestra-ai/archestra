@@ -25,7 +25,7 @@ env:
   CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","piercypixel","arsenyinfo","xdrdak"]'
   # These bot accounts already have an owner shepherding their PRs, so skip
   # reviewer auto-assignment on every branch, including backports.
-  REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]", "archestra-ci[bot]"]'
+  REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]", "archestra-automation-prs[bot]", "archestra-releaser[bot]"]'
 
 concurrency:
   group: random-issue-pr-assignee-${{ github.event.issue.number || github.ref }}

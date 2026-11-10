@@ -101,7 +101,7 @@ jobs:
       - name: Require current release benchmark tables
         if: >-
           github.event_name == 'pull_request' &&
-          github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+          github.event.pull_request.user.login == 'archestra-releaser[bot]' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           startsWith(github.event.pull_request.head.ref, 'release-please--branches--') &&
           endsWith(github.event.pull_request.head.ref, '--components--platform')
@@ -181,7 +181,7 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@a95549fa3d078185ea8311e30bb36e920124977f # v1.12.0
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

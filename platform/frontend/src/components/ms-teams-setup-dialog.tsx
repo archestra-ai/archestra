@@ -694,9 +694,11 @@ function StepManifest({
  * Optional: let the bot read files shared outside direct messages. Channel
  * files live in each team's SharePoint site: the bot's app needs Graph
  * `Sites.Selected` plus a read grant per site, a Microsoft 365 admin task, so
- * that tab builds a request to hand over. Group-chat files live in each
- * sender's OneDrive: the bot asks that person to sign in once (delegated
- * `Files.Read`), which needs a redirect URI and the permission on the app.
+ * that tab builds a request to hand over. Sign-in covers the rest: the bot
+ * asks the person who shared a file to sign in once, which needs a redirect
+ * URI and delegated permissions on the app. Group-chat files (in the
+ * sender's OneDrive) need `Files.Read`; channel files without a site grant
+ * need `Files.Read.All`.
  */
 function StepReadFiles({
   stepNumber,
@@ -740,8 +742,8 @@ function StepReadFiles({
     >
       <StepCard stepNumber={stepNumber} title="Read Files (Optional)">
         <p className="text-sm text-muted-foreground">
-          Files in direct messages already work. Channels and group chats each
-          need one admin step.
+          Files in direct messages already work. For channels, your admin grants
+          each team's site, or people sign in. Group chats need sign-in.
         </p>
 
         <TabsList className="w-full">
@@ -753,8 +755,8 @@ function StepReadFiles({
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="group-chats">
-            <span>Group chats</span>
+          <TabsTrigger value="sign-in">
+            <span>Sign-in</span>
             {groupChatEnabled && (
               <span
                 role="img"
@@ -803,13 +805,27 @@ function StepReadFiles({
               </span>
             </NumberedItem>
           </ol>
+          <p className="text-sm text-muted-foreground">
+            Too many teams to list? Let people{" "}
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0"
+              onClick={() => setTab("sign-in")}
+            >
+              sign in
+            </Button>{" "}
+            instead.
+          </p>
         </TabsContent>
 
-        <TabsContent value="group-chats" className="mt-0 space-y-4">
+        <TabsContent value="sign-in" className="mt-0 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Teams keeps group-chat files in the sender's own OneDrive. Rather
-            than grant the bot every OneDrive in your organization, each person
-            signs in once, and the bot reads only the files they share with it.
+            Each person signs in once, and the bot opens the files they share
+            with their own access, so it never sees more than they can. Group
+            chats need this, since Teams keeps their files in the sender's
+            OneDrive. In channels, it covers any team your admin hasn't granted.
           </p>
           <ol className="space-y-3">
             <NumberedItem n={1}>
@@ -833,7 +849,11 @@ function StepReadFiles({
               <code className="rounded bg-muted px-1 py-0.5 text-xs">
                 offline_access
               </code>
-              .
+              . For channel files, add{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                Files.Read.All
+              </code>{" "}
+              too.
             </NumberedItem>
             <NumberedItem n={3}>
               <span className="flex items-center gap-3">
@@ -844,7 +864,7 @@ function StepReadFiles({
                   onCheckedChange={onGroupChatEnabledChange}
                 />
                 <Label htmlFor="ms-teams-group-chat-file-sign-in">
-                  Ask people to sign in for group-chat files
+                  Ask people to sign in for the files they share
                 </Label>
               </span>
             </NumberedItem>
@@ -868,7 +888,7 @@ function StepReadFiles({
           />
         </div>
       ) : (
-        <div key="group-chats" className="flex flex-col gap-2">
+        <div key="sign-in" className="flex flex-col gap-2">
           <span className="text-xs text-muted-foreground">
             What each person sees once, in Teams
           </span>
@@ -892,7 +912,7 @@ function StepReadFiles({
   );
 }
 
-type ReadFilesTab = "channels" | "group-chats";
+type ReadFilesTab = "channels" | "sign-in";
 
 function NumberedItem({
   n,

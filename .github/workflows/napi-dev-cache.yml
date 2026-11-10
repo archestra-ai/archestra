@@ -34,7 +34,7 @@ jobs:
     name: Publish prebuilt dev addons
     # Forks and the private mirror cannot write the public org's packages.
     if: github.repository == 'archestra-ai/archestra'
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 45
     permissions:
       contents: read # Check out the addon sources.

@@ -125,6 +125,9 @@ async function diagnose(
   const basis = await cachedBasis(active, tiers);
   if (basis.history.sample.length === 0) return { status: "cold_start" };
 
+  if (active.budgetUsdPerDay === null) {
+    throw new Error("The active routing plan has no budget");
+  }
   const savedBudgetUsdPerDay = Number(active.budgetUsdPerDay);
   const budgetUsdPerDay = requestedBudget ?? savedBudgetUsdPerDay;
   const solved = await solve(basis.history, tiers, budgetUsdPerDay);

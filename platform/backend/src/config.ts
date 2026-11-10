@@ -24,7 +24,6 @@ import {
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
-  getAgentCatalogImageTag,
   gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
@@ -36,10 +35,16 @@ import {
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  pinReleaseImage,
   providerSupportsChat,
+  type ReleaseImageDigests,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import {
+  isAnalyticsEnabled,
+  resolveErrorReporting,
+} from "@archestra/shared/error-reporting";
 import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
@@ -86,7 +91,6 @@ dotenv.config({
   quiet: true,
 });
 
-const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
@@ -162,6 +166,13 @@ const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
 /**
+ * Archestra's Sentry project for backend errors. A DSN only allows sending
+ * events to the project, so it is public by design.
+ */
+const DEFAULT_SENTRY_BACKEND_DSN =
+  "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232";
+
+/**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
  * @public — exported for testability
@@ -176,6 +187,24 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
  */
 export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
   buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
+
+/**
+ * The audit log's own OTLP log exporter, or null when
+ * ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT is unset and audit records share the
+ * backend's log pipeline. A dedicated collector gets only its own credentials:
+ * the shared OTLP credentials belong to a different destination.
+ * @public — exported for testability
+ */
+export const getAuditLogOtelExporter = (
+  envValue: string | undefined = process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT,
+): Pick<OTLPExporterNodeConfigBase, "url" | "headers"> | null => {
+  const endpoint = envValue?.trim();
+  if (!endpoint) return null;
+  return {
+    url: getOtelExporterOtlpLogEndpoint(endpoint),
+    headers: buildOtlpAuthHeaders("ARCHESTRA_AUDIT_LOG_OTEL_AUTH"),
+  };
+};
 
 const buildOtlpAuthHeaders = (
   envPrefix: string,
@@ -1393,7 +1422,16 @@ export const getMCPGatewayOauthPublicHostSchemes = (): Map<string, string> =>
  *   undefined / ""  → false
  *   "true"          → true
  *   "false"         → false
- *   anything else   → trimmed string passed directly to Fastify (IP/CIDR list)
+ *   anything else   → the trimmed IP/CIDR list, with `loopback` added
+ *
+ * Why `loopback` joins any list: the bundled frontend runs in the backend's
+ * container and its rewrites reach the API over 127.0.0.1, passing the load
+ * balancer's X-Forwarded-For on unchanged. Without trusting that hop, every
+ * request from the web UI resolves to 127.0.0.1, so audit records and per-IP
+ * rate limits never see the client the operator configured the list for.
+ * Only processes inside the pod connect from loopback, and trust decisions
+ * that must not honor forwarded headers read the raw socket peer
+ * (`isLoopbackRequest`), not `request.ip`.
  * @public — exported for testability
  */
 export const parseTrustProxy = (
@@ -1402,11 +1440,13 @@ export const parseTrustProxy = (
   const trimmed = envValue?.trim();
   if (!trimmed || trimmed === "false") return false;
   if (trimmed === "true") return true;
-  return trimmed
+  const proxies = trimmed
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean)
-    .join(",");
+    .filter(Boolean);
+  // proxy-addr's name for 127.0.0.0/8 and ::1.
+  if (!proxies.includes("loopback")) proxies.unshift("loopback");
+  return proxies.join(",");
 };
 
 /** @public — exported for testability */
@@ -1591,19 +1631,17 @@ export function parseCommaSeparatedList(value: string): string[] {
 
 /** @public — exported for testability */
 export const getAnalyticsConfig = () => {
-  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
-  // Evaluated at call time (not the module-level `isProduction`) so tests can
-  // exercise both environments.
-  const isProductionEnv = ["production", "prod"].includes(
-    process.env.NODE_ENV?.toLowerCase() ?? "",
-  );
   return {
-    // Analytics (PostHog product analytics, instance heartbeats, and backend
-    // error tracking) defaults to on only in production builds. Local dev and
-    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
-    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
-    // wins in both directions ("disabled" → off, any other value → on).
-    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    // Analytics (PostHog product analytics, instance heartbeats, and error
+    // reports to Archestra's Sentry) defaults to on only in production builds.
+    // Local dev and test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't
+    // "production") stay silent unless ARCHESTRA_ANALYTICS is explicitly set,
+    // which always wins in both directions ("disabled" → off, any other value
+    // → on). Evaluated at call time so tests can exercise both environments.
+    enabled: isAnalyticsEnabled({
+      analytics: process.env.ARCHESTRA_ANALYTICS,
+      nodeEnv: process.env.NODE_ENV,
+    }),
     posthog: {
       key:
         process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
@@ -1615,9 +1653,62 @@ export const getAnalyticsConfig = () => {
   };
 };
 
+/**
+ * Backend error reporting. Without ARCHESTRA_SENTRY_BACKEND_DSN, errors (and
+ * only errors) go to Archestra's Sentry project while analytics is on. An
+ * explicit DSN reports to that project with full diagnostics, independent of
+ * ARCHESTRA_ANALYTICS.
+ * @public — exported for testability
+ */
+export const getSentryConfig = () =>
+  resolveErrorReporting({
+    dsnOverride: process.env.ARCHESTRA_SENTRY_BACKEND_DSN,
+    defaultDsn: DEFAULT_SENTRY_BACKEND_DSN,
+    environmentOverride: process.env.ARCHESTRA_SENTRY_ENVIRONMENT,
+    nodeEnv: process.env.NODE_ENV,
+    analyticsEnabled: getAnalyticsConfig().enabled,
+  });
+
+/**
+ * Parse `ARCHESTRA_RELEASE_IMAGE_DIGESTS`, the digests the release pipeline
+ * writes into the Helm chart: `{"version": "<platform version>", "images":
+ * {"<image name>": "sha256:<hex>"}}`. Digests recorded for another version
+ * (a chart run with a different platform image) are ignored, so the default
+ * images fall back to their version tags. Unset, as in development builds,
+ * there is nothing to pin. A malformed value fails startup.
+ * @public — exported for testability
+ */
+export function parseReleaseImageDigests(params: {
+  rawValue: string | undefined;
+  appVersion: string;
+}): ReleaseImageDigests | null {
+  const raw = params.rawValue?.trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ARCHESTRA_RELEASE_IMAGE_DIGESTS must be JSON");
+  }
+  if (!isReleaseImageDigests(parsed)) {
+    throw new Error(
+      'ARCHESTRA_RELEASE_IMAGE_DIGESTS must look like {"version": "1.2.3", "images": {"mcp-server-base": "sha256:<64 hex>"}}',
+    );
+  }
+  return parsed.version === params.appVersion ? parsed : null;
+}
+
+const releaseImageDigests = parseReleaseImageDigests({
+  rawValue: process.env.ARCHESTRA_RELEASE_IMAGE_DIGESTS,
+  appVersion,
+});
+
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
+  pinReleaseImage({
+    image: `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`,
+    digests: releaseImageDigests,
+  });
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -2577,17 +2668,23 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
     /**
      * Maintained catalog images (Claude Code, Codex, ...). Operators mirroring
-     * them can move the registry and pin the tag; the tag otherwise follows
-     * the platform version.
+     * them can move the registry and pin the tag; the tag otherwise is the
+     * platform version, pinned to the digest its release shipped with.
      */
-    catalogImages: getAgentCatalogImages({
-      registry:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
-        AGENT_CATALOG_IMAGE_REGISTRY,
-      tag:
-        process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() ||
-        getAgentCatalogImageTag(appVersion),
-    }),
+    catalogImages: Object.fromEntries(
+      Object.entries(
+        getAgentCatalogImages({
+          registry:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY?.trim() ||
+            AGENT_CATALOG_IMAGE_REGISTRY,
+          tag:
+            process.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG?.trim() || appVersion,
+        }),
+      ).map(([id, image]) => [
+        id,
+        pinReleaseImage({ image, digests: releaseImageDigests }),
+      ]),
+    ) as ReturnType<typeof getAgentCatalogImages>,
     /**
      * Pre-pull the whole catalog onto every runtime node at startup and on
      * each platform version, so a cold-started Agent does not wait on a
@@ -3641,10 +3738,7 @@ const config = {
       ),
     },
     sentry: {
-      enabled: sentryDsn !== "",
-      dsn: sentryDsn,
-      environment:
-        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+      ...getSentryConfig(),
       tracesSampleRate: parseSampleRate(
         process.env.ARCHESTRA_SENTRY_TRACES_SAMPLE_RATE,
         0.1,
@@ -3732,7 +3826,10 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+        pinReleaseImage({
+          image: `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
+          digests: releaseImageDigests,
+        }),
       p4Binary: {
         x64: {
           url:
@@ -3966,19 +4063,6 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
     /**
-     * Development override for where the Archestra VAF Add On install script
-     * gets the add-on from. Set to a git ref of archestra-ai/archestra (a
-     * pushed commit SHA, branch, or tag) to have the script compile the
-     * add-on from that source instead of downloading a release package, or
-     * to the special value `local` to use this backend checkout's HEAD
-     * commit. Unset (the default, and the right value for production), the
-     * script downloads the package of the release matching this platform
-     * version, falling back to the latest release.
-     */
-    mfilesVafAddOnSourceRef:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
-      null,
-    /**
      * Directory holding the VAF Add On package compiled into the platform
      * image (a versioned `archestra-m-files-vaf-add-on-<version>.mfappx`
      * plus a stable-named copy — see the vaf-add-on-builder stage in
@@ -3986,21 +4070,11 @@ const config = {
      * connector form's download from it, with no GitHub dependency. The
      * default matches where the image puts it; deployments running outside
      * the image (dev stacks) simply have no such directory and fall back to
-     * the source-ref override or the newest add-on release.
+     * the newest add-on release.
      */
     mfilesVafAddOnPackageDir:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR?.trim() ||
       "/app/mfiles-vaf-add-on",
-    /**
-     * GitHub token used to download the source ref's CI-built add-on package
-     * (GitHub requires authentication for Actions artifact downloads even on
-     * public repositories). Only read when the source-ref override above is
-     * set; without it the install script compiles the add-on from source
-     * instead. Never sent to clients — the backend proxies the package.
-     */
-    mfilesVafAddOnGithubToken:
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN?.trim() ||
-      null,
     // A document still `pending`/`processing` this long after its last touch has
     // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
     // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
@@ -4175,6 +4249,10 @@ const config = {
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    otelExporter: getAuditLogOtelExporter(),
+    // Adds the actor's email and display name to each exported record.
+    otelIncludeActorIdentity:
+      process.env.ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY === "true",
     // Retention is enterprise-licensed; the boot-time assertion in
     // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(
@@ -4211,6 +4289,25 @@ export const shouldRunWorker =
 export default config;
 
 // ===== Internal helpers =====
+
+function isReleaseImageDigests(value: unknown): value is ReleaseImageDigests {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const { version, images, ...rest } = value as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || typeof version !== "string" || !version) {
+    return false;
+  }
+  if (typeof images !== "object" || images === null || Array.isArray(images)) {
+    return false;
+  }
+  return Object.entries(images).every(
+    ([name, digest]) =>
+      /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) &&
+      typeof digest === "string" &&
+      /^sha256:[0-9a-f]{64}$/.test(digest),
+  );
+}
 
 /**
  * Get the environment variable API key for a provider.

@@ -1,8 +1,10 @@
 import path from "node:path";
 import {
+  AGENT_TOOL_PREFIX,
   DEFAULT_APP_NAME,
   normalizeSubagentLoadBalancingConfig,
   resolveSubagentLoadBalancerScopeKey,
+  slugify,
   TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_AGENT_RUN_SHORT_NAME,
@@ -32,6 +34,7 @@ import {
   AgentTeamModel,
   AgentWorkspaceModel,
   InteractionModel,
+  ToolModel,
 } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
@@ -122,12 +125,98 @@ import {
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve an `agent_id` argument that may be either a UUID or an `agent__<slug>`
+ * delegation tool name into an agent UUID. Returns `null` when the identifier
+ * is neither a valid UUID nor a matching delegation tool name for the caller.
+ */
+export async function resolveTargetAgentId(params: {
+  agentIdOrToolName: string;
+  callerAgent: Agent | null;
+  context: ArchestraContext;
+}): Promise<string | null> {
+  const trimmed = params.agentIdOrToolName.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (UUID_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  if (!trimmed.startsWith(AGENT_TOOL_PREFIX)) {
+    return null;
+  }
+  const expectedSlug = trimmed.slice(AGENT_TOOL_PREFIX.length);
+  if (!expectedSlug) {
+    return null;
+  }
+
+  const { callerAgent, context } = params;
+  if (callerAgent) {
+    const delegatedTools = await ToolModel.getDelegationToolsByAgent(
+      callerAgent.id,
+    );
+    const matchedDelegated = delegatedTools.find(
+      (entry) => slugify(entry.targetAgent.name) === expectedSlug,
+    );
+    if (matchedDelegated) {
+      return matchedDelegated.targetAgent.id;
+    }
+  }
+
+  const actorUserId = context.userId ?? context.tokenAuth?.userId;
+  const organizationId =
+    callerAgent?.organizationId ??
+    context.organizationId ??
+    context.tokenAuth?.organizationId;
+  if (
+    actorUserId &&
+    actorUserId !== "system" &&
+    organizationId &&
+    (!callerAgent || callerAgent.accessAllSubagents)
+  ) {
+    const isAgentAdmin = await ResourcePermissions.allows({
+      userId: actorUserId,
+      organizationId,
+      resource: "agent",
+      scope: "*",
+      action: "update",
+    });
+    const [targets, excludedIds] = await Promise.all([
+      AgentModel.findAccessibleDelegationTargets({
+        userId: actorUserId,
+        isAdmin: isAgentAdmin,
+        organizationId,
+        excludeAgentId: callerAgent?.id ?? "",
+        includeDetails: false,
+        environmentId: callerAgent?.environmentId ?? null,
+      }),
+      callerAgent
+        ? AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id)
+        : Promise.resolve([] as string[]),
+    ]);
+    const excluded = new Set(excludedIds);
+    const matchedAccessible = targets.find(
+      (target) =>
+        !excluded.has(target.id) && slugify(target.name) === expectedSlug,
+    );
+    if (matchedAccessible) {
+      return matchedAccessible.id;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Verify that `callerAgentId` is permitted to target `targetAgent` as a
  * subagent when `callerAgentId !== targetAgent.id`.
  *
  * Enforces environment isolation, explicit `agent_excluded_subagents` rows,
- * and `accessAllSubagents: false` custom allowlists (`delegateToAgentId` tools).
+ * and `accessAllSubagents: false` custom allowlists (`delegateToAgentId` tools),
+ * including 1-hop delegation through an assigned load-balancing router agent.
  */
 export async function checkCallerSubagentAccess(
   callerAgentId: string,
@@ -164,11 +253,51 @@ export async function checkCallerSubagentAccess(
       .map((tool) => tool.delegateToAgentId)
       .filter((id): id is string => Boolean(id));
     if (!delegatedAgentIds.includes(targetAgent.id)) {
-      return {
-        allowed: false,
-        reason: "refused",
-        message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
-      };
+      let allowedViaRouter = false;
+      for (const delegatedId of delegatedAgentIds) {
+        if (excludedSubagentIds.includes(delegatedId)) {
+          continue;
+        }
+        const routerAgent = await AgentModel.findById(delegatedId);
+        if (
+          !routerAgent ||
+          routerAgent.environmentId !== callerAgent.environmentId ||
+          resolveAgentRuntime(routerAgent)
+        ) {
+          continue;
+        }
+        const routerLbConfig = normalizeSubagentLoadBalancingConfig(
+          routerAgent.subagentLoadBalancing,
+        );
+        if (!routerLbConfig?.enabled) {
+          continue;
+        }
+        const routerExcludedIds =
+          await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+            routerAgent.id,
+          );
+        if (routerExcludedIds.includes(targetAgent.id)) {
+          continue;
+        }
+        if (routerAgent.accessAllSubagents) {
+          allowedViaRouter = true;
+          break;
+        }
+        const routerDelegatedIds = routerAgent.tools
+          .map((tool) => tool.delegateToAgentId)
+          .filter((id): id is string => Boolean(id));
+        if (routerDelegatedIds.includes(targetAgent.id)) {
+          allowedViaRouter = true;
+          break;
+        }
+      }
+      if (!allowedViaRouter) {
+        return {
+          allowed: false,
+          reason: "refused",
+          message: `Agent "${targetAgent.name}" is not an allowed subagent of "${callerAgent.name}".`,
+        };
+      }
     }
   }
   return { allowed: true };
@@ -241,26 +370,161 @@ export async function startDelegatedTask(params: {
   const callerAgent = params.context.agent?.id
     ? await AgentModel.findById(params.context.agent.id)
     : null;
-  const lbConfig = normalizeSubagentLoadBalancingConfig(
+  let poolAgent: Agent | null = callerAgent;
+  let lbConfig = normalizeSubagentLoadBalancingConfig(
     callerAgent?.subagentLoadBalancing,
   );
-  const explicitAgentId = params.agentId?.trim();
+  const rawAgentId = params.agentId?.trim();
+  let explicitAgentId: string | undefined;
+  if (rawAgentId) {
+    const resolvedId = await resolveTargetAgentId({
+      agentIdOrToolName: rawAgentId,
+      callerAgent,
+      context: params.context,
+    });
+    if (!resolvedId) {
+      const { result, outcome } = failedLaunch(
+        "agent_not_found",
+        errorResult("Agent not found"),
+      );
+      if (outcome) await recordRuntimeLaunch(params.context, outcome);
+      return result;
+    }
+    explicitAgentId = resolvedId;
+  }
 
-  const assignedIds = callerAgent
+  let assignedIds = callerAgent
     ? await resolveCandidateRuntimeSubagentIds({
         callerAgent,
         actorUserId: params.context.userId,
       })
     : [];
-  const assignedSet = new Set(assignedIds);
+  let assignedSet = new Set(assignedIds);
+
+  // When explicitAgentId targets a foreground load-balanced router agent
+  // (has no runtime of its own, but has subagentLoadBalancing.enabled === true),
+  // verify caller access to the router agent and route through its runtime subagent pool.
+  let targetRouterPoolSelected = false;
+  if (
+    explicitAgentId &&
+    (!lbConfig?.enabled || !assignedSet.has(explicitAgentId))
+  ) {
+    const explicitTargetAgent = await AgentModel.findById(explicitAgentId);
+    const targetLbConfig = explicitTargetAgent
+      ? normalizeSubagentLoadBalancingConfig(
+          explicitTargetAgent.subagentLoadBalancing,
+        )
+      : undefined;
+    if (
+      explicitTargetAgent &&
+      !resolveAgentRuntime(explicitTargetAgent) &&
+      targetLbConfig?.enabled
+    ) {
+      if (
+        params.context.tokenAuth?.oauthExecution ||
+        (params.context.tokenAuth?.oauthClientId &&
+          !params.context.tokenAuth.isUserToken)
+      ) {
+        const { result, outcome } = failedLaunch(
+          "refused",
+          errorResult(
+            "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+          ),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      let actor: A2AActor;
+      try {
+        actor = requireActor(params.context);
+      } catch (error) {
+        const { result, outcome } = failedLaunch(
+          "refused",
+          error instanceof ApiError
+            ? errorResult(error.message)
+            : catchError(error, "starting the run"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      if (explicitTargetAgent.organizationId !== actor.organizationId) {
+        const { result, outcome } = failedLaunch(
+          "agent_not_found",
+          errorResult("Agent not found"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      const isAgentAdmin = await ResourcePermissions.allows({
+        userId: actor.id,
+        organizationId: actor.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      });
+      if (
+        !(await AgentTeamModel.userHasAgentAccess({
+          userId: actor.id,
+          agentId: explicitTargetAgent.id,
+          isAgentAdmin,
+          agentAccessContext: explicitTargetAgent,
+          action: "use",
+        }))
+      ) {
+        const { result, outcome } = failedLaunch(
+          "agent_not_found",
+          errorResult("Agent not found"),
+        );
+        if (outcome) await recordRuntimeLaunch(params.context, outcome);
+        return result;
+      }
+      if (params.context.agent?.id) {
+        const subagentAccess = await checkCallerSubagentAccess(
+          params.context.agent.id,
+          explicitTargetAgent,
+        );
+        if (!subagentAccess.allowed) {
+          const { result, outcome } = failedLaunch(
+            subagentAccess.reason,
+            errorResult(subagentAccess.message),
+          );
+          if (outcome) await recordRuntimeLaunch(params.context, outcome);
+          return result;
+        }
+      }
+      let routerCandidateIds = await resolveCandidateRuntimeSubagentIds({
+        callerAgent: explicitTargetAgent,
+        actorUserId: params.context.userId,
+      });
+      if (callerAgent && callerAgent.id !== explicitTargetAgent.id) {
+        const callerExcludedIds =
+          await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+            callerAgent.id,
+          );
+        if (callerExcludedIds.length > 0) {
+          const callerExcludedSet = new Set(callerExcludedIds);
+          routerCandidateIds = routerCandidateIds.filter(
+            (id) => !callerExcludedSet.has(id),
+          );
+        }
+      }
+      poolAgent = explicitTargetAgent;
+      lbConfig = targetLbConfig;
+      assignedIds = routerCandidateIds;
+      assignedSet = new Set(assignedIds);
+      targetRouterPoolSelected = true;
+    }
+  }
 
   // When subagent load balancing is disabled (or when the caller specified an
   // agent_id outside the caller's load-balanced pool so access checks can report
   // the exact refusal), dispatch directly to explicitAgentId. When load balancing
-  // is enabled and explicitAgentId belongs to the caller's pool, route
-  // programmatically through the load balancer across all assigned candidates.
+  // is enabled and explicitAgentId belongs to the caller's pool (or is itself a
+  // load-balanced router agent), route programmatically through the load balancer
+  // across all assigned candidates.
   if (
     explicitAgentId &&
+    !targetRouterPoolSelected &&
     (!lbConfig?.enabled || !assignedSet.has(explicitAgentId))
   ) {
     let ephemeralCredentials: Record<string, string> | undefined;
@@ -316,7 +580,7 @@ export async function startDelegatedTask(params: {
     return result;
   }
 
-  if (!callerAgent) {
+  if (!poolAgent) {
     const { result, outcome } = failedLaunch(
       "refused",
       errorResult("agent_id is required."),
@@ -378,7 +642,7 @@ export async function startDelegatedTask(params: {
             logger.warn(
               {
                 err: error,
-                callerAgentId: callerAgent.id,
+                callerAgentId: poolAgent.id,
                 candidateId,
               },
               "Subagent readiness pre-filter check failed; marking candidate unready",
@@ -404,12 +668,12 @@ export async function startDelegatedTask(params: {
     organizationId:
       params.context.organizationId ??
       params.context.tokenAuth?.organizationId ??
-      callerAgent.organizationId,
+      poolAgent.organizationId,
   });
 
   const { candidateIds, claimedPrimaryAgentId, dispatchCount } =
     await subagentLoadBalancer.planCandidates({
-      callerAgentId: callerAgent.id,
+      callerAgentId: poolAgent.id,
       assignedAgentIds: assignedIds,
       excludedAgentIds: planningExcludedSet,
       config: lbConfig,
@@ -438,7 +702,7 @@ export async function startDelegatedTask(params: {
       actor = requireActor(params.context);
     } catch (error) {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
-        callerAgentId: callerAgent.id,
+        callerAgentId: poolAgent.id,
         claimedAgentId: claimedPrimaryAgentId,
         scopeKey,
       });
@@ -455,12 +719,12 @@ export async function startDelegatedTask(params: {
       grantIds: params.credentialGrantIds,
       organizationId: actor.organizationId,
       userId: actor.id,
-      callerAgentId: callerAgent.id,
+      callerAgentId: params.context.agent?.id || poolAgent.id,
       candidateAgentIds: activeCandidates,
     });
     if (!resolved.ok) {
       await subagentLoadBalancer.releaseUnlaunchedClaim({
-        callerAgentId: callerAgent.id,
+        callerAgentId: poolAgent.id,
         claimedAgentId: claimedPrimaryAgentId,
         scopeKey,
       });
@@ -496,7 +760,7 @@ export async function startDelegatedTask(params: {
       subagentExecutionPolicy: {
         ...(trackDistributedRotation
           ? {
-              callerAgentId: callerAgent.id,
+              callerAgentId: poolAgent.id,
               scopeKey,
               assignedAgentIds: assignedIds,
               plannedDispatchCount: currentPlannedDispatchCount,
@@ -521,7 +785,7 @@ export async function startDelegatedTask(params: {
     ) {
       if (currentCandidateId === claimedPrimaryAgentId) {
         await subagentLoadBalancer.releaseUnlaunchedClaim({
-          callerAgentId: callerAgent.id,
+          callerAgentId: poolAgent.id,
           claimedAgentId: claimedPrimaryAgentId,
           scopeKey,
         });
@@ -534,7 +798,7 @@ export async function startDelegatedTask(params: {
     }
     if (trackDistributedRotation) {
       const claimed = await subagentLoadBalancer.claimNextFallbackCandidate({
-        callerAgentId: callerAgent.id,
+        callerAgentId: poolAgent.id,
         scopeKey,
         remainingCandidateIds: remainingFallbackIds,
         assignedAgentIds: assignedIds,
@@ -721,6 +985,9 @@ async function launchDelegatedTask(params: {
             }),
           }
         : undefined;
+    // The caller's LLM session, when the gateway or chat knows it exactly:
+    // recorded on the run so the session trace can show the handoff.
+    const originLlmSessionId = context.tokenAuth?.llmSessionId;
     const taskRow = await startDetachedAgentTask({
       actor,
       agentId: agent.id,
@@ -729,6 +996,15 @@ async function launchDelegatedTask(params: {
       systemParams: {
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
+        ...(originLlmSessionId
+          ? {
+              onRuntimeSessionCreated: ({ taskId }) =>
+                AgentRunModel.setOriginLlmSessionId({
+                  taskId,
+                  originLlmSessionId,
+                }),
+            }
+          : {}),
         routeCategory: completionTarget
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
@@ -1331,7 +1607,7 @@ const registry = defineArchestraTools([
         .string()
         .optional()
         .describe(
-          "The agent to do the work. Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy.",
+          "The agent to do the work (UUID or agent__<slug> tool name). Omit when calling through an MCP gateway to select an assigned runtime subagent using the gateway's load-balancing policy, or pass a load-balanced router agent to select from its assigned runtime subagents.",
         ),
       exclude_agent_ids: z
         .array(z.string().uuid())

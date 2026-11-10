@@ -220,16 +220,23 @@ type ProcessedToolResult = {
   content: string;
   diagnostic?: string;
   outputSource: OutputSource;
-  /** A native refusal, distinct from a successful authoritative replacement. */
-  refused?: true;
   reason?: RuntimeReason;
   code?: string;
-  /** The runtime denied this call, so `content` is its ruling, not an output. */
-  denied?: true;
   /** Current denial metadata; omitted offers are unknown, not an empty list. */
   offers?: string[];
   review?: Array<{ offer_id: string; text: string }>;
-};
+} & (
+  | {
+      /** The call never ran; retain its ruling as history, never waive its result. */
+      denied: true;
+      refused?: never;
+    }
+  | {
+      denied?: never;
+      /** A result admission refused actual output, not a prior call's ruling. */
+      refused?: true;
+    }
+);
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
   | {
@@ -1035,6 +1042,20 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  if (decision.decision === "deny_call") {
+    // ToolResult replays a denied/cancelled call's authoritative receipt.
+    // There are no executed bytes to release. A new attempt is evaluated by
+    // ToolCall, where the operator's current waiver setting applies.
+    return {
+      content,
+      outputSource,
+      ...(reason ? { reason } : {}),
+      ...(code ? { code } : {}),
+      denied: true,
+      offers: decision.offers?.map((offer) => offer.offer_id),
+      review: decision.review,
+    };
+  }
   // Old native receipts for fabricated/unknown offers remain authoritative
   // errors, not evidence of a soft policy refusal that can disable a session.
   const unknownControl =
@@ -1045,8 +1066,7 @@ async function approveToolResult(params: {
     content,
     outputSource,
     ...((!unknownControl || isHardBlock(content)) &&
-    (decision.decision === "deny_call" ||
-      decision.decision === "block" ||
+    (decision.decision === "block" ||
       decision.decision === "refuse" ||
       decision.decision === "replace_output" ||
       (decision.decision === "mcp_result" && decision.result?.isError === true))
@@ -1054,13 +1074,6 @@ async function approveToolResult(params: {
       : {}),
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call"
-      ? {
-          denied: true as const,
-          offers: decision.offers?.map((offer) => offer.offer_id),
-          review: decision.review,
-        }
-      : {}),
   };
 }
 // SPDX-SnippetEnd

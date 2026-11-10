@@ -1370,6 +1370,64 @@ describe("createLLMModel", () => {
     });
   });
 
+  test("current chat key selection overrides a stored key but cannot borrow another user's key", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const other = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const secret = await makeSecret({ secret: { apiKey: "synthetic-key" } });
+    const oldKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      access: "org",
+    });
+    const selectedKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      access: "org",
+    });
+    const privateKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      userId: other.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      title: "Synthetic selection",
+      chatApiKeyId: oldKey.id,
+    });
+    const params = {
+      organizationId: org.id,
+      userId: user.id,
+      agentId: agent.id,
+      model: "gpt-4o",
+      provider: "openai" as const,
+      conversationId: conversation.id,
+    };
+    const selected = await createLLMModelForAgent({
+      ...params,
+      providerKeySelection: { providerApiKeyId: selectedKey.id },
+    });
+    expect(selected.chatApiKeyId).toBe(selectedKey.id);
+    expect(capturedCreateOpenAIOptions.headers).toEqual(
+      expect.objectContaining({ [CHAT_API_KEY_ID_HEADER]: selectedKey.id }),
+    );
+    await expect(
+      createLLMModelForAgent({
+        ...params,
+        providerKeySelection: { providerApiKeyId: privateKey.id },
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("uses an explicit keyless Azure conversation key and forwards its inference URL to the proxy", async ({
     makeOrganization,
     makeUser,

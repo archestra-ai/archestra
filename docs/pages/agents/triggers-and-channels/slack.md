@@ -2,7 +2,7 @@
 title: Slack
 description: Give each Archestra agent its own Slack bot
 order: 3
-lastUpdated: 2026-10-28
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -72,7 +72,7 @@ What to know:
 What Slack needs to reach depends on the connection mode under **Advanced**:
 
 - **Socket Mode:** nothing. Archestra opens the connection to Slack, so you do not open any port to traffic from the internet.
-- **Webhook Mode:** Slack sends each new message to your Archestra address over HTTPS, so that address must be reachable from the internet. To keep the Archestra web app off the internet, set [`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL) to a public address for Slack to use. Archestra still connects to `slack.com` and the file addresses to post replies and read files.
+- **Webhook Mode:** Slack sends each new message to your Archestra address over HTTPS, so that address must be reachable from the internet. To keep the web app private, expose only the [public webhook endpoints](/docs/admin/deployment/networking#public-webhook-endpoints). Archestra still connects to `slack.com` and the file addresses to post replies and read files.
 
 <span id="usage"></span><span id="first-message"></span><span id="default-agent"></span><span id="replying-within-a-thread"></span><span id="answering-every-message"></span>
 

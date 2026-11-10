@@ -97,6 +97,16 @@ archestra:
     # Identifiers and endpoints, not credentials.
     ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
     ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://grafana-alloy.archestra.svc.cluster.local:4318/v1/traces"
+    # Export audit events as OTLP logs, on their own endpoint and only there,
+    # to the audit collector that writes them to the organization's security
+    # log archive. Alloy does not carry them.
+    # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
+    ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
+    ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    # The security archive's alerts name who acted.
+    ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY: "true"
+    # Labels this installation's records environment=staging in the archive.
+    OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=staging"
     ARCHESTRA_SENTRY_BACKEND_DSN: "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232"
     ARCHESTRA_SENTRY_FRONTEND_DSN: "https://5ff9bac572fb23e3620c066cbc93ce34@o4509825927479296.ingest.de.sentry.io/4510381678461008"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID: "e6ec2dea-2205-4e2f-afb6-f83e5f588f40"
@@ -141,9 +151,6 @@ archestra:
     - name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
       secretName: archestra-platform-runtime
       secretKey: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
-    - name: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
-      secretName: archestra-platform-runtime
-      secretKey: ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN
 
   diagnostics:
     enabled: true
@@ -172,6 +179,14 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      # MCP server pods, Agent Runtime sessions and code-runtime Dagger engines
+      # run here, away from the platform pods and the content-encryption Secret
+      # in `archestra`. archestra-ai/infra (gcp/gke/mcp-namespace.tf) creates
+      # the namespace, its Pod Security labels and the CI deployer's RBAC;
+      # apply that before this deploys, or the chart's RoleBindings there fail.
+      # Objects started in `archestra` before the move are not cleaned up by
+      # the platform; they are cleaned up by hand after the rollout.
+      namespace: archestra-mcp
       serviceAccount:
         annotations:
           iam.gke.io/gcp-service-account: archestra-staging-platform@friendly-path-465518-r6.iam.gserviceaccount.com

@@ -410,9 +410,15 @@ export type OrganizationDefaultModelRef = z.infer<
   typeof OrganizationDefaultModelRefSchema
 >;
 
-/** What "Organization default" runs on: the default model, routed across the trio while auto routing is active. */
+/**
+ * What "Organization default" runs on, and whether the `auto` model can be
+ * picked. `model` is the default model, or the normal tier while the default
+ * is `auto`. `autoRouting` is active while auto routing is on and its tiers
+ * are set, so `auto` is offered and routes across them.
+ */
 export const OrganizationDefaultModelSchema = z.object({
   model: OrganizationDefaultModelRefSchema.nullable(),
+  defaultAutoModel: z.boolean(),
   autoRouting: z.discriminatedUnion("active", [
     z.object({ active: z.literal(false) }),
     z.object({
@@ -523,6 +529,11 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultAgentId: z.string().uuid().nullable().optional(),
   defaultFastModelId: z.string().uuid().nullable().optional(),
   defaultSmartModelId: z.string().uuid().nullable().optional(),
+  /**
+   * Chats and agents on the organization default run on `auto`. The default
+   * model stays what built-in tasks and forked subagents run on.
+   */
+  defaultAutoModel: z.boolean().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

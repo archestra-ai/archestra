@@ -1,8 +1,8 @@
 ---
 title: "Okta"
 description: "Configure Okta for SSO sign-in and RFC 8693 token exchange for MCP tools"
-order: 3
-lastUpdated: 2026-10-22
+order: 4
+lastUpdated: 2026-11-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -73,24 +73,18 @@ To call downstream APIs as the calling user, configure Okta to accept signed tok
 
 ## Enable Token Exchange in Archestra
 
-1. In **Settings → Identity Providers**, edit **Okta** and expand **Enterprise-Managed Credentials**.
+1. In **Settings → Identity Providers**, click **Edit** on **Okta**, and open **Tool Authentication**.
 2. Set **Exchange Token Endpoint** to `https://<org>.okta.com/oauth2/v1/token`.
 3. Set **Exchange Client Authentication** to **Private key JWT**.
 4. Enter your **Signing Key ID** and paste your **Private Key PEM**.
-5. Set **User Token To Exchange** to **ID token**.
-6. Save the provider.
+5. Set **User's Token to Exchange** to **ID token**.
+6. Click **Update Provider**.
 
-<span id="6-configure-mcp-server-multitenant-auth"></span>
+<span id="6-configure-mcp-server-multitenant-auth"></span><span id="configure-mcp-server-multitenant-auth"></span>
 
-## Configure MCP Server Multitenant Auth
+## Use It in an MCP Server
 
-1. In **MCP Servers**, open target catalog item and select **Multitenant Authorization**.
-2. Choose **Identity Provider Token Exchange** and select **Okta**.
-3. Set **Requested Credential** to **Bearer token** and **Injection Mode** to **Authorization: Bearer**.
-4. Set **Managed Resource Identifier** to the target downstream audience or scope (e.g. `api://internal-service`).
-5. When assigning tools from this server to an agent or gateway, choose **Resolve at call time**.
-
-Servers running in cluster pods must use **streamable-http** transport to support per-request token exchange.
+Pick **IdP token exchange** on the server, choose **Okta** as the **Identity Provider**, and set **Managed Resource Identifier** to the downstream audience, such as `api://internal-service`. See [IdP Token Exchange](/docs/mcp/authentication/idp-token-exchange#set-up-a-server).
 
 ## Troubleshooting
 

@@ -405,7 +405,7 @@ impl State {
         let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
-            runtime: Arc::new(self.runtime.recording(consults.clone())),
+            runtime: Arc::new(self.runtime.transcribing(consults.clone())),
             ..self.clone()
         };
         let attribution = consults::Attribution {

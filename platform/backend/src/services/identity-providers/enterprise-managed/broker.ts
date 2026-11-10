@@ -4,6 +4,7 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";
 import {
+  type EnterpriseCredentialIssuedTo,
   type EnterpriseManagedCredentialResult,
   exchangeEnterpriseManagedCredential,
   extractProviderErrorMessage,
@@ -15,6 +16,8 @@ export type ResolvedEnterpriseTransportCredential = {
   headerName: string;
   headerValue: string;
   expiresInSeconds: number | null;
+  /** The client the exchanged credential was issued to, when known. */
+  issuedTo?: EnterpriseCredentialIssuedTo;
 };
 
 /**
@@ -59,6 +62,8 @@ export async function resolveEnterpriseTransportCredential(params: {
   owner: ToolOwner;
   tokenAuth?: TokenAuthContext;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  /** The calling agent's Entra agent identity, when it is bound to one. */
+  entraAgentIdentityId?: string | null;
 }): Promise<ResolvedEnterpriseTransportCredential | null> {
   const config = params.enterpriseManagedConfig;
   if (!config) {
@@ -114,6 +119,7 @@ export async function resolveEnterpriseTransportCredential(params: {
     identityProviderId: assertion.identityProviderId,
     assertion: assertion.assertion,
     enterpriseManagedConfig: config,
+    entraAgentIdentityId: params.entraAgentIdentityId,
   });
 
   return normalizeEnterpriseTransportCredential({
@@ -225,6 +231,12 @@ export async function exchangeIdJagAtProtectedResource(params: {
       typeof responseBody.issued_token_type === "string"
         ? responseBody.issued_token_type
         : OAUTH_TOKEN_TYPE.AccessToken,
+    issuedTo: {
+      clientId,
+      clientType: params.enterpriseManagedConfig.clientIdOverride
+        ? "mcp_server"
+        : "identity_provider",
+    },
   };
 }
 
@@ -344,6 +356,7 @@ function normalizeEnterpriseTransportCredential(params: {
   return {
     ...buildEnterpriseCredentialHeader({ config, value: scalarValue }),
     expiresInSeconds: credential.expiresInSeconds,
+    ...(credential.issuedTo ? { issuedTo: credential.issuedTo } : {}),
   };
 }
 

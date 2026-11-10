@@ -3,6 +3,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database/schema";
 import { CommonToolCallSchema } from "./common-llm-format";
+import { EnterpriseCredentialClientTypeSchema } from "./enterprise-managed-credentials";
 import { ToolOwnerTypeSchema } from "./tool-owner";
 
 /**
@@ -52,6 +53,7 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
     source: McpGatewayCallSourceSchema.nullable(),
+    credentialClientType: EnterpriseCredentialClientTypeSchema.nullable(),
   },
 )
   // Server-side plumbing telling the read path which key the row is under.
@@ -81,6 +83,8 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
     source: McpGatewayCallSourceSchema.nullable().optional(),
+    credentialClientType:
+      EnterpriseCredentialClientTypeSchema.nullable().optional(),
   },
 )
   // Derived by McpToolCallModel.create from toolCall/toolResult.

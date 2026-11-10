@@ -21,9 +21,9 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * The group-chat file sign-in switch, inside the "Setup MS Teams" card. It
- * saves as soon as it flips. The Entra setup it depends on sits in a
- * collapsible below it, with a request the admin can hand to IT.
+ * The file sign-in switch, inside the "Setup MS Teams" card. It saves as soon
+ * as it flips. The Entra setup it depends on sits in a collapsible below it,
+ * with a request the admin can hand to IT.
  */
 export function GroupChatFilesSetting() {
   const appName = useAppName();
@@ -46,11 +46,11 @@ export function GroupChatFilesSetting() {
             htmlFor="ms-teams-group-chat-files"
             className="text-xs font-medium text-foreground"
           >
-            Group-chat files
+            File sign-in
           </Label>
           <span>
             Each sender signs in once so the {appName} bot can read the files
-            they share in group chats.
+            they share in group chats, and in channels without a site grant.
           </span>
         </div>
         <Switch
@@ -134,7 +134,11 @@ function EntraSetup({
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
                 offline_access
               </code>
-              , then grant admin consent.
+              , plus{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+                Files.Read.All
+              </code>{" "}
+              for channel files, then grant admin consent.
             </span>
           </li>
         </ol>
@@ -170,15 +174,15 @@ function buildGroupChatFilesRequest(params: {
 }): string {
   const appId = params.appId || "<Microsoft App ID>";
   return [
-    `Sign-in for our Teams bot to read files shared in group chats`,
+    `Sign-in for our Teams bot to read files shared in chats and channels`,
     ``,
-    `Our ${params.appName} Teams bot (Microsoft App ID ${appId}) needs to read files people share in Teams group chats. Each sender signs in once, and the bot reads the file with that person's own access.`,
+    `Our ${params.appName} Teams bot (Microsoft App ID ${appId}) needs to read files people share in Teams group chats and channels. Each sender signs in once, and the bot reads the file with that person's own access, so it never sees more than they can.`,
     ``,
     `Microsoft Entra admin center (https://entra.microsoft.com/) > App registrations > open the app by its App ID:`,
     ``,
     `1. Authentication > Add a platform > Web, with this redirect URI:`,
     `   ${params.redirectUri}`,
     ``,
-    `2. API permissions > Add a permission > Microsoft Graph > Delegated permissions > add Files.Read and offline_access > Grant admin consent.`,
+    `2. API permissions > Add a permission > Microsoft Graph > Delegated permissions > add Files.Read, Files.Read.All (for channel files), and offline_access > Grant admin consent.`,
   ].join("\n");
 }

@@ -3,9 +3,77 @@ import {
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from "@opentelemetry/sdk-logs";
+import { APICallError, generateText } from "ai";
 import { expect, test } from "vitest";
+import { createAzureMediaLanguageModel } from "@/clients/azure-media-language-model";
 import { createLogger } from "./create-logger";
 import { createLogObserverStream } from "./observer-stream";
+
+test("provider failures omit the submitted prompt from stdout, retained context and OTEL", async () => {
+  const prompt = "synthetic-private-conversation-content";
+  const submitted: unknown[] = [];
+  const model = createAzureMediaLanguageModel({
+    modelId: "image-model",
+    kind: "image",
+    baseURL: "https://provider.example/v1",
+    fetch: async (_url, init) => {
+      submitted.push(JSON.parse(String(init?.body)));
+      return new Response('{"error":{"message":"Model unavailable"}}', {
+        status: 503,
+      });
+    },
+  });
+  let error: unknown;
+  try {
+    await generateText({ model, prompt, maxRetries: 0 });
+  } catch (caught) {
+    error = caught;
+  }
+  expect(APICallError.isInstance(error)).toBe(true);
+  expect(submitted).toEqual([
+    expect.objectContaining({ model: "image-model", prompt }),
+  ]);
+
+  const exporter = new InMemoryLogRecordExporter();
+  const provider = new LoggerProvider({
+    processors: [new SimpleLogRecordProcessor({ exporter })],
+  });
+  const retained: Record<string, unknown>[] = [];
+  const stdout: string[] = [];
+  try {
+    const logger = createLogger({
+      level: "info",
+      streams: [
+        { stream: { write: (record) => stdout.push(record) } },
+        {
+          stream: createLogObserverStream({
+            logger: provider.getLogger("pino"),
+            retain: (record) => retained.push(record),
+          }),
+        },
+      ],
+    });
+    logger.error(
+      { err: error, conversationId: "synthetic-id" },
+      "Chat stream failed",
+    );
+    await provider.forceFlush();
+    const exported = exporter.getFinishedLogRecords();
+    expect(stdout).toHaveLength(1);
+    expect(retained).toHaveLength(1);
+    expect(exported).toHaveLength(1);
+    expect(retained[0]).toEqual(JSON.parse(stdout[0]));
+    expect(retained[0]).toMatchObject({
+      conversationId: "synthetic-id",
+      err: { statusCode: 503, message: "Model unavailable", isRetryable: true },
+    });
+    expect(exported[0].attributes.err).toMatchObject({ statusCode: 503 });
+    expect(JSON.stringify([stdout, retained, exported])).not.toContain(prompt);
+    expect(error).toMatchObject({ requestBodyValues: { prompt } });
+  } finally {
+    await provider.shutdown();
+  }
+});
 
 test("stdout, retained context and exported OTEL records share credential redaction", async () => {
   const exporter = new InMemoryLogRecordExporter();

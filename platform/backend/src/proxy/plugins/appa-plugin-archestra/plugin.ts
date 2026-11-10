@@ -281,6 +281,8 @@ type AppaPluginBinding = {
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
   requiresRemedyContinuation: boolean;
+  /** The ruling that continuation answers, recorded once the guidance goes out. */
+  pendingRemedyContinuation?: RemedyContinuation;
   /** Offers whose first control call requested a native client review. */
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
@@ -932,13 +934,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           offers: [],
         };
     }
-    binding.requiresRemedyContinuation = await hasRemedyOfferResult({
+    binding.pendingRemedyContinuation = await hasRemedyOfferResult({
       binding,
+      session: this.governedSession(binding),
       interactionType: context.interactionType,
       results: toolResults,
       toolResultUpdates: result.toolResultUpdates,
       verifiedNativeQuestionResults,
     });
+    binding.requiresRemedyContinuation =
+      binding.pendingRemedyContinuation !== undefined;
     // A denied call's receipt is history, not withheld output: waiving it
     // would disable enforcement just because a client replayed an old block.
     // Keep those receipts even when a separate result admission is waived.
@@ -1149,6 +1154,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
+      const delivered = binding.pendingRemedyContinuation;
+      binding.pendingRemedyContinuation = undefined;
+      if (delivered) {
+        // The nudge goes out once per ruling. A replay of the same history
+        // gets it again; a history the model has since added to does not.
+        await cacheManager.set(
+          remedyContinuationDeliveredKey({
+            session: this.governedSession(binding),
+            callId: delivered.callId,
+          }),
+          delivered.laterResults,
+          TimeInMs.Day,
+        );
+      }
     }
     if (binding && binding.nativeHitlRulings.length > 0) {
       const rulings = binding.nativeHitlRulings;
@@ -3278,6 +3297,23 @@ function unansweredNoticeKey(params: {
 }): AllowedCacheKey {
   return sessionScopedCacheKey(
     CacheKey.OpenAppaUnansweredAnnotationNotice,
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  );
+}
+
+/** A ruling whose remedy continuation is due, and how much history followed it. */
+type RemedyContinuation = {
+  callId: string;
+  /** Results after the ruling in the request that carried it. */
+  laterResults: number;
+};
+
+function remedyContinuationDeliveredKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaRemedyContinuationDelivered,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   );
 }
@@ -7861,15 +7897,23 @@ async function reviewQuestionAskedBefore(params: {
   return false;
 }
 
+/**
+ * The ruling the next request must answer with a remedy call, if any: the
+ * latest blocked result with an offer, unless a control call or a user
+ * answer already followed it, or the model already went on after reading
+ * it. Without that last check a declined offer would be put to the model
+ * again on every later request of the turn.
+ */
 async function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
+  session: OpenAppaSession;
   interactionType: string;
   results: LlmProxyToolResultsContext["toolResults"];
   toolResultUpdates: Awaited<
     ReturnType<typeof processProxyResults>
   >["toolResultUpdates"];
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<boolean> {
+}): Promise<RemedyContinuation | undefined> {
   // Restored notice IDs are client-carried structure, not proof of issuance.
   // The runtime must supply the ruling and this session must own its call.
   const session = params.binding.session;
@@ -7982,7 +8026,7 @@ async function hasRemedyOfferResult(params: {
     return [index];
   });
   const latestBlockedResult = blocked.at(-1) ?? -1;
-  if (latestBlockedResult < 0) return false;
+  if (latestBlockedResult < 0) return undefined;
 
   const control = params.binding.request.tools?.control;
   for (
@@ -7995,7 +8039,7 @@ async function hasRemedyOfferResult(params: {
       params.verifiedNativeQuestionResults.has(result) ||
       isUserQuestionResult({ binding: params.binding, answer: result })
     )
-      return false;
+      return undefined;
     if (!control) continue;
     if (
       isSpecialToolMember(
@@ -8009,10 +8053,33 @@ async function hasRemedyOfferResult(params: {
         "control",
       )
     ) {
-      return false;
+      return undefined;
     }
   }
-  return true;
+  const continuation = {
+    callId: withoutTrajectoryStamp(params.results[latestBlockedResult].id),
+    laterResults: params.results.length - 1 - latestBlockedResult,
+  };
+  const delivered = await cacheManager.get<number>(
+    remedyContinuationDeliveredKey({
+      session: params.session,
+      callId: continuation.callId,
+    }),
+  );
+  if (typeof delivered === "number" && continuation.laterResults > delivered) {
+    // The model read the ruling and went on with other calls: the plan it
+    // declined is not put to it again. A new ruling arms the nudge again.
+    logger.debug(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: continuation.callId,
+        laterResults: continuation.laterResults,
+      },
+      "OpenAPPA remedy continuation already answered; the model went on",
+    );
+    return undefined;
+  }
+  return continuation;
 }
 
 function reviewStatusInstruction(

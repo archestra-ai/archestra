@@ -51,6 +51,7 @@ import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallsContext,
+  type LlmProxyToolResultsContext,
 } from "@/proxy/plugins/registry";
 import { GrokDeferredTools } from "@/routes/proxy/utils/grok-deferred-tools";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
@@ -1344,6 +1345,147 @@ describe("asking through the client's own question tool", () => {
       }
     });
   }
+
+  test("puts a remedy offer to the model once, not on every later request", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sessionId = "remedy-continuation-once";
+    const rulings = ["call_notice", "call_notice_2"].map((callId) => ({
+      callId,
+      ruling: `[appa] Blocked: execute_remedy_plan(offer_id: "offer-${callId}", plan: "Submit for approval")`,
+    }));
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId, organizationId: org.id });
+    context.headers = { originator: "codex_cli_rs" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.toolIdentity = identityStub();
+    trusted.request = {
+      tools: {
+        control: {
+          name: "archestra__execute_remedy_plan",
+          namespace: "mcp__gateway",
+        },
+        notice: {
+          name: "archestra__get_remedy_plans",
+          namespace: "mcp__gateway",
+        },
+        askUser: undefined,
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [],
+      session: {},
+    };
+    const storedSession = {
+      organizationId: org.id,
+      callerId: "user:user",
+      sessionId,
+      actor: openappaActor(sessionId),
+      root: openappaActor(sessionId),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    };
+    await db.insert(schema.openappaSessionsTable).values(storedSession);
+    for (const { callId } of rulings) {
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        root: storedSession.root,
+        operationId: `call:${callId}`,
+        status: "complete",
+        input: { semantic: { event: "tool_call" } },
+        decision: { decision: "deny_call" },
+      });
+    }
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: Object.fromEntries(
+          rulings.map(({ callId, ruling }) => [
+            callId,
+            { content: ruling, outputSource: "runtime" as const },
+          ]),
+        ),
+      });
+    const noticeResult = (index: 0 | 1) => ({
+      id: rulings[index].callId,
+      name: "archestra__get_remedy_plans",
+      namespace: "mcp__gateway",
+      content: "client echo",
+      isError: false,
+    });
+    const laterResult = (id: string) => ({
+      id,
+      name: "read_document",
+      namespace: "mcp__foreign",
+      content: "Done",
+      isError: false,
+    });
+    const nudged = async (
+      toolResults: LlmProxyToolResultsContext["toolResults"],
+    ) => {
+      await plugin.onToolResults({ ...context, toolResults });
+      const request = {
+        input: [],
+        tool_choice: "auto",
+        parallel_tool_calls: true,
+      };
+      await plugin.onBeforeModel({
+        ...context,
+        interactionType: "openai:responses",
+        request,
+      });
+      const guided = JSON.stringify(request.input).includes(
+        "The ruling above offers a remedy plan",
+      );
+      expect(request.tool_choice).toBe(guided ? "required" : "auto");
+      return guided;
+    };
+    try {
+      await plugin.onSessionInit(context);
+      // The ruling arrives: the model is told to apply a fitting plan.
+      expect(await nudged([noticeResult(0)])).toBe(true);
+      // The same history again (a retry) is told again.
+      expect(await nudged([noticeResult(0)])).toBe(true);
+      // The model read the ruling, declined the plan and went on: not again.
+      expect(await nudged([noticeResult(0), laterResult("later-1")])).toBe(
+        false,
+      );
+      expect(
+        await nudged([
+          noticeResult(0),
+          laterResult("later-1"),
+          laterResult("later-2"),
+        ]),
+      ).toBe(false);
+      // A new ruling arms the nudge once more, and only once.
+      expect(
+        await nudged([
+          noticeResult(0),
+          laterResult("later-1"),
+          laterResult("later-2"),
+          noticeResult(1),
+        ]),
+      ).toBe(true);
+      expect(
+        await nudged([
+          noticeResult(0),
+          laterResult("later-1"),
+          laterResult("later-2"),
+          noticeResult(1),
+          laterResult("later-3"),
+        ]),
+      ).toBe(false);
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
 
   test("tells Codex to use declared collaboration spawn tools instead of a nested CLI", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);

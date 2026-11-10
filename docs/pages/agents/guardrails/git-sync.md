@@ -73,7 +73,7 @@ include = [
 ]
 ```
 
-Only Archestra reads `mcp/*.toml` and the `<tool prefix>__*` rules below: OpenAPPA's own `appa` command does not read them yet. A workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on them. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+OpenAPPA 0.41 and later read `mcp/*.toml` too, so `appa replay` in the repository's CI sees the server files. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
 
 ### Before Editors Start
 

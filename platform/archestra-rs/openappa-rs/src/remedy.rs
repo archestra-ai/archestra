@@ -536,9 +536,15 @@ fn denied_block(feedback: &str) -> &str {
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
-        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
+        // A superseded offer was a live one gone stale, reported before as an unknown offer.
+        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer | RemedyRefusal::Superseded => {
+            Some("unknown_control_call")
+        }
         // Its text says how to declare at the spawn's block instead.
         RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::AttemptReused
+        | RemedyRefusal::UnidentifiedDeclaration
+        | RemedyRefusal::AmbiguousReplay
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
@@ -546,12 +552,16 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     }
 }
 
+/// A plan that only declares a subagent's return covers none of the call's other gaps, so
+/// the runtime authorizes it and the retry can still be refused.
+const RECHECKED: &str = "The call is checked again and can still be blocked for another reason; then follow that block. ";
+
 fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
     // A call made through the dispatch tool is retried through it: the client
     // may hold no tool by the target's own name.
     if let Some(dispatch) = owner.and_then(|owner| owner.dispatch.as_deref()) {
         return format!(
-            "[appa] {status}. Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
+            "[appa] {status}. {RECHECKED}Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
             Value::String(spelled_tool(&call.tool)),
             retry_arguments(call)
         );
@@ -564,7 +574,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // The user may have accepted the plan through ask_user, so the text does
     // not credit the model with the choice.
     format!(
-        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. {RECHECKED}Call the {tool} tool again with exactly these arguments: {}",
         retry_arguments(call)
     )
 }
@@ -905,7 +915,8 @@ mod typed_tests {
         let (prefix, arguments) = hint.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
             prefix,
-            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+            "[appa] Authorized. The call is checked again and can still be blocked for another reason; \
+             then follow that block. Call the my_gateway_archestra__run_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -1113,8 +1124,8 @@ mod typed_tests {
         assert_eq!(
             prefix,
             "[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, \
-             the session keeps its current label and calls that need the plan stay blocked. Call the client_tool tool \
-             again with "
+             the session keeps its current label and calls that need the plan stay blocked. The call is checked again \
+             and can still be blocked for another reason; then follow that block. Call the client_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -1149,7 +1160,8 @@ mod typed_tests {
             .expect("hint names the arguments");
         assert_eq!(
             prefix,
-            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+            "[appa] Authorized. The call is checked again and can still be blocked for another reason; \
+             then follow that block. Call the my_gateway_archestra__run_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),

@@ -160,9 +160,9 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         );
         if (connected.length > 0)
           return connected.map((key) => ({ kind, key }));
-        return catalog.isHidden(spec.provider)
-          ? []
-          : [{ kind, key: undefined }];
+        return catalog.canAddKey(spec.provider)
+          ? [{ kind, key: undefined }]
+          : [];
       }),
     [data.keys, catalog],
   );

@@ -1,3 +1,5 @@
+import { GITHUB_COPILOT_ORGANIZATION_LABEL } from "@archestra/shared";
+
 /**
  * Display helpers for an organization subscription: GitHub Copilot paid by a
  * GitHub organization through a GitHub App key. Pickers list it in its own
@@ -19,17 +21,17 @@ export function isOrganizationSubscription(
 }
 
 /**
- * The plan's own name, as set when it was connected. A plan still named by
- * default reads "GitHub Copilot · acme".
+ * How every picker and the Model Providers card name a connected plan:
+ * "Github Copilot acme", after its GitHub organization. Without a known
+ * organization, the plan's own name.
  */
 export function organizationSubscriptionName(
   key: OrganizationSubscriptionKey,
 ): string {
-  const name = key.name?.trim();
-  const organization = key.githubOrganization ?? "organization";
-  return name && name !== `GitHub Copilot (${organization})`
-    ? name
-    : `GitHub Copilot · ${organization}`;
+  if (key.githubOrganization) {
+    return `${ORGANIZATION_PLAN_NAME_PREFIX} ${key.githubOrganization}`;
+  }
+  return key.name?.trim() || GITHUB_COPILOT_ORGANIZATION_LABEL;
 }
 
 /** "Billed to acme on GitHub". */
@@ -49,3 +51,5 @@ export function copilotCredentialSourceLabel(
     ? `Enterprise plan · ${source.organization ?? "unknown organization"}`
     : "Personal sign-in";
 }
+
+const ORGANIZATION_PLAN_NAME_PREFIX = "Github Copilot";

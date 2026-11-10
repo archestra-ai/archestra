@@ -50,6 +50,7 @@ function renderCards(
   };
   render(
     <OrganizationSubscriptionCards
+      name="Github Copilot Organization"
       credentials={credentials}
       isLoading={false}
       disconnectBlockedReason={() => blockedReason}
@@ -64,13 +65,26 @@ describe("OrganizationSubscriptionCards", () => {
     const user = userEvent.setup();
     const handlers = renderCards([]);
 
-    expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
+    expect(screen.getByText("Github Copilot Organization")).toBeInTheDocument();
     expect(
       screen.getByText("Connect your enterprise GitHub Copilot plan."),
     ).toBeInTheDocument();
     expect(screen.getByText("Not connected")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(handlers.onConnect).toHaveBeenCalledOnce();
+  });
+
+  it("names a connected card after its GitHub organization", () => {
+    renderCards([appKey()]);
+
+    expect(screen.getByText("Github Copilot my-org")).toBeInTheDocument();
+    expect(screen.queryByText("Github Copilot Organization")).toBeNull();
+  });
+
+  it("keeps the plan's name on a connected card whose organization is unknown", () => {
+    renderCards([appKey({ githubOrganization: null })]);
+
+    expect(screen.getByText("Github Copilot Organization")).toBeInTheDocument();
   });
 
   it("shows a connected organization like a personal subscription, with Manage and Disconnect", async () => {

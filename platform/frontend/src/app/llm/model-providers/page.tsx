@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  copilotEnterprisePlanLabel,
   DEFAULT_CREDENTIAL_GRANTS,
   E2eTestId,
   formatSecretStorageType,
@@ -204,7 +205,7 @@ export default function ApiKeysPage() {
   const linkedCreate = useMemo(
     (): Partial<LlmProviderApiKeyFormValues> | undefined =>
       isSupportedProvider(createProvider) &&
-      !providerCatalog.isHidden(createProvider)
+      providerCatalog.canAddKey(createProvider)
         ? {
             provider: createProvider,
             initialGrants: createShared
@@ -420,13 +421,14 @@ export default function ApiKeysPage() {
 
   /**
    * Subscription offers shown as cards above the table. A provider the admins
-   * turned off is not offered at all; a key that already connects it keeps its
-   * table row instead, so an admin can still see and delete it.
+   * turned off is not offered at all, and neither is GitHub Copilot when only
+   * its personal subscriptions are off. A key that already connects it keeps
+   * its table row instead, so an admin can still see and delete it.
    */
   const subscriptionOffers = useMemo(
     () =>
-      buildSubscriptionOffers(allApiKeys).filter(
-        ({ provider }) => !providerCatalog.isHidden(provider),
+      buildSubscriptionOffers(allApiKeys).filter(({ provider }) =>
+        providerCatalog.canAddKey(provider),
       ),
     [allApiKeys, providerCatalog],
   );
@@ -484,7 +486,7 @@ export default function ApiKeysPage() {
         allApiKeys.filter((key) => key.userId === currentUserId),
       ).find(
         ({ kind, provider }) =>
-          kind === reconnectKind && !providerCatalog.isHidden(provider),
+          kind === reconnectKind && providerCatalog.canAddKey(provider),
       ) ?? null
     );
   }, [
@@ -519,6 +521,8 @@ export default function ApiKeysPage() {
     () => allApiKeys.filter((key) => key.isGithubAppKey),
     [allApiKeys],
   );
+  const enterprisePlansHidden =
+    providerCatalog.isCopilotPlanHidden("enterprise");
   const [copilotConnect, setCopilotConnect] = useState<{
     manage: {
       id: string;
@@ -535,9 +539,13 @@ export default function ApiKeysPage() {
         ...subscriptionOffers.flatMap(({ credential }) =>
           credential ? [credential.id] : [],
         ),
-        ...organizationSubscriptions.map((key) => key.id),
+        // With enterprise plans off there are no cards, so the plans that
+        // exist stay in the table, where an admin can still delete them.
+        ...(enterprisePlansHidden
+          ? []
+          : organizationSubscriptions.map((key) => key.id)),
       ]),
-    [subscriptionOffers, organizationSubscriptions],
+    [subscriptionOffers, organizationSubscriptions, enterprisePlansHidden],
   );
 
   const rows = useMemo(
@@ -654,9 +662,11 @@ export default function ApiKeysPage() {
                 className="rounded dark:invert"
               />
               <span className="truncate">{label}</span>
-              {providerCatalog.isHidden(provider) && (
-                <InlineTag className="shrink-0">Turned off</InlineTag>
-              )}
+              {(providerCatalog.isHidden(provider) ||
+                (provider === "github-copilot" &&
+                  providerCatalog.isCopilotPlanHidden(
+                    row.original.isGithubAppKey ? "enterprise" : "personal",
+                  ))) && <InlineTag className="shrink-0">Turned off</InlineTag>}
             </div>
           );
         },
@@ -798,9 +808,10 @@ export default function ApiKeysPage() {
           }}
         />
 
-        {/* Turned off by an admin: no enterprise plan is offered either. */}
-        {providerCatalog.isHidden("github-copilot") ? null : (
+        {/* Turned off by an admin, alone or with GitHub Copilot itself. */}
+        {enterprisePlansHidden ? null : (
           <OrganizationSubscriptionCards
+            name={copilotEnterprisePlanLabel(providerCatalog.overrides)}
             credentials={organizationSubscriptions}
             isLoading={
               permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)

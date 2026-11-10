@@ -1463,13 +1463,18 @@ export function ConnectCommandPanel({
   // The GitHub Copilot accounts still to connect, as on the Model Providers
   // page: both before any is connected, then the one not in use. They have one
   // place, under the provider, on the command page and the approval page alike.
+  const hiddenCopilotPlans = {
+    personal: providerCatalog.isCopilotPlanHidden("personal"),
+    enterprise: providerCatalog.isCopilotPlanHidden("enterprise"),
+  };
   const accountCards =
     proxyActive &&
     provider === "github-copilot" &&
     providerIsPerUser &&
-    copilotAccountMissing(perUserKeys) ? (
+    copilotAccountMissing(perUserKeys, hiddenCopilotPlans) ? (
       <CopilotAccountCards
         keys={perUserKeys}
+        hiddenPlans={hiddenCopilotPlans}
         pending={createPerUserKey.isPending}
         onToken={connectOwnCopilot}
       />

@@ -1,6 +1,7 @@
 import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import { appendChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { retainChildTrajectoryReference } from "@/openappa/child-trajectory-reference";
 import { wrapCompactionResponse } from "@/openappa/compaction-carrier";
 import { formatSessionReceipt } from "@/openappa/session-token";
 import {
@@ -85,11 +86,18 @@ export class OpenappaReceipts {
       }
     }
     if (!issued && !sessionReceipt) return undefined;
+    const childFooter =
+      issued?.compactSession && (!issued.inHistory || clientCompaction)
+        ? await retainChildTrajectoryReference(
+            issued.compactSession,
+            issued.footer,
+          )
+        : issued?.footer;
     return new OpenappaReceipts({
       session: sessionReceipt,
       childTrajectory:
         issued && family && (!issued.inHistory || clientCompaction)
-          ? { family, footer: issued.footer }
+          ? { family, footer: childFooter ?? issued.footer }
           : undefined,
       compactionContext: issued?.footer,
     });

@@ -299,6 +299,16 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     label: "Grok Build",
     sub: "xAI coding agent",
     ...markFields(GROK_MARK),
+    proxy: {
+      kind: "custom",
+      supportedProviders: ["xai", "openai", "anthropic"],
+      build: ({ provider, url, tokenPlaceholder, appName }) => ({
+        kind: "snippet",
+        language: "toml",
+        code: `[model.archestra]\nname = ${JSON.stringify(appName)}\nmodel = "<model-id>"\nbase_url = ${JSON.stringify(url)}\napi_backend = "${provider === "anthropic" ? "messages" : "chat_completions"}"\napi_key = ${JSON.stringify(tokenPlaceholder)}\nextra_headers = { "X-Archestra-Agent-Id" = "grok-build" }\nsupports_backend_search = false`,
+        note: "This snippet configures one Grok Build model, not every inference role. Use the connection installer and node ~/.archestra/grok/launch.cjs for managed proxy routing and browser MCP authorization. Grok Bot desktop is not configured.",
+      }),
+    },
   },
   {
     id: "hermes-agent",
@@ -1058,6 +1068,24 @@ export COPILOT_MODEL="<model-name>"`,
       svgFillRule:
         client.svgFillRule ?? (client.svgViewBox ? undefined : "evenodd"),
       mcp: { kind: "generic", supportedAuth: "both" },
+      ...(client.id === "grok-build"
+        ? {
+            mcp: {
+              kind: "custom" as const,
+              supportedAuth: "both" as const,
+              configFile: "~/.archestra/grok/native/config.toml",
+              language: "toml" as const,
+              steps: [
+                {
+                  title: "Connect the Grok gateway",
+                  body: "Use the Grok Build connection installer. Its authorization step opens browser consent, verifies the gateway, and returns without starting Grok. Starting Grok is a separate optional step. Grok Bot desktop configuration is not changed.",
+                },
+              ],
+              buildConfig: ({ url, token, serverName }: McpBuildParams) =>
+                `[mcp_servers.${JSON.stringify(serverName)}]\nurl = ${JSON.stringify(url)}\nheaders = { "x-appa-session-id" = "{{session_id}}"${token ? `, "Authorization" = ${JSON.stringify(`Bearer ${token}`)}` : ""} }`,
+            },
+          }
+        : {}),
       proxy: client.proxy ?? { kind: "generic" },
     }),
   ),

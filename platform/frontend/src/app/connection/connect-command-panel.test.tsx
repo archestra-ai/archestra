@@ -2358,6 +2358,261 @@ describe("ConnectCommandPanel", () => {
   });
 
   describe("script client model choice", () => {
+    it("Grok starts with native subscription without an org key/catalog, preserves overrides, and rejects an explicitly cleared model", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      modelsByProviderMock.mockReturnValue({});
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("grok-build") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "native-session",
+            model: undefined,
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-model"));
+      expect(
+        screen.queryByRole("textbox", { name: "Custom model ID" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent(
+        "Automatic — current subscription default",
+      );
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Model" }), {
+        key: "ArrowDown",
+      });
+      await user.click(screen.getByRole("option", { name: "Custom model…" }));
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "caller-served-model" },
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "native-session",
+            model: "caller-served-model",
+          }),
+        ),
+      );
+      createSetupMock.mockClear();
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "   " },
+      });
+      expect(screen.getByPlaceholderText("Model id")).toHaveValue("   ");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Enter a model ID served by the selected provider",
+      );
+      expect(createSetupMock).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "" },
+      });
+      expect(screen.getByPlaceholderText("Model id")).toHaveValue("");
+      expect(createSetupMock).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "caller-served-model" },
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "caller-served-model" }),
+        ),
+      );
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Model" }), {
+        key: "ArrowDown",
+      });
+      await user.click(
+        screen.getByRole("option", {
+          name: "Automatic — current subscription default",
+        }),
+      );
+      expect(
+        screen.queryByRole("textbox", { name: "Custom model ID" }),
+      ).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: undefined }),
+        ),
+      );
+    });
+
+    it("Grok offers actual catalog options and retains a deliberate custom value across same-provider credential modes", async () => {
+      availableKeysMock.mockReturnValue({
+        data: [{ id: "xai-key", provider: "xai" }],
+      });
+      modelsByProviderMock.mockReturnValue({
+        xai: [{ id: "grok-4.3" }, { id: "catalog-deployment-model" }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("grok-build") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: undefined }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-model"));
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Model" }), {
+        key: "ArrowDown",
+      });
+      await user.click(
+        screen.getByRole("option", {
+          name: "catalog-deployment-model",
+        }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "catalog-deployment-model" }),
+        ),
+      );
+      expect(
+        screen.queryByRole("textbox", { name: "Custom model ID" }),
+      ).not.toBeInTheDocument();
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Model" }), {
+        key: "ArrowDown",
+      });
+      await user.click(screen.getByRole("option", { name: "Custom model…" }));
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "Custom model ID" }),
+        { target: { value: "private-deployment-model" } },
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "private-deployment-model" }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "A personal virtual key" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "virtual-key",
+            model: "private-deployment-model",
+          }),
+        ),
+      );
+    });
+
+    it("Grok resets the model only when switching providers and uses MCP-only setup with proxy off", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      modelsByProviderMock.mockReturnValue({});
+      const user = userEvent.setup();
+      const client = findClient("grok-build");
+      const { rerender } = renderPanel({ client });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ provider: "xai", model: undefined }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "Your own API key (passthrough)" }),
+      );
+      rerender(
+        <ConnectCommandPanel
+          {...renderPanelProps({ client, urlProvider: "openai" })}
+        />,
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "openai",
+            proxyAuth: "provider-key",
+            model: expect.any(String),
+          }),
+        ),
+      );
+      expect(createSetupMock.mock.lastCall?.[0].model).not.toBe("grok-4.3");
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      expect(
+        screen.getByRole("option", { name: "A personal virtual key" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      await user.keyboard("{Escape}");
+      rerender(
+        <ConnectCommandPanel
+          {...renderPanelProps({
+            client,
+            urlProvider: "openai",
+            llmProxyId: null,
+          })}
+        />,
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: undefined,
+            model: undefined,
+          }),
+        ),
+      );
+    });
+
+    it("Grok exposes API passthrough and native skills without plugins, then switches to an available virtual-key provider", async () => {
+      availableKeysMock.mockReturnValue({
+        data: [{ id: "xai-key", provider: "xai" }],
+      });
+      modelsByProviderMock.mockReturnValue({
+        xai: [{ id: "grok-test-model" }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("grok-build") });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "native-session",
+            model: undefined,
+            skills: expect.anything(),
+            pluginIds: [],
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "Your own API key (passthrough)" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "provider-key",
+            provider: "xai",
+          }),
+        ),
+      );
+      expect(screen.getByText(/XAI_API_KEY/)).toBeVisible();
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Grok credentials" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "A personal virtual key" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "xai",
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+    });
+
     it.each([
       "pi",
       "copilot-cli",
@@ -3571,14 +3826,15 @@ describe("first approval setup, as the server seed prepares it", () => {
   ] as const;
 
   it.each(
-    (["opencode", "claude-code", "pi"] as const).flatMap((clientId) =>
-      (["admin", "member"] as const).flatMap((role) =>
-        [false, true].map((configuredBaseUrls) => ({
-          clientId,
-          role,
-          configuredBaseUrls,
-        })),
-      ),
+    (["opencode", "claude-code", "codex", "grok-build", "pi"] as const).flatMap(
+      (clientId) =>
+        (["admin", "member"] as const).flatMap((role) =>
+          [false, true].map((configuredBaseUrls) => ({
+            clientId,
+            role,
+            configuredBaseUrls,
+          })),
+        ),
     ),
   )("prepares a valid first payload: $clientId, $role, configured base URLs $configuredBaseUrls", async ({
     clientId,

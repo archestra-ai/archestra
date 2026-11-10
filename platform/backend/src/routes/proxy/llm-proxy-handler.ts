@@ -136,6 +136,7 @@ import {
   scrubOpenappaIngress,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
+import { APPA_WITHDRAWN_CHILD_RETURN } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -1884,6 +1885,11 @@ async function handleObservedLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      if (
+        (admission.kind === "ungoverned" || admission.kind === "waived") &&
+        admission.withdrawnChildReturn
+      )
+        pluginContext.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
       if (admission.kind !== "ungoverned") {
         const prepared = await prepareOpenappaRequest({
           admission,
@@ -3717,9 +3723,18 @@ async function handleStreaming<
         }) ?? contentMessage;
       childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
-      // Its text comes from APPA when enabled.
-      const refusalEvents =
-        streamAdapter.formatCompleteTextSSE(fullContentMessage);
+      // A root's preface may already be visible. Separate the ruling from
+      // that text; buffered child prose was discarded and needs no separator.
+      const precedingText = bufferModelResponse ? "" : streamAdapter.state.text;
+      const separator =
+        !precedingText || precedingText.endsWith("\n\n")
+          ? ""
+          : precedingText.endsWith("\n")
+            ? "\n"
+            : "\n\n";
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(
+        `${separator}${fullContentMessage}`,
+      );
       for (const event of refusalEvents) {
         childStream.emitPolicy(event);
       }
@@ -3888,8 +3903,7 @@ async function handleStreaming<
     }
     const eofError =
       error instanceof ResponsesStreamIncompleteError &&
-      provider.provider === "openai" &&
-      provider.interactionType === "openai:responses"
+      appaWireFamily(provider.interactionType) === "openai:responses"
         ? error
         : undefined;
     const responsesError =

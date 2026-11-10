@@ -160,6 +160,7 @@ describe("GitHub Copilot Responses stream normalization", () => {
         output_index: 1,
         item: { type: "message", id: "rotating-7" },
       },
+      { type: "response.completed" },
     ];
     const out = await collect(chunks);
     expect(
@@ -174,6 +175,7 @@ describe("GitHub Copilot Responses stream normalization", () => {
       "message",
       "message",
       "message",
+      undefined,
     ]);
     expect(
       out.map(({ item_id: _itemId, item, ...event }) => ({
@@ -213,6 +215,7 @@ describe("GitHub Copilot Responses stream normalization", () => {
         item: { type: "function_call", id: "rotating" },
       },
       { ...ambiguous, item_id: "rotating-again" },
+      { type: "response.completed" },
     ]);
     expect(out[2]).toEqual(ambiguous);
     expect(out[3]).toEqual(unknown);
@@ -264,10 +267,29 @@ describe("GitHub Copilot Responses stream normalization", () => {
         item_id: "ROTATING",
         summary_index: 0,
       },
+      { type: "response.completed" },
     ]);
 
     const added = out[0].item as { id?: string };
     expect(added.id).toBeTruthy();
     expect(out[1].item_id).toBe(added.id);
+  });
+
+  test("rejects an unfinished Copilot stream after normalizing its events", async () => {
+    await expect(
+      collect([
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "message", id: "message" },
+        },
+        {
+          type: "response.output_text.delta",
+          output_index: 0,
+          item_id: "rotating",
+          delta: "Partial answer",
+        },
+      ]),
+    ).rejects.toMatchObject({ code: "proxy_stream_incomplete" });
   });
 });

@@ -67,6 +67,7 @@ function makeSettings(
   return {
     enabled: true,
     budgetUsdPerDay: 20,
+    budgetPreset: null,
     tiers: {
       fast: tier("claude-haiku", 1),
       normal: tier("claude-sonnet", 2),
@@ -275,16 +276,163 @@ describe("AutoRoutingOverviewPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("requires a budget to turn routing on", async () => {
+  it("turns routing on with Balanced when no budget was ever set", async () => {
     settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
     const user = userEvent.setup();
     renderPage();
-    await openConfigure(user);
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Configure" }))[0],
+    );
+    expect(
+      await screen.findByRole("radio", { name: /Balanced/ }),
+    ).toBeChecked();
+    expect(screen.queryByLabelText("USD per day")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Auto routing on" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updates).toEqual([{ enabled: true, budgetPreset: "balanced" }]),
+    );
+  });
+
+  it("requires a custom budget to turn routing on with Custom", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Configure" }))[0],
+    );
+    await user.click(await screen.findByRole("radio", { name: /Custom/ }));
     await user.click(screen.getByRole("switch", { name: "Auto routing on" }));
 
     expect(await screen.findByText("Set a daily budget.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(updates).toEqual([]);
+  });
+
+  it("switching from a custom budget to a preset saves only the preset and shows what it costs today", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        coldStart: { ...makeSettings().status.coldStart, sessions: 120 },
+      },
+    });
+    const simulated: unknown[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/simulate`,
+        async ({ request }) => {
+          simulated.push(await request.json());
+          return HttpResponse.json({
+            ...feasibleSimulation(0.9),
+            budgetUsdPerDay: 12.34,
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await openConfigure(user);
+    await user.click(screen.getByRole("radio", { name: /Intelligence/ }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("auto-routing-preset-estimate"),
+      ).toHaveTextContent("≈ $12.34/day"),
+    );
+    expect(screen.getByTestId("auto-routing-budget-split")).toHaveTextContent(
+      "50% fast30% normal20% smart",
+    );
+    expect(simulated).toEqual([
+      { budgetUsdPerDay: 20, volumeMultiplier: 1 },
+      { budgetPreset: "intelligence", volumeMultiplier: 1 },
+    ]);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updates).toEqual([{ budgetPreset: "intelligence" }]),
+    );
+  });
+
+  it("shows where sessions would land for a typed custom budget", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        coldStart: { ...makeSettings().status.coldStart, sessions: 120 },
+      },
+    });
+    const simulated: { budgetUsdPerDay?: number }[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/simulate`,
+        async ({ request }) => {
+          const body = (await request.json()) as { budgetUsdPerDay: number };
+          simulated.push(body);
+          if (body.budgetUsdPerDay < 5) {
+            return HttpResponse.json({
+              status: "infeasible",
+              minBudgetUsdPerDay: 7.5,
+              baseline: { tokensPerDay: 10_000_000, sessionsPerDay: 150 },
+            });
+          }
+          return HttpResponse.json({
+            ...feasibleSimulation(0.9),
+            budgetUsdPerDay: body.budgetUsdPerDay,
+            summary: {
+              ...activePlan.summary,
+              tier_session_share: [0.1, 0.6, 0.3],
+            },
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await openConfigure(user);
+    await user.clear(budget);
+    await user.type(budget, "35");
+
+    await waitFor(() =>
+      expect(simulated).toContainEqual({
+        budgetUsdPerDay: 35,
+        volumeMultiplier: 1,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("auto-routing-budget-split")).toHaveTextContent(
+        "10% fast60% normal30% smart",
+      ),
+    );
+
+    await user.clear(budget);
+    await user.type(budget, "2");
+    expect(
+      await screen.findByText("Today's traffic needs at least $7.50/day."),
+    ).toBeInTheDocument();
+    expect(updates).toEqual([]);
+  });
+
+  it("opens on the saved preset and explains a preset during cold start", async () => {
+    settings = makeSettings({ budgetPreset: "cost_efficient" });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Configure" }))[0],
+    );
+
+    expect(
+      await screen.findByRole("radio", { name: /Cost-efficient/ }),
+    ).toBeChecked();
+    expect(screen.getByTestId("auto-routing-budget-note")).toHaveTextContent(
+      "Set after 100 sessions (12 so far)",
+    );
+    await user.click(screen.getByRole("radio", { name: /Custom/ }));
+    const budget = screen.getByLabelText("USD per day");
+    await user.clear(budget);
+    await user.type(budget, "40");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updates).toEqual([{ budgetPreset: null, budgetUsdPerDay: 40 }]),
+    );
   });
   it("says where Auto is used", async () => {
     settings = makeSettings({
@@ -1403,6 +1551,7 @@ function feasibleSimulation(quality: number): AutoRoutingSimulation {
   const saved = makeSettings().tiers;
   return {
     status: "feasible",
+    budgetUsdPerDay: 20,
     summary: {
       ...activePlan.summary,
       tokens_per_day: 30_000_000,
@@ -1462,5 +1611,5 @@ async function openConfigure(user: ReturnType<typeof userEvent.setup>) {
     name: "Configure",
   });
   await user.click(configure);
-  return screen.findByLabelText("Daily budget (USD)");
+  return screen.findByLabelText("USD per day");
 }

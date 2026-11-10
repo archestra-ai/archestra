@@ -1,3 +1,5 @@
+import { MARKETPLACE_SKILLS_SYNC } from "./marketplace-skills-sync";
+
 /** Private, ownership-aware state shared by setup and the native launcher. */
 export const PI_INSTALLATION = String.raw`
 const PiInstallation = (() => {
@@ -201,6 +203,7 @@ if ($action -eq 'add') {
 `;
 
 export const PI_LIFECYCLE = String.raw`// Managed Pi launcher lifecycle.
+${MARKETPLACE_SKILLS_SYNC}
 ${PI_INSTALLATION}
 module.exports = { PiInstallation };
 if (require.main === module) {
@@ -278,9 +281,9 @@ async function checkPiConnection(install) {
     (async () => {
       try {
         if (config.skills) {
-          const owner = install.readJson(path.join(install.home, ".archestra/skills", config.skills.marketplaceName, ".git/archestra-skills.json"));
-          if (owner?.sourceFingerprint !== crypto.createHash("sha256").update(config.skills.cloneUrl).digest("hex")) throw new Error();
-          const directory = path.join(install.home, ".archestra/skills", config.skills.marketplaceName);
+          const directory = marketplaceSkillsLocation(config.skills).repository;
+          const owner = install.readJson(path.join(directory, ".git/archestra-skills.json"));
+          if (![owner?.sourceFingerprint, ...(owner?.approvedSources || [])].includes(crypto.createHash("sha256").update(config.skills.cloneUrl).digest("hex"))) throw new Error();
           const git = (...args) => require("node:child_process").execFileSync("git", ["-c", "core.fsmonitor=false", "-C", directory, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 2000 });
           if (git("rev-parse", "HEAD").trim() !== owner.revision) throw new Error();
           git("diff", "--quiet"); git("diff", "--cached", "--quiet");

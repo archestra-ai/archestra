@@ -71,6 +71,13 @@ export async function updateAutoRoutingSettings(
   const update = {
     enabled: body.enabled,
     budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+    // A custom budget sent on its own replaces the preset.
+    budgetPreset:
+      body.budgetPreset !== undefined
+        ? body.budgetPreset
+        : body.budgetUsdPerDay !== undefined
+          ? null
+          : undefined,
     tiers: body.tiers,
   };
   // The feasibility fit runs outside the routing-plan lock; the write then
@@ -131,7 +138,8 @@ export function toPlanSummary(
     status: plan.status,
     generation: plan.generation,
     inputWatermark: plan.inputWatermark,
-    budgetUsdPerDay: Number(plan.budgetUsdPerDay),
+    budgetUsdPerDay:
+      plan.budgetUsdPerDay === null ? null : Number(plan.budgetUsdPerDay),
     scorerVersion: record.scorerVersion,
     coreVersion: plan.coreVersion,
     planFormatVersion: plan.planFormatVersion,
@@ -184,7 +192,7 @@ async function fitAndDescribe(
   return { ...described, status: { ...described.status, lastFitError }, fit };
 }
 
-/** Enabled settings need every tier, one long-context threshold across the tiers, and a budget. */
+/** Enabled settings need every tier, one long-context threshold across the tiers, and a budget or a preset. */
 async function assertValidSettings(
   next: AutoRoutingSettings,
   tx: Transaction,
@@ -220,7 +228,7 @@ async function assertValidSettings(
       `Choose a ${missing} model before turning auto routing on.`,
     );
   }
-  if (next.budgetUsdPerDay === null) {
+  if (next.budgetUsdPerDay === null && next.budgetPreset === null) {
     throw new ApiError(400, "Set a daily budget before enabling auto routing.");
   }
 }
@@ -336,6 +344,7 @@ async function describe(
       settings.budgetUsdPerDay === null
         ? null
         : Number(settings.budgetUsdPerDay),
+    budgetPreset: settings.budgetPreset,
     tiers: { fast, normal, smart },
     eligibleApiKeyIds,
     usage: {

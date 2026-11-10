@@ -1,5 +1,5 @@
 {
-  "id": "8b6ff5c6-b45e-46fe-b301-9743b4ec9bdc",
+  "id": "8ff68e99-d9f7-4927-a11f-cae48a26c67f",
   "prevId": "90f49cb2-c842-4d82-bca8-e6b4d2bca051",
   "version": "7",
   "dialect": "postgresql",
@@ -4688,6 +4688,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "auto_routing_budget_preset": {
+          "name": "auto_routing_budget_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "auto_routing_scorer_version_id": {
           "name": "auto_routing_scorer_version_id",
           "type": "uuid",
@@ -4710,12 +4716,6 @@
         },
         "identity_provider_id": {
           "name": "identity_provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "entra_agent_identity_id": {
-          "name": "entra_agent_identity_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -19090,18 +19090,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "credential_client_id": {
-          "name": "credential_client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "credential_client_type": {
-          "name": "credential_client_type",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "duration_ms": {
           "name": "duration_ms",
           "type": "integer",
@@ -25357,7 +25345,7 @@
           "name": "budget_usd_per_day",
           "type": "numeric(12, 2)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "scorer_version_id": {
           "name": "scorer_version_id",

@@ -36,7 +36,10 @@ class AutoRoutingDispatchModel {
           eq(agents.isDefault, true),
           notDeleted(agents),
           eq(agents.autoRoutingEnabled, true),
-          isNotNull(agents.autoRoutingBudgetUsdPerDay),
+          or(
+            isNotNull(agents.autoRoutingBudgetUsdPerDay),
+            isNotNull(agents.autoRoutingBudgetPreset),
+          ),
           // Every tier is set.
           sql`(${tierCount}) = 3`,
           or(

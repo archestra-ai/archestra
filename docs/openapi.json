@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.27"
+    "version": "v1.5.0-rc.28"
   },
   "components": {
     "schemas": {
@@ -125017,6 +125017,25 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "budgetPreset": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "cost_efficient",
+                            "balanced",
+                            "intelligence"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
                     "tiers": {
                       "type": "object",
                       "properties": {
@@ -125365,6 +125384,7 @@
                   "required": [
                     "enabled",
                     "budgetUsdPerDay",
+                    "budgetPreset",
                     "tiers",
                     "eligibleApiKeyIds",
                     "usage",
@@ -125638,6 +125658,25 @@
                     "minimum": 0.01,
                     "maximum": 9999999999.99
                   },
+                  "budgetPreset": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "cost_efficient",
+                          "balanced",
+                          "intelligence"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "nullable": true,
+                        "enum": [
+                          null
+                        ]
+                      }
+                    ]
+                  },
                   "tiers": {
                     "type": "object",
                     "properties": {
@@ -125729,6 +125768,25 @@
                     "budgetUsdPerDay": {
                       "nullable": true,
                       "type": "number"
+                    },
+                    "budgetPreset": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "cost_efficient",
+                            "balanced",
+                            "intelligence"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     },
                     "tiers": {
                       "type": "object",
@@ -126173,6 +126231,7 @@
                   "required": [
                     "enabled",
                     "budgetUsdPerDay",
+                    "budgetPreset",
                     "tiers",
                     "eligibleApiKeyIds",
                     "usage",
@@ -126497,6 +126556,7 @@
                         "format": "date-time"
                       },
                       "budgetUsdPerDay": {
+                        "nullable": true,
                         "type": "number"
                       },
                       "scorerVersion": {
@@ -126883,6 +126943,7 @@
                       "format": "date-time"
                     },
                     "budgetUsdPerDay": {
+                      "nullable": true,
                       "type": "number"
                     },
                     "scorerVersion": {
@@ -127233,6 +127294,25 @@
                     "budgetUsdPerDay": {
                       "nullable": true,
                       "type": "number"
+                    },
+                    "budgetPreset": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "cost_efficient",
+                            "balanced",
+                            "intelligence"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
                     },
                     "tiers": {
                       "type": "object",
@@ -127677,6 +127757,7 @@
                   "required": [
                     "enabled",
                     "budgetUsdPerDay",
+                    "budgetPreset",
                     "tiers",
                     "eligibleApiKeyIds",
                     "usage",
@@ -128366,31 +128447,59 @@
         "tags": [
           "Auto Routing"
         ],
-        "description": "Fit a plan at a budget and a scaled traffic volume without publishing it\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:read`](/docs/reference/permissions#llmProxy:read): View the LLM Proxy and its connection details",
+        "description": "Fit a plan at a budget, or a budget preset, and a scaled traffic volume without publishing it\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmProxy:read`](/docs/reference/permissions#llmProxy:read): View the LLM Proxy and its connection details",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "budgetUsdPerDay": {
-                    "type": "number",
-                    "minimum": 0.01,
-                    "maximum": 9999999999.99
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "budgetUsdPerDay": {
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 9999999999.99
+                      },
+                      "volumeMultiplier": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "budgetUsdPerDay",
+                      "volumeMultiplier"
+                    ],
+                    "additionalProperties": false
                   },
-                  "volumeMultiplier": {
-                    "type": "number",
-                    "minimum": 0,
-                    "exclusiveMinimum": true,
-                    "maximum": 100
+                  {
+                    "type": "object",
+                    "properties": {
+                      "budgetPreset": {
+                        "type": "string",
+                        "enum": [
+                          "cost_efficient",
+                          "balanced",
+                          "intelligence"
+                        ]
+                      },
+                      "volumeMultiplier": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "budgetPreset",
+                      "volumeMultiplier"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "budgetUsdPerDay",
-                  "volumeMultiplier"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }
@@ -128410,6 +128519,9 @@
                           "enum": [
                             "feasible"
                           ]
+                        },
+                        "budgetUsdPerDay": {
+                          "type": "number"
                         },
                         "summary": {
                           "type": "object",
@@ -128440,6 +128552,7 @@
                       },
                       "required": [
                         "status",
+                        "budgetUsdPerDay",
                         "summary",
                         "tiersFingerprint",
                         "baseline"

@@ -232,6 +232,8 @@ const EditAgentToolArgsSchema = z
           .describe(
             "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions).",
           ),
+        subagentLoadBalancing:
+          CreateBaseToolArgsSchema.shape.subagentLoadBalancing,
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
           .optional()

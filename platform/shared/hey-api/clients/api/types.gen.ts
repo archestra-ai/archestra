@@ -33972,6 +33972,7 @@ export type GetAutoRoutingSettingsResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
@@ -34034,6 +34035,7 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
+        budgetPreset?: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers?: {
             fast: {
                 modelId: string;
@@ -34129,6 +34131,7 @@ export type UpdateAutoRoutingSettingsResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
@@ -34289,7 +34292,7 @@ export type GetAutoRoutingPlansResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -34399,7 +34402,7 @@ export type GetAutoRoutingPlanResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -34509,6 +34512,7 @@ export type ReplanAutoRoutingResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
@@ -34699,6 +34703,9 @@ export type SimulateAutoRoutingData = {
     body: {
         budgetUsdPerDay: number;
         volumeMultiplier: number;
+    } | {
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence';
+        volumeMultiplier: number;
     };
     path?: never;
     query?: never;
@@ -34789,6 +34796,7 @@ export type SimulateAutoRoutingResponses = {
      */
     200: {
         status: 'feasible';
+        budgetUsdPerDay: number;
         summary: {
             [key: string]: unknown;
         };

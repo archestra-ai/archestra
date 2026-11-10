@@ -33,6 +33,7 @@ describe("GET /api/auto-routing/settings", () => {
     expect(response.json()).toEqual({
       enabled: false,
       budgetUsdPerDay: null,
+      budgetPreset: null,
       tiers: { fast: null, normal: null, smart: null },
       eligibleApiKeyIds: [],
       usage: { agentCount: 0, organizationDefault: false },
@@ -127,6 +128,7 @@ describe("GET /api/auto-routing/settings", () => {
     expect(response.json()).toEqual({
       enabled: true,
       budgetUsdPerDay: 50,
+      budgetPreset: null,
       tiers: {
         fast: {
           id: trio[0].id,

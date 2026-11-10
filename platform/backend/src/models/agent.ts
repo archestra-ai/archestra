@@ -1631,7 +1631,10 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          isNotNull(schema.agentsTable.runtime),
+          or(
+            isNotNull(schema.agentsTable.runtime),
+            sql`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
+          ),
           notDeleted(schema.agentsTable),
         ),
       );

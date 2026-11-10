@@ -473350,18 +473350,11 @@
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "mapErrors": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
                         }
                       },
                       "required": [
                         "state",
-                        "unowned",
-                        "mapErrors"
+                        "unowned"
                       ],
                       "additionalProperties": false
                     }

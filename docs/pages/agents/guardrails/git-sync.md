@@ -34,7 +34,7 @@ Each permission serves one part of Git sync, and a part whose permission is miss
 | Permission | Access | What it does | Without it |
 | --- | --- | --- | --- |
 | Metadata | Read | Lists the repositories the installation covers, in setup. GitHub grants it to every App. | Nothing to choose. |
-| Contents | Read and write | Reads `appa.toml`, the server files, `code-owners.toml` and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
+| Contents | Read and write | Reads `appa.toml`, the server files and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
 | Pull requests | Read and write | Finds the open pull requests to check and the setup pull request. Opens pull requests: a server's rules from the APPA Keeper, `CODEOWNERS`, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
 | Checks | Read and write | Posts the **Guardrails policy** check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
 | Administration | Read and write | Creates the **Guardrails policy** ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
@@ -82,7 +82,7 @@ Four things put a server's rules in its editors' hands; each is in place once an
 1. **Git sync on GitHub**, with an App that has [every permission above](#github-app-permissions). A GitLab project gets the pull requests and the check, but no code owners and no branch rules; protect its branch in GitLab.
 2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules** and become the file's code owners.
 3. **The APPA Keeper for those teams.** Only administrators can use the agent until you share it with the editors' teams for use.
-4. **A GitHub identity for each editor**, so GitHub counts their review: a GitHub user credential they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential), or a line in [`code-owners.toml`](#protect-each-servers-file). Each owner also needs write access to the repository on GitHub, or GitHub ignores the owner line. Settings lists the editors who have no owner yet.
+4. **A connected GitHub account for each editor**, so GitHub counts their review: the GitHub user credential they connect under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential). Each owner also needs write access to the repository on GitHub, or GitHub ignores the owner line. Settings lists the editors who have not connected one yet.
 
 ### Change a Server's Rules
 
@@ -101,24 +101,13 @@ What to know:
 
 Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
 
-- **Code owners:** a pull request that makes each server's editors the owners of its file in `CODEOWNERS`, updated when editors change. A line that already names the file is rewritten where it stands; a file without one gets a line in Archestra's block.
+- **Code owners:** a pull request that makes each server's editors the owners of its file in `CODEOWNERS`, updated when editors or team members change. A line that already names the file is rewritten where it stands; a file without one gets a line in Archestra's block.
 - **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
 - **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
-People map to GitHub through the account they connected in Archestra. Map teams, roles, and anyone else in `code-owners.toml`, beside `appa.toml`:
+Owners are people, never GitHub teams: Archestra expands each grant on the server to the people it reaches today, a team grant to the team's members and its child teams', a role grant to everyone who holds the role, and names each by the GitHub account they connected. So the owners follow Archestra's teams and roles, and need no copy of them on GitHub.
 
-```toml
-[teams]
-Payments = "@example/payments"
-
-[roles]
-admin = "@example/guardrails-admins"
-
-[users]
-"dana@example.com" = "@dana"
-```
-
-**Settings → Guardrails** shows the code owners and the branch rules under **Repository protection**, with any editor who has no GitHub owner yet.
+**Settings → Guardrails** shows the code owners and the branch rules under **Repository protection**, with any editor who has not connected a GitHub account yet. Until they do, GitHub cannot ask them for review; a server none of whose editors connected one keeps the fallback owners above Archestra's block.
 
 What to know:
 

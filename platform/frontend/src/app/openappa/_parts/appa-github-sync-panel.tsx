@@ -330,7 +330,7 @@ function RepositoryProtection() {
     { label: "Branch rules", view: branchRulesView(data.branchRules, appName) },
     { label: "Code owners", view: codeOwnersView(data.codeOwners, appName) },
   ];
-  const { unowned, mapErrors } = data.codeOwners;
+  const { unowned } = data.codeOwners;
   return (
     <GitSourceNotice>
       <div className="space-y-2 rounded-md border p-3 text-sm">
@@ -375,20 +375,14 @@ function RepositoryProtection() {
           <InlineNotice variant="warning">
             <AlertTriangle className="size-4 shrink-0" aria-hidden />
             <InlineNoticeText>
-              {unowned.length === 1
-                ? "One server's editors have no GitHub owner, so its file keeps the fallback owners: "
-                : `${unowned.length} servers' editors have no GitHub owner, so their files keep the fallback owners: `}
+              Editors who have not connected a GitHub account in {appName}, so
+              GitHub cannot ask them for review:{" "}
               {unowned
                 .map((entry) => `${entry.server} (${entry.editors.join(", ")})`)
                 .join("; ")}
-              . Map them in code-owners.toml, or ask them to connect GitHub.
+              . A server none of whose editors connected one keeps the fallback
+              owners.
             </InlineNoticeText>
-          </InlineNotice>
-        )}
-        {mapErrors.length > 0 && (
-          <InlineNotice variant="error">
-            <AlertTriangle className="size-4 shrink-0" aria-hidden />
-            <InlineNoticeText>{mapErrors.join(" ")}</InlineNoticeText>
           </InlineNotice>
         )}
       </div>

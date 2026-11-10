@@ -962,6 +962,42 @@ class TeamModel {
   }
 
   /**
+   * Everyone a grant to each of these teams reaches: the team's own members
+   * and the members of the teams under it, since membership in a child team
+   * counts for the parent (as {@link effectiveMembershipCondition}). Teams of
+   * another organization yield nobody.
+   */
+  static async findEffectiveMemberUserIds(params: {
+    organizationId: string;
+    teamIds: string[];
+  }): Promise<Map<string, string[]>> {
+    const byTeam = new Map<string, string[]>(
+      params.teamIds.map((teamId) => [teamId, []]),
+    );
+    if (params.teamIds.length === 0) return byTeam;
+    const rows = await db.execute<{ root_id: string; user_id: string }>(sql`
+      WITH RECURSIVE reached(root_id, team_id) AS (
+        SELECT id, id FROM team
+        WHERE organization_id = ${params.organizationId}
+          AND id IN (${sql.join(
+            params.teamIds.map((teamId) => sql`${teamId}`),
+            sql`, `,
+          )})
+        UNION
+        SELECT reached.root_id, child.id
+        FROM team child
+        INNER JOIN reached ON child.parent_team_id = reached.team_id
+        WHERE child.organization_id = ${params.organizationId}
+      )
+      SELECT DISTINCT reached.root_id, tm.user_id
+      FROM reached
+      INNER JOIN team_member tm ON tm.team_id = reached.team_id
+    `);
+    for (const row of rows.rows) byTeam.get(row.root_id)?.push(row.user_id);
+    return byTeam;
+  }
+
+  /**
    * A caller's teams for authorization, in one statement: the
    * organization's teams they belong to with ancestors, with names and roles
    * (role sources, as {@link effectiveMembershipCondition}), and every team id

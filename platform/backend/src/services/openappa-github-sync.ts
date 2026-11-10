@@ -22,12 +22,14 @@ import { gitClient } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import MemberModel from "@/models/member";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import RoleCompositionModel from "@/models/role-composition";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import TeamModel from "@/models/team";
 import {
@@ -42,7 +44,6 @@ import {
 import {
   asRecord,
   isServerRulesFile,
-  parsePolicyToml,
   repositoryIncludePaths,
   SERVER_RULES_INCLUDE,
   serverRulesPath,
@@ -1767,18 +1768,8 @@ const CODEOWNERS_PATHS = [
   "docs/CODEOWNERS",
 ] as const;
 
-/**
- * Beside appa.toml: the GitHub owner of each Archestra team and role, and of
- * a person who has not connected GitHub. Reviewed like any other file.
- */
-const OWNERS_MAP_FILE = "code-owners.toml";
-
 /** The ruleset Archestra keeps on the synced branch, found again by this name. */
 const RULESET_NAME = "Guardrails policy";
-
-/** A GitHub user (`@login`) or team (`@org/team`) as CODEOWNERS names one. */
-const GITHUB_OWNER =
-  /^@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
 
 export type RepositoryProtection = {
   /** The ruleset on the synced branch. */
@@ -1815,10 +1806,11 @@ export type RepositoryProtection = {
       | "error";
     url?: string;
     detail?: string;
-    /** Servers whose editors have no GitHub owner, with the editors unmapped. */
+    /**
+     * Servers some of whose editors have no GitHub owner yet, with those
+     * editors' emails: people who have not connected a GitHub account.
+     */
     unowned: Array<{ server: string; editors: string[] }>;
-    /** Problems in the owners map. */
-    mapErrors: string[];
   };
 };
 
@@ -1851,7 +1843,6 @@ async function repositoryProtection(params: {
         state: "unsupported",
         detail: `${archestraMcpBranding.appName} writes code owners on GitHub repositories only; GitLab keeps its own CODEOWNERS.`,
         unowned: [],
-        mapErrors: [],
       },
     };
   const source = {
@@ -1869,7 +1860,6 @@ async function repositoryProtection(params: {
       state: "error" as const,
       detail: protectionError(error),
       unowned: [],
-      mapErrors: [],
     })),
   ]);
   return { branchRules, codeOwners };
@@ -2300,13 +2290,6 @@ function unavailable(response: {
 
 // === Code owners ===
 
-type OwnersMap = {
-  teams: Map<string, string[]>;
-  roles: Map<string, string[]>;
-  users: Map<string, string[]>;
-  errors: string[];
-};
-
 async function githubCodeOwners(
   source: ConnectedSource,
   apply: boolean,
@@ -2315,7 +2298,7 @@ async function githubCodeOwners(
   const used = repositoryIncludePaths(root.content).some(
     (entry) => entry === SERVER_RULES_INCLUDE || isServerRulesFile(entry),
   );
-  if (!used) return { state: "not_used", unowned: [], mapErrors: [] };
+  if (!used) return { state: "not_used", unowned: [] };
   let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
   try {
     access = await resolveOpenAppaGithubAccess(source, {
@@ -2324,12 +2307,7 @@ async function githubCodeOwners(
     });
   } catch (error) {
     if (error instanceof MissingGithubPermission)
-      return {
-        state: "needs_permission",
-        detail: error.message,
-        unowned: [],
-        mapErrors: [],
-      };
+      return { state: "needs_permission", detail: error.message, unowned: [] };
     throw error;
   }
   const { token, api } = access;
@@ -2339,48 +2317,30 @@ async function githubCodeOwners(
       detail:
         "The policy repository is read without a credential. Connect a GitHub App in Git sync.",
       unowned: [],
-      mapErrors: [],
     };
-  const map = parseOwnersMap(
-    (
-      await openappaRepositoryIncludes.read({
-        source,
-        commit: source.sourceCommit,
-        paths: [OWNERS_MAP_FILE],
-      })
-    ).get(OWNERS_MAP_FILE),
-  );
   const servers = await serverEditors(source.organizationId);
   const connected = await connectedLogins({
     organizationId: source.organizationId,
     api,
     token,
-    users: servers.flatMap((server) => server.users),
+    users: servers.flatMap((server) => server.editors),
   });
   const lines: string[] = [];
   const unowned: RepositoryProtection["codeOwners"]["unowned"] = [];
   for (const server of servers) {
     const owners = new Set<string>();
     const unmapped: string[] = [];
-    const add = (found: string[] | undefined, name: string) => {
-      if (found?.length) for (const owner of found) owners.add(owner);
-      else unmapped.push(name);
-    };
-    for (const team of server.teams) add(map.teams.get(team), `team ${team}`);
-    for (const role of server.roles)
-      add(map.roles.get(role), role === "*" ? "everyone" : `role ${role}`);
-    for (const user of server.users) {
-      const login =
-        map.users.get(user.email.toLowerCase()) ??
-        (connected.get(user.id) ? [`@${connected.get(user.id)}`] : undefined);
-      add(login, user.email);
+    for (const editor of server.editors) {
+      const login = connected.get(editor.id);
+      if (login) owners.add(`@${login}`);
+      else unmapped.push(editor.email);
     }
     if (owners.size > 0)
       lines.push(
         `/${repositoryPath(source, server.path)} ${[...owners].sort().join(" ")}`,
       );
     if (unmapped.length > 0)
-      unowned.push({ server: server.name, editors: unmapped });
+      unowned.push({ server: server.name, editors: unmapped.sort() });
   }
   lines.sort();
   const current = await currentCodeOwners(source);
@@ -2390,12 +2350,11 @@ async function githubCodeOwners(
   );
   const base = `${api}/repos/${source.repo}`;
   const open = await openOwnersPull({ token, base, repo: source.repo });
-  const result = { unowned, mapErrors: map.errors };
   if (next === (current?.content ?? null)) {
     // Nothing left to propose: a pull request still open has nothing to add.
     if (open && apply)
       await closeOwnersPull({ token, base, number: open.number });
-    return { state: "up_to_date", ...result };
+    return { state: "up_to_date", unowned };
   }
   const file = current?.path ?? CODEOWNERS_PATHS[0];
   if (open) {
@@ -2407,8 +2366,8 @@ async function githubCodeOwners(
       })
     ).get(file);
     if (proposed === next || !apply)
-      return { state: "pull_request", url: open.url, ...result };
-  } else if (!apply) return { state: "out_of_date", ...result };
+      return { state: "pull_request", url: open.url, unowned };
+  } else if (!apply) return { state: "out_of_date", unowned };
   const pull = await proposeOwners({
     source,
     token,
@@ -2419,70 +2378,23 @@ async function githubCodeOwners(
     lines,
     updated,
     unowned,
-    mapErrors: map.errors,
   });
-  return { state: "pull_request", url: pull.url, ...result };
-}
-
-/** The owners map in `code-owners.toml`, or an empty one with what is wrong. */
-function parseOwnersMap(text: string | undefined): OwnersMap {
-  const map: OwnersMap = {
-    teams: new Map(),
-    roles: new Map(),
-    users: new Map(),
-    errors: [],
-  };
-  if (text === undefined) return map;
-  const document = parsePolicyToml(text);
-  if (!document) {
-    map.errors.push(`${OWNERS_MAP_FILE} is not valid TOML`);
-    return map;
-  }
-  for (const [section, target] of [
-    ["teams", map.teams],
-    ["roles", map.roles],
-    ["users", map.users],
-  ] as const) {
-    const table = asRecord(document[section]);
-    if (document[section] !== undefined && !table) {
-      map.errors.push(`${OWNERS_MAP_FILE}: [${section}] must be a table`);
-      continue;
-    }
-    for (const [name, value] of Object.entries(table ?? {})) {
-      const owners = (Array.isArray(value) ? value : [value]).filter(
-        (owner): owner is string => typeof owner === "string",
-      );
-      const invalid = owners.filter((owner) => !GITHUB_OWNER.test(owner));
-      if (owners.length === 0 || invalid.length > 0) {
-        map.errors.push(
-          `${OWNERS_MAP_FILE}: ${section}.${JSON.stringify(name)} must name GitHub users or teams as "@login" or "@org/team"`,
-        );
-        continue;
-      }
-      target.set(section === "users" ? name.toLowerCase() : name, owners);
-    }
-  }
-  for (const key of Object.keys(document))
-    if (!["teams", "roles", "users"].includes(key))
-      map.errors.push(
-        `${OWNERS_MAP_FILE} may hold only [teams], [roles] and [users]; it sets ${key}`,
-      );
-  return map;
+  return { state: "pull_request", url: pull.url, unowned };
 }
 
 /**
- * Every server with a rules file of its own, and who may edit it: the teams
- * (by name), roles, and people its own edit grants name. A grant to the whole
- * organization reads as the role "*". Grants to every server in the registry
- * are the administrators' and stay with the fallback owners.
+ * Every server with a rules file of its own, and the people who may edit it:
+ * each `update` grant on the server itself, expanded to people. A team grant
+ * reaches the team's members and its child teams'; a role grant reaches
+ * everyone who holds the role, directly or through a team; a grant to the
+ * whole organization reaches every member. Grants to every server in the
+ * registry are the administrators' and stay with the fallback owners.
  */
 async function serverEditors(organizationId: string): Promise<
   Array<{
     name: string;
     path: string;
-    teams: string[];
-    roles: string[];
-    users: Array<{ id: string; email: string }>;
+    editors: Array<{ id: string; email: string }>;
   }>
 > {
   const prefixes = await catalogToolPrefixes(organizationId);
@@ -2514,56 +2426,80 @@ async function serverEditors(organizationId: string): Promise<
     ]),
   );
   const subjects = [...grants.values()].flat().map((grant) => grant.subject);
-  const teamIds = [
+  const subjectIds = (type: string) => [
     ...new Set(
       subjects.flatMap((subject) =>
-        subject.type === "team" ? [subject.id] : [],
+        subject.type === type ? [subject.id] : [],
       ),
     ),
   ];
-  const userIds = [
-    ...new Set(
-      subjects.flatMap((subject) =>
-        subject.type === "user" ? [subject.id] : [],
+  const [teamMembers, roleHolders, everyone] = await Promise.all([
+    TeamModel.findEffectiveMemberUserIds({
+      organizationId,
+      teamIds: subjectIds("team"),
+    }),
+    Promise.all(
+      subjectIds("role").map(
+        async (role) =>
+          [
+            role,
+            (
+              await RoleCompositionModel.getRoleHolders({
+                roleIdentifier: role,
+                organizationId,
+              })
+            ).map((holder) => holder.userId),
+          ] as const,
       ),
-    ),
-  ];
-  const [teams, users] = await Promise.all([
-    teamIds.length > 0 ? TeamModel.findByIds(teamIds) : [],
-    userIds.length > 0
-      ? db
+    ).then((entries) => new Map(entries)),
+    subjects.some((subject) => subject.type === "organization")
+      ? MemberModel.findAllUserIdsByOrganization(organizationId)
+      : [],
+  ]);
+  // Only current members: a direct grant to someone who left stays in the
+  // policy until it is edited, and names nobody GitHub should ask.
+  const members = new Set(
+    await MemberModel.findUserIdsInOrganization({
+      organizationId,
+      userIds: subjectIds("user"),
+    }),
+  );
+  const reached = (grant: ResourcePermissionGrant): string[] => {
+    const { subject } = grant;
+    switch (subject.type) {
+      case "user":
+        return members.has(subject.id) ? [subject.id] : [];
+      case "team":
+        return teamMembers.get(subject.id) ?? [];
+      case "role":
+        return roleHolders.get(subject.id) ?? [];
+      case "organization":
+        return everyone;
+      default:
+        return [];
+    }
+  };
+  const userIds = [...new Set([...grants.values()].flat().flatMap(reached))];
+  const userEmail = new Map(
+    (userIds.length > 0
+      ? await db
           .select({ id: schema.usersTable.id, email: schema.usersTable.email })
           .from(schema.usersTable)
           .where(inArray(schema.usersTable.id, userIds))
-      : [],
-  ]);
-  const teamName = new Map(
-    teams
-      .filter((team) => team.organizationId === organizationId)
-      .map((team) => [team.id, team.name]),
+      : []
+    ).map((user) => [user.id, user.email]),
   );
-  const userEmail = new Map(users.map((user) => [user.id, user.email]));
   return catalogs
-    .map((catalog) => {
-      const own = grants.get(catalog.id) ?? [];
-      const of = (type: string) =>
-        own.flatMap((grant) =>
-          grant.subject.type === type ? [grant.subject.id] : [],
-        );
-      return {
-        name: catalog.name,
-        path: serverRulesPath(slugifyMcpServerName(catalog.name)),
-        teams: of("team").flatMap((id) => {
-          const name = teamName.get(id);
-          return name ? [name] : [];
-        }),
-        roles: [...of("role"), ...of("organization")],
-        users: of("user").flatMap((id) => {
+    .map((catalog) => ({
+      name: catalog.name,
+      path: serverRulesPath(slugifyMcpServerName(catalog.name)),
+      editors: [...new Set((grants.get(catalog.id) ?? []).flatMap(reached))]
+        .flatMap((id) => {
           const email = userEmail.get(id);
           return email ? [{ id, email }] : [];
-        }),
-      };
-    })
+        })
+        .sort((a, b) => a.email.localeCompare(b.email)),
+    }))
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
@@ -2687,7 +2623,7 @@ function withOwnersBlock(
   );
   const block = [
     OWNERS_BEGIN,
-    `# Written from who may edit each MCP server in ${archestraMcpBranding.appName} and ${OWNERS_MAP_FILE}.`,
+    `# Written from who may edit each MCP server in ${archestraMcpBranding.appName}.`,
     `# Change those, not these lines: ${archestraMcpBranding.appName} rewrites them.`,
     ...added,
     OWNERS_END,
@@ -2757,7 +2693,6 @@ async function proposeOwners(params: {
   lines: string[];
   updated: Array<{ before: string; after: string }>;
   unowned: RepositoryProtection["codeOwners"]["unowned"];
-  mapErrors: string[];
 }): Promise<{ url: string }> {
   const { source, token, base } = params;
   const commit = await githubJson<{ tree?: { sha?: string } }>({
@@ -2855,11 +2790,10 @@ function ownersPullBody(params: {
   lines: string[];
   updated: Array<{ before: string; after: string }>;
   unowned: RepositoryProtection["codeOwners"]["unowned"];
-  mapErrors: string[];
   githubErrors: Array<{ line?: number; kind?: string; message?: string }>;
 }): string {
   const sections = [
-    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry, and rewrites a line elsewhere in the file that names a server's file instead of adding a second one. Each server's rules file gets its editors as owners: teams and roles through \`${OWNERS_MAP_FILE}\`, people through the GitHub account they connected in ${archestraMcpBranding.appName} or \`${OWNERS_MAP_FILE}\`. Merging this pull request applies it; until then, the owners above the block review each file.`,
+    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry, and rewrites a line elsewhere in the file that names a server's file instead of adding a second one. Each server's rules file gets the people who may edit the server as owners, named by the GitHub account each connected in ${archestraMcpBranding.appName}. Merging this pull request applies it; until then, the owners above the block review each file.`,
     params.lines.length > 0
       ? `### Owners\n\n${params.lines.map((line) => `- \`${line}\``).join("\n")}`
       : "### Owners\n\nNo server's editors have a GitHub owner yet.",
@@ -2870,11 +2804,7 @@ function ownersPullBody(params: {
     );
   if (params.unowned.length > 0)
     sections.push(
-      `### Editors without a GitHub owner\n\nAdd them to \`${OWNERS_MAP_FILE}\`, or ask them to connect GitHub in ${archestraMcpBranding.appName}:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
-    );
-  if (params.mapErrors.length > 0)
-    sections.push(
-      `### Problems in ${OWNERS_MAP_FILE}\n\n${params.mapErrors.map((error) => `- ${error}`).join("\n")}`,
+      `### Editors without a GitHub owner\n\nThese people may edit the server but have not connected a GitHub account in ${archestraMcpBranding.appName}, so GitHub cannot ask them for review:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
     );
   if (params.githubErrors.length > 0)
     sections.push(

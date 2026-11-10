@@ -121804,7 +121804,6 @@ export type GetAppaRepositoryProtectionResponses = {
                 server: string;
                 editors: Array<string>;
             }>;
-            mapErrors: Array<string>;
         };
     } | null;
 };

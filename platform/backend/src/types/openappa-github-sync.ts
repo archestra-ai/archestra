@@ -147,7 +147,6 @@ export const AppaRepositoryProtectionSchema = z
       unowned: z.array(
         z.object({ server: z.string(), editors: z.array(z.string()) }),
       ),
-      mapErrors: z.array(z.string()),
     }),
   })
   .nullable();

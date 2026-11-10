@@ -140,8 +140,7 @@ test("shows the repository protection kept for server rules files, with bypass e
         codeOwners: {
           state: "pull_request",
           url: "https://github.com/example/policies/pull/2",
-          unowned: [{ server: "Payments API", editors: ["team Payments"] }],
-          mapErrors: [],
+          unowned: [{ server: "Payments API", editors: ["pat@example.com"] }],
         },
       }),
     ),
@@ -165,8 +164,8 @@ test("shows the repository protection kept for server rules files, with bypass e
     screen.getByRole("link", { name: "Review pull request" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/2");
   expect(
-    screen.getByText(/One server's editors have no GitHub owner/),
-  ).toHaveTextContent("Payments API (team Payments)");
+    screen.getByText(/have not connected a GitHub account in Acme AI/),
+  ).toHaveTextContent("Payments API (pat@example.com)");
 });
 
 test("says when pull requests wait on a policy check the GitHub App cannot post", async () => {
@@ -180,7 +179,7 @@ test("says when pull requests wait on a policy check the GitHub App cannot post"
           detail:
             "The GitHub App cannot post the Guardrails policy check: The GitHub App cannot act on example/policies with Pull requests (read) and Checks (read and write).",
         },
-        codeOwners: { state: "up_to_date", unowned: [], mapErrors: [] },
+        codeOwners: { state: "up_to_date", unowned: [] },
       }),
     ),
   );

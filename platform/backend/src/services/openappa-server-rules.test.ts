@@ -1,4 +1,5 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -27,6 +28,7 @@ import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
+import { GitHubUserIdSchema } from "@/types";
 import {
   getServerRules,
   getServerRulesChangeStatus,
@@ -81,7 +83,6 @@ function serveRepository(state: {
 }) {
   const paths = [
     "appa.toml",
-    "code-owners.toml",
     ".github/CODEOWNERS",
     "mcp/payments_api.toml",
     "mcp/helpdesk.toml",
@@ -1766,26 +1767,53 @@ test("the ruleset requires the policy check only while the App may post it, and 
   ]);
 });
 
-test("the code owners of each server's file follow who may edit the server, proposed in one pull request that is updated only when they change", async ({
+test("the code owners of each server's file are the people who may edit the server, named by the GitHub account each connected, proposed in one pull request that is updated only when they change", async ({
   makeOrganization,
   makeUser,
   makeMember,
   makeTeam,
+  makeTeamMember,
 }) => {
   config.openappa.enabled = true;
   const org = await makeOrganization();
-  const admin = await makeUser();
+  const admin = await makeUser({ email: "admin@example.com" });
   await makeMember(admin.id, org.id, { role: "admin" });
+  // A team grant reaches the team's members and a child team's.
   const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
-  const data = await makeTeam(org.id, admin.id, { name: "Data" });
+  const paymentsOps = await makeTeam(org.id, admin.id, {
+    name: "Payments Ops",
+    parentId: payments.id,
+  });
+  const pat = await makeUser({ email: "pat@example.com" });
+  await makeTeamMember(payments.id, pat.id);
+  const sam = await makeUser({ email: "sam@example.com" });
+  await makeTeamMember(payments.id, sam.id);
+  const quinn = await makeUser({ email: "quinn@example.com" });
+  await makeTeamMember(paymentsOps.id, quinn.id);
+  // A direct grant, a role grant, and a grant to someone who left.
   const dana = await makeUser({ email: "dana@example.com" });
   await makeMember(dana.id, org.id);
+  const riley = await makeUser({ email: "riley@example.com" });
+  await makeMember(riley.id, org.id, { role: "auditor" });
+  const gone = await makeUser({ email: "gone@example.com" });
+  // A team none of whose members connected GitHub.
+  const data = await makeTeam(org.id, admin.id, { name: "Data" });
+  const lee = await makeUser({ email: "lee@example.com" });
+  await makeTeamMember(data.id, lee.id);
   const servers = [
-    { name: "payments_api", grant: { type: "team", id: payments.id } },
-    { name: "helpdesk", grant: { type: "user", id: dana.id } },
-    { name: "data_warehouse", grant: { type: "team", id: data.id } },
+    { name: "payments_api", grants: [{ type: "team", id: payments.id }] },
+    {
+      name: "helpdesk",
+      grants: [
+        { type: "user", id: dana.id },
+        { type: "role", id: "auditor" },
+        { type: "user", id: gone.id },
+      ],
+    },
+    { name: "data_warehouse", grants: [{ type: "team", id: data.id }] },
+    { name: "crm", grants: [{ type: "organization", id: "*" }] },
   ] as const;
-  for (const { name, grant } of servers) {
+  for (const { name, grants } of servers) {
     const catalog = await InternalMcpCatalogModel.create(
       {
         name,
@@ -1796,7 +1824,12 @@ test("the code owners of each server's file follow who may edit the server, prop
       {
         organizationId: org.id,
         initialPermissionGrants: [
-          { subject: grant, actions: ["read", "use", "update"] },
+          ...grants.map(
+            (subject): ResourcePermissionGrant => ({
+              subject: { ...subject },
+              actions: ["read", "use", "update"],
+            }),
+          ),
           {
             subject: { type: "organization", id: "*" },
             actions: ["read", "use"],
@@ -1811,11 +1844,72 @@ test("the code owners of each server's file follow who may edit the server, prop
       catalogId: catalog.id,
     });
   }
+  // The GitHub accounts people connected: a github.com App's user credential.
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId: org.id,
+    createdBy: admin.id,
+    definition: {
+      description: "",
+      icon: null,
+      key: "repository-app",
+      name: "Repository App",
+      kind: "github_app",
+      allowPersonal: false,
+      allowOrganization: true,
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId: "456",
+      githubClientId: "test-client",
+    },
+  });
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId: org.id,
+    createdBy: admin.id,
+    definition: {
+      description: "",
+      icon: null,
+      key: "github-user",
+      name: "GitHub",
+      kind: "github_app_user",
+      allowPersonal: true,
+      allowOrganization: false,
+      githubAppCredentialKey: "repository-app",
+    },
+  });
+  const logins: Record<number, string> = {};
+  const connected = [
+    [pat, 1001, "pat-acme"],
+    [quinn, 1002, "quinn-acme"],
+    [dana, 1003, "dana-acme"],
+    [riley, 1004, "riley-acme"],
+    // Connected, but no longer a member: not an owner anywhere.
+    [gone, 1005, "gone-acme"],
+  ] as const;
+  for (const [user, githubId, login] of connected) {
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId: org.id,
+      scope: "personal",
+      userId: user.id,
+      credentialId: "github-user",
+      value: "token",
+      githubId: GitHubUserIdSchema.parse(githubId),
+    });
+    logins[githubId] = login;
+  }
+  const userReads: string[] = [];
+  server.use(
+    http.get("https://api.github.com/user/:id", ({ params }) => {
+      userReads.push(String(params.id));
+      const login = logins[Number(params.id)];
+      return login
+        ? HttpResponse.json({ login })
+        : HttpResponse.json({ message: "Not Found" }, { status: 404 });
+    }),
+  );
   await connectApp({ organizationId: org.id, refuse: ["administration"] });
   const files = {
     "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
     "mcp/payments_api.toml": REFUNDS,
-    "code-owners.toml": `[teams]\nPayments = "@acme/payments"\n\n[users]\n"Dana@Example.com" = "@dana-acme"\n`,
     // One server's file already has a line, with yesterday's owner.
     ".github/CODEOWNERS":
       "* @acme/admins\n# Payments wrote this one by hand.\n/mcp/payments_api.toml    @acme/legacy\n",
@@ -1864,7 +1958,7 @@ test("the code owners of each server's file follow who may edit the server, prop
             line: 6,
             kind: "Unknown owner",
             message:
-              "Unknown owner on line 6: make sure @acme/payments exists and has write access to the repository",
+              "Unknown owner on line 6: make sure @quinn-acme exists and has write access to the repository",
           },
         ],
       }),
@@ -1882,12 +1976,13 @@ test("the code owners of each server's file follow who may edit the server, prop
   // The existing line is rewritten where it stands, not repeated in the block.
   const proposed = `* @acme/admins
 # Payments wrote this one by hand.
-/mcp/payments_api.toml    @acme/payments
+/mcp/payments_api.toml    @pat-acme @quinn-acme
 
 # BEGIN Guardrails: MCP server rules owners
-# Written from who may edit each MCP server in Archestra and code-owners.toml.
+# Written from who may edit each MCP server in Archestra.
 # Change those, not these lines: Archestra rewrites them.
-/mcp/helpdesk.toml @dana-acme
+/mcp/crm.toml @dana-acme @pat-acme @quinn-acme @riley-acme
+/mcp/helpdesk.toml @dana-acme @riley-acme
 # END Guardrails: MCP server rules owners
 `;
   expect(trees).toEqual([
@@ -1910,17 +2005,26 @@ test("the code owners of each server's file follow who may edit the server, prop
       base: "main",
     }),
   ]);
-  expect(pulls[0]?.body).toContain("- data_warehouse: team Data");
+  expect(pulls[0]?.body).toContain("- data_warehouse: lee@example.com");
   expect(pulls[0]?.body).toContain(
-    "- `/mcp/payments_api.toml    @acme/legacy` → `/mcp/payments_api.toml    @acme/payments`",
+    "- `/mcp/payments_api.toml    @acme/legacy` → `/mcp/payments_api.toml    @pat-acme @quinn-acme`",
   );
   expect(pulls[0]?.body).toContain("line 6: Unknown owner on line 6");
+  // Each editor without a GitHub account, per server; a leaver is nobody.
   expect((await getRepositoryProtection(org.id))?.codeOwners).toEqual({
     state: "pull_request",
     url: "https://github.com/example/policies/pull/9",
-    unowned: [{ server: "data_warehouse", editors: ["team Data"] }],
-    mapErrors: [],
+    unowned: [
+      {
+        server: "crm",
+        editors: ["admin@example.com", "lee@example.com", "sam@example.com"],
+      },
+      { server: "data_warehouse", editors: ["lee@example.com"] },
+      { server: "payments_api", editors: ["sam@example.com"] },
+    ],
   });
+  // GitHub was asked once per connected member, never for the leaver.
+  expect(userReads.sort()).toEqual(["1001", "1002", "1003", "1004"]);
 
   // The open pull request already proposes these owners: nothing is pushed.
   open = [

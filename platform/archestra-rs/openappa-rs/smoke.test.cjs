@@ -526,8 +526,6 @@ builtin = "hitl"
     assert.match(review.text, /email/);
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
-    assert.equal(review.authority, 'email-operator');
-    assert.equal(review.hint, 'Review this exact external email.');
     assert.ok(email.review[0].scope, JSON.stringify(email.review[0]));
     assert.deepEqual(JSON.parse(review.scope), email.review[0].scope);
 
@@ -558,7 +556,6 @@ builtin = "hitl"
     const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
     assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
     assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
-    assert.equal(binaryReview.authority, 'email-operator');
     assert.deepEqual(JSON.parse(binaryReview.scope), binaryEmail.review[0].scope);
     const binaryRemedy = await hook(session, {
       event: 'remedy', operation_id: 'remedy:binary-email', arguments: { offer_id: binaryEmail.review[0].offer_id },

@@ -898,9 +898,12 @@ class SlackProvider implements ChatOpsProvider {
       : null;
     const subject = options.reviewText
       ? // The review text may carry column-aligned art; keep it monospace.
-        `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
+        `\`\`\`\n${formatApprovalReviewText(escapeSlackText(options.reviewText))}\n\`\`\``
       : `\`${options.toolName}\``;
-    const alsoAccepts = formatApprovalAlsoAccepts(options.alsoAccepts);
+    const alsoAccepts = formatApprovalAlsoAccepts(
+      options.alsoAccepts,
+      escapeSlackText,
+    );
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -909,7 +912,7 @@ class SlackProvider implements ChatOpsProvider {
           type: "section" as const,
           text: {
             type: "mrkdwn" as const,
-            text: `*Approval required*\n${subject}\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${escapeSlackText(alsoAccepts)}` : ""}`,
+            text: `*Approval required*\n${subject}\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${alsoAccepts}` : ""}`,
           },
         },
         {

@@ -244,17 +244,23 @@ export function formatApprovalReviewText(
 }
 
 /**
- * What approving also accepts, as plain text; undefined when nothing. Kept
- * short enough to share one Slack section or Telegram message with the
- * rest of the prompt.
+ * What approving also accepts, escaped for the surface; undefined when
+ * nothing. Truncated before escaping, so no entity is cut, and short enough
+ * that even escaping every character keeps it inside one Slack section or
+ * Telegram message with the rest of the prompt.
  */
 export function formatApprovalAlsoAccepts(
   lines: string[] | undefined,
+  escape: (text: string) => string = (text) => text,
 ): string | undefined {
   if (!lines?.length) return undefined;
-  return formatApprovalReviewText(
-    ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join("\n"),
-    1500,
+  return escape(
+    formatApprovalReviewText(
+      ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join(
+        "\n",
+      ),
+      400,
+    ),
   );
 }
 

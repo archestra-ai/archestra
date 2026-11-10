@@ -305,7 +305,7 @@ class TelegramProvider implements ChatOpsProvider {
       : approvalRequestHtml(
           options.toolName,
           options.toolArgs,
-          formatApprovalAlsoAccepts(options.alsoAccepts),
+          formatApprovalAlsoAccepts(options.alsoAccepts, escapeHtml),
         );
 
     const metadata = options.originalMessage.metadata ?? {};
@@ -1148,9 +1148,10 @@ export function markdownToTelegramHtml(markdown: string): string {
 function approvalRequestHtml(
   toolName: string,
   args: Record<string, unknown> | undefined,
+  /** Already escaped. */
   alsoAccepts: string | undefined,
 ): string {
-  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${escapeHtml(alsoAccepts)}` : ""}`;
+  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${alsoAccepts}` : ""}`;
   const entries = Object.entries(args ?? {});
   if (entries.length === 0) return header;
 

@@ -119,12 +119,9 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
-    /// The authority asked to rule. Absent for a review stored before the
-    /// runtime typed it, or one that joins several authorities.
-    pub authority: Option<String>,
-    pub hint: Option<String>,
-    /// The review's coverage items as JSON text. Absent means unknown, so
-    /// show `text`; `[]` means the ruling accepts nothing else.
+    /// The review's coverage items as JSON text. Absent means unknown (a
+    /// review stored before the runtime typed it, or one that joins several
+    /// authorities), so show `text`; `[]` means the ruling accepts nothing else.
     pub scope: Option<String>,
 }
 
@@ -183,7 +180,6 @@ pub async fn load_offer_review(
             let row = client.query_opt(
                 &format!(
                     "SELECT entry->>'text' AS text, \
-                     entry->>'authority' AS authority, entry->>'hint' AS hint, \
                      (entry->'scope')::text AS scope, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
                      COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
@@ -206,8 +202,6 @@ pub async fn load_offer_review(
                     session_id,
                     tool: row.get("tool"),
                     arguments: row.get("arguments"),
-                    authority: row.get("authority"),
-                    hint: row.get("hint"),
                     scope: row.get("scope"),
                 }));
             }
@@ -250,8 +244,6 @@ fn review_in(
             text: review["text"].as_str().unwrap_or_default().to_owned(),
             tool: source["tool"].as_str().map(str::to_owned),
             arguments: source.get("arguments").map(Value::to_string),
-            authority: review["authority"].as_str().map(str::to_owned),
-            hint: review["hint"].as_str().map(str::to_owned),
             scope: review.get("scope").map(Value::to_string),
         })
     })
@@ -1424,11 +1416,10 @@ mod review_tests {
         }] });
         let receipts = [(input.clone(), old), (input, typed)];
 
-        let old = review_in(receipts.clone(), "o1", "s").unwrap();
-        assert_eq!((old.authority, old.hint, old.scope), (None, None, None));
-
-        let typed = review_in(receipts, "o2", "s").unwrap();
-        assert_eq!(typed.authority.as_deref(), Some("operator"));
-        assert_eq!(typed.scope.as_deref(), Some("[]"));
+        assert_eq!(review_in(receipts.clone(), "o1", "s").unwrap().scope, None);
+        assert_eq!(
+            review_in(receipts, "o2", "s").unwrap().scope.as_deref(),
+            Some("[]")
+        );
     }
 }

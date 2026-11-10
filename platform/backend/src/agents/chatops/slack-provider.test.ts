@@ -2102,6 +2102,22 @@ describe("SlackProvider.addApprovalRequestForm", () => {
     );
   });
 
+  test("escapes review text that closes its code fence", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "archestra__execute_remedy_plan",
+      reviewText: "```\n<!channel>",
+    });
+
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks[0].text.text).not.toContain("<!channel>");
+  });
+
   test("omits View arguments when there are no arguments", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });

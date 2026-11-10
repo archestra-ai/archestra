@@ -2163,24 +2163,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
     const trusted = getTrustedContext(context.resources);
-    let session: OpenAppaSession | undefined;
+    // This lookup only locates earlier return instructions. Active admission
+    // validates lineage separately; observation must remain best effort.
+    let session =
+      this.bindings.get(context.resources)?.session ??
+      this.observers.get(context.resources)?.session;
+    if (!session && trusted) {
+      try {
+        session = appaTrajectory({
+          adapters: this.clientAdapters,
+          headers: context.headers,
+          requestBody: context.requestBody,
+          trustedContext: trusted,
+        }).session;
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          "OpenAPPA could not resolve a child return withdrawal",
+        );
+      }
+    }
     await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
       async () => {
-        // Capture the bound child before a waiver removes its binding and
-        // before provider preparation strips the signed lineage carriers.
-        session =
-          this.bindings.get(context.resources)?.session ??
-          this.observers.get(context.resources)?.session ??
-          (trusted
-            ? appaTrajectory({
-                adapters: this.clientAdapters,
-                headers: context.headers,
-                requestBody: context.requestBody,
-                trustedContext: trusted,
-              }).session
-            : undefined);
         const result = await this.guardedBeforeModel(context);
 
         return result;

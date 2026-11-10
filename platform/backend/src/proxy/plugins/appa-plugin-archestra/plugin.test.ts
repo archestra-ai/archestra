@@ -64,6 +64,7 @@ import { AppaPluginArchestra } from "./plugin";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "./types";
@@ -12389,6 +12390,82 @@ function stubRequestTools() {
     namespaces: new Map<string, string>(),
   };
 }
+
+describe("withdrawal observation", () => {
+  test.for([
+    "openai:chatCompletions",
+    "github-copilot:chatCompletions",
+  ])("delivers advisory withdrawal on a valid %s request", async (interactionType) => {
+    const context = requestContext({ sessionId: "waived-child" });
+    context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    context.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
+    const request = {
+      messages: [{ role: "user", content: "Return the useful result." }],
+    };
+    const plugin = new AppaPluginArchestra([]);
+    await expect(
+      plugin.onBeforeModel({ ...context, interactionType, request }),
+    ).resolves.toBeUndefined();
+    expect(JSON.stringify(request)).toContain(
+      "withdrawn its earlier protected-return instructions",
+    );
+    expect(request.messages).toContainEqual({
+      role: "user",
+      content: "Return the useful result.",
+    });
+  });
+
+  test.for([
+    { client: "claude-code", allowSoftBlocks: false },
+    { client: "claude-code", allowSoftBlocks: true },
+    { client: "codex", allowSoftBlocks: false },
+    { client: "codex", allowSoftBlocks: true },
+  ] as const)("keeps invalid $client lineage advisory while inactive (soft override=$allowSoftBlocks)", async ({
+    client,
+    allowSoftBlocks,
+  }, { makeOrganization }) => {
+    const organizationId = (await makeOrganization()).id;
+    config.openappa.softBlockMode = allowSoftBlocks ? "allow" : "refuse";
+    const context = requestContext({
+      organizationId,
+      sessionId: "observed-unverified-child",
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.enforcement = "inactive";
+    trusted.claims = { parentId: "unverified-parent" };
+    context.headers =
+      client === "codex"
+        ? { originator: "codex_cli_rs" }
+        : { "user-agent": "claude-code/1" };
+    const plugin = new AppaPluginArchestra([
+      new AppaClaudeCodeAdapter(),
+      new AppaCodexAdapter(),
+    ]);
+    const request = {
+      messages: [{ role: "user", content: "Keep the original request." }],
+    };
+    await plugin.onSessionInit(context);
+    await expect(
+      plugin.onBeforeModel({ ...context, request }),
+    ).resolves.toBeUndefined();
+    expect(request).toEqual({
+      messages: [{ role: "user", content: "Keep the original request." }],
+    });
+    expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([]);
+    await plugin.onCleanup(context);
+  });
+});
 
 describe("soft-block emergency override", () => {
   beforeEach(() => {

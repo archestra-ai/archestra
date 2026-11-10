@@ -70,6 +70,8 @@ export const CacheKey = {
   NativeUserQuestion: "native-user-question",
   /** Single-card choices and provenance, isolated from older grouped-only decoders. */
   NativeUserQuestionPresentation: "native-question-presentation",
+  /** The LLM session and user behind an MCP tool call the proxy handed a client, for the gateway that runs it */
+  LlmToolCallSession: "llm-tool-call-session",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
   /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */

@@ -60,8 +60,9 @@ export function RanOnHeader({
 }
 
 /**
- * Phones: a lane in the row gutter, solid beside rows that ran in Agent
- * Runtime, with a small knob where the work changed hands.
+ * Phones: rows that ran in Agent Runtime get a faint tint across the row and
+ * a solid lane in the row gutter, with a small knob where the work changed
+ * hands. The timeline column is too narrow there for the move hairlines.
  */
 export function RanOnLane({
   runtime,
@@ -74,7 +75,10 @@ export function RanOnLane({
   return (
     <span aria-hidden="true" className="lg:hidden">
       {runtime ? (
-        <span className="pointer-events-none absolute inset-y-0 left-[5px] z-[1] w-[3px] bg-indigo-500/70 dark:bg-indigo-400/70" />
+        <>
+          <span className="pointer-events-none absolute inset-0 bg-indigo-500/[0.07] dark:bg-indigo-400/[0.08]" />
+          <span className="pointer-events-none absolute inset-y-0 left-[5px] z-[1] w-[3px] bg-indigo-500/70 dark:bg-indigo-400/70" />
+        </>
       ) : null}
       {knob ? (
         <span
@@ -111,7 +115,7 @@ export function RuntimeGlyph() {
   );
 }
 
-/** Faint hairlines under the rows where the work changed hands. */
+/** Faint hairlines under the rows where the work changed hands; not on phones. */
 export function RanOnMoveLines({ view }: { view: RanOnView }) {
   return (
     <>
@@ -120,7 +124,7 @@ export function RanOnMoveLines({ view }: { view: RanOnView }) {
         .map((move) => (
           <span
             key={`ran-on-${move.key}`}
-            className="absolute inset-y-0 w-px bg-indigo-500/20 dark:bg-indigo-400/20"
+            className="absolute inset-y-0 w-px bg-indigo-500/20 max-lg:hidden dark:bg-indigo-400/20"
             style={{ left: `${move.x * 100}%` }}
           />
         ))}

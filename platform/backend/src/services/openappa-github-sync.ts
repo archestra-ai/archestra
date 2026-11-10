@@ -112,7 +112,7 @@ type SyncRow = NonNullable<
  * requests, and what decides it: ARCHESTRA_OPENAPPA_SELF_SERVICE while it is
  * set, else the setting saved with the source. Off by default.
  */
-export function selfServiceState(row: Pick<SyncRow, "selfService"> | null) {
+function selfServiceState(row: Pick<SyncRow, "selfService"> | null) {
   const value = config.openappa.selfService;
   const setting = row?.selfService ?? false;
   return {

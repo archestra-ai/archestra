@@ -62,9 +62,9 @@ export const AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE = `${AGENT_RUNTIME_DIR}/read
 
 /**
  * A maintained runtime can leave a normalized transcript in the shared run
- * directory. The bootstrap base64-frames it on stdout after the PTY closes so
- * the control plane can persist it independently without exposing raw provider
- * events in the terminal recording.
+ * directory. The supervisor appends base64 frames to the turn recording after
+ * the PTY closes. The control plane reads that file and persists the transcript
+ * independently, without copying its contents to container logs.
  */
 export const AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START =
   "\u001b]777;archestra-readable-transcript=base64\u0007";

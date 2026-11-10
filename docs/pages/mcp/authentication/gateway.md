@@ -134,6 +134,6 @@ A refusal names its reason in `error`:
 
 ## ID-JAG
 
-The gateway does not accept an ID-JAG yet. Archestra uses ID-JAG the other way: it gets one from your identity provider to sign a person in to an MCP server. See [ID-JAG](/docs/mcp/authentication/idp-token-exchange#id-jag).
+The gateway does not accept an ID-JAG yet. After accepting one, it would have to pass the person's identity on to each MCP server behind it, and no standard defines that step yet. The IETF [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/) proposes one, and gateway support waits on it.
 
-Gateway support waits on the [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/). Without it, Archestra cannot pass the person's identity on to the next server after it accepts an ID-JAG.
+Archestra uses ID-JAG the other way today: it gets one from your identity provider to sign a person in to an MCP server. See [ID-JAG](/docs/mcp/authentication/idp-token-exchange#id-jag).

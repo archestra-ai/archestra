@@ -12,8 +12,12 @@ export function parseReviewScope(
   json: string | undefined,
 ): ReviewScopeItem[] | undefined {
   if (json === undefined) return undefined;
-  const parsed = ReviewScopeSchema.safeParse(JSON.parse(json));
-  return parsed.success ? parsed.data : undefined;
+  try {
+    const parsed = ReviewScopeSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const tools = z.array(z.string());

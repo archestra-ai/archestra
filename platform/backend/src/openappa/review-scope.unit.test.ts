@@ -29,5 +29,6 @@ describe("parseReviewScope", () => {
       { kind: "future", text: "something new" },
     ];
     expect(parseReviewScope(JSON.stringify(scope))).toBeUndefined();
+    expect(parseReviewScope("[")).toBeUndefined();
   });
 });

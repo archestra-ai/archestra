@@ -243,13 +243,18 @@ export function formatApprovalReviewText(
     : text;
 }
 
-/** What approving also accepts, as plain text; undefined when nothing. */
+/**
+ * What approving also accepts, as plain text; undefined when nothing. Kept
+ * short enough to share one Slack section or Telegram message with the
+ * rest of the prompt.
+ */
 export function formatApprovalAlsoAccepts(
   lines: string[] | undefined,
 ): string | undefined {
   if (!lines?.length) return undefined;
-  return ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join(
-    "\n",
+  return formatApprovalReviewText(
+    ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join("\n"),
+    1500,
   );
 }
 

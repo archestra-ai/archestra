@@ -83,6 +83,15 @@ describe("getReviewCardView", () => {
     });
   });
 
+  it("shows the message of a request that carries neither coverage nor text", () => {
+    expect(
+      getReviewCardView({ message: "Old review.", reviewedTool: "Bash" }),
+    ).toEqual({
+      toolCard: { title: "Bash" },
+      description: [REVIEW_STATUS_DESCRIPTION, "Old review."].join("\n\n"),
+    });
+  });
+
   it("falls back to the message when the review names no tool", () => {
     expect(
       getReviewCardView({ message: "  Allow the agent to continue?  " }),

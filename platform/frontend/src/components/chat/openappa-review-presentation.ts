@@ -79,12 +79,16 @@ export function getReviewCardView({
   if (!tool && input === undefined) {
     return { description: message.trim() || REVIEW_STATUS_DESCRIPTION };
   }
-  const details = reviewedCoverage?.length
-    ? [
-        "Approving also accepts:",
-        ...reviewedCoverage.map((line) => `  - ${line}`),
-      ].join("\n")
-    : reviewedText?.trim();
+  // No coverage and no text: a request from before the platform sent either,
+  // whose message is the review itself.
+  const details = reviewedCoverage
+    ? reviewedCoverage.length
+      ? [
+          "Approving also accepts:",
+          ...reviewedCoverage.map((line) => `  - ${line}`),
+        ].join("\n")
+      : undefined
+    : (reviewedText ?? message).trim();
   return {
     toolCard: {
       ...(tool ? { title: tool } : {}),

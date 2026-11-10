@@ -2598,10 +2598,10 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
-  /** Unknown for a review stored before the runtime typed it, or one that joins several authorities. */
-  authority?: string;
-  hint?: string;
-  /** Unknown under the same conditions as `authority`: show `text` instead. */
+  /**
+   * What approving accepts. Unknown for a review stored before the runtime
+   * typed it, or one that joins several authorities: show `text` instead.
+   */
   scope?: ReviewScopeItem[];
 } | null> {
   try {
@@ -2632,8 +2632,6 @@ export async function loadOfferReview(params: {
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
-      ...(result.authority ? { authority: result.authority } : {}),
-      ...(result.hint ? { hint: result.hint } : {}),
       ...(scope ? { scope } : {}),
     };
   } catch (error) {

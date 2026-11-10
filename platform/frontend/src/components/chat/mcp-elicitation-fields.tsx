@@ -45,6 +45,8 @@ export const ChatMcpElicitationRequestSchema = z.object({
   reviewedTool: z.string().optional(),
   /** Reviewed call's arguments as JSON text. */
   reviewedArguments: z.string().optional(),
+  /** What approving accepts besides the person's attention. */
+  reviewedCoverage: z.array(z.string()).optional(),
 });
 
 export type ChatMcpElicitationRequest = z.infer<

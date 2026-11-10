@@ -65,6 +65,34 @@ describe("useNavOnboarding", () => {
     expect(result.current.showStudioDot).toBe(true);
   });
 
+  it.each([
+    "pending",
+    "error",
+  ] as const)("keeps unrelated dots when organization settings are %s", (status) => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      status,
+      isPending: status === "pending",
+      isError: status === "error",
+      error: status === "error" ? new Error("Settings unavailable") : null,
+    } as ReturnType<typeof useOrganization>);
+
+    const { result } = renderHook(() => useNavOnboarding());
+
+    expect(result.current.unseenKeys).toEqual(
+      new Set([
+        "nav:projects",
+        "nav:apps",
+        "nav:model-providers",
+        "nav:mcp-registry",
+        "nav:guardrails",
+      ]),
+    );
+    expect(result.current.showChatsDot).toBe(true);
+    expect(result.current.showStudioDot).toBe(true);
+    expect(result.current.showCollapsedToggleDot).toBe(true);
+  });
+
   it("shows all dots for a fresh user, including the aggregates", () => {
     const { result } = renderHook(() => useNavOnboarding());
 

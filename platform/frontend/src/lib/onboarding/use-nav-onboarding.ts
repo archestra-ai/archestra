@@ -23,8 +23,8 @@ import { useShellReady } from "@/lib/shell-deferral";
  * Studio segment and the collapsed-sidebar toggle. Also clears a dot when the
  * user lands on its route (deep links included).
  *
- * `unseenKeys` stays empty until every gating query has resolved, so dots only
- * ever appear (or get dismissed) — they never flash and vanish on load.
+ * Dots wait for seen items and page permissions. Connect additionally waits
+ * for its own visibility settings without holding up unrelated items.
  */
 export function useNavOnboarding() {
   const pathname = usePathname();
@@ -34,10 +34,10 @@ export function useNavOnboarding() {
     enabled: shellReady,
   });
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { visible: showConnect, ready: connectReady } = useConnectNavigation();
+  const { visible: showConnect } = useConnectNavigation();
   const { mutate: markItemsSeen } = useMarkNavItemsSeen();
 
-  const ready = seenLoaded && permissionMap !== null && connectReady;
+  const ready = seenLoaded && permissionMap !== null;
 
   const unseenKeys = React.useMemo(() => {
     if (!ready) return new Set<NavDotKey>();

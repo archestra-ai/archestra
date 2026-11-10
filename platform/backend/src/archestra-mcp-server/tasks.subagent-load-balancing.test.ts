@@ -2388,18 +2388,18 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
   }) => {
     const reviewSubagentA = await createRuntimeSubagent(
       makeAgent,
-      "Lobster Code Review Claude Code",
+      "Code Review Subagent A",
       false,
     );
     const reviewSubagentB = await createRuntimeSubagent(
       makeAgent,
-      "Lobster Code Review Codex",
+      "Code Review Subagent B",
       false,
     );
 
     // Foreground router agent (`runtime: null`, `subagentLoadBalancing.enabled: true`)
     const reviewRouter = await makeAgent({
-      name: "Lobster Env Code Review",
+      name: "Code Review Router",
       agentType: "agent",
       organizationId,
       authorId: actorId,
@@ -2434,7 +2434,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
 
     const sendSpy = await mockDetachedTaskStart();
 
-    // 1. Dispatch via router UUID and via `agent__lobster_env_code_review` tool name
+    // 1. Dispatch via router UUID and via `agent__code_review_router` tool name
     const expectedOrder = [reviewSubagentA.id, reviewSubagentB.id];
     const run1 = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
@@ -2453,7 +2453,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const run2 = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       {
-        agent_id: "agent__lobster_env_code_review",
+        agent_id: "agent__code_review_router",
         message: "Review PR #102 via router slug",
       },
       context,
@@ -2476,7 +2476,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const grantRes = await executeArchestraTool(
       TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
       {
-        agent_id: "agent__lobster_env_code_review",
+        agent_id: "agent__code_review_router",
         ephemeral: true,
         environment: [
           {
@@ -2497,7 +2497,7 @@ describe("subagent load balancing, ephemeral grants, and runtime supervisor fail
     const run3 = await executeArchestraTool(
       TOOL_START_AGENT_RUN_FULL_NAME,
       {
-        agent_id: "agent__lobster_env_code_review",
+        agent_id: "agent__code_review_router",
         credential_grant_ids: [grantId],
         message: "Review PR #103 with ephemeral credential",
       },

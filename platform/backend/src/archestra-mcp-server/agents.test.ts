@@ -1996,7 +1996,7 @@ describe("agent runtime and model tools", () => {
 
   test("create_agent, edit_agent, and get_agent configure and return subagentLoadBalancing", async () => {
     const created = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
-      name: "Lobster Env Code Review",
+      name: "Code Review Router",
       subagentLoadBalancing: {
         enabled: true,
         algorithm: "round_robin",

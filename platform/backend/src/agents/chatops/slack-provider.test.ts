@@ -2084,6 +2084,24 @@ describe("SlackProvider.addApprovalRequestForm", () => {
     expect(JSON.parse(buttons[1].value).approved).toBe(false);
   });
 
+  test("lists what approving also accepts as escaped text", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "send_email",
+      alsoAccepts: ["readers <!channel>"],
+    });
+
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks[0].text.text).toBe(
+      "*Approval required*\n`send_email`\nReview this tool call before it can continue.\n\nApproving also accepts:\n- readers &lt;!channel&gt;",
+    );
+  });
+
   test("omits View arguments when there are no arguments", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });

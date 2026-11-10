@@ -29,6 +29,7 @@ import {
 } from "./constants";
 import {
   errorMessage,
+  formatApprovalAlsoAccepts,
   formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -301,7 +302,11 @@ class TelegramProvider implements ChatOpsProvider {
       ? markdownToTelegramHtml(
           `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``,
         )
-      : approvalRequestHtml(options.toolName, options.toolArgs);
+      : approvalRequestHtml(
+          options.toolName,
+          options.toolArgs,
+          formatApprovalAlsoAccepts(options.alsoAccepts),
+        );
 
     const metadata = options.originalMessage.metadata ?? {};
     await this.callApi("sendMessage", {
@@ -1143,8 +1148,9 @@ export function markdownToTelegramHtml(markdown: string): string {
 function approvalRequestHtml(
   toolName: string,
   args: Record<string, unknown> | undefined,
+  alsoAccepts: string | undefined,
 ): string {
-  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.`;
+  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${escapeHtml(alsoAccepts)}` : ""}`;
   const entries = Object.entries(args ?? {});
   if (entries.length === 0) return header;
 

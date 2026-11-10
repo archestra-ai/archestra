@@ -243,6 +243,16 @@ export function formatApprovalReviewText(
     : text;
 }
 
+/** What approving also accepts, as plain text; undefined when nothing. */
+export function formatApprovalAlsoAccepts(
+  lines: string[] | undefined,
+): string | undefined {
+  if (!lines?.length) return undefined;
+  return ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join(
+    "\n",
+  );
+}
+
 /**
  * Whether an error message reads like an LLM provider rejecting the API key —
  * e.g. Anthropic's 401 body "invalid x-api-key", OpenAI's "Incorrect API key

@@ -208,7 +208,7 @@ const labTest = test.extend<{
 });
 
 labTest.for([false, true])(
-  "configured retries recover on the same member before output (stream=%s)",
+  "configured retries reselect the next healthy member before output (stream=%s)",
   async (stream, { lab }) => {
     const [first, second] = await lab.deploy(
       [{ priority: 1 }, { priority: 2 }],
@@ -217,15 +217,14 @@ labTest.for([false, true])(
     first.mode = { kind: "status", status: 503, recoverAfter: 2 };
     const answer = await lab.ask({ stream });
     expect(answer.status, answer.body).toBe(200);
-    expect(answer.providerKey).toBe(first.keyId);
-    expect(answer.attempts).toBe("3");
-    expect([first.hits, second.hits]).toEqual([3, 0]);
+    expect(answer.providerKey).toBe(second.keyId);
+    expect(answer.attempts).toBe("2");
+    expect([first.hits, second.hits]).toEqual([1, 1]);
     const rows = await db
       .select()
       .from(schema.interactionsTable)
       .orderBy(schema.interactionsTable.createdAt);
     expect(rows.map((row) => row.attemptOutcome)).toEqual([
-      "failed_over",
       "failed_over",
       "answered",
     ]);
@@ -233,7 +232,7 @@ labTest.for([false, true])(
 );
 
 labTest(
-  "configured connection errors retry on the same member before failover",
+  "configured connection errors reselect a healthy deployment",
   async ({ lab }) => {
     const [first, second] = await lab.deploy(
       [{ priority: 1 }, { priority: 2 }],
@@ -246,7 +245,178 @@ labTest(
     first.mode = { kind: "refused" };
     const answer = await lab.ask();
     expect(answer.status, answer.body).toBe(200);
-    expect([first.hits, second.hits]).toEqual([2, 1]);
+    expect([first.hits, second.hits]).toEqual([1, 1]);
+  },
+);
+
+labTest(
+  "group retry budget does not reset when the selected deployment or error changes",
+  async ({ lab }) => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const [first, second, third] = await lab.deploy(
+        [
+          {
+            priority: 1,
+            retrySettings: { retryPolicy: { rateLimitError: 1 } },
+          },
+          { priority: 1, retrySettings: { numRetries: 10 } },
+          { priority: 1 },
+        ],
+        { numRetries: 4, initialDelayMs: 100, maxDelayMs: 100 },
+      );
+      first.mode = { kind: "status", status: 429 };
+      second.mode = { kind: "status", status: 503 };
+      const answer = await lab.ask();
+      expect(answer.status).toBe(503);
+      expect(answer.attempts).toBe("2");
+      expect([first.hits, second.hits, third.hits]).toEqual([1, 1, 0]);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .orderBy(schema.interactionsTable.createdAt);
+      expect(rows.map((row) => row.attemptOutcome)).toEqual([
+        "failed_over",
+        "failed",
+      ]);
+    } finally {
+      random.mockRestore();
+    }
+  },
+);
+
+labTest.for([undefined, "0"])(
+  "zero retries does not sweep same-order siblings, but preserves later-order fallback (header=%s)",
+  async (retryHeader, { lab }) => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const [first, sibling, fallback] = await lab.deploy(
+        [{ priority: 1 }, { priority: 1 }, { priority: 2 }],
+        { numRetries: retryHeader ? 3 : 0, initialDelayMs: 100 },
+      );
+      first.mode = { kind: "status", status: 503 };
+      const answer = await lab.ask({ retryHeader });
+      expect(answer.status).toBe(200);
+      expect([first.hits, sibling.hits, fallback.hits]).toEqual([1, 0, 1]);
+    } finally {
+      random.mockRestore();
+    }
+  },
+);
+
+labTest(
+  "retry selection stays in the lowest healthy order and preserves weighted selection",
+  async ({ lab }) => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const [first, light, heavy, fallback] = await lab.deploy(
+        [
+          { priority: 1 },
+          { priority: 1, weight: 1 },
+          { priority: 1, weight: 9 },
+          { priority: 2 },
+        ],
+        { numRetries: 1, initialDelayMs: 100 },
+      );
+      first.mode = { kind: "status", status: 503 };
+      // Initial plan selects the first member. Its network response changes
+      // the next random draw; a fixed precomputed member sweep would pick light.
+      server.use(
+        http.post(`${first.origin}/chat/completions`, ({ request }) => {
+          random.mockReturnValue(0.5);
+          return respond(first, request);
+        }),
+      );
+      const answer = await lab.ask();
+      expect(answer.status).toBe(200);
+      expect([first.hits, light.hits, heavy.hits, fallback.hits]).toEqual([
+        1, 0, 1, 0,
+      ]);
+    } finally {
+      random.mockRestore();
+    }
+  },
+);
+
+labTest(
+  "a later-order fallback starts its own budget and cannot return to a healthy earlier order",
+  async ({ lab }) => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const [first, skipped, fallback, sibling] = await lab.deploy(
+        [
+          { priority: 1 },
+          { priority: 1 },
+          { priority: 2, retrySettings: { numRetries: 1 } },
+          { priority: 2 },
+        ],
+        { numRetries: 0, initialDelayMs: 100 },
+      );
+      first.mode = fallback.mode = { kind: "status", status: 503 };
+      const answer = await lab.ask();
+      expect(answer.status).toBe(200);
+      expect([first.hits, skipped.hits, fallback.hits, sibling.hits]).toEqual([
+        1, 0, 1, 1,
+      ]);
+    } finally {
+      random.mockRestore();
+    }
+  },
+);
+
+labTest(
+  "a retry-selected final plan member still times out while a healthy sibling can answer",
+  async ({ lab }) => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const [first, healthy, slow] = await lab.deploy(
+        [{ priority: 1 }, { priority: 1 }, { priority: 1 }],
+        { numRetries: 2, initialDelayMs: 100, maxDelayMs: 100 },
+      );
+      first.mode = { kind: "status", status: 503 };
+      slow.mode = { kind: "black-hole" };
+      server.use(
+        http.post(`${first.origin}/chat/completions`, ({ request }) => {
+          random.mockReturnValue(0.9);
+          return respond(first, request);
+        }),
+      );
+      const answer = await lab.ask({ stream: true });
+      expect(answer.status).toBe(200);
+      expect(answer.providerKey).toBe(healthy.keyId);
+      expect([first.hits, healthy.hits, slow.hits]).toEqual([1, 1, 1]);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .orderBy(schema.interactionsTable.createdAt);
+      expect(rows.map((row) => row.failureReason)).toEqual([
+        "server_error (503)",
+        "timeout (408)",
+        null,
+      ]);
+      expect(rows.map((row) => row.attemptOutcome)).toEqual([
+        "failed_over",
+        "failed_over",
+        "answered",
+      ]);
+    } finally {
+      random.mockRestore();
+    }
+  },
+);
+
+labTest(
+  "configured retries do not resurrect cooling deployments to fill the budget",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy(
+      [{ priority: 1 }, { priority: 2 }],
+      { numRetries: 4, initialDelayMs: 100, maxDelayMs: 100 },
+    );
+    first.mode = second.mode = { kind: "status", status: 503 };
+    expect((await lab.ask()).status).toBe(503);
+    expect([first.hits, second.hits]).toEqual([1, 1]);
+    expect((await lab.ask()).status).toBe(503);
+    expect([first.hits, second.hits]).toEqual([1, 1]);
   },
 );
 
@@ -303,8 +473,8 @@ labTest(
     second.mode = { kind: "status", status: 503 };
     const answer = await lab.ask();
     expect(answer.status).toBe(503);
-    expect(answer.attempts).toBe("3");
-    expect([first.hits, second.hits]).toEqual([1, 2]);
+    expect(answer.attempts).toBe("2");
+    expect([first.hits, second.hits]).toEqual([1, 1]);
   },
 );
 
@@ -366,7 +536,7 @@ labTest(
 );
 
 labTest(
-  "configured timeout retries reopen with a fresh signal and account for every cut-off",
+  "configured timeout retries switch deployments and account for the cut-off",
   async ({ lab }) => {
     const [first, second] = await lab.deploy(
       [{ priority: 1 }, { priority: 2 }],
@@ -375,12 +545,12 @@ labTest(
     first.mode = { kind: "black-hole" };
     const answer = await lab.ask({ stream: true });
     expect(answer.status, answer.body).toBe(200);
-    expect([first.hits, second.hits]).toEqual([2, 1]);
+    expect([first.hits, second.hits]).toEqual([1, 1]);
     const rows = await db
       .select()
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.attemptOutcome, "failed_over"));
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     for (const row of rows) {
       expect(row.failureReason).toBe("timeout (408)");
       expect(row.inputTokensEstimated).toBe(true);

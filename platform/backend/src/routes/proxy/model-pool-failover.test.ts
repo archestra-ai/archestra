@@ -455,12 +455,16 @@ describe("openThroughModelPool", () => {
         providerApiKeyId: keyA,
         provider: "zhipuai",
         modelId: "glm-5",
+        priority: 1,
+        weight: 1,
       },
       {
         memberId: "00000000-0000-4000-8000-0000000000b1",
         providerApiKeyId: keyB,
         provider: "bedrock",
         modelId: "zai.glm-5",
+        priority: 2,
+        weight: 1,
       },
     ],
   };

@@ -133,6 +133,7 @@ const xaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           response: constructResponseSchema(z.record(z.string(), z.unknown())),
         },
       },
+      // codeql[js/missing-rate-limiting] The passthrough authenticator enforces distributed credential/IP failure limits before forwarding; rate-limit.native-grok.route.test.ts verifies the 401-to-429 boundary.
       async (request, reply) => {
         if (!nativeGrokSessionAdapter(request.headers))
           throw new ApiError(401, "Native Grok authentication is required.");
@@ -164,6 +165,7 @@ const xaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         },
       },
+      // codeql[js/missing-rate-limiting] The passthrough authenticator enforces distributed credential/IP failure limits before forwarding; rate-limit.native-grok.route.test.ts verifies the 401-to-429 boundary.
       async (request, reply) => {
         if (!nativeGrokSessionAdapter(request.headers))
           throw new ApiError(401, "Native Grok authentication is required.");

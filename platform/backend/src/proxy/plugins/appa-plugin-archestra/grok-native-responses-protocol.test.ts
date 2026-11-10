@@ -2716,6 +2716,10 @@ for (const [background, chat] of [
         organizationId,
         parentSessionId: session.session_id,
       });
+      // Retained child-rejection receipts must not waive the parent when
+      // replayed. Nor may a waiver release an unrecorded or foreign resume.
+      config.openappa.yellEnabled = true;
+      await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "allow" });
       for (const foreignParent of [false, true]) {
         const parentId = foreignParent ? randomUUID() : rootId;
         planned = [
@@ -2739,12 +2743,36 @@ for (const [background, chat] of [
           refusedOutput.some(
             (item: { type?: string }) => item.type === "function_call",
           ),
+          JSON.stringify({
+            output: refusedOutput,
+            waivers: await OpenAppaYellModel.list({
+              organizationId,
+              limit: 20,
+              status: "all",
+            }),
+          }),
         ).toBe(false);
         expect(JSON.stringify(refusedOutput)).toContain(
           "could not verify this Grok resume source",
         );
         expect(JSON.stringify(refusedOutput)).toContain("no child was started");
       }
+      await GuardrailsDeploymentModel.set({ unapprovableBlockMode: "refuse" });
+      expect(
+        await OpenAppaUnenforcedModel.findSessions({
+          organizationId,
+          sessionIds: [session.session_id],
+        }),
+      ).toEqual([]);
+      expect(
+        (
+          await OpenAppaYellModel.list({
+            organizationId,
+            limit: 20,
+            status: "all",
+          })
+        ).data,
+      ).toEqual([]);
       const retainedAfter = await loadChildReturns({
         organizationId,
         parentSessionId: session.session_id,

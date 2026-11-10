@@ -306,6 +306,12 @@ export type AppaClientAdapter = {
   reviewedSession?(context: AppaMatchContext): AppaReviewedSession | undefined;
   /** True when this local tool starts a delegated child run. */
   isSpawnTool(name: string, namespace?: string, args?: unknown): boolean;
+  /** A continuation that still needs host lineage checks, even under a waiver. */
+  isChildContinuationTool?(
+    name: string,
+    namespace?: string,
+    args?: unknown,
+  ): boolean;
   /**
    * Classifies a native spawn launch result. A successful launch stays
    * pending until the child binds the prepared fork. A failed launch closes

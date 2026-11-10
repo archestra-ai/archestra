@@ -14270,6 +14270,65 @@ describe("soft-block emergency override", () => {
     config.openappa.yellEnabled = false;
   });
 
+  test.for([
+    "denial",
+    "runtime failure",
+  ] as const)("a denied Grok resume cannot bypass its lineage binding through an ordinary-call waiver (%s)", async (mode, {
+    makeOrganization,
+  }) => {
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "grok-denied-resume",
+    });
+    context.headers = { "x-archestra-agent-id": "grok-build" };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        {
+          kind: "deny",
+          feedback: "The requested continuation is not permitted.",
+          recorded: true,
+          offers: [],
+        },
+      ]);
+    if (mode === "runtime failure")
+      evaluate.mockRejectedValueOnce(
+        new ApiError(503, "Synthetic policy failure"),
+      );
+    try {
+      await plugin.onSessionInit(context);
+      const proposed = plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "resume",
+            name: "spawn_subagent",
+            arguments: {
+              resume_from: "00000000-0000-4000-8000-000000000001",
+              prompt: "Resume this unrecorded child.",
+            },
+          },
+        ],
+      });
+      if (mode === "runtime failure")
+        await expect(proposed).rejects.toThrow("Synthetic policy failure");
+      else expect(await proposed).toMatchObject({ decision: "refuse" });
+      expect(evaluate).toHaveBeenCalledOnce();
+      expect(
+        evaluate.mock.calls[0][2]?.isSpawn?.("spawn_subagent", undefined, {
+          resume_from: "00000000-0000-4000-8000-000000000001",
+        }),
+      ).toBe(false);
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      evaluate.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   async function setup(organizationId: string, parentId?: string) {
     const context = requestContext({
       organizationId,

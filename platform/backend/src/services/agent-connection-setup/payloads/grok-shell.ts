@@ -15,12 +15,16 @@ function grokShellChanges(state, install) {
   const launcher = path.join(require("node:os").homedir(), ".archestra", "grok", "launch.cjs");
   const connection = path.join(path.dirname(launcher), "connection.json");
   const managed = "& " + ps(process.execPath) + " " + ps(launcher) + " @args";
+  // Windows installers may copy the executable rather than link it. Compare
+  // content on both lookup and invocation, without caching a stale identity.
+  const windowsAgentIdentity = (agent, grok) =>
+    "(Split-Path " + agent + " -Leaf) -ieq 'agent.exe' -and (& { param($candidate, $native) try { $a = (Microsoft.PowerShell.Utility\\Get-FileHash -LiteralPath $candidate -Algorithm SHA256 -ErrorAction Stop).Hash; $g = (Microsoft.PowerShell.Utility\\Get-FileHash -LiteralPath $native -Algorithm SHA256 -ErrorAction Stop).Hash; return ($a -and $g -and ($a -eq $g)) } catch { return $false } } " + agent + " " + grok + ")";
   const windowsBody = [
     "function global:grok { if (Test-Path -LiteralPath " + ps(connection) + ") { " + managed + " } else { $archGrok = Get-Command grok -CommandType Application -ErrorAction Stop | Select-Object -First 1; & $archGrok.Source @args } }",
     "$archGrokNative = Get-Command grok -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
     "$archAgentNative = Get-Command agent -ErrorAction SilentlyContinue",
-    "if ($archGrokNative -and $archAgentNative -and $archAgentNative.CommandType -eq 'Application' -and (Split-Path $archAgentNative.Source -Leaf) -ieq 'agent.exe' -and (Split-Path $archAgentNative.Source -Parent) -ieq (Split-Path $archGrokNative.Source -Parent)) {",
-    "  function global:agent { $archAgent = Get-Command agent -CommandType Application,ExternalScript -ErrorAction Stop | Select-Object -First 1; $archGrok = Get-Command grok -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if ($archGrok -and (Split-Path $archAgent.Source -Leaf) -ieq 'agent.exe' -and (Split-Path $archAgent.Source -Parent) -ieq (Split-Path $archGrok.Source -Parent) -and (Test-Path -LiteralPath " + ps(connection) + ")) { " + managed + " } else { & $archAgent.Source @args } }",
+    "if ($archGrokNative -and $archAgentNative -and $archAgentNative.CommandType -eq 'Application' -and (" + windowsAgentIdentity("$archAgentNative.Source", "$archGrokNative.Source") + ")) {",
+    "  function global:agent { $archAgent = Get-Command agent -CommandType Application,ExternalScript -ErrorAction Stop | Select-Object -First 1; $archGrok = Get-Command grok -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if ($archGrok -and (" + windowsAgentIdentity("$archAgent.Source", "$archGrok.Source") + ") -and (Test-Path -LiteralPath " + ps(connection) + ")) { " + managed + " } else { & $archAgent.Source @args } }",
     "}",
     "Remove-Variable archGrokNative,archAgentNative -ErrorAction SilentlyContinue"
   ].join("\r\n");
@@ -29,10 +33,17 @@ function grokShellChanges(state, install) {
   // Preserve aliases/functions and recheck at invocation in case PATH changed.
   // Subshells keep command lookup and temporary variables out of the profile.
   const unixAgentCheck = 'archGrok=$(command -v grok) && archAgent=$(command -v agent) && [ -f "$archGrok" ] && [ -x "$archGrok" ] && [ -f "$archAgent" ] && [ -x "$archAgent" ] && [ "$archAgent" -ef "$archGrok" ]';
+  const unixAgentFunction = 'agent() ( unalias agent grok 2>/dev/null || :; unset -f agent grok; if ' + unixAgentCheck + ' && [ -f ' + sh(connection) + ' ]; then ' + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command agent "$@"; fi )';
   const unixBody = [
+    // Keep the original alias declaration in the profile for disconnect, but
+    // make the connected command use the launcher even if that alias bypassed
+    // functions with an absolute path or "command grok".
+    'unalias grok 2>/dev/null || :',
     'grok() { if [ -f ' + sh(connection) + ' ]; then ' + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command grok "$@"; fi; }',
-    'if (unset -f grok; ' + unixAgentCheck + '); then',
-    '  agent() ( unset -f agent grok; if ' + unixAgentCheck + ' && [ -f ' + sh(connection) + ' ]; then ' + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command agent "$@"; fi )',
+    'if (unset -f grok; ! alias agent >/dev/null 2>&1 && ' + unixAgentCheck + '); then',
+    // Do not parse an agent function declaration when an unrelated alias won
+    // command lookup. The evaluated source contains only our quoted template.
+    '  eval ' + sh(unixAgentFunction),
     'fi'
   ].join("\n");
   const body = process.platform === "win32"

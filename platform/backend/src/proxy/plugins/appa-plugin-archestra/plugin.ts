@@ -837,14 +837,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const id of childReturns.rejectedSpawns) {
       const settled = result.toolResultUpdates[id];
       // Specialize the runtime's generic failure status using the verified
-      // rejection. Preserve all refusal flags; this admits no child bytes.
+      // rejection. It reports a retained ChildEnd rejection, not withheld
+      // tool output. Replaying this fixed status must not waive the parent.
       // An unrecognized dispatch or a policy-denied call retains its ruling.
       if (
         settled?.outputSource === "runtime" &&
         !settled.denied &&
         !settled.code
-      )
+      ) {
         settled.content = childReturns.updates[id];
+        delete settled.refused;
+      }
     }
     // Keep the native hard ruling before any metadata/cache lookup can fail.
     // A later generic exception must not release the original client bytes.
@@ -1896,7 +1899,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : [],
     );
     binding.hardBlockSeen ||= refusals.some(isHardBlock);
-    if (refusals.length && !binding.hardBlockSeen)
+    if (
+      refusals.length &&
+      !binding.hardBlockSeen &&
+      !calls.some((call) => isChildContinuationCall(binding.adapter, call))
+    )
       await refuseSoftBlock(
         refusals.join("\n"),
         context.toolCalls
@@ -2149,10 +2156,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         if (
           runtimeCalls.has(call.id) ||
           withheldRelayDecisions.has(call.id) ||
-          (binding.adapter && isChildSpawnCall(binding.adapter, call))
+          (binding.adapter &&
+            (isChildSpawnCall(binding.adapter, call) ||
+              isChildContinuationCall(binding.adapter, call)))
         ) {
-          // A runtime call, a withheld relay or a spawn is never waived here:
-          // the runtime releases those itself.
+          // Lifecycle calls still need their host binding. An ordinary-call
+          // waiver must not release a continuation without that binding.
         } else {
           const waiver = waiverFor({
             decision,
@@ -2657,6 +2666,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const adapter = this.bindings.get(context.resources)?.adapter;
+    if (
+      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
+    ) {
+      // The generic failure fallback releases original wire calls. A resumed
+      // child must instead retain its host binding, including on policy or
+      // runtime failure, so neither waiver path may release it unchanged.
+      return this.guardedToolCalls(context);
+    }
     return this.withSoftBlockWaiver(
       context,
       "onToolCalls",
@@ -5955,6 +5973,19 @@ function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
       message: "probe",
       items: [{ type: "text", text: "probe" }],
     }) !== undefined
+  );
+}
+
+function isChildContinuationCall(
+  adapter: AppaClientAdapter | undefined,
+  call: ToolCall,
+): boolean {
+  return (
+    adapter?.isChildContinuationTool?.(
+      call.name,
+      call.namespace,
+      call.arguments,
+    ) === true
   );
 }
 

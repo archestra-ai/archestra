@@ -15,6 +15,19 @@ import { runInNewContext } from "node:vm";
 import { expect, test } from "vitest";
 import { GROK_SHELL } from "./grok-shell";
 
+const powershell = process.platform === "win32" ? "powershell.exe" : "pwsh";
+const hasPowerShell =
+  spawnSync(
+    powershell,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$PSVersionTable.PSVersion.ToString()",
+    ],
+    { encoding: "utf8" },
+  ).status === 0;
+
 function shellFixture(platform: "linux" | "darwin" | "win32") {
   const home = mkdtempSync(path.join(tmpdir(), "grok shell $& [日本語] ' "));
   const require = createRequire(import.meta.url);
@@ -219,12 +232,16 @@ test.each([
     executable(path.join(other, "agent"), "unrelated-agent", 9);
     apply(run(null).changes);
     const profile = path.join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
-    const invoke = (command: string) =>
-      spawnSync(
+    const invoke = (command: string) => {
+      const guarded = command.replaceAll(
+        '. "$TEST_PROFILE";',
+        '. "$TEST_PROFILE" || exit $?;',
+      );
+      const result = spawnSync(
         shell,
         shell === "zsh"
-          ? ["-df", "-c", command]
-          : ["--noprofile", "--norc", "-O", "expand_aliases", "-c", command],
+          ? ["-df", "-c", guarded]
+          : ["--noprofile", "--norc", "-O", "expand_aliases", "-c", guarded],
         {
           env: {
             ...process.env,
@@ -237,7 +254,23 @@ test.each([
           encoding: "utf8",
         },
       );
+      expect(result.stderr).toBe("");
+      return result;
+    };
     writeFileSync(path.join(root, "connection.json"), "{}");
+    for (const declaration of [
+      "alias grok='grok --no-alt-screen'",
+      "alias grok='command grok --no-alt-screen'",
+    ]) {
+      const aliased = invoke(
+        `${declaration}; . "$TEST_PROFILE"; eval 'grok --resume custom'`,
+      );
+      expect(aliased.status, aliased.stderr).toBe(0);
+      expect(JSON.parse(aliased.stdout)).toEqual({
+        source: "managed",
+        args: ["--resume", "custom"],
+      });
+    }
     const connected = invoke(
       ". \"$TEST_PROFILE\"; grok --resume 'two words' '日本語'; agent -p 'hello world'; test -z \"$archGrok$archAgent\"",
     );
@@ -251,6 +284,14 @@ test.each([
       { source: "managed", args: ["--resume", "two words", "日本語"] },
       { source: "managed", args: ["-p", "hello world"] },
     ]);
+    const laterAlias = invoke(
+      '. "$TEST_PROFILE"; alias agent="printf unrelated"; \\agent --version',
+    );
+    expect(laterAlias.status, laterAlias.stderr).toBe(0);
+    expect(JSON.parse(laterAlias.stdout)).toEqual({
+      source: "managed",
+      args: ["--version"],
+    });
     const changedPath = invoke(
       '. "$TEST_PROFILE"; PATH="$TEST_OTHER_BIN:$PATH"; agent -p changed',
     );
@@ -307,3 +348,82 @@ test.each([
     close();
   }
 });
+
+// This portable harness runs the Windows profile in PowerShell on Unix.
+// Its fake native executables use Unix shebangs, not Windows PE binaries.
+test
+  .skipIf(!hasPowerShell || process.platform === "win32")
+  .each(["same", "different", "replaced"] as const)(
+  "PowerShell verifies native executable ownership before wrapping and invoking agent (%s)",
+  (mode) => {
+    const { home, profile, run, apply, close } = shellFixture("win32");
+    try {
+      const root = path.join(home, ".archestra/grok");
+      const bin = path.join(home, "bin");
+      mkdirSync(bin);
+      const grok = path.join(bin, "grok.exe");
+      const agent = path.join(bin, "agent.exe");
+      const replacement = path.join(home, "replacement.exe");
+      const binary = (source: string) =>
+        `#!${process.execPath}\nconsole.log(JSON.stringify({source:${JSON.stringify(source)},args:process.argv.slice(2)}));`;
+      writeFileSync(grok, binary("native"), { mode: 0o700 });
+      writeFileSync(
+        agent,
+        binary(mode === "different" ? "unrelated" : "native"),
+        { mode: 0o700 },
+      );
+      writeFileSync(replacement, binary("unrelated"), { mode: 0o700 });
+      writeFileSync(path.join(root, "launch.cjs"), binary("managed"));
+      writeFileSync(path.join(root, "connection.json"), "{}");
+      apply(run(null).changes);
+      const probe = path.join(home, "probe.ps1");
+      writeFileSync(
+        probe,
+        `
+$ErrorActionPreference = 'Stop'
+# Command discovery is the Windows boundary; execute the generated profile,
+# file hashing, launcher and native fallback with real PowerShell.
+function global:Get-Command {
+  [CmdletBinding()]
+  param([string]$Name, [object[]]$CommandType)
+  $source = if ($Name -eq 'grok') { $env:TEST_GROK_BIN } else { $env:TEST_AGENT_BIN }
+  [pscustomobject]@{ CommandType = 'Application'; Source = $source }
+}
+. $env:TEST_PROFILE
+$wrapped = Test-Path Function:\\agent
+if ($env:TEST_REPLACE -eq '1') {
+  [IO.File]::WriteAllBytes($env:TEST_AGENT_BIN, [IO.File]::ReadAllBytes($env:TEST_REPLACEMENT))
+}
+$raw = if ($wrapped) { agent --probe 'two words' } else { & $env:TEST_AGENT_BIN --probe 'two words' }
+[pscustomobject]@{ wrapped = $wrapped; reply = ($raw | ConvertFrom-Json) } | ConvertTo-Json -Compress -Depth 5
+`,
+      );
+      const result = spawnSync(
+        powershell,
+        ["-NoProfile", "-NonInteractive", "-File", probe],
+        {
+          env: {
+            ...process.env,
+            TEST_PROFILE: profile,
+            TEST_GROK_BIN: grok,
+            TEST_AGENT_BIN: agent,
+            TEST_REPLACEMENT: replacement,
+            TEST_REPLACE: mode === "replaced" ? "1" : "0",
+          },
+          encoding: "utf8",
+        },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        wrapped: mode !== "different",
+        reply: {
+          source: mode === "same" ? "managed" : "unrelated",
+          args: ["--probe", "two words"],
+        },
+      });
+    } finally {
+      close();
+    }
+  },
+);

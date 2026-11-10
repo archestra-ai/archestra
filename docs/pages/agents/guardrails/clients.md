@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,6 +44,8 @@ Choose **Grok Build** on the connection page, complete setup, and start `grok` i
 Interactive startup shows configuration, skill sync, model discovery and proxy routing progress on stderr. Routing remains pending server admission; startup is not proof that a session is protected. The first eligible governed reply displays the server-issued `protected session` receipt, as it does for other native clients. This is a reply indicator, not a persistent Grok status-bar badge. Headless prompts skip the screen and check connectivity in the background. Plain output reports status on stdout; JSON output retains native reply fields and adds `_meta.archestraStartup` to the final object. Other quiet and non-terminal runs keep native stdout unchanged. Guardrails checks run in the proxy, never in client hooks.
 
 PowerShell, Bash and Zsh profiles also route Grok's own `agent` command through this launcher. On Unix, both names must resolve to the same executable. An unrelated `agent` command, alias or function keeps its existing behavior. Open a new terminal after connecting to load the managed functions.
+
+On Unix, the managed function replaces any existing `grok` alias in the loaded shell. Its original declaration stays in your profile and takes effect again in a new terminal after disconnecting.
 
 The launcher uses a dedicated profile for native skills and managed hook isolation. Grok reads and refreshes the ordinary native login directly; `/login` and `node ~/.archestra/grok/login.cjs` renew that same login. Credentials are never copied, and conflicting native routing policies stop launch.
 

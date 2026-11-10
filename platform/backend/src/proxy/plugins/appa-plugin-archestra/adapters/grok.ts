@@ -267,6 +267,17 @@ export class AppaGrokAdapter implements AppaClientAdapter {
       !argumentRecord(args)?.resume_from
     );
   }
+  isChildContinuationTool(
+    name: string,
+    namespace?: string,
+    args?: unknown,
+  ): boolean {
+    return (
+      !namespace &&
+      name === "spawn_subagent" &&
+      Boolean(argumentRecord(args)?.resume_from)
+    );
+  }
   spawnPromptField(
     name: string,
     args: Record<string, unknown>,

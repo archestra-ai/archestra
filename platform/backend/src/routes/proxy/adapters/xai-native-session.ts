@@ -277,7 +277,7 @@ export async function fetchNativeGrokMetadata(params: {
   signal: AbortSignal;
 }): Promise<Record<string, unknown>> {
   const response = await fetch(
-    `${config.llm.xai.subscription.baseUrl.replace(/\/+$/, "")}/${params.name}`,
+    `${config.llm.xai.subscription.baseUrl.replace(/\/+$/, "")}${nativeMetadataPath(params.name)}`,
     {
       headers: nativeAccountHeaders(params.headers),
       redirect: "error",
@@ -321,6 +321,22 @@ export async function fetchNativeGrokMetadata(params: {
     );
   } finally {
     await reader.cancel().catch(() => {});
+  }
+}
+
+function nativeMetadataPath(name: string): string {
+  // Select literal paths at runtime too; never interpolate a caller's string.
+  switch (name) {
+    case "models":
+      return "/models";
+    case "settings":
+      return "/settings";
+    case "login-config":
+      return "/login-config";
+    case "user":
+      return "/user";
+    default:
+      throw new ApiError(400, "Unsupported native Grok metadata endpoint.");
   }
 }
 

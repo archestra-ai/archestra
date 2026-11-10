@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import { ResponsesStreamIncompleteError } from "./openai-responses";
 import {
+  fetchNativeGrokMetadata,
   nativeGrokSessionAdapter,
   resolveNativeGrokDefault,
 } from "./xai-native-session";
@@ -83,6 +84,46 @@ describe("native Grok Responses factory", () => {
     config.llm.xai.subscription.baseUrl = `http://127.0.0.1:${address.port}/native/v1`;
     return captured;
   }
+
+  test.each([
+    "models",
+    "settings",
+    "login-config",
+    "user",
+  ] as const)("metadata selects the fixed native %s endpoint", async (name) => {
+    const captured = await stubNative(() => ({
+      status: 200,
+      body: '{"data":[]}',
+    }));
+    await fetchNativeGrokMetadata({
+      name,
+      headers,
+      signal: AbortSignal.timeout(1000),
+    });
+    expect(captured.map((request) => request.url)).toEqual([
+      `/native/v1/${name}`,
+    ]);
+  });
+
+  test.each([
+    "../user",
+    "https://other.example",
+    "models?extra=1",
+    "__proto__",
+  ])("metadata refuses an unsupported runtime name before fetching (%s)", async (name) => {
+    const captured = await stubNative(() => ({
+      status: 200,
+      body: "{}",
+    }));
+    await expect(
+      fetchNativeGrokMetadata({
+        name: name as "models",
+        headers,
+        signal: AbortSignal.timeout(1000),
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(captured).toEqual([]);
+  });
 
   test("explicit native mode supplies the upstream auth header and keeps only allowlisted headers", async () => {
     const captured = await stubNative(() => ({

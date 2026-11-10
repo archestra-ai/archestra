@@ -1365,12 +1365,16 @@ describe("acceptedCoverage", () => {
 
   test("keeps what an approval accepts beyond the person's attention", () => {
     expect(
-      acceptedCoverage(review(["  - attention: signoff", "  - first", "  - b"])),
+      acceptedCoverage(
+        review(["  - attention: signoff", "  - first", "  - b"]),
+      ),
     ).toEqual(["first", "b"]);
   });
 
   test("reads nothing from coverage it does not recognize", () => {
-    expect(acceptedCoverage(review(["  - first", "free text"]))).toBeUndefined();
+    expect(
+      acceptedCoverage(review(["  - first", "free text"])),
+    ).toBeUndefined();
   });
 });
 

@@ -110,6 +110,64 @@ describe("GET /api/llm-proxy-logs/sessions/:sessionId/handoffs", () => {
     expect(remote.json().moves).toEqual(local.json().moves);
   });
 
+  test("reads the moves a client made through run_tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    const run = await makeRun({
+      agentId: agent.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      workloadName: "agent-run-dispatched-1",
+    });
+    await AgentRunModel.setOriginLlmSessionId({
+      taskId: run.taskId,
+      originLlmSessionId: LOCAL,
+    });
+    // How a client on a search-and-run gateway reaches the run tools.
+    const dispatch = (
+      toolName: string,
+      toolArgs: Record<string, unknown>,
+      result = {},
+    ) =>
+      McpToolCallModel.create({
+        agentId: agent.id,
+        userId: ctx.user.id,
+        sessionId: LOCAL,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: {
+          id: crypto.randomUUID(),
+          name: "archestra__run_tool",
+          arguments: { tool_name: toolName, tool_args: toolArgs },
+        },
+        toolResult: { isError: false, ...result },
+      });
+    // Other tools it dispatches are not moves.
+    await dispatch("archestra__whoami", {});
+    const start = await dispatch(
+      "archestra__start_agent_run",
+      { message: "Fix the flaky test" },
+      { structuredContent: { run: { run_id: run.taskId } } },
+    );
+    // The short name names the same tool.
+    const pull = await dispatch("cancel_agent_run", { run_id: run.taskId });
+
+    const response = await read(LOCAL);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response
+        .json()
+        .moves.map((m: { kind: string; mcpToolCallId: string }) => [
+          m.kind,
+          m.mcpToolCallId,
+        ]),
+    ).toEqual([
+      ["push", start.id],
+      ["pull", pull.id],
+    ]);
+  });
+
   test("shows a member only their own runs", async ({
     makeAgent,
     makeUser,

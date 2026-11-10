@@ -506,13 +506,15 @@ class McpToolCallModel {
    * A session's gateway calls to the named tools, oldest first, with their
    * arguments and results readable (a locked row keeps its sentinel). Only
    * calls the Archestra server ran count, so another server's tool of the
-   * same short name never matches. `userId` limits them to that user's calls.
+   * same short name never matches. `userId` limits them to that user's calls,
+   * and `since` to calls made from then on.
    */
   static async findArchestraCallsBySession(params: {
     organizationId: string;
     sessionId: string;
     toolNames: string[];
     userId?: string;
+    since?: Date;
     limit: number;
   }): Promise<
     {
@@ -543,6 +545,7 @@ class McpToolCallModel {
           eq(table.mcpServerName, ARCHESTRA_MCP_SERVER_NAME),
           inArray(MCP_TOOL_CALL_TOOL_NAME, params.toolNames),
           ...(params.userId ? [eq(table.userId, params.userId)] : []),
+          ...(params.since ? [gte(table.createdAt, params.since)] : []),
           mcpToolCallBelongsToOrganization(params.organizationId),
         ),
       )

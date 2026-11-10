@@ -50,6 +50,7 @@ import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallsContext,
+  type LlmProxyToolResultsContext,
 } from "@/proxy/plugins/registry";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1458,6 +1459,215 @@ describe("asking through the client's own question tool", () => {
       }
     });
   }
+
+  describe("remedy continuation delivery", () => {
+    /**
+     * One session with two offered rulings. Each request gets a fresh plugin
+     * and request context, as separate proxy replicas would, so only shared
+     * state carries between requests.
+     */
+    async function rulingSession(organizationId: string, sessionId: string) {
+      const callIds = ["call_notice", "call_notice_2"] as const;
+      const root = openappaActor(sessionId);
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId,
+        callerId: "user:user",
+        sessionId,
+        actor: root,
+        root,
+        parentId: null,
+        startDecision: { decision: "ack" },
+      });
+      for (const callId of callIds) {
+        await db.insert(schema.openappaOperationsTable).values({
+          organizationId,
+          callerId: "user:user",
+          sessionId,
+          root,
+          operationId: `call:${callId}`,
+          status: "complete",
+          input: { semantic: { event: "tool_call" } },
+          decision: { decision: "deny_call" },
+        });
+      }
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: Object.fromEntries(
+            callIds.map((callId) => [
+              callId,
+              {
+                content: `[appa] Blocked: execute_remedy_plan(offer_id: "offer-${callId}", plan: "Submit for approval")`,
+                outputSource: "runtime" as const,
+              },
+            ]),
+          ),
+        });
+      const ruling = (index: 0 | 1) => ({
+        id: callIds[index],
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__gateway",
+        content: "client echo",
+        isError: false,
+      });
+      const later = (id: string) => ({
+        id,
+        name: "read_document",
+        namespace: "mcp__foreign",
+        content: "Done",
+        isError: false,
+      });
+      /** Sends one request; true when it told the model to apply the plan. */
+      const guided = async (
+        toolResults: LlmProxyToolResultsContext["toolResults"],
+      ) => {
+        const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+        const context = requestContext({ sessionId, organizationId });
+        context.headers = { originator: "codex_cli_rs" };
+        const trusted = trustedOf(context);
+        trusted.request = {
+          tools: {
+            control: {
+              name: "archestra__execute_remedy_plan",
+              namespace: "mcp__gateway",
+            },
+            notice: {
+              name: "archestra__get_remedy_plans",
+              namespace: "mcp__gateway",
+            },
+            askUser: undefined,
+            platformToolNames: new Set(),
+            namespaces: new Map(),
+          },
+          customTools: new Set(),
+          declaredTools: [],
+          session: {},
+        };
+        await plugin.onSessionInit(context);
+        try {
+          await plugin.onToolResults({ ...context, toolResults });
+          const request = {
+            input: [],
+            tool_choice: "auto",
+            parallel_tool_calls: true,
+          };
+          await plugin.onBeforeModel({
+            ...context,
+            interactionType: "openai:responses",
+            request,
+          });
+          const nudged = JSON.stringify(request.input).includes(
+            "The ruling above offers a remedy plan",
+          );
+          expect(request.tool_choice).toBe(nudged ? "required" : "auto");
+          return nudged;
+        } finally {
+          await plugin.onCleanup(context);
+        }
+      };
+      return {
+        ruling,
+        later,
+        guided,
+        restore: () => processResults.mockRestore(),
+      };
+    }
+
+    test("puts a remedy offer to the model once, not on every later request", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-once",
+      );
+      try {
+        // The ruling arrives: the model is told to apply a fitting plan.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The same history again (a retry) is told again.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The model read the ruling, declined the plan and went on: not again.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+        expect(
+          await guided([ruling(0), later("later-1"), later("later-2")]),
+        ).toBe(false);
+        // A new ruling arms the nudge once more, and only once.
+        const history = [ruling(0), later("later-1"), later("later-2")];
+        expect(await guided([...history, ruling(1)])).toBe(true);
+        expect(await guided([...history, ruling(1), later("later-3")])).toBe(
+          false,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test("keeps every guided history after many ever shorter replays", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-many-replays",
+      );
+      const history = (laterResults: number) => [
+        ruling(0),
+        ...Array.from({ length: laterResults }, (_, index) =>
+          later(`later-${index + 1}`),
+        ),
+      ];
+      try {
+        // 41 guided histories, each one shorter than the last.
+        for (let laterResults = 40; laterResults >= 0; laterResults--) {
+          expect(await guided(history(laterResults))).toBe(true);
+        }
+        // The oldest, longest ones are still recognized as retries.
+        expect(await guided(history(40))).toBe(true);
+        expect(await guided(history(39))).toBe(true);
+        // A history past every guided one is progress.
+        expect(await guided(history(41))).toBe(false);
+      } finally {
+        restore();
+      }
+    }, 60_000);
+
+    test("guides again every history it guided, after a shorter replay or overlapping requests", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-replays",
+      );
+      const longer = [ruling(0), later("later-1"), later("later-2")];
+      try {
+        // The ruling first arrives with two results after it in one batch.
+        expect(await guided(longer)).toBe(true);
+        // An older, shorter request is replayed: it was never guided, and the
+        // model had not gone on from it.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The longer history is retried exactly: it gets what it got before.
+        expect(await guided(longer)).toBe(true);
+        expect(await guided([ruling(0)])).toBe(true);
+        // A history that extends the shortest guided one is progress.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+
+        // Two first requests after a new ruling overlap. Which one counts as
+        // progress depends on which record lands first, but a retry of each
+        // must get the answer it got the first time: a lost record would
+        // turn a guided history into "progress".
+        const short = [...longer, ruling(1)];
+        const long = [...short, later("later-3"), later("later-4")];
+        const first = await Promise.all([guided(long), guided(short)]);
+        // Nothing follows the ruling in the short history: never progress.
+        expect(first[1]).toBe(true);
+        expect([await guided(long), await guided(short)]).toEqual(first);
+        expect(await guided([...short, later("later-3")])).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+  });
 
   test("tells Codex to use declared collaboration spawn tools instead of a nested CLI", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);

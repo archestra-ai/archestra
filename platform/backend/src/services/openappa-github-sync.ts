@@ -2,12 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   getGithubWebOrigin,
   gitHostFromUrl,
-  isBuiltInCatalogId,
-  type ResourcePermissionGrant,
   slugifyMcpServerName,
   TimeInMs,
 } from "@archestra/shared";
-import { inArray } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import {
@@ -16,22 +13,21 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
-import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { gitClient } from "@/git-hosts/git-access";
 import { GitHostError } from "@/git-hosts/git-host-client";
 import logger from "@/logging";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import MemberModel from "@/models/member";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { port } from "@/models/ports";
 import RoleCompositionModel from "@/models/role-composition";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
-import TeamModel from "@/models/team";
 import {
   catalogToolPrefixes,
   openappaBatteriesService,
@@ -45,8 +41,7 @@ import {
   asRecord,
   isServerRulesFile,
   repositoryIncludePaths,
-  SERVER_RULES_INCLUDE,
-  serverRulesPath,
+  serverRulesPrefix,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
@@ -62,6 +57,7 @@ import {
   withGithubMessage,
 } from "@/services/openappa-github";
 import {
+  githubAppLogin,
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
@@ -634,7 +630,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     });
   }
   // Every sync also keeps the repository's protection for server rules files
-  // in line: their code owners and the branch ruleset. A failure there shows
+  // in line: the branch ruleset. A failure there shows
   // in the protection status and never fails the pull.
   try {
     await maintainRepositoryProtection(organizationId);
@@ -797,6 +793,17 @@ const RECHECK_REFUSED = 15 * TimeInMs.Minute;
  */
 const REFUSED_TTL = 10 * TimeInMs.Minute;
 
+/**
+ * How often who asked for a pull request, and whether they still may, is
+ * read again while its head stands: an edit grant taken away, or a GitHub
+ * account connected, shows within this long.
+ */
+const RECHECK_AUTHORSHIP = 15 * TimeInMs.Minute;
+
+/** The most changed files and commits one pull request may hold to be checked. */
+const MAX_PULL_FILES = 1000;
+const MAX_PULL_COMMITS = 250;
+
 /** The host refused the credential: it may not list pull requests or post the check. */
 class CheckRefused extends ApiError {
   constructor(status: number) {
@@ -804,10 +811,20 @@ class CheckRefused extends ApiError {
   }
 }
 
-/** The outcome posted for one pull request result, what it was checked against, and when. */
+/** The outcome posted for one pull request result, and the two checks behind it. */
 type CheckedResult = {
-  deployment: string;
   accepted: boolean;
+  reason: string | null;
+  /** The policy's own check, the deployment it was checked against, and when. */
+  policy: Verdict & { deployment: string };
+  /** Who asked, and whether they may change what the pull request changes. */
+  authorship: Verdict;
+};
+
+/** One check's outcome as stored. */
+type Verdict = {
+  accepted: boolean;
+  title: string | null;
   reason: string | null;
   checkedAt: number;
 };
@@ -854,20 +871,51 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const checked = await cacheManager.getMany<CheckedResult>(keys);
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
-    const previous = checked.get(key);
-    if (
-      previous?.deployment === deployment &&
-      (previous.accepted || Date.now() - previous.checkedAt < RECHECK_REFUSED)
-    )
-      continue;
-    const outcome = await outcomeAt({ source, commitSha: pull.result });
+    const stored = checked.get(key);
+    // A result stored before authorship was checked is checked again whole.
+    const previous = stored?.policy && stored.authorship ? stored : undefined;
+    const now = Date.now();
+    // The policy's check stands while the deployment it was checked against
+    // does, a refusal for a while; authorship for a while either way.
+    const policyStands =
+      previous?.policy.deployment === deployment &&
+      (previous.policy.accepted ||
+        now - previous.policy.checkedAt < RECHECK_REFUSED);
+    const authorshipStands =
+      previous !== undefined &&
+      now - previous.authorship.checkedAt < RECHECK_AUTHORSHIP;
+    if (policyStands && authorshipStands) continue;
+    const policy = policyStands
+      ? previous.policy
+      : verdict(await outcomeAt({ source, commitSha: pull.result }), {
+          deployment,
+          checkedAt: now,
+        });
     // A read or a check that failed for now is checked again next minute.
-    if (!outcome) continue;
+    if (!policy) continue;
+    const authorship = authorshipStands
+      ? previous.authorship
+      : verdict(
+          pull.authorship ? await pull.authorship() : { accepted: true },
+          {
+            checkedAt: now,
+          },
+        );
+    if (!authorship) continue;
+    // The policy's own fault first: it is the one a reviewer fixes in the diff.
+    const failed = [policy, authorship].find((check) => !check.accepted);
+    const outcome: PullOutcome = failed
+      ? {
+          accepted: false,
+          title: failed.title ?? undefined,
+          reason: failed.reason ?? "",
+        }
+      : { accepted: true };
     const result: CheckedResult = {
-      deployment,
       accepted: outcome.accepted,
       reason: outcome.accepted ? null : outcome.reason,
-      checkedAt: Date.now(),
+      policy,
+      authorship,
     };
     // A changed deployment that leaves the outcome as posted posts nothing.
     if (
@@ -959,19 +1007,41 @@ async function deploymentState(
     .digest("hex");
 }
 
-type PullOutcome = { accepted: true } | { accepted: false; reason: string };
+type PullOutcome =
+  | { accepted: true }
+  | { accepted: false; title?: string; reason: string };
 
 type CheckedPull = {
   head: string;
   /** The commit checked: GitHub's merge result when it has one, else the head. */
   result: string;
   post: (outcome: PullOutcome) => Promise<void>;
+  /**
+   * Who asked for the change and whether they may make it; null for a read
+   * that failed for now. Absent where the host cannot tell who asked.
+   */
+  authorship?: () => Promise<PullOutcome | null>;
 };
 
 type PolicySource = RepositorySource & {
   path: string;
   ref: string | null;
+  validationDirectory?: string | null;
 };
+
+/** An outcome as stored, or null for one that is not in yet. */
+function verdict<Extra extends object>(
+  outcome: PullOutcome | null,
+  extra: Extra & { checkedAt: number },
+): (Verdict & Extra) | null {
+  if (!outcome) return null;
+  return {
+    accepted: outcome.accepted,
+    title: outcome.accepted ? null : (outcome.title ?? null),
+    reason: outcome.accepted ? null : outcome.reason,
+    ...extra,
+  };
+}
 
 /** Whether a pull would accept the policy at `commitSha`; null for a passing failure. */
 async function outcomeAt(params: {
@@ -1019,7 +1089,7 @@ function checkSummary(outcome: PullOutcome) {
         summary: `${archestraMcpBranding.appName} checked the policy this pull request would merge, with every file it includes, as Git sync checks a commit before applying it.`,
       }
     : {
-        title: "Git sync would refuse this policy",
+        title: outcome.title ?? "Git sync would refuse this policy",
         summary: outcome.reason,
       };
 }
@@ -1043,7 +1113,12 @@ async function githubPullRequests(
       })
     ).default_branch;
   const pulls = await githubJson<
-    Array<{ head?: { sha?: string }; merge_commit_sha?: string | null }>
+    Array<{
+      number?: number;
+      head?: { sha?: string };
+      merge_commit_sha?: string | null;
+      user?: { id?: number; login?: string; type?: string } | null;
+    }>
   >({
     url: `${base}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=${MAX_CHECKED_PULLS}`,
     token,
@@ -1056,14 +1131,335 @@ async function githubPullRequests(
     const head = pull.head?.sha;
     if (!head || !/^[a-f0-9]{40}$/.test(head)) return [];
     const merged = pull.merge_commit_sha;
+    const number = pull.number;
     return [
       {
         head,
         result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
         post: (outcome) => postGithubCheck({ base, token, head, outcome }),
+        ...(number
+          ? {
+              authorship: () =>
+                githubAuthorship({
+                  source,
+                  token,
+                  api,
+                  base,
+                  number,
+                  user: pull.user ?? null,
+                }),
+            }
+          : {}),
       },
     ];
   });
+}
+
+// --- Authorship: who asked for a pull request, and whether they may ---
+
+type GithubPullUser = { id?: number; login?: string; type?: string };
+
+/** Personal access token owners by credential, for a day. */
+const tokenOwners = new LRUCacheManager<{ id?: number; login: string }>({
+  maxSize: 256,
+  defaultTtl: TimeInMs.Day,
+});
+
+/**
+ * Whether the person behind a pull request may change what it changes: each
+ * server rules file takes edit access to that server in the MCP registry,
+ * and the policy file, any other `.toml` beside it and the validations take
+ * the guardrailsPolicy:update permission. Files Git sync never reads are
+ * nobody's concern here.
+ *
+ * Who asked is read from what GitHub vouches for. A pull request Archestra
+ * opened, from the APPA Keeper or Settings, is made of commits GitHub signed
+ * for Archestra's credential, whose author is the person who asked; any other
+ * commit on it means someone else pushed, and the pull request is refused.
+ * A pull request a person opened is theirs, found by the GitHub account they
+ * connected in Archestra. Null for a read that failed for now.
+ */
+async function githubAuthorship(params: {
+  source: PolicySource;
+  token: string;
+  api: string;
+  base: string;
+  number: number;
+  user: GithubPullUser | null;
+}): Promise<PullOutcome | null> {
+  const { source, token, base, number } = params;
+  const appName = archestraMcpBranding.appName;
+  const changed = await pagedGithub<{
+    filename?: string;
+    previous_filename?: string;
+  }>({
+    token,
+    url: `${base}/pulls/${number}/files`,
+    max: MAX_PULL_FILES,
+  });
+  if (changed === null) return null;
+  if (changed === "over")
+    return {
+      accepted: false,
+      title: "This pull request changes too many files to check",
+      reason: `${appName} checks who may change each file in a pull request of up to ${MAX_PULL_FILES} files. Split this one.`,
+    };
+  const governed = governedFiles(
+    source,
+    changed.flatMap((file) =>
+      [file.filename, file.previous_filename].filter(
+        (path): path is string => typeof path === "string",
+      ),
+    ),
+  );
+  if (governed.length === 0) return { accepted: true };
+  const requester = await pullRequester({ ...params, governed });
+  if (requester === null) return null;
+  if ("refused" in requester) return requester.refused;
+  const { userId, email } = requester;
+  const prefixes = governed.some((file) => file.prefix !== null)
+    ? await catalogToolPrefixes(source.organizationId)
+    : null;
+  let needsPolicyPermission = false;
+  for (const file of governed) {
+    const catalogIds = file.prefix ? prefixes?.byPrefix.get(file.prefix) : null;
+    if (!catalogIds || catalogIds.size !== 1) {
+      // No server of that name, or more than one: the policy's own matter.
+      needsPolicyPermission = true;
+      continue;
+    }
+    const [catalogId] = [...catalogIds] as [string];
+    const allowed = await (await port("scopedPermissions")).allows({
+      organizationId: source.organizationId,
+      userId,
+      resource: "mcpRegistry",
+      scope: catalogId,
+      action: "update",
+    });
+    if (!allowed) {
+      const catalog = await InternalMcpCatalogModel.findById(catalogId);
+      return {
+        accepted: false,
+        title: "The requester may not change these rules",
+        reason: `${email} may not change ${file.path}: that takes edit access to the MCP server ${catalog?.name ?? file.prefix} in the MCP registry.`,
+      };
+    }
+  }
+  if (needsPolicyPermission) {
+    const permissions = await RoleCompositionModel.getUserPermissions({
+      userId,
+      organizationId: source.organizationId,
+    });
+    if (!permissions.guardrailsPolicy?.includes("update")) {
+      const first = governed.find(
+        (file) =>
+          !file.prefix ||
+          (prefixes?.byPrefix.get(file.prefix)?.size ?? 0) !== 1,
+      );
+      return {
+        accepted: false,
+        title: "The requester may not change the policy",
+        reason: `${email} may not change ${first?.path ?? source.path}: that takes the guardrailsPolicy:update permission.`,
+      };
+    }
+  }
+  return { accepted: true };
+}
+
+/**
+ * The changed files Git sync reads, with the tool prefix of each server
+ * rules file: the policy file and any `.toml` beside or below it, and the
+ * validations folder.
+ */
+function governedFiles(
+  source: PolicySource,
+  paths: string[],
+): Array<{ path: string; prefix: string | null }> {
+  const folder = repositoryPath(source, "");
+  const validations = repositoryPath(
+    source,
+    source.validationDirectory || "traces",
+  );
+  const within = (path: string, parent: string) =>
+    parent === "" || path === parent || path.startsWith(`${parent}/`);
+  const seen = new Set<string>();
+  return paths.flatMap((path) => {
+    if (seen.has(path)) return [];
+    seen.add(path);
+    const relative = folder === "" ? path : path.slice(folder.length + 1);
+    if (within(path, folder) && isServerRulesFile(relative))
+      return [{ path, prefix: serverRulesPrefix(relative) }];
+    if (
+      path === source.path ||
+      (within(path, folder) && path.endsWith(".toml")) ||
+      within(path, validations)
+    )
+      return [{ path, prefix: null }];
+    return [];
+  });
+}
+
+/**
+ * The member who asked for a pull request, or why that cannot be told. A
+ * pull request opened by Archestra's own credential is read from its
+ * commits; one opened by a person from the account they connected.
+ */
+async function pullRequester(params: {
+  source: PolicySource;
+  token: string;
+  api: string;
+  base: string;
+  number: number;
+  user: GithubPullUser | null;
+  governed: Array<{ path: string }>;
+}): Promise<
+  { userId: string; email: string } | { refused: PullOutcome } | null
+> {
+  const { source, token, api, base, number, user } = params;
+  const appName = archestraMcpBranding.appName;
+  const own = await ownIdentity({ source, token, api });
+  if (own === null) return null;
+  const byArchestra =
+    own !== undefined &&
+    (own.login.toLowerCase() === user?.login?.toLowerCase() ||
+      (own.id !== undefined && own.id === user?.id));
+  if (byArchestra) {
+    const commits = await pagedGithub<{
+      sha?: string;
+      commit?: {
+        author?: { email?: string };
+        verification?: { verified?: boolean };
+      };
+      committer?: { login?: string } | null;
+    }>({
+      token,
+      url: `${base}/pulls/${number}/commits`,
+      max: MAX_PULL_COMMITS,
+    });
+    if (commits === null) return null;
+    const foreign =
+      commits === "over" ||
+      commits.some(
+        (entry) =>
+          entry.commit?.verification?.verified !== true ||
+          entry.committer?.login?.toLowerCase() !== own.login.toLowerCase(),
+      );
+    if (!foreign) {
+      const emails = new Set(
+        commits.map((entry) => entry.commit?.author?.email?.toLowerCase()),
+      );
+      const [email] = [...emails];
+      const member =
+        emails.size === 1 && email
+          ? await MemberModel.findByIdOrEmail(email, source.organizationId)
+          : null;
+      if (member) return { userId: member.id, email: member.email };
+      if (user?.type === "Bot")
+        return {
+          refused: {
+            accepted: false,
+            title: "Could not tell who asked for this change",
+            reason: `${appName} opened this pull request for someone who is no longer a member. Propose the change again from the APPA Keeper or Settings → Guardrails.`,
+          },
+        };
+    } else if (user?.type === "Bot")
+      return {
+        refused: {
+          accepted: false,
+          title: "Could not tell who asked for this change",
+          reason: `This pull request has commits ${appName} did not make, so ${appName} cannot tell who asked for them. Propose the change again from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
+        },
+      };
+    // A person's own token opened it: the person is the requester.
+  }
+  if (user?.type !== "User" || user.id === undefined)
+    return {
+      refused: {
+        accepted: false,
+        title: "Could not tell who asked for this change",
+        reason: `This pull request was opened by ${user?.login ? `@${user.login}` : "an account"} that is not a person ${appName} knows. Propose the change from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
+      },
+    };
+  // The accounts Archestra holds are github.com's.
+  const roster =
+    api === "https://api.github.com"
+      ? await RuntimeCredentialConnectionModel.listGitHubRoster(
+          source.organizationId,
+        )
+      : new Map<unknown, string>();
+  const email = [...roster.entries()].find(
+    ([githubId]) => Number(githubId) === user.id,
+  )?.[1];
+  const member = email
+    ? await MemberModel.findByIdOrEmail(email, source.organizationId)
+    : null;
+  if (!member)
+    return {
+      refused: {
+        accepted: false,
+        title: "Could not tell who asked for this change",
+        reason: `@${user.login ?? user.id} has not connected a GitHub account in ${appName}, so ${appName} cannot tell whether they may change ${params.governed[0]?.path ?? source.path}. Connect one under Settings → Credentials, or ask an editor to propose the change from the APPA Keeper.`,
+      },
+    };
+  return { userId: member.id, email: member.email };
+}
+
+/**
+ * The GitHub account Archestra's credential acts as: the App's bot, or the
+ * owner of the personal access token. Undefined without a credential, null
+ * for a read that failed for now.
+ */
+async function ownIdentity(params: {
+  source: PolicySource;
+  token: string;
+  api: string;
+}): Promise<{ login: string; id?: number } | null | undefined> {
+  const { source } = params;
+  if (source.githubAppConfigId) {
+    try {
+      const login = await githubAppLogin(source);
+      return login ? { login } : undefined;
+    } catch (error) {
+      logger.warn(
+        { organizationId: source.organizationId, error },
+        "OpenAPPA could not read the GitHub App's own login",
+      );
+      return null;
+    }
+  }
+  if (!source.githubPatId) return undefined;
+  const cached = tokenOwners.get(source.githubPatId);
+  if (cached) return cached;
+  const user = await githubCall<{ id?: number; login?: string }>({
+    token: params.token,
+    url: `${params.api}/user`,
+  });
+  if (!user.ok || typeof user.body.login !== "string") return null;
+  const owner = { login: user.body.login, id: user.body.id };
+  tokenOwners.set(source.githubPatId, owner);
+  return owner;
+}
+
+/**
+ * Every page of a GitHub list, up to `max` entries: "over" past that, null
+ * when a page could not be read.
+ */
+async function pagedGithub<T>(params: {
+  token: string;
+  url: string;
+  max: number;
+}): Promise<T[] | "over" | null> {
+  const all: T[] = [];
+  for (let page = 1; all.length <= params.max; page++) {
+    const read = await githubCall<T[]>({
+      token: params.token,
+      url: `${params.url}?per_page=100&page=${page}`,
+    });
+    if (!read.ok || !Array.isArray(read.body)) return null;
+    all.push(...read.body);
+    if (read.body.length < 100) return all.length > params.max ? "over" : all;
+  }
+  return "over";
 }
 
 /**
@@ -1749,25 +2145,6 @@ export function hasOwnFile(
 // Repository protection: who reviews each server's file, and the branch rules
 // =============================================================================
 
-/**
- * Where Archestra's lines sit in CODEOWNERS. Everything between the markers
- * is rewritten from the registry; everything else is the repository's own.
- * The markers find the block, so they stay the same whatever the deployment
- * is called.
- */
-const OWNERS_BEGIN = "# BEGIN Guardrails: MCP server rules owners";
-const OWNERS_END = "# END Guardrails: MCP server rules owners";
-
-/** The branch of the one code owners pull request Archestra keeps open. */
-const OWNERS_BRANCH = "archestra/openappa-code-owners";
-
-/** Where GitHub reads CODEOWNERS from, in its own order. */
-const CODEOWNERS_PATHS = [
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  "docs/CODEOWNERS",
-] as const;
-
 /** The ruleset Archestra keeps on the synced branch, found again by this name. */
 const RULESET_NAME = "Guardrails policy";
 
@@ -1794,37 +2171,16 @@ export type RepositoryProtection = {
      */
     checkRule?: "omitted" | "unposted";
   };
-  /** The CODEOWNERS lines for server rules files. */
-  codeOwners: {
-    state:
-      | "up_to_date"
-      | "pull_request"
-      | "out_of_date"
-      | "not_used"
-      | "needs_permission"
-      | "unsupported"
-      | "error";
-    url?: string;
-    detail?: string;
-    /**
-     * Servers some of whose editors have no GitHub owner yet, with those
-     * editors' emails: people who have not connected a GitHub account.
-     */
-    unowned: Array<{ server: string; editors: string[] }>;
-  };
 };
 
 /**
- * The policy repository's protection for server rules files, and with
- * `apply` the changes that bring it in line: a CODEOWNERS block naming each
- * server's editors, proposed as one pull request, and a branch ruleset that
- * requires a pull request, code owner review and the policy check. Nothing
- * merges here: the code owners change is reviewed like any other.
+ * The policy repository's protection, and with `apply` the changes that bring
+ * it in line: a branch ruleset that requires a pull request, up to date, with
+ * the policy check, which is where who may change each file is decided.
  *
- * Each part works with its own token, limited to the policy repository and to
- * what it does: the ruleset with Administration, the code owners with
- * Contents and Pull requests. A permission the App was not granted is
- * reported, not raised.
+ * The ruleset is written with a token limited to the policy repository and
+ * Administration. A permission the App was not granted is reported, not
+ * raised.
  */
 async function repositoryProtection(params: {
   organizationId: string;
@@ -1839,11 +2195,6 @@ async function repositoryProtection(params: {
         state: "unsupported",
         detail: `${archestraMcpBranding.appName} keeps branch rules on GitHub repositories only; protect the GitLab branch in its settings.`,
       },
-      codeOwners: {
-        state: "unsupported",
-        detail: `${archestraMcpBranding.appName} writes code owners on GitHub repositories only; GitLab keeps its own CODEOWNERS.`,
-        unowned: [],
-      },
     };
   const source = {
     ...row,
@@ -1851,18 +2202,10 @@ async function repositoryProtection(params: {
     path: row.path,
     sourceCommit: row.sourceCommit,
   };
-  const [branchRules, codeOwners] = await Promise.all([
-    githubBranchRules(source, params.apply).catch((error) => ({
-      state: "error" as const,
-      detail: protectionError(error),
-    })),
-    githubCodeOwners(source, params.apply).catch((error) => ({
-      state: "error" as const,
-      detail: protectionError(error),
-      unowned: [],
-    })),
-  ]);
-  return { branchRules, codeOwners };
+  const branchRules = await githubBranchRules(source, params.apply).catch(
+    (error) => ({ state: "error" as const, detail: protectionError(error) }),
+  );
+  return { branchRules };
 }
 
 /** The last protection read or applied, by organization, for a minute. */
@@ -2063,12 +2406,14 @@ function requiresPolicyCheck(rules: Rule[] | undefined): boolean {
 }
 
 /**
- * The ruleset Archestra keeps: a pull request with a code owner's approval
- * of its latest push, the policy check on a branch that is up to date, and no
- * force push or deletion. Archestra adds no one who may bypass it, itself
- * included. Up to date, because the check stands for the merge result it saw:
- * once the branch moves, a pull request merges only after it is updated and
- * its new result checked.
+ * The ruleset Archestra keeps: a pull request, the policy check on a branch
+ * that is up to date, and no force push or deletion. No approval: the check
+ * decides whether the person who asked may change each file, so a server's
+ * only editor merges their own change. An administrator who wants a second
+ * pair of eyes raises the approval count on GitHub, and it stays. Archestra
+ * adds no one who may bypass it, itself included. Up to date, because the
+ * check stands for the merge result it saw: once the branch moves, a pull
+ * request merges only after it is updated and its new result checked.
  */
 function desiredRuleset(params: {
   branch: string;
@@ -2106,10 +2451,10 @@ function desiredRuleset(params: {
       {
         type: "pull_request",
         parameters: {
-          required_approving_review_count: 1,
+          required_approving_review_count: 0,
           dismiss_stale_reviews_on_push: true,
-          require_code_owner_review: true,
-          require_last_push_approval: true,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
           required_review_thread_resolution: false,
         },
       },
@@ -2143,23 +2488,30 @@ function strengthenedRuleset(
       continue;
     }
     if (wanted.type === "pull_request") {
+      // Approvals and reviews are the administrator's to require; a stale
+      // approval must not outlive the push it approved.
       const parameters = have.parameters ?? {};
-      const count = Number(parameters.required_approving_review_count ?? 0);
       const next = {
         ...parameters,
-        required_approving_review_count: Math.max(count, 1),
+        required_approving_review_count: Number(
+          parameters.required_approving_review_count ?? 0,
+        ),
         dismiss_stale_reviews_on_push: true,
-        require_code_owner_review: true,
-        require_last_push_approval: true,
+        require_code_owner_review:
+          parameters.require_code_owner_review === true,
+        require_last_push_approval:
+          parameters.require_last_push_approval === true,
         required_review_thread_resolution:
-          parameters.required_review_thread_resolution ?? false,
+          parameters.required_review_thread_resolution === true,
       };
       if (
-        count < 1 ||
         parameters.dismiss_stale_reviews_on_push !== true ||
-        parameters.require_code_owner_review !== true ||
-        parameters.require_last_push_approval !== true ||
-        parameters.required_review_thread_resolution === undefined
+        [
+          "required_approving_review_count",
+          "require_code_owner_review",
+          "require_last_push_approval",
+          "required_review_thread_resolution",
+        ].some((name) => parameters[name] === undefined)
       ) {
         rules[at] = { type: have.type, parameters: next };
         changed = true;
@@ -2288,531 +2640,6 @@ function unavailable(response: {
   };
 }
 
-// === Code owners ===
-
-async function githubCodeOwners(
-  source: ConnectedSource,
-  apply: boolean,
-): Promise<RepositoryProtection["codeOwners"]> {
-  const root = await guardrailsPolicyService.get(source.organizationId);
-  const used = repositoryIncludePaths(root.content).some(
-    (entry) => entry === SERVER_RULES_INCLUDE || isServerRulesFile(entry),
-  );
-  if (!used) return { state: "not_used", unowned: [] };
-  let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
-  try {
-    access = await resolveOpenAppaGithubAccess(source, {
-      contents: "write",
-      pull_requests: "write",
-    });
-  } catch (error) {
-    if (error instanceof MissingGithubPermission)
-      return { state: "needs_permission", detail: error.message, unowned: [] };
-    throw error;
-  }
-  const { token, api } = access;
-  if (!token)
-    return {
-      state: "needs_permission",
-      detail:
-        "The policy repository is read without a credential. Connect a GitHub App in Git sync.",
-      unowned: [],
-    };
-  const servers = await serverEditors(source.organizationId);
-  const connected = await connectedLogins({
-    organizationId: source.organizationId,
-    api,
-    token,
-    users: servers.flatMap((server) => server.editors),
-  });
-  const lines: string[] = [];
-  const unowned: RepositoryProtection["codeOwners"]["unowned"] = [];
-  for (const server of servers) {
-    const owners = new Set<string>();
-    const unmapped: string[] = [];
-    for (const editor of server.editors) {
-      const login = connected.get(editor.id);
-      if (login) owners.add(`@${login}`);
-      else unmapped.push(editor.email);
-    }
-    if (owners.size > 0)
-      lines.push(
-        `/${repositoryPath(source, server.path)} ${[...owners].sort().join(" ")}`,
-      );
-    if (unmapped.length > 0)
-      unowned.push({ server: server.name, editors: unmapped.sort() });
-  }
-  lines.sort();
-  const current = await currentCodeOwners(source);
-  const { content: next, updated } = withOwnersBlock(
-    current?.content ?? null,
-    lines,
-  );
-  const base = `${api}/repos/${source.repo}`;
-  const open = await openOwnersPull({ token, base, repo: source.repo });
-  if (next === (current?.content ?? null)) {
-    // Nothing left to propose: a pull request still open has nothing to add.
-    if (open && apply)
-      await closeOwnersPull({ token, base, number: open.number });
-    return { state: "up_to_date", unowned };
-  }
-  const file = current?.path ?? CODEOWNERS_PATHS[0];
-  if (open) {
-    const proposed = (
-      await openappaRepositoryIncludes.read({
-        source: { ...source, path: null },
-        commit: open.head,
-        paths: [file],
-      })
-    ).get(file);
-    if (proposed === next || !apply)
-      return { state: "pull_request", url: open.url, unowned };
-  } else if (!apply) return { state: "out_of_date", unowned };
-  const pull = await proposeOwners({
-    source,
-    token,
-    base,
-    file,
-    content: next,
-    open,
-    lines,
-    updated,
-    unowned,
-  });
-  return { state: "pull_request", url: pull.url, unowned };
-}
-
-/**
- * Every server with a rules file of its own, and the people who may edit it:
- * each `update` grant on the server itself, expanded to people. A team grant
- * reaches the team's members and its child teams'; a role grant reaches
- * everyone who holds the role, directly or through a team; a grant to the
- * whole organization reaches every member. Grants to every server in the
- * registry are the administrators' and stay with the fallback owners.
- */
-async function serverEditors(organizationId: string): Promise<
-  Array<{
-    name: string;
-    path: string;
-    editors: Array<{ id: string; email: string }>;
-  }>
-> {
-  const prefixes = await catalogToolPrefixes(organizationId);
-  const ids = [...prefixes.byCatalog.keys()].filter(
-    (id) => !isBuiltInCatalogId(id),
-  );
-  if (ids.length === 0) return [];
-  const catalogs = (
-    await db
-      .select({
-        id: schema.internalMcpCatalogTable.id,
-        name: schema.internalMcpCatalogTable.name,
-      })
-      .from(schema.internalMcpCatalogTable)
-      .where(inArray(schema.internalMcpCatalogTable.id, ids))
-  ).filter((catalog) => hasOwnFile(catalog, prefixes));
-  const policies = (
-    await ResourcePermissionPolicyModel.findObjectPolicies({
-      resources: ["mcpRegistry"],
-      scopes: catalogs.map((catalog) => catalog.id),
-    })
-  ).filter((policy) => policy.organizationId === organizationId);
-  const grants = new Map(
-    policies.map((policy) => [
-      policy.scope,
-      (policy.grants as ResourcePermissionGrant[]).filter((grant) =>
-        grant.actions.includes("update"),
-      ),
-    ]),
-  );
-  const subjects = [...grants.values()].flat().map((grant) => grant.subject);
-  const subjectIds = (type: string) => [
-    ...new Set(
-      subjects.flatMap((subject) =>
-        subject.type === type ? [subject.id] : [],
-      ),
-    ),
-  ];
-  const [teamMembers, roleHolders, everyone] = await Promise.all([
-    TeamModel.findEffectiveMemberUserIds({
-      organizationId,
-      teamIds: subjectIds("team"),
-    }),
-    Promise.all(
-      subjectIds("role").map(
-        async (role) =>
-          [
-            role,
-            (
-              await RoleCompositionModel.getRoleHolders({
-                roleIdentifier: role,
-                organizationId,
-              })
-            ).map((holder) => holder.userId),
-          ] as const,
-      ),
-    ).then((entries) => new Map(entries)),
-    subjects.some((subject) => subject.type === "organization")
-      ? MemberModel.findAllUserIdsByOrganization(organizationId)
-      : [],
-  ]);
-  // Only current members: a direct grant to someone who left stays in the
-  // policy until it is edited, and names nobody GitHub should ask.
-  const members = new Set(
-    await MemberModel.findUserIdsInOrganization({
-      organizationId,
-      userIds: subjectIds("user"),
-    }),
-  );
-  const reached = (grant: ResourcePermissionGrant): string[] => {
-    const { subject } = grant;
-    switch (subject.type) {
-      case "user":
-        return members.has(subject.id) ? [subject.id] : [];
-      case "team":
-        return teamMembers.get(subject.id) ?? [];
-      case "role":
-        return roleHolders.get(subject.id) ?? [];
-      case "organization":
-        return everyone;
-      default:
-        return [];
-    }
-  };
-  const userIds = [...new Set([...grants.values()].flat().flatMap(reached))];
-  const userEmail = new Map(
-    (userIds.length > 0
-      ? await db
-          .select({ id: schema.usersTable.id, email: schema.usersTable.email })
-          .from(schema.usersTable)
-          .where(inArray(schema.usersTable.id, userIds))
-      : []
-    ).map((user) => [user.id, user.email]),
-  );
-  return catalogs
-    .map((catalog) => ({
-      name: catalog.name,
-      path: serverRulesPath(slugifyMcpServerName(catalog.name)),
-      editors: [...new Set((grants.get(catalog.id) ?? []).flatMap(reached))]
-        .flatMap((id) => {
-          const email = userEmail.get(id);
-          return email ? [{ id, email }] : [];
-        })
-        .sort((a, b) => a.email.localeCompare(b.email)),
-    }))
-    .sort((a, b) => a.path.localeCompare(b.path));
-}
-
-/** GitHub logins by GitHub user id, for a day: they rarely change. */
-const logins = new LRUCacheManager<string>({
-  maxSize: 4096,
-  defaultTtl: 24 * 60 * 60_000,
-});
-
-/**
- * The GitHub login of each user who connected a github.com account in
- * Archestra, by user id. Only github.com: the accounts Archestra holds are
- * github.com's, so a repository on another host gets none.
- */
-async function connectedLogins(params: {
-  organizationId: string;
-  api: string;
-  token: string;
-  users: Array<{ id: string; email: string }>;
-}): Promise<Map<string, string>> {
-  const found = new Map<string, string>();
-  if (params.users.length === 0 || params.api !== "https://api.github.com")
-    return found;
-  // The roster names one person per GitHub account, by email.
-  const byEmail = new Map(
-    [
-      ...(await RuntimeCredentialConnectionModel.listGitHubRoster(
-        params.organizationId,
-      )),
-    ].map(([githubId, email]) => [email.toLowerCase(), String(githubId)]),
-  );
-  const users = [
-    ...new Map(params.users.map((user) => [user.id, user])).values(),
-  ];
-  await mapWithConcurrency(users, 4, async ({ id: userId, email }) => {
-    const githubId = byEmail.get(email.toLowerCase());
-    if (!githubId) return;
-    let login = logins.get(githubId);
-    if (login === undefined) {
-      const user = await githubCall<{ login?: string }>({
-        token: params.token,
-        url: `${params.api}/user/${encodeURIComponent(githubId)}`,
-      });
-      if (!user.ok || typeof user.body.login !== "string") return;
-      login = user.body.login;
-      logins.set(githubId, login);
-    }
-    found.set(userId, login);
-  });
-  return found;
-}
-
-/** The CODEOWNERS file GitHub reads at the accepted commit, if any. */
-async function currentCodeOwners(
-  source: ConnectedSource,
-): Promise<{ path: string; content: string } | null> {
-  const files = await openappaRepositoryIncludes.read({
-    // CODEOWNERS paths are the repository's own, not appa.toml's folder's.
-    source: { ...source, path: null },
-    commit: source.sourceCommit,
-    paths: CODEOWNERS_PATHS,
-  });
-  for (const path of CODEOWNERS_PATHS) {
-    const content = files.get(path);
-    if (content !== undefined) return { path, content };
-  }
-  return null;
-}
-
-/**
- * CODEOWNERS with each server file's owners in place: a line that already names
- * the file, anywhere in the file, is rewritten with the editors' owners where
- * it stands; a file with no line of its own gets one in the block, which is
- * replaced as a whole. Nothing is added twice: GitHub takes a path's last
- * matching line, so a second line would either be dead or override the first
- * without a word. Patterns such as `*` or `/mcp/*` stay as written.
- */
-function withOwnersBlock(
-  current: string | null,
-  lines: string[],
-): {
-  content: string | null;
-  updated: Array<{ before: string; after: string }>;
-} {
-  const owners = new Map(
-    lines.map((line) => {
-      const space = line.indexOf(" ");
-      return [line.slice(0, space).replace(/^\//, ""), line.slice(space + 1)];
-    }),
-  );
-  const updated: Array<{ before: string; after: string }> = [];
-  const placed = new Set<string>();
-  // A line outside the block that names a managed file, rewritten in place.
-  const outside = (text: string) =>
-    text
-      .split("\n")
-      .map((line) => {
-        const [pattern = "", ...rest] = line.trim().split(/\s+/);
-        if (!pattern || pattern.startsWith("#")) return line;
-        const path = pattern.replace(/^\//, "");
-        const wanted = owners.get(path);
-        if (wanted === undefined) return line;
-        placed.add(path);
-        // The same owners in any order leave the line as its author wrote it.
-        if ([...rest].sort().join(" ") === wanted) return line;
-        // Otherwise only the owners change; the pattern and its spacing stay.
-        const after = line.replace(/^(\s*\S+\s+).*$/, `$1${wanted}`);
-        updated.push({ before: line.trim(), after: after.trim() });
-        return after;
-      })
-      .join("\n");
-  const start = current?.indexOf(OWNERS_BEGIN) ?? -1;
-  const end = current && start >= 0 ? current.indexOf(OWNERS_END, start) : -1;
-  const hasBlock = current !== null && start >= 0 && end > start;
-  const before = hasBlock
-    ? outside(current.slice(0, start))
-    : outside(current ?? "");
-  const after = hasBlock ? outside(current.slice(end + OWNERS_END.length)) : "";
-  const added = lines.filter(
-    (line) => !placed.has(line.slice(0, line.indexOf(" ")).replace(/^\//, "")),
-  );
-  const block = [
-    OWNERS_BEGIN,
-    `# Written from who may edit each MCP server in ${archestraMcpBranding.appName}.`,
-    `# Change those, not these lines: ${archestraMcpBranding.appName} rewrites them.`,
-    ...added,
-    OWNERS_END,
-  ].join("\n");
-  if (hasBlock) return { content: `${before}${block}${after}`, updated };
-  if (added.length === 0)
-    return { content: current === null ? null : before, updated };
-  if (current === null || current.trim() === "")
-    return { content: `${block}\n`, updated };
-  return { content: `${before.replace(/\n*$/, "\n\n")}${block}\n`, updated };
-}
-
-async function openOwnersPull(params: {
-  token: string;
-  base: string;
-  repo: string;
-}): Promise<{ number: number; url: string; head: string } | null> {
-  const owner = params.repo.slice(0, params.repo.indexOf("/"));
-  const pulls = await githubCall<
-    Array<{ number?: number; html_url?: string; head?: { sha?: string } }>
-  >({
-    token: params.token,
-    url: `${params.base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${OWNERS_BRANCH}`)}`,
-  });
-  if (!pulls.ok) throw new ApiError(502, `GitHub answered ${pulls.status}`);
-  const pull = pulls.body[0];
-  return pull?.number && pull.html_url && pull.head?.sha
-    ? {
-        number: pull.number,
-        url: pull.html_url,
-        head: commitSha(pull.head.sha),
-      }
-    : null;
-}
-
-async function closeOwnersPull(params: {
-  token: string;
-  base: string;
-  number: number;
-}) {
-  await githubCall({
-    token: params.token,
-    url: `${params.base}/pulls/${params.number}`,
-    method: "PATCH",
-    body: { state: "closed" },
-  });
-  await githubCall({
-    token: params.token,
-    url: `${params.base}/git/refs/heads/${OWNERS_BRANCH}`,
-    method: "DELETE",
-  });
-}
-
-/**
- * Commit the CODEOWNERS file on Archestra's branch, based on the accepted
- * commit, and open or update its one pull request. GitHub's own reading of
- * the file on that branch goes into the description, so its reviewers see an
- * owner GitHub does not know before merging.
- */
-async function proposeOwners(params: {
-  source: ConnectedSource;
-  token: string;
-  base: string;
-  file: string;
-  content: string | null;
-  open: { number: number; url: string } | null;
-  lines: string[];
-  updated: Array<{ before: string; after: string }>;
-  unowned: RepositoryProtection["codeOwners"]["unowned"];
-}): Promise<{ url: string }> {
-  const { source, token, base } = params;
-  const commit = await githubJson<{ tree?: { sha?: string } }>({
-    token,
-    url: `${base}/git/commits/${source.sourceCommit}`,
-    errors: githubSyncErrors,
-  });
-  const tree = await githubJson<{ sha: string }>({
-    token,
-    url: `${base}/git/trees`,
-    method: "POST",
-    body: {
-      base_tree: commitSha(commit.tree?.sha),
-      tree: [
-        {
-          path: params.file,
-          mode: "100644",
-          type: "blob",
-          content: params.content ?? "",
-        },
-      ],
-    },
-    errors: githubSyncErrors,
-  });
-  const created = await githubJson<{ sha: string }>({
-    token,
-    url: `${base}/git/commits`,
-    method: "POST",
-    body: {
-      message: "Code owners for MCP server rules files",
-      tree: commitSha(tree.sha),
-      parents: [source.sourceCommit],
-    },
-    errors: githubSyncErrors,
-  });
-  const ref = await githubCall({
-    token,
-    url: `${base}/git/ref/heads/${OWNERS_BRANCH}`,
-  });
-  const moved = ref.ok
-    ? await githubCall({
-        token,
-        url: `${base}/git/refs/heads/${OWNERS_BRANCH}`,
-        method: "PATCH",
-        body: { sha: commitSha(created.sha), force: true },
-      })
-    : await githubCall({
-        token,
-        url: `${base}/git/refs`,
-        method: "POST",
-        body: {
-          ref: `refs/heads/${OWNERS_BRANCH}`,
-          sha: commitSha(created.sha),
-        },
-      });
-  if (!moved.ok)
-    throw new ApiError(
-      502,
-      `GitHub answered ${moved.status} for the code owners branch`,
-    );
-  const errors = await githubCall<{
-    errors?: Array<{ line?: number; kind?: string; message?: string }>;
-  }>({
-    token,
-    url: `${base}/codeowners/errors?ref=${encodeURIComponent(OWNERS_BRANCH)}`,
-  });
-  const body = ownersPullBody({
-    ...params,
-    githubErrors: errors.ok ? (errors.body.errors ?? []) : [],
-  });
-  const title = "Code owners for MCP server rules files";
-  if (params.open) {
-    await githubJson({
-      token,
-      url: `${base}/pulls/${params.open.number}`,
-      method: "PATCH",
-      body: { title, body },
-      errors: githubSyncErrors,
-    });
-    return { url: params.open.url };
-  }
-  const branch = source.ref ?? (await defaultBranch({ token, base }));
-  const pull = await githubJson<{ html_url: string }>({
-    token,
-    url: `${base}/pulls`,
-    method: "POST",
-    body: { title, body, head: OWNERS_BRANCH, base: branch },
-    errors: githubSyncErrors,
-  });
-  return { url: pull.html_url };
-}
-
-function ownersPullBody(params: {
-  file: string;
-  lines: string[];
-  updated: Array<{ before: string; after: string }>;
-  unowned: RepositoryProtection["codeOwners"]["unowned"];
-  githubErrors: Array<{ line?: number; kind?: string; message?: string }>;
-}): string {
-  const sections = [
-    `${archestraMcpBranding.appName} keeps the block between \`${OWNERS_BEGIN}\` and \`${OWNERS_END}\` in \`${params.file}\` in line with who may edit each MCP server in its registry, and rewrites a line elsewhere in the file that names a server's file instead of adding a second one. Each server's rules file gets the people who may edit the server as owners, named by the GitHub account each connected in ${archestraMcpBranding.appName}. Merging this pull request applies it; until then, the owners above the block review each file.`,
-    params.lines.length > 0
-      ? `### Owners\n\n${params.lines.map((line) => `- \`${line}\``).join("\n")}`
-      : "### Owners\n\nNo server's editors have a GitHub owner yet.",
-  ];
-  if (params.updated.length > 0)
-    sections.push(
-      `### Lines updated where they stand\n\nThese lines already named a server's file; their owners now follow the registry:\n\n${params.updated.map(({ before, after }) => `- \`${before}\` → \`${after}\``).join("\n")}`,
-    );
-  if (params.unowned.length > 0)
-    sections.push(
-      `### Editors without a GitHub owner\n\nThese people may edit the server but have not connected a GitHub account in ${archestraMcpBranding.appName}, so GitHub cannot ask them for review:\n\n${params.unowned.map((entry) => `- ${entry.server}: ${entry.editors.join(", ")}`).join("\n")}`,
-    );
-  if (params.githubErrors.length > 0)
-    sections.push(
-      `### GitHub's reading of this file\n\nGitHub ignores these lines until they are fixed, for example by giving the team write access to the repository:\n\n${params.githubErrors.map((error) => `- line ${error.line ?? "?"}: ${error.message ?? error.kind ?? "unknown problem"}`).join("\n")}`,
-    );
-  return sections.join("\n\n");
-}
-
 // === GitHub calls ===
 
 async function defaultBranch(params: { token: string; base: string }) {
@@ -2863,11 +2690,4 @@ async function githubCall<T = unknown>(params: {
     };
   }
   return { ok: true, status: response.status, body: parsed as T };
-}
-
-/** A commit or tree id GitHub returned, checked before it is used. */
-function commitSha(sha: unknown): string {
-  if (typeof sha !== "string" || !/^[a-f0-9]{40}$/.test(sha))
-    throw new ApiError(502, "GitHub returned an invalid object");
-  return sha;
 }

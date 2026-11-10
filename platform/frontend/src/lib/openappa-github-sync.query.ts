@@ -26,7 +26,7 @@ export function useAppaGithubSync() {
 }
 /**
  * How the policy repository protects server rules files: the branch ruleset
- * and the code owners Archestra keeps. The server reads it at most once a
+ * Archestra keeps. The server reads it at most once a
  * minute, so polling more often only reads its cache.
  */
 export function useAppaRepositoryProtection(enabled: boolean) {

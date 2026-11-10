@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import UserModel from "@/models/user";
 import { declaredCredentials } from "@/openappa/battery-target";
 import {
   addedGrants,
@@ -221,6 +222,9 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         ],
       },
     });
+    // The commit's author is the person who asked: GitHub signs the commit
+    // for Archestra's credential, so the policy check can trust that name.
+    const requester = await UserModel.getById(params.userId);
     const commitResult = await githubJson<{ sha: string }>({
       method: "POST",
       url: `${base}/git/commits`,
@@ -230,6 +234,14 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         message: params.title,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
+        ...(requester
+          ? {
+              author: {
+                name: requester.name || requester.email,
+                email: requester.email,
+              },
+            }
+          : {}),
       },
     });
     const commitSha = checkedSha(commitResult.sha);

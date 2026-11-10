@@ -141,9 +141,14 @@ export async function proposeServerRulesChange(
       : []),
   ];
   const head = `${BRANCH_PREFIX}${change.server.prefix}-${randomUUID().slice(0, 8)}`;
+  // The commit's author is the person who asked: GitHub signs the commit for
+  // Archestra's credential, so the policy check can trust that name.
+  const author = requester
+    ? { name: requester.name || requester.email, email: requester.email }
+    : undefined;
   const opened = change.source.gitlabTokenId
     ? await openGitlabRequest({ ...change, title, body, files, head })
-    : await openGithubPull({ ...change, title, body, files, head });
+    : await openGithubPull({ ...change, title, body, files, head, author });
   return {
     stage: "proposed" as const,
     delivery: "pull_request" as const,
@@ -151,7 +156,7 @@ export async function proposeServerRulesChange(
     repo: change.source.repo,
     ...change.view,
     instruction:
-      "Give the user the link. A reviewer of the policy repository merges it; Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.",
+      "Give the user the link. Once its Guardrails policy check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.",
   };
 }
 
@@ -502,6 +507,7 @@ async function openGithubPull(params: {
   body: string;
   files: ChangedFile[];
   head: string;
+  author?: { name: string; email: string };
 }) {
   const { source } = params;
   const { token, api } = await githubWriter(source);
@@ -536,6 +542,7 @@ async function openGithubPull(params: {
       message: params.title,
       tree: checkedSha(tree.sha),
       parents: [source.sourceCommit],
+      ...(params.author ? { author: params.author } : {}),
     },
   });
   await github({

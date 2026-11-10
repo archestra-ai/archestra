@@ -106,8 +106,8 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
 }).omit({ content: true });
 /**
  * How the policy repository protects its server rules files: the branch
- * ruleset Archestra keeps, and the CODEOWNERS lines it proposes from who may
- * edit each MCP server. Null without a connected repository.
+ * ruleset Archestra keeps, which makes the policy check the gate. Null
+ * without a connected repository.
  */
 export const AppaRepositoryProtectionSchema = z
   .object({
@@ -131,22 +131,6 @@ export const AppaRepositoryProtectionSchema = z
        * rules until it can, or required by a rule it cannot satisfy.
        */
       checkRule: z.enum(["omitted", "unposted"]).optional(),
-    }),
-    codeOwners: z.object({
-      state: z.enum([
-        "up_to_date",
-        "pull_request",
-        "out_of_date",
-        "not_used",
-        "needs_permission",
-        "unsupported",
-        "error",
-      ]),
-      url: z.string().optional(),
-      detail: z.string().optional(),
-      unowned: z.array(
-        z.object({ server: z.string(), editors: z.array(z.string()) }),
-      ),
     }),
   })
   .nullable();

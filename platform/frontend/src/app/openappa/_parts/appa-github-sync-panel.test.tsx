@@ -128,7 +128,7 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
-test("shows the repository protection kept for server rules files, with bypass entries and editors who have no GitHub owner", async () => {
+test("shows the repository protection kept for server rules files, with bypass entries", async () => {
   server.use(
     http.get(`${url}/protection`, () =>
       HttpResponse.json({
@@ -136,11 +136,6 @@ test("shows the repository protection kept for server rules files, with bypass e
           state: "incomplete",
           url: "https://github.com/example/policies/rules/5",
           bypassActors: 2,
-        },
-        codeOwners: {
-          state: "pull_request",
-          url: "https://github.com/example/policies/pull/2",
-          unowned: [{ server: "Payments API", editors: ["pat@example.com"] }],
         },
       }),
     ),
@@ -160,12 +155,6 @@ test("shows the repository protection kept for server rules files, with bypass e
     "href",
     "https://github.com/example/policies/rules/5",
   );
-  expect(
-    screen.getByRole("link", { name: "Review pull request" }),
-  ).toHaveAttribute("href", "https://github.com/example/policies/pull/2");
-  expect(
-    screen.getByText(/have not connected a GitHub account in Acme AI/),
-  ).toHaveTextContent("Payments API (pat@example.com)");
 });
 
 test("says when pull requests wait on a policy check the GitHub App cannot post", async () => {
@@ -179,7 +168,6 @@ test("says when pull requests wait on a policy check the GitHub App cannot post"
           detail:
             "The GitHub App cannot post the Guardrails policy check: The GitHub App cannot act on example/policies with Pull requests (read) and Checks (read and write).",
         },
-        codeOwners: { state: "up_to_date", unowned: [] },
       }),
     ),
   );

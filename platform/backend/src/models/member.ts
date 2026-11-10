@@ -387,17 +387,6 @@ class MemberModel {
   }
 
   /** At most `limit` member emails of the organization. */
-  /** The user id of every member of the organization. */
-  static async findAllUserIdsByOrganization(
-    organizationId: string,
-  ): Promise<string[]> {
-    const rows = await db
-      .select({ userId: schema.membersTable.userId })
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.organizationId, organizationId));
-    return rows.map((row) => row.userId);
-  }
-
   static async findEmailsByOrganization(params: {
     organizationId: string;
     limit: number;

@@ -1,5 +1,4 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
-import type { ResourcePermissionGrant } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -605,14 +604,43 @@ test("each open pull request carries the checks a pull would make on its merge r
     context: string;
     description: string;
   }> = [];
+  // The token's owner opened both, so each is read from its commits; the
+  // administrator asked for the first, and may change the policy.
+  const owner = { id: 7, login: "admin-gh", type: "User" };
   server.use(
+    http.get("https://api.github.com/user", () => HttpResponse.json(owner)),
     http.get(`${REPO}/pulls`, ({ request }) => {
       expect(new URL(request.url).searchParams.get("base")).toBe("main");
       return HttpResponse.json([
-        { head: { sha: goodHead }, merge_commit_sha: THIRD },
-        { head: { sha: badHead }, merge_commit_sha: null },
+        {
+          number: 1,
+          head: { sha: goodHead },
+          merge_commit_sha: THIRD,
+          user: owner,
+        },
+        {
+          number: 2,
+          head: { sha: badHead },
+          merge_commit_sha: null,
+          user: owner,
+        },
       ]);
     }),
+    http.get(`${REPO}/pulls/:number/files`, () =>
+      HttpResponse.json([{ filename: "mcp/payments_api.toml" }]),
+    ),
+    http.get(`${REPO}/pulls/:number/commits`, () =>
+      HttpResponse.json([
+        {
+          sha: goodHead,
+          commit: {
+            author: { email: admin.email },
+            verification: { verified: true, reason: "valid" },
+          },
+          committer: { login: "admin-gh", type: "User" },
+        },
+      ]),
+    ),
     // A check run where the credential may create one; a personal access
     // token may not, and posts a commit status instead.
     http.post(`${REPO}/check-runs`, async ({ request }) => {
@@ -1366,7 +1394,6 @@ test("each job's GitHub App token covers the policy repository and its own permi
       { contents: "read", pull_requests: "read" },
       { contents: "read" },
       { administration: "write" },
-      { contents: "write", pull_requests: "write" },
     ]),
   );
   const protection = await getRepositoryProtection(org.id);
@@ -1437,10 +1464,10 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
           {
             type: "pull_request",
             parameters: {
-              required_approving_review_count: 1,
+              required_approving_review_count: 0,
               dismiss_stale_reviews_on_push: true,
-              require_code_owner_review: true,
-              require_last_push_approval: true,
+              require_code_owner_review: false,
+              require_last_push_approval: false,
               required_review_thread_resolution: false,
             },
           },
@@ -1625,7 +1652,7 @@ test("Archestra keeps one ruleset on the synced branch: it creates it, restores 
             parameters: {
               required_approving_review_count: 2,
               dismiss_stale_reviews_on_push: true,
-              require_code_owner_review: true,
+              require_code_owner_review: false,
               require_last_push_approval: true,
               required_review_thread_resolution: true,
             },
@@ -1767,7 +1794,7 @@ test("the ruleset requires the policy check only while the App may post it, and 
   ]);
 });
 
-test("the code owners of each server's file are the people who may edit the server, named by the GitHub account each connected, proposed in one pull request that is updated only when they change", async ({
+test("the policy check refuses a pull request whose requester may not change its files, and says when it cannot tell who asked", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -1778,42 +1805,18 @@ test("the code owners of each server's file are the people who may edit the serv
   const org = await makeOrganization();
   const admin = await makeUser({ email: "admin@example.com" });
   await makeMember(admin.id, org.id, { role: "admin" });
-  // A team grant reaches the team's members and a child team's.
   const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
-  const paymentsOps = await makeTeam(org.id, admin.id, {
-    name: "Payments Ops",
-    parentId: payments.id,
-  });
   const pat = await makeUser({ email: "pat@example.com" });
   await makeTeamMember(payments.id, pat.id);
   const sam = await makeUser({ email: "sam@example.com" });
-  await makeTeamMember(payments.id, sam.id);
-  const quinn = await makeUser({ email: "quinn@example.com" });
-  await makeTeamMember(paymentsOps.id, quinn.id);
-  // A direct grant, a role grant, and a grant to someone who left.
-  const dana = await makeUser({ email: "dana@example.com" });
-  await makeMember(dana.id, org.id);
+  await makeMember(sam.id, org.id);
   const riley = await makeUser({ email: "riley@example.com" });
-  await makeMember(riley.id, org.id, { role: "auditor" });
-  const gone = await makeUser({ email: "gone@example.com" });
-  // A team none of whose members connected GitHub.
-  const data = await makeTeam(org.id, admin.id, { name: "Data" });
-  const lee = await makeUser({ email: "lee@example.com" });
-  await makeTeamMember(data.id, lee.id);
+  await makeMember(riley.id, org.id);
   const servers = [
-    { name: "payments_api", grants: [{ type: "team", id: payments.id }] },
-    {
-      name: "helpdesk",
-      grants: [
-        { type: "user", id: dana.id },
-        { type: "role", id: "auditor" },
-        { type: "user", id: gone.id },
-      ],
-    },
-    { name: "data_warehouse", grants: [{ type: "team", id: data.id }] },
-    { name: "crm", grants: [{ type: "organization", id: "*" }] },
+    { name: "payments_api", grant: { type: "team", id: payments.id } },
+    { name: "helpdesk", grant: { type: "user", id: sam.id } },
   ] as const;
-  for (const { name, grants } of servers) {
+  for (const { name, grant } of servers) {
     const catalog = await InternalMcpCatalogModel.create(
       {
         name,
@@ -1824,12 +1827,7 @@ test("the code owners of each server's file are the people who may edit the serv
       {
         organizationId: org.id,
         initialPermissionGrants: [
-          ...grants.map(
-            (subject): ResourcePermissionGrant => ({
-              subject: { ...subject },
-              actions: ["read", "use", "update"],
-            }),
-          ),
+          { subject: { ...grant }, actions: ["read", "use", "update"] },
           {
             subject: { type: "organization", id: "*" },
             actions: ["read", "use"],
@@ -1844,7 +1842,8 @@ test("the code owners of each server's file are the people who may edit the serv
       catalogId: catalog.id,
     });
   }
-  // The GitHub accounts people connected: a github.com App's user credential.
+  await connectApp({ organizationId: org.id });
+  // Riley connected a GitHub account; Sam did not.
   await RuntimeCredentialDefinitionModel.create({
     organizationId: org.id,
     createdBy: admin.id,
@@ -1876,166 +1875,160 @@ test("the code owners of each server's file are the people who may edit the serv
       githubAppCredentialKey: "repository-app",
     },
   });
-  const logins: Record<number, string> = {};
-  const connected = [
-    [pat, 1001, "pat-acme"],
-    [quinn, 1002, "quinn-acme"],
-    [dana, 1003, "dana-acme"],
-    [riley, 1004, "riley-acme"],
-    // Connected, but no longer a member: not an owner anywhere.
-    [gone, 1005, "gone-acme"],
-  ] as const;
-  for (const [user, githubId, login] of connected) {
-    await RuntimeCredentialConnectionModel.upsert({
-      organizationId: org.id,
-      scope: "personal",
-      userId: user.id,
-      credentialId: "github-user",
-      value: "token",
-      githubId: GitHubUserIdSchema.parse(githubId),
-    });
-    logins[githubId] = login;
-  }
-  const userReads: string[] = [];
-  server.use(
-    http.get("https://api.github.com/user/:id", ({ params }) => {
-      userReads.push(String(params.id));
-      const login = logins[Number(params.id)];
-      return login
-        ? HttpResponse.json({ login })
-        : HttpResponse.json({ message: "Not Found" }, { status: 404 });
-    }),
-  );
-  await connectApp({ organizationId: org.id, refuse: ["administration"] });
-  const files = {
-    "appa.toml": `include = ["mcp/*.toml"]\n${RULES}`,
-    "mcp/payments_api.toml": REFUNDS,
-    // One server's file already has a line, with yesterday's owner.
-    ".github/CODEOWNERS":
-      "* @acme/admins\n# Payments wrote this one by hand.\n/mcp/payments_api.toml    @acme/legacy\n",
-  };
-  const proposedHead = "a".repeat(40);
-  const state = {
+  await RuntimeCredentialConnectionModel.upsert({
+    organizationId: org.id,
+    scope: "personal",
+    userId: riley.id,
+    credentialId: "github-user",
+    value: "token",
+    githubId: GitHubUserIdSchema.parse(1004),
+  });
+  const root = `include = ["mcp/*.toml"]\n${RULES}`;
+  const results = Object.fromEntries(
+    [1, 2, 3, 4, 5, 6].map((number) => [number, String(number).repeat(40)]),
+  ) as Record<number, string>;
+  serveRepository({
     head: FIRST,
-    files: { [FIRST]: files } as Record<string, Record<string, string>>,
-  };
-  serveRepository(state);
-  let open: Array<Record<string, unknown>> = [];
-  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
-  const pulls: Array<{
-    title: string;
-    body: string;
-    head: string;
-    base: string;
-  }> = [];
-  server.use(
-    http.get(`${REPO}/pulls`, ({ request }) =>
-      HttpResponse.json(
-        new URL(request.url).searchParams.get("head") ===
-          "example:archestra/openappa-code-owners"
-          ? open
-          : [],
+    files: {
+      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+      // Every result is a valid policy: only who asked tells them apart.
+      ...Object.fromEntries(
+        Object.values(results).map((sha) => [
+          sha,
+          { "appa.toml": root, "mcp/payments_api.toml": INVOICES },
+        ]),
       ),
-    ),
-    http.get(`${REPO}/git/commits/${FIRST}`, () =>
-      HttpResponse.json({ tree: { sha: TREE } }),
-    ),
-    http.post(`${REPO}/git/trees`, async ({ request }) => {
-      trees.push((await request.json()) as (typeof trees)[number]);
-      return HttpResponse.json({ sha: "4".repeat(40) });
-    }),
-    http.post(`${REPO}/git/commits`, () =>
-      HttpResponse.json({ sha: proposedHead }),
-    ),
-    http.get(`${REPO}/git/ref/heads/archestra/openappa-code-owners`, () =>
-      HttpResponse.json({ message: "Not Found" }, { status: 404 }),
-    ),
-    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
-    http.get(`${REPO}/codeowners/errors`, () =>
-      HttpResponse.json({
-        errors: [
-          {
-            line: 6,
-            kind: "Unknown owner",
-            message:
-              "Unknown owner on line 6: make sure @quinn-acme exists and has write access to the repository",
-          },
-        ],
-      }),
-    ),
-    http.post(`${REPO}/pulls`, async ({ request }) => {
-      pulls.push((await request.json()) as (typeof pulls)[number]);
-      return HttpResponse.json({
-        number: 9,
-        html_url: "https://github.com/example/policies/pull/9",
-      });
-    }),
-  );
-
+    },
+  });
   await syncAppaGithubPolicy(org.id);
-  // The existing line is rewritten where it stands, not repeated in the block.
-  const proposed = `* @acme/admins
-# Payments wrote this one by hand.
-/mcp/payments_api.toml    @pat-acme @quinn-acme
 
-# BEGIN Guardrails: MCP server rules owners
-# Written from who may edit each MCP server in Archestra.
-# Change those, not these lines: Archestra rewrites them.
-/mcp/crm.toml @dana-acme @pat-acme @quinn-acme @riley-acme
-/mcp/helpdesk.toml @dana-acme @riley-acme
-# END Guardrails: MCP server rules owners
-`;
-  expect(trees).toEqual([
-    {
-      base_tree: TREE,
-      tree: [
+  const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
+  const signed = (email: string, sha: string) => ({
+    sha,
+    commit: {
+      author: { email },
+      verification: { verified: true, reason: "valid" },
+    },
+    committer: { login: "acme-guardrails[bot]", type: "Bot" },
+  });
+  const pulls: Record<
+    number,
+    { user: typeof bot; files: string[]; commits: unknown[] }
+  > = {
+    // Opened by the App for Pat, an editor of Payments API.
+    1: {
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [signed(pat.email, results[1] as string)],
+    },
+    // Opened by the App for Sam, who may not edit Payments API.
+    2: {
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [signed(sam.email, results[2] as string)],
+    },
+    // The App's branch, with a commit someone else pushed.
+    3: {
+      user: bot,
+      files: ["mcp/payments_api.toml"],
+      commits: [
+        signed(pat.email, "c".repeat(40)),
         {
-          path: ".github/CODEOWNERS",
-          mode: "100644",
-          type: "blob",
-          content: proposed,
+          sha: results[3],
+          commit: {
+            author: { email: pat.email },
+            verification: { verified: false, reason: "unsigned" },
+          },
+          committer: { login: "mallory", type: "User" },
         },
       ],
     },
-  ]);
-  expect(pulls).toEqual([
-    expect.objectContaining({
-      title: "Code owners for MCP server rules files",
-      head: "archestra/openappa-code-owners",
-      base: "main",
-    }),
-  ]);
-  expect(pulls[0]?.body).toContain("- data_warehouse: lee@example.com");
-  expect(pulls[0]?.body).toContain(
-    "- `/mcp/payments_api.toml    @acme/legacy` → `/mcp/payments_api.toml    @pat-acme @quinn-acme`",
-  );
-  expect(pulls[0]?.body).toContain("line 6: Unknown owner on line 6");
-  // Each editor without a GitHub account, per server; a leaver is nobody.
-  expect((await getRepositoryProtection(org.id))?.codeOwners).toEqual({
-    state: "pull_request",
-    url: "https://github.com/example/policies/pull/9",
-    unowned: [
-      {
-        server: "crm",
-        editors: ["admin@example.com", "lee@example.com", "sam@example.com"],
-      },
-      { server: "data_warehouse", editors: ["lee@example.com"] },
-      { server: "payments_api", editors: ["sam@example.com"] },
-    ],
-  });
-  // GitHub was asked once per connected member, never for the leaver.
-  expect(userReads.sort()).toEqual(["1001", "1002", "1003", "1004"]);
-
-  // The open pull request already proposes these owners: nothing is pushed.
-  open = [
-    {
-      number: 9,
-      html_url: "https://github.com/example/policies/pull/9",
-      head: { sha: proposedHead },
+    // Opened by Riley, connected, who may not change the policy file.
+    4: {
+      user: { id: 1004, login: "riley-gh", type: "User" },
+      files: ["appa.toml"],
+      commits: [],
     },
-  ];
-  state.files[proposedHead] = { ...files, ".github/CODEOWNERS": proposed };
-  await syncAndProtect(org.id);
-  expect(trees).toHaveLength(1);
-  expect(pulls).toHaveLength(1);
+    // Opened by Sam, who has not connected GitHub, on a server Sam edits.
+    5: {
+      user: { id: 1002, login: "sam-gh", type: "User" },
+      files: ["mcp/helpdesk.toml"],
+      commits: [],
+    },
+    // Opened by Riley, changing nothing Git sync reads.
+    6: {
+      user: { id: 1004, login: "riley-gh", type: "User" },
+      files: ["README.md", ".github/workflows/validate.yml"],
+      commits: [],
+    },
+  };
+  const runs: Array<{
+    head_sha: string;
+    conclusion: string;
+    output: { title: string; summary: string };
+  }> = [];
+  server.use(
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails" }),
+    ),
+    http.get(`${REPO}/pulls`, () =>
+      HttpResponse.json(
+        Object.entries(pulls).map(([number, pull]) => ({
+          number: Number(number),
+          head: { sha: results[Number(number)] },
+          merge_commit_sha: null,
+          user: pull.user,
+        })),
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/files`, ({ params }) =>
+      HttpResponse.json(
+        pulls[Number(params.number)]?.files.map((filename) => ({ filename })),
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/commits`, ({ params }) =>
+      HttpResponse.json(pulls[Number(params.number)]?.commits),
+    ),
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  const posted = Object.fromEntries(
+    runs.map((run) => [
+      run.head_sha,
+      { conclusion: run.conclusion, ...run.output },
+    ]),
+  );
+  expect(posted[results[1] as string]).toMatchObject({ conclusion: "success" });
+  expect(posted[results[2] as string]).toEqual({
+    conclusion: "failure",
+    title: "The requester may not change these rules",
+    summary:
+      "sam@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server payments_api in the MCP registry.",
+  });
+  expect(posted[results[3] as string]).toMatchObject({
+    conclusion: "failure",
+    title: "Could not tell who asked for this change",
+    summary: expect.stringContaining("commits Archestra did not make"),
+  });
+  expect(posted[results[4] as string]).toEqual({
+    conclusion: "failure",
+    title: "The requester may not change the policy",
+    summary:
+      "riley@example.com may not change appa.toml: that takes the guardrailsPolicy:update permission.",
+  });
+  expect(posted[results[5] as string]).toMatchObject({
+    conclusion: "failure",
+    title: "Could not tell who asked for this change",
+    summary: expect.stringMatching(
+      /^@sam-gh has not connected a GitHub account in Archestra, so Archestra cannot tell whether they may change mcp\/helpdesk\.toml\./,
+    ),
+  });
+  expect(posted[results[6] as string]).toMatchObject({ conclusion: "success" });
+  expect(runs).toHaveLength(6);
+  // Nothing moved: nothing is posted again.
+  await checkDueAppaGithubSyncs();
+  expect(runs).toHaveLength(6);
 });

@@ -214,6 +214,52 @@ async function jobAccess(params: {
   return { token: minted.token, api, web };
 }
 
+/** GitHub App logins (`<slug>[bot]`) by credential, for a day: they do not change. */
+const appLogins = new LRUCacheManager<string>({
+  maxSize: 256,
+  defaultTtl: 24 * 60 * 60_000,
+});
+
+/**
+ * The GitHub login a source's App acts as, `<slug>[bot]`: the committer of
+ * every commit the App makes, which GitHub signs. Null for a source that
+ * reads with a personal access token or no credential.
+ */
+export async function githubAppLogin(source: {
+  organizationId: string;
+  githubAppConfigId: string | null;
+}): Promise<string | null> {
+  if (!source.githubAppConfigId) return null;
+  const cached = appLogins.get(source.githubAppConfigId);
+  if (cached) return cached;
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: source.githubAppConfigId,
+    organizationId: source.organizationId,
+  });
+  if (definition?.kind !== "github_app" || !definition.appId)
+    throw new ApiError(404, "GitHub App credential not found");
+  const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
+    organizationId: source.organizationId,
+    credentialId: definition.key,
+    scope: "organization",
+  });
+  if (!privateKey)
+    throw new ApiError(400, "GitHub App credential has no private key");
+  const app = await fetchAsGithubApp<{ slug?: unknown }>({
+    githubUrl: (
+      definition.githubUrl ?? GITHUB_DOT_COM_SOURCE.apiBaseUrl
+    ).replace(/\/+$/, ""),
+    appId: definition.appId,
+    privateKey,
+    path: "/app",
+  });
+  if (typeof app.slug !== "string" || !app.slug)
+    throw new ApiError(502, "GitHub did not name the App");
+  const login = `${app.slug}[bot]`;
+  appLogins.set(source.githubAppConfigId, login);
+  return login;
+}
+
 /** The GitLab host and token behind a source's GitLab token. */
 export async function resolveOpenAppaGitlabAccess(source: {
   organizationId: string;

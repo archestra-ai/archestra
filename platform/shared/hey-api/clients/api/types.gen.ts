@@ -121796,15 +121796,6 @@ export type GetAppaRepositoryProtectionResponses = {
             bypassActors?: number;
             checkRule?: 'omitted' | 'unposted';
         };
-        codeOwners: {
-            state: 'up_to_date' | 'pull_request' | 'out_of_date' | 'not_used' | 'needs_permission' | 'unsupported' | 'error';
-            url?: string;
-            detail?: string;
-            unowned: Array<{
-                server: string;
-                editors: Array<string>;
-            }>;
-        };
     } | null;
 };
 

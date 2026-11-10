@@ -35,7 +35,7 @@ Each permission serves one part of Git sync, and a part whose permission is miss
 | --- | --- | --- | --- |
 | Metadata | Read | Lists the repositories the installation covers, in setup. GitHub grants it to every App. | Nothing to choose. |
 | Contents | Read and write | Reads `appa.toml`, the server files and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
-| Pull requests | Read and write | Finds the open pull requests to check and the setup pull request. Opens pull requests: a server's rules from the APPA Keeper, `CODEOWNERS`, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
+| Pull requests | Read and write | Finds the open pull requests to check, with who opened them and what they change. Opens pull requests: a server's rules from the APPA Keeper, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
 | Checks | Read and write | Posts the **Guardrails policy** check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
 | Administration | Read and write | Creates the **Guardrails policy** ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
 | Workflows | Read and write, GitHub Enterprise Server only | Lets setup commit the template's workflow files into an empty repository; GitHub refuses that commit otherwise. On GitHub.com the template repository brings them. | Setup on GitHub Enterprise Server fails on the workflow files. |
@@ -73,23 +73,24 @@ include = [
 ]
 ```
 
-OpenAPPA 0.41 and later read `mcp/*.toml` too, so `appa replay` in the repository's CI sees the server files. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included.
+OpenAPPA 0.41 and later read `mcp/*.toml` too, so `appa replay` in the repository's CI sees the server files. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included, and that the person who asked may change each file.
 
 ### Before Editors Start
 
-Four things put a server's rules in its editors' hands; each is in place once and holds for every server.
+Three things put a server's rules in its editors' hands; each is in place once and holds for every server.
 
-1. **Git sync on GitHub**, with an App that has [every permission above](#github-app-permissions). A GitLab project gets the pull requests and the check, but no code owners and no branch rules; protect its branch in GitLab.
-2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules** and become the file's code owners.
+1. **Git sync on GitHub**, with an App that has [every permission above](#github-app-permissions). A GitLab project gets the pull requests and the policy check, but the check does not tell who asked there, and Archestra keeps no branch rules; protect its branch in GitLab.
+2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules**, and the policy check passes their own changes.
 3. **The APPA Keeper for those teams.** Only administrators can use the agent until you share it with the editors' teams for use.
-4. **A connected GitHub account for each editor**, so GitHub counts their review: the GitHub user credential they connect under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential). Each owner also needs write access to the repository on GitHub, or GitHub ignores the owner line. Settings lists the editors who have not connected one yet.
+
+To merge, an editor needs write access to the repository on GitHub, or someone who has it clicks **Merge** for them. Nobody needs to approve.
 
 ### Change a Server's Rules
 
 1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
-4. A reviewer merges it, and Git sync applies it at the next sync.
+4. When the **Guardrails policy** check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
 
 What to know:
 
@@ -99,21 +100,20 @@ What to know:
 
 ## Protect Each Server's File
 
-Only a server's own editors approve changes to its rules file: Archestra keeps the repository's reviews in line with the MCP Registry. It never merges anything itself. At each sync it keeps three things:
+Only a server's own editors can change its rules file, and they need no one's approval: the policy check on each pull request decides who may change what, by the MCP Registry, and the branch rules make that check the gate. Archestra never merges anything itself. At each sync it keeps two things:
 
-- **Code owners:** a pull request that makes each server's editors the owners of its file in `CODEOWNERS`, updated when editors or team members change. A line that already names the file is rewritten where it stands; a file without one gets a line in Archestra's block.
-- **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result.
-- **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch, a code owner's approval of its latest push, and the passing check. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
+- **The policy check:** every pull request into the synced branch gets the **Guardrails policy** check within a minute. It fails when Git sync would refuse the result, and when the person who asked may not change a file it touches: a server's file takes edit access to that server; `appa.toml`, any other `.toml` beside it and the validations take [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Files Git sync never reads are not checked.
+- **Branch rules:** the **Guardrails policy** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch and the passing check, and no approval. To require a second pair of eyes as well, raise the approval count on the ruleset on GitHub: Archestra keeps it. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
-Owners are people, never GitHub teams: Archestra expands each grant on the server to the people it reaches today, a team grant to the team's members and its child teams', a role grant to everyone who holds the role, and names each by the GitHub account they connected. So the owners follow Archestra's teams and roles, and need no copy of them on GitHub.
+Who asked is read from what GitHub vouches for. A pull request the APPA Keeper or **Settings → Guardrails** opened names the person who asked in its commits, which GitHub signs for the App; a commit someone else pushes onto that branch fails the check. A pull request a person opened on GitHub is theirs, through the GitHub account they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential); without one, the check fails and says so.
 
-**Settings → Guardrails** shows the code owners and the branch rules under **Repository protection**, with any editor who has not connected a GitHub account yet. Until they do, GitHub cannot ask them for review; a server none of whose editors connected one keeps the fallback owners above Archestra's block.
+**Settings → Guardrails** shows the branch rules under **Repository protection**.
 
 What to know:
 
 - An App created before Archestra kept these needs the Checks and Administration permissions added in its settings on GitHub, and the change accepted on its installation. Until then, the parts it cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
 - To manage the branch yourself, turn the ruleset off on GitHub. Archestra leaves a disabled ruleset alone, and keeps any rule you make stricter.
-- In `CODEOWNERS`, Archestra rewrites its own block and the lines that name a server's file, nothing else. Keep a fallback owner above the block for files no server owns. GitLab repositories get the policy check as a commit status; protect their branch in GitLab.
+- GitLab projects get the policy check as a commit status, for the policy alone: it does not tell who asked there. Protect the branch and its approvals in GitLab.
 
 ## Validations in Git
 

@@ -319,8 +319,8 @@ type ProtectionView = {
 };
 
 /**
- * The repository's protection for server rules files: the branch ruleset and
- * the code owners Archestra keeps in line with the MCP registry at each sync.
+ * The repository's protection for server rules files: the branch ruleset
+ * Archestra keeps in line at each sync.
  */
 function RepositoryProtection() {
   const { data } = useAppaRepositoryProtection(true);
@@ -328,9 +328,7 @@ function RepositoryProtection() {
   if (!data) return null;
   const rows: Array<{ label: string; view: ProtectionView }> = [
     { label: "Branch rules", view: branchRulesView(data.branchRules, appName) },
-    { label: "Code owners", view: codeOwnersView(data.codeOwners, appName) },
   ];
-  const { unowned } = data.codeOwners;
   return (
     <GitSourceNotice>
       <div className="space-y-2 rounded-md border p-3 text-sm">
@@ -371,20 +369,6 @@ function RepositoryProtection() {
             </div>
           ))}
         </dl>
-        {unowned.length > 0 && (
-          <InlineNotice variant="warning">
-            <AlertTriangle className="size-4 shrink-0" aria-hidden />
-            <InlineNoticeText>
-              Editors who have not connected a GitHub account in {appName}, so
-              GitHub cannot ask them for review:{" "}
-              {unowned
-                .map((entry) => `${entry.server} (${entry.editors.join(", ")})`)
-                .join("; ")}
-              . A server none of whose editors connected one keeps the fallback
-              owners.
-            </InlineNoticeText>
-          </InlineNotice>
-        )}
       </div>
     </GitSourceNotice>
   );
@@ -419,8 +403,8 @@ function branchRulesView(
       return {
         status:
           rules.checkRule === "omitted"
-            ? `Merges need an up-to-date pull request and a code owner's approval; ${appName} adds the Guardrails policy check once the App may post it`
-            : "Merges need an up-to-date pull request, a code owner's approval and the Guardrails policy check",
+            ? `Merges need an up-to-date pull request; ${appName} adds the Guardrails policy check, which decides who may change each file, once the App may post it`
+            : "Merges need an up-to-date pull request that passes the Guardrails policy check, which decides who may change each file",
         tone: "ok",
         link,
         detail,
@@ -464,51 +448,6 @@ function branchRulesView(
         status: "Could not check",
         tone: "problem",
         detail: rules.detail,
-      };
-  }
-}
-
-function codeOwnersView(
-  owners: Protection["codeOwners"],
-  appName: string,
-): ProtectionView {
-  switch (owners.state) {
-    case "up_to_date":
-      return {
-        status: "In line with who may edit each MCP server",
-        tone: "ok",
-      };
-    case "pull_request":
-      return {
-        status: "A change is waiting for review",
-        tone: "pending",
-        link: owners.url
-          ? { href: owners.url, label: "Review pull request" }
-          : undefined,
-      };
-    case "out_of_date":
-      return {
-        status: `${appName} opens a pull request at the next sync`,
-        tone: "pending",
-      };
-    case "not_used":
-      return {
-        status: "No MCP server rules files are included yet",
-        tone: "off",
-      };
-    case "needs_permission":
-      return {
-        status: "The GitHub App cannot open the pull request",
-        tone: "problem",
-        detail: owners.detail,
-      };
-    case "unsupported":
-      return { status: "Not managed here", tone: "off", detail: owners.detail };
-    default:
-      return {
-        status: "Could not check",
-        tone: "problem",
-        detail: owners.detail,
       };
   }
 }

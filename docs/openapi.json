@@ -473307,61 +473307,10 @@
                         "state"
                       ],
                       "additionalProperties": false
-                    },
-                    "codeOwners": {
-                      "type": "object",
-                      "properties": {
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "up_to_date",
-                            "pull_request",
-                            "out_of_date",
-                            "not_used",
-                            "needs_permission",
-                            "unsupported",
-                            "error"
-                          ]
-                        },
-                        "url": {
-                          "type": "string"
-                        },
-                        "detail": {
-                          "type": "string"
-                        },
-                        "unowned": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "server": {
-                                "type": "string"
-                              },
-                              "editors": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            },
-                            "required": [
-                              "server",
-                              "editors"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "state",
-                        "unowned"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
-                    "branchRules",
-                    "codeOwners"
+                    "branchRules"
                   ],
                   "additionalProperties": false
                 }

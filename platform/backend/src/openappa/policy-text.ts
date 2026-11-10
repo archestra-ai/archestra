@@ -138,7 +138,7 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
  *
  * Archestra stores none of these files. They are read from the repository at
  * the commit Git sync accepted, so who may change one, and how, is the
- * repository's to decide: its pull requests, reviews and code owners.
+ * repository's to decide: its pull requests and the policy check on them.
  */
 
 /** The `[policy]` arrays an included file may add to. */
@@ -192,6 +192,11 @@ export function serverRulesPath(toolPrefix: string): string {
 /** Whether a repository path is a server rules file `mcp/*.toml` takes in. */
 export function isServerRulesFile(path: string): boolean {
   return SERVER_RULES_FILE.test(path);
+}
+
+/** The tool prefix a server rules file is named for, or null for another path. */
+export function serverRulesPrefix(path: string): string | null {
+  return SERVER_RULES_FILE.exec(path)?.[1] ?? null;
 }
 
 /** The repository include entries a root document lists, in its order. */

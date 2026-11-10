@@ -162510,6 +162510,35 @@
                                 "nullable": true,
                                 "type": "string",
                                 "maxLength": 60
+                              },
+                              "plans": {
+                                "type": "object",
+                                "properties": {
+                                  "personal": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "enterprise": {
+                                    "type": "object",
+                                    "properties": {
+                                      "hidden": {
+                                        "type": "boolean"
+                                      },
+                                      "displayName": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "maxLength": 60
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
                               }
                             },
                             "additionalProperties": false
@@ -489302,6 +489331,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -491000,6 +491058,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -492443,6 +492530,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -493494,6 +493610,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -494542,6 +494687,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -496367,6 +496541,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -497547,6 +497750,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -498164,6 +498396,35 @@
                           "nullable": true,
                           "type": "string",
                           "maxLength": 60
+                        },
+                        "plans": {
+                          "type": "object",
+                          "properties": {
+                            "personal": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "enterprise": {
+                              "type": "object",
+                              "properties": {
+                                "hidden": {
+                                  "type": "boolean"
+                                },
+                                "displayName": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "maxLength": 60
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -498752,6 +499013,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -499870,6 +500160,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -500932,6 +501251,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -502025,6 +502373,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -503055,6 +503432,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -505289,6 +505695,35 @@
                             "nullable": true,
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "plans": {
+                            "type": "object",
+                            "properties": {
+                              "personal": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "enterprise": {
+                                "type": "object",
+                                "properties": {
+                                  "hidden": {
+                                    "type": "boolean"
+                                  },
+                                  "displayName": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "maxLength": 60
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false

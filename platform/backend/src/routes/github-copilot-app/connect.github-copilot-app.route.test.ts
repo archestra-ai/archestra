@@ -1065,6 +1065,50 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
+  test("refuses every setup step once enterprise plans are off, and keeps personal sign-ins working", async () => {
+    const { keyId, reference } = await connectedApp();
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { enterprise: { hidden: true } } },
+      },
+    });
+
+    for (const [url, payload] of [
+      ["/api/github-copilot-app/manifest", { organization: "my-org" }],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, privateKey, replaceKeyId: keyId },
+      ],
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId: reference?.ref.credentialId, replaceKeyId: keyId },
+      ],
+    ] as const) {
+      const response = await post(url, payload);
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json().error.message, url).toContain(
+        "enterprise plans are turned off",
+      );
+    }
+
+    // The connected plan is frozen like any key whose plan is off…
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed plan" },
+    });
+    expect(rename.statusCode).toBe(400);
+    // …and a person's own Copilot sign-in is not refused by the plan switch.
+    // (This file's GitHub fake does not serve Copilot, so the key check
+    // itself fails later; the success path is in llm-provider-api-keys.test.)
+    const personal = await post("/api/llm-provider-api-keys", {
+      name: "My Copilot",
+      provider: "github-copilot",
+      apiKey: "gho_personal",
+    });
+    expect(personal.json().error?.message ?? "").not.toContain("turned off");
+  });
+
   test("takes only a GitHub over https", async () => {
     for (const url of [
       "/api/github-copilot-app/organization/check",

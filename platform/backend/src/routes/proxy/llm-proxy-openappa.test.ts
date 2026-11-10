@@ -1,9 +1,13 @@
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat";
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
-import type { ServerResponse } from "node:http";
+import { createServer, type ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   ENCRYPTED_CHAT_REDACTED_MARKER,
   extractMcpHumanRuling,
@@ -75,6 +79,7 @@ import {
 import { superyellSession } from "@/openappa/unenforced";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { grokToolName } from "@/routes/mcp-gateway/grok-tool-names";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import {
@@ -826,6 +831,238 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent).toHaveLength(requestsBeforeForeignOwner);
   });
 
+  test("Grok's real proxy boundary returns signed deferred denial notices through use_tool", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(agent.id);
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
+      const client = createOpenAiTestClient({
+        nonStreamingToolCalls: [
+          {
+            id: "grok-write",
+            name: "write",
+            arguments:
+              '{"file_path":"/synthetic/note.txt","content":"synthetic"}',
+          },
+        ],
+      });
+      const create = client.chat.completions.create;
+      client.chat.completions.create = async (params) => {
+        sent.push(structuredClone(params));
+        return create(params);
+      };
+      return client as never;
+    });
+    const tools = ["get_remedy_plans", "execute_remedy_plan", "ask_user"].map(
+      (name) => ({
+        tool_name: `gateway__archestra__${name}`,
+        description: attestToolDescription({
+          organizationId: agent.organizationId,
+          gatewayId: agent.id,
+          advertisedName: `archestra__${name}`,
+          kind: "b",
+          description: "Synthetic gateway control",
+        }),
+        input_schema: { type: "object", additionalProperties: true },
+      }),
+    );
+    block = true;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        "x-archestra-agent-id": "grok-build",
+        "x-grok-session-id": "grok-deferred-http",
+        "x-appa-session-id": "grok-deferred-http",
+        "x-grok-client-mode": "interactive",
+      },
+      payload: {
+        model: "gpt-4o",
+        stream: false,
+        tools: ["write", "use_tool", "search_tool", "ask_user_question"].map(
+          (name) => ({
+            type: "function",
+            function: { name, parameters: { type: "object" } },
+          }),
+        ),
+        messages: [
+          { role: "user", content: "Synthetic Grok request" },
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "grok-search",
+                type: "function",
+                function: {
+                  name: "search_tool",
+                  arguments: '{"query":"gateway remedy"}',
+                },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "grok-search",
+            content: JSON.stringify({
+              results: [{ server: "gateway", tools }],
+              status: "ready",
+              total_hidden_tools: 3,
+              note: null,
+            }),
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const calls = response.json().choices[0].message.tool_calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0].function.name).toBe("use_tool");
+    const wrapped = JSON.parse(calls[0].function.arguments);
+    expect(wrapped.tool_name).toBe("gateway__archestra__get_remedy_plans");
+    expect(
+      readNotice({ callId: "grok-write", arguments: wrapped.tool_input })?.tool,
+    ).toBe("write");
+    expect(JSON.stringify(sent)).not.toContain("[[gwa1");
+    expect(
+      events.some(
+        (event) => event.event === "tool_call" && event.tool === "Write",
+      ),
+    ).toBe(true);
+  });
+
+  for (const denied of [false, true]) {
+    test(`Grok's real proxy boundary repairs progressive dispatch and preserves policy denial (${denied})`, async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(agent.id);
+      await app.register(openAiProxyRoutes);
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      const input = { limit: 3 };
+      vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+        () =>
+          createOpenAiTestClient({
+            nonStreamingToolCalls: [
+              {
+                id: "progressive",
+                name: "use_tool",
+                arguments: JSON.stringify({
+                  tool_name: "archestra__list_skills",
+                  tool_input: input,
+                }),
+              },
+            ],
+          }) as never,
+      );
+      const names = [
+        "run_tool",
+        "search_tools",
+        "get_remedy_plans",
+        "execute_remedy_plan",
+        "ask_user",
+      ];
+      const tools = names.map((name) => ({
+        tool_name: `gateway__${grokToolName(`archestra__${name}`)}`,
+        description: attestToolDescription({
+          organizationId: agent.organizationId,
+          gatewayId: agent.id,
+          advertisedName: `archestra__${name}`,
+          kind: "b",
+          description: "Synthetic progressive gateway",
+        }),
+        input_schema: { type: "object", additionalProperties: true },
+      }));
+      block = denied;
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformKey,
+          "x-archestra-agent-id": "grok-build",
+          "x-grok-session-id": `grok-progressive-${denied}`,
+          "x-grok-client-mode": "interactive",
+        },
+        payload: {
+          model: "gpt-4o",
+          stream: false,
+          tools: ["use_tool", "search_tool"].map((name) => ({
+            type: "function",
+            function: { name, parameters: { type: "object" } },
+          })),
+          messages: [
+            { role: "user", content: "List the available skills." },
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "catalog",
+                  type: "function",
+                  function: {
+                    name: "search_tool",
+                    arguments: '{"query":"gateway tools"}',
+                  },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              tool_call_id: "catalog",
+              content: JSON.stringify({
+                results: [{ server: "gateway", tools }],
+              }),
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "tool_call",
+          tool: "archestra__list_skills",
+          arguments: input,
+          dispatch: `gateway__${grokToolName("archestra__run_tool")}`,
+        }),
+      );
+      const calls = response.json().choices[0].message.tool_calls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0].function.name).toBe("use_tool");
+      const wrapped = JSON.parse(calls[0].function.arguments);
+      if (denied) {
+        expect(wrapped.tool_name).toBe(
+          `gateway__${grokToolName("archestra__get_remedy_plans")}`,
+        );
+        expect(
+          readNotice({ callId: "progressive", arguments: wrapped.tool_input })
+            ?.tool,
+        ).toBe("archestra__list_skills");
+      } else {
+        expect(wrapped).toEqual({
+          tool_name: `gateway__${grokToolName("archestra__run_tool")}`,
+          tool_input: { tool_name: "archestra__list_skills", tool_args: input },
+        });
+      }
+    });
+  }
+
   test.each([
     "deny",
     "error",
@@ -1001,15 +1238,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ).toBe(true);
   });
 
-  test.for([
-    { stream: false, state: "active" },
-    { stream: true, state: "active" },
-    { stream: true, state: "off" },
-    { stream: true, state: "superyell" },
-    { stream: true, state: "error" },
-  ] as const)("Pi protected-session receipt reflects admission (stream=$stream, state=$state)", async ({
+  test.for(
+    (
+      [
+        { stream: false, state: "active" },
+        { stream: true, state: "active" },
+        { stream: true, state: "off" },
+        { stream: true, state: "superyell" },
+        { stream: true, state: "error" },
+      ] as const
+    ).flatMap((entry) => [
+      { ...entry, client: "pi" },
+      { ...entry, client: "grok-build" },
+    ]),
+  )("$client protected-session receipt reflects admission (stream=$stream, state=$state)", async ({
     stream,
     state,
+    client,
   }) => {
     await app.register(openAiProxyRoutes);
     for (const modelId of ["gpt-5.5", "openai:gpt-6.1-sol"]) {
@@ -1052,7 +1297,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       },
     } as never);
-    const nativeId = "pi-receipt-session";
+    const nativeId = `${client}-receipt-session`;
     if (state === "off") await GuardrailsDeploymentModel.setEnabled(false);
     if (state === "superyell")
       await OpenAppaUnenforcedModel.recordSession({
@@ -1070,8 +1315,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: {
           authorization: "Bearer test-key",
           "x-archestra-virtual-key": platformKey,
-          "x-archestra-agent-id": "pi",
-          "x-pi-session-id": nativeId,
+          "x-archestra-agent-id": client,
+          ...(client === "pi"
+            ? { "x-pi-session-id": nativeId }
+            : {
+                "x-grok-session-id": nativeId,
+                "x-grok-client-mode": "interactive",
+              }),
         },
         payload: {
           model,
@@ -1789,6 +2039,510 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         .filter((event) => event.event === "session_start")
         .every((event) => event.fork_of === undefined),
     ).toBe(true);
+  });
+
+  test.each([
+    "valid",
+    "changed",
+    "missing",
+  ] as const)("Grok child history uses its signed spawn before root fork tracing (marker=%s)", async (proof) => {
+    config.openappa.offerSigningSecret = "synthetic-grok-admission-secret";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_grok_child",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [
+              {
+                type: "function_call",
+                call_id: "call_read",
+                name: "read_file",
+                arguments: '{"target_file":"synthetic.txt"}',
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    const parent = "00000000-0000-4000-8000-000000000010";
+    const child = "00000000-0000-4000-8000-000000000011";
+    const prompt = "Read the synthetic file";
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: parent,
+      spawnerNativeId: parent,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    // A native child can replay stamped context even though its bare CLI ID
+    // has never opened a root: its governed ID is parent:child.
+    const callId = stampToolCallId({
+      callId: "call_title",
+      sessionId: child,
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      secret: config.openappa.offerSigningSecret,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        "x-grok-client-identifier": "grok-pager",
+        "x-grok-session-id": child,
+      },
+      payload: {
+        model: "gpt-5.5",
+        stream: false,
+        input: [
+          {
+            role: "user",
+            content:
+              proof === "missing"
+                ? prompt
+                : `${proof === "changed" ? "Changed prompt" : prompt}\n\n${marker}`,
+          },
+          {
+            type: "function_call",
+            call_id: callId,
+            name: "session_title",
+            arguments: '{"title":"Synthetic child"}',
+          },
+          {
+            type: "function_call_output",
+            call_id: callId,
+            output: "Title set",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "read_file",
+            parameters: {
+              type: "object",
+              properties: { target_file: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+    if (proof !== "valid") {
+      expect(response.statusCode, response.body).toBe(
+        proof === "changed" ? 409 : 400,
+      );
+      expect(sent).toHaveLength(0);
+      expect(events.some((event) => event.event === "session_start")).toBe(
+        false,
+      );
+      return;
+    }
+    expect(response.statusCode, response.body).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: `user:${userId}|${parent}:${child}`,
+        parent_id: `user:${userId}|${parent}`,
+      }),
+    );
+    expect(
+      events
+        .filter((event) => event.event === "session_start")
+        .every((event) => event.fork_of === undefined),
+    ).toBe(true);
+  });
+
+  test.for(
+    [false, true].flatMap((stream) =>
+      [false, true].flatMap((siblings) =>
+        ["unknown", "foreign-parent"].map((source) => ({
+          stream,
+          siblings,
+          source,
+        })),
+      ),
+    ),
+  )("Grok completes an unverified resume refusal without stream errors (stream=$stream, siblings=$siblings, source=$source)", async ({
+    stream,
+    siblings,
+    source,
+  }) => {
+    config.openappa.offerSigningSecret = "synthetic-grok-resume-refusal-secret";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const nativeId = "grok-refused-resume";
+    const sourceId = "00000000-0000-4000-8000-000000000001";
+    native.loadChildReturns.mockImplementation(async (_organization, parent) =>
+      source === "foreign-parent" && parent === `user:${userId}|foreign-root`
+        ? [
+            {
+              childSessionId: `user:${userId}|foreign-root:${sourceId}`,
+              childNativeId: sourceId,
+              spawnCallId: "foreign-spawn",
+              value: "FOREIGN_CHILD",
+            },
+          ]
+        : [],
+    );
+    const preface =
+      source === "unknown"
+        ? `I will attempt the requested resume once.${siblings ? "\n" : ""}`
+        : siblings
+          ? ""
+          : "I will attempt the requested resume once.\n\n";
+    const message = {
+      id: "msg_resume_attempt",
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      content: [
+        {
+          type: "output_text",
+          text: preface,
+          annotations: [],
+        },
+      ],
+    };
+    const output = [
+      message,
+      ...(siblings
+        ? [
+            {
+              id: "fc_read_before_resume",
+              type: "function_call",
+              call_id: "read-before-resume",
+              name: "read_file",
+              arguments: '{"target_file":"synthetic.txt"}',
+              status: "completed",
+            },
+          ]
+        : []),
+      {
+        id: "fc_refused_resume",
+        type: "function_call",
+        call_id: "refused-resume",
+        name: "spawn_subagent",
+        arguments: JSON.stringify({
+          resume_from: sourceId,
+          background: false,
+          prompt: "Reply exactly UNKNOWN_SOURCE.",
+        }),
+        status: "completed",
+      },
+    ];
+    let upstreamRequests = 0;
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async () => {
+          upstreamRequests++;
+          return stream
+            ? {
+                async *[Symbol.asyncIterator]() {
+                  for await (const event of codexResponseStream(
+                    "resp_refused_resume",
+                    output,
+                  )) {
+                    yield "response" in event
+                      ? {
+                          ...event,
+                          response: { created_at: 1, ...event.response },
+                        }
+                      : event;
+                  }
+                },
+              }
+            : {
+                id: "resp_refused_resume",
+                object: "response",
+                created_at: 1,
+                status: "completed",
+                model: "gpt-5.5",
+                output,
+                usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+              };
+        },
+      },
+    } as never);
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        "x-grok-client-identifier": "grok-pager",
+        "x-grok-session-id": nativeId,
+      },
+      payload: {
+        model: "gpt-5.5",
+        stream,
+        input: [
+          {
+            role: "user",
+            content: "Attempt this source once and stop if refused.",
+          },
+        ],
+        tools: ["spawn_subagent", "read_file"].map((name) => ({
+          type: "function",
+          name,
+          parameters: { type: "object", additionalProperties: true },
+        })),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    let completed: {
+      status?: string;
+      output?: Array<{ type?: string; content?: Array<{ text?: string }> }>;
+    };
+    if (stream) {
+      const frames = response.body
+        .split("\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.slice(6)));
+      expect(
+        frames.some((frame) =>
+          ["error", "response.failed", "response.incomplete"].includes(
+            frame.type,
+          ),
+        ),
+      ).toBe(false);
+      expect(
+        frames.filter((frame) => frame.type === "response.completed"),
+      ).toHaveLength(1);
+      completed = frames.findLast(
+        (frame) => frame.type === "response.completed",
+      ).response;
+      const streamedText = frames
+        .filter((frame) => frame.type === "response.output_text.delta")
+        .map((frame) => frame.delta)
+        .join("");
+      if (preface) {
+        expect(streamedText).toContain(
+          "I will attempt the requested resume once.\n\nOpenAPPA",
+        );
+      } else {
+        expect(streamedText).not.toContain("resume once.");
+        expect(streamedText).not.toContain("\n\n\n");
+      }
+    } else completed = response.json();
+    expect(completed.status).toBe("completed");
+    expect(
+      completed.output?.some((item) => item.type === "function_call"),
+    ).toBe(false);
+    const text = completed.output
+      ?.flatMap((item) => item.content?.map((part) => part.text ?? "") ?? [])
+      .join("\n");
+    expect(text).toContain("could not verify this Grok resume source");
+    expect(text).toContain("no child was started");
+    expect(text).not.toContain("Start a fresh subagent instead");
+    expect(upstreamRequests).toBe(1);
+    expect(native.loadChildReturns).toHaveBeenCalledWith(
+      agent.organizationId,
+      `user:${userId}|${nativeId}`,
+      undefined,
+    );
+    expect(
+      events
+        .filter((event) => event.event === "cancel_call")
+        .map((event) => event.tool_call_id)
+        .sort(),
+    ).toEqual(
+      [...(siblings ? ["read-before-resume"] : []), "refused-resume"].sort(),
+    );
+    expect(events.some((event) => event.event === "child_address")).toBe(false);
+    expect(
+      events.some(
+        (event) => event.event === "session_start" && event.parent_id,
+      ),
+    ).toBe(false);
+    if (
+      stream &&
+      !siblings &&
+      source === "unknown" &&
+      process.env.ARCHESTRA_GROK_TEST_BINARY
+    ) {
+      const home = await mkdtemp(path.join(tmpdir(), "grok-resume-refusal-"));
+      const authPath = path.join(home, "synthetic-auth.json");
+      await mkdir(path.join(home, "native"));
+      await writeFile(
+        authPath,
+        JSON.stringify({
+          "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {
+            key: "synthetic-access",
+            auth_mode: "oidc",
+            oidc_issuer: "https://auth.x.ai",
+            oidc_client_id: "b1a00492-073a-47ea-816f-4c329264a828",
+            user_id: "synthetic",
+            expires_at: "2099-01-01T00:00:00Z",
+            create_time: new Date().toISOString(),
+          },
+        }),
+      );
+      let mainRequests = 0;
+      const nativeSessions = new Set<string>();
+      const bridgeFailures: unknown[] = [];
+      const bridge = createServer(async (request, reply) => {
+        try {
+          if (request.method === "GET") {
+            reply.setHeader("content-type", "application/json");
+            reply.end(
+              JSON.stringify({
+                default_model: "gpt-5.5",
+                data: [
+                  { id: "gpt-5.5", model: "gpt-5.5", api_backend: "responses" },
+                ],
+              }),
+            );
+            return;
+          }
+          let raw = "";
+          for await (const chunk of request) raw += chunk;
+          const sid = String(request.headers["x-grok-session-id"] ?? "");
+          if (
+            !sid ||
+            String(request.headers["x-grok-conv-id"] ?? "").startsWith(
+              "turn-summary-",
+            )
+          ) {
+            reply.setHeader("content-type", "text/event-stream");
+            reply.end(
+              `data: ${JSON.stringify({
+                type: "response.completed",
+                sequence_number: 1,
+                response: {
+                  id: "resp_title",
+                  object: "response",
+                  status: "completed",
+                  output: [
+                    {
+                      ...message,
+                      content: [
+                        {
+                          type: "output_text",
+                          text: "Synthetic refusal test",
+                          annotations: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              })}\n\n`,
+            );
+            return;
+          }
+          mainRequests++;
+          nativeSessions.add(sid);
+          const result = await app.inject({
+            method: "POST",
+            url: `/v1/openai/${agent.id}/responses`,
+            headers: {
+              authorization: "Bearer test-key",
+              "x-archestra-virtual-key": platformKey,
+              "x-grok-client-identifier": "grok-shell",
+              "x-grok-session-id": sid,
+            },
+            payload: JSON.parse(raw),
+          });
+          reply.writeHead(result.statusCode, {
+            "content-type":
+              result.headers["content-type"] ?? "text/event-stream",
+          });
+          reply.end(result.body);
+        } catch (error) {
+          bridgeFailures.push(error);
+          reply.writeHead(500).end("Synthetic bridge failed");
+        }
+      });
+      await new Promise<void>((resolve) =>
+        bridge.listen(0, "127.0.0.1", resolve),
+      );
+      let child: ReturnType<typeof spawn> | undefined;
+      try {
+        const env = Object.fromEntries(
+          Object.entries(process.env).filter(
+            ([key]) => !/^(GROK_|XAI_)/.test(key),
+          ),
+        );
+        Object.assign(env, {
+          HOME: home,
+          GROK_HOME: path.join(home, "native"),
+          GROK_AUTH_PATH: authPath,
+          GROK_CLI_CHAT_PROXY_BASE_URL: `http://127.0.0.1:${(bridge.address() as { port: number }).port}`,
+          GROK_DISABLE_AUTOUPDATER: "1",
+          GROK_TELEMETRY_ENABLED: "0",
+          GROK_DISABLE_API_KEY_AUTH: "1",
+          NO_PROXY: "127.0.0.1",
+        });
+        const result = await new Promise<{
+          code: number | null;
+          stdout: string;
+          stderr: string;
+        }>((resolve, reject) => {
+          child = spawn(
+            process.env.ARCHESTRA_GROK_TEST_BINARY as string,
+            [
+              "--permission-mode=bypassPermissions",
+              "-m",
+              "gpt-5.5",
+              "-p",
+              "Attempt one unknown native resume and stop if refused.",
+              "--output-format=json",
+              "--max-turns",
+              "2",
+            ],
+            { cwd: home, env, stdio: ["ignore", "pipe", "pipe"] },
+          );
+          let stdout = "",
+            stderr = "";
+          child.stdout?.on("data", (chunk) => {
+            stdout += chunk;
+          });
+          child.stderr?.on("data", (chunk) => {
+            stderr += chunk;
+          });
+          const timer = setTimeout(() => child?.kill("SIGKILL"), 15000);
+          child.once("error", reject);
+          child.once("close", (code) => {
+            clearTimeout(timer);
+            resolve({ code, stdout, stderr });
+          });
+        });
+        expect(bridgeFailures).toEqual([]);
+        expect(result.code, result.stderr.slice(-1500)).toBe(0);
+        expect(result.stdout).toContain("no child was started");
+        expect(mainRequests).toBe(1);
+        expect(nativeSessions.size).toBe(1);
+      } finally {
+        child?.kill("SIGTERM");
+        bridge.closeAllConnections();
+        await new Promise<void>((resolve) => bridge.close(() => resolve()));
+        await rm(home, { recursive: true, force: true });
+      }
+    }
   });
 
   test("Copilot CLI subagents bind through the task prompt's delegation marker and are refused without one", async () => {
@@ -3977,9 +4731,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       { role: "user", content: "Continue the original task" },
     ]);
     expect(ordinary.statusCode, ordinary.body).toBe(200);
-    expect(noticeFrom(ordinary.body, stream).name).toBe(
-      "archestra__get_remedy_plans",
-    );
+    expect(noticeFrom(ordinary.body, stream).name).toBeUndefined();
+    expect(ordinary.body).toContain("Do not retry ordinary tools");
     expect(
       events.filter(
         (event) => event.event === "tool_call" && event.tool === "Bash",
@@ -4024,7 +4777,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(noticeFrom(reviewed.body, stream).name).toBe(
         reviewedTool === "archestra__yell"
           ? "archestra__execute_remedy_plan"
-          : "archestra__get_remedy_plans",
+          : undefined,
       );
     }
     recoveryReview.mockRestore();
@@ -15890,15 +16643,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(await parentTurns([carried[0]])).toEqual([200, 200]);
       }
       if (answers[0] === "") {
-        // A turn with no text ends as a turn. A child end with no value would
-        // end the child: the runtime then denies its tool calls and blocks its
-        // answer to a follow-up.
+        // The runtime applies the recorded return contract to an empty turn.
+        // A child with a crossing return stays open for a follow-up.
         expect(events.filter((event) => event.event === "child_end")).toEqual(
           [],
         );
         expect(events).toContainEqual(
           expect.objectContaining({
-            event: "turn_end",
+            event: "child_turn_end",
             session_id: childSession,
           }),
         );

@@ -2,7 +2,10 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
-import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import type {
+  GatewayToolIdentity,
+  ToolNameResolution,
+} from "@/routes/proxy/utils/gateway-tool-names";
 import type { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
 
@@ -18,12 +21,23 @@ export const APPA_CHILD_TRAJECTORY_RECEIPT: unique symbol = Symbol(
   "archestra.appa.child-trajectory-receipt",
 );
 
-/** Withdraw prior child-return guidance after an operator waiver. */
+export const GROK_DEFERRED_TOOLS = Symbol("grok-deferred-tools");
+
+/** Admission verified a waived child; withdraw old guidance without governing it. */
 export const APPA_WITHDRAWN_CHILD_RETURN = Symbol(
   "archestra.appa.withdrawn-child-return",
 );
 
+/** The route supplies a turn-scoped recovery budget without exposing its catalog. */
+export type GrokDeferredToolRecovery = {
+  recoverySearch(call: {
+    name: string;
+    arguments: string;
+  }): boolean | undefined;
+};
+
 export type AppaChildTrajectoryReceiptOutput = {
+  compactSession?: OpenAppaSession;
   footer: string;
   inHistory: boolean;
 };
@@ -162,9 +176,16 @@ export type AppaClientAdapter = {
   readonly trajectoryPrefix: string;
   /** Client signals select tool syntax, not authority; they may be spoofed. */
   matches(context: AppaMatchContext): boolean;
+  /** Explicit native headless signal, equivalent to the client's unattended header. */
+  isUnattended?(headers: IncomingHttpHeaders): boolean;
   /** `namespace` is the tool group the request declared the name under, if any. */
   classifyToolName(name: string, namespace?: string): "gateway" | "local";
   normalizeLocalToolName(name: string): string;
+  nativeDispatch?: ToolNameResolution["nativeDispatch"];
+  blockedToolReason?(
+    name: string,
+    args: string | Record<string, unknown>,
+  ): string | undefined;
   /**
    * The client's own question tool. Its results need the same decision
    * guidance as ask_user. Clients without MCP forms may also provide an
@@ -227,6 +248,11 @@ export type AppaClientAdapter = {
    * can carry a denial while the gateway notice tool is not declared yet.
    */
   readonly pendingServersTool?: string;
+  /** Native catalog search used once to load deferred gateway remedy tools. */
+  gatewayToolsSearch?(serverName: string): {
+    name: string;
+    arguments: string;
+  };
   /**
    * On the Anthropic Messages wire, the client answers a call to a tool it
    * never declared with an error result and goes on with its turn. A denial
@@ -279,7 +305,13 @@ export type AppaClientAdapter = {
    */
   reviewedSession?(context: AppaMatchContext): AppaReviewedSession | undefined;
   /** True when this local tool starts a delegated child run. */
-  isSpawnTool(name: string, namespace?: string): boolean;
+  isSpawnTool(name: string, namespace?: string, args?: unknown): boolean;
+  /** A continuation that still needs host lineage checks, even under a waiver. */
+  isChildContinuationTool?(
+    name: string,
+    namespace?: string,
+    args?: unknown,
+  ): boolean;
   /**
    * Classifies a native spawn launch result. A successful launch stays
    * pending until the child binds the prepared fork. A failed launch closes
@@ -292,6 +324,11 @@ export type AppaClientAdapter = {
   isChildCompletionResult?(result: CommonToolResult): boolean;
   /** Returns bounded launch metadata and strips arbitrary acknowledgment text. */
   normalizeChildLaunchResult?(result: CommonToolResult): string | undefined;
+  /** Rebuilds a native completion using only the verified identity and value. */
+  formatChildReturn?(params: {
+    childNativeId: string | undefined;
+    value: string;
+  }): string;
   /**
    * The client resumes the parent's conversation by itself when a child it
    * launched in the background finishes, and hands the parent its return
@@ -302,6 +339,12 @@ export type AppaClientAdapter = {
    * keeps its spawn open across turns by itself.
    */
   readonly resumesForBackgroundReturns?: true;
+  /**
+   * Automatic notifications and explicit polls can repeat the same ended
+   * value. Reuse a retained crossing only with an exact native child ID and
+   * value match; a client's envelope alone never proves a return.
+   */
+  readonly repeatsChildReturns?: true;
   /**
    * Reads a native message between agents of one session, such as a
    * teammate writing to its lead. `to` is the recipient as the client names
@@ -331,7 +374,11 @@ export type AppaClientAdapter = {
     records: readonly string[],
   ): { content: unknown; withheld: boolean };
   /** Rewrites a native message call so the recipient gets `value` instead. */
-  rewriteRelayMessage?(args: unknown, value: string): string;
+  rewriteRelayMessage?(
+    args: unknown,
+    value: string,
+    context?: { senderSessionId: string },
+  ): string;
   /**
    * The messages that arrived in this request's history from other agents,
    * each with a setter that replaces the message text the model reads.
@@ -429,6 +476,8 @@ export type AppaRelayMessage = {
 
 export type AppaRelayRecipient =
   | { kind: "lead" }
+  /** An exact native child identity, never a name, prefix, or display alias. */
+  | { kind: "native-child"; id: string }
   | {
       kind: "teammate";
       name: string;
@@ -458,6 +507,8 @@ export type AppaRelayArrival = {
   kind: "teammate" | "agent" | "coordinator" | "session";
   /** The sender as the client names it. */
   from: string;
+  /** Envelope hint only; the persisted family and runtime release verify it. */
+  senderSessionId?: string;
   /**
    * For a client that names its agents by place, whether the sender is one
    * of this agent's children or one of its siblings. Without it, the sender
@@ -497,6 +548,8 @@ export type AskUserArguments = {
    */
   shortQuestion?: string;
   callPreview?: string;
+  /** Complete, unwrapped server-held review for plain-text native previews. */
+  plainCallPreview?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
   /** A server-held review's option `preview` replaces its `callPreview`. */

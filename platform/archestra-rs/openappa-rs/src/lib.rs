@@ -61,7 +61,7 @@ use appa_eventlog::{
     postgres::{LeaseError, PostgresError},
 };
 use appa_runtime::{
-    api::{ExecuteRemedyPlanArgs, PublishedDeployment, Runtime},
+    api::{ExecuteRemedyPlanArgs, PublishedDeployment, RemedyAttempt, Runtime},
     hooks,
 };
 use appa_runtime_api::{
@@ -437,7 +437,7 @@ impl State {
                 labels::ChangeEvent::ToolResult
             }
             HookEventKind::Remedy => labels::ChangeEvent::Remedy,
-            HookEventKind::ChildReturn | HookEventKind::ChildEnd => {
+            HookEventKind::ChildReturn | HookEventKind::ChildEnd | HookEventKind::ChildTurnEnd => {
                 labels::ChangeEvent::ChildReturn
             }
             HookEventKind::Yell
@@ -809,9 +809,20 @@ impl State {
                 // A return declared ahead of its spawn names no offer, so no call presented one.
                 None => Default::default(),
             };
+            // The provider call id survives a client retry, so a replayed declaration answers
+            // from its record. Without one the runtime refuses to declare ahead.
+            let attempt = input
+                .tool_call_id
+                .as_ref()
+                .map(|tool_call_id| RemedyAttempt(format!("remedy:{tool_call_id}")));
             let outcome = self
                 .runtime
-                .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
+                .execute_embedded_remedy_with_options(
+                    &actor,
+                    args,
+                    presentation_options(&input),
+                    attempt,
+                )
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
@@ -935,6 +946,13 @@ impl State {
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
+                },
+                HookEventKind::ChildTurnEnd => HookEvent::ChildTurnEnd {
+                    root: actor.root.clone(),
+                    child: actor
+                        .child
+                        .clone()
+                        .ok_or_else(|| invalid_input("not a child session"))?,
                 },
                 HookEventKind::ChildEnd => HookEvent::ChildEnd {
                     root: actor.root.clone(),

@@ -461,6 +461,9 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      grokToolNames:
+        /^grok-cli\//i.test(String(request.headers["user-agent"] ?? "")) ||
+        request.headers["x-archestra-agent-id"] === "grok-build",
       openappaSession,
       currentToolCallId,
       agentId: profileId,

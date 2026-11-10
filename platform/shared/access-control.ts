@@ -1130,6 +1130,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // only obtains the caller's own OAuth credential for a new personal xAI
   // (SuperGrok subscription) key.
   [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiNativeMetadataWithDefaultAgent]: {},
+  [RouteId.XaiNativeMetadataWithAgent]: {},
+  [RouteId.XaiNativePrivacyWithDefaultAgent]: {},
+  [RouteId.XaiNativePrivacyWithAgent]: {},
   [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {},
   [RouteId.UpdateLlmProviderApiKey]: {},

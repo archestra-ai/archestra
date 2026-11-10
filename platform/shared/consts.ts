@@ -317,6 +317,13 @@ export const COPILOT_ENV_HANDLED_MARKER = "ARCHESTRA_COPILOT_ENV_HANDLED";
  * guard entry — its connect is reversed from the Disconnect panel instead.
  */
 export const STARTUP_GUARD_INSTALL = {
+  "grok-build": {
+    scriptRelpath: ".archestra/grok/startup.sh",
+    psScriptRelpath: ".archestra/grok/startup.ps1",
+    skipRelpath: ".archestra/grok/startup.skip",
+    markerStart: "# BEGIN ARCHESTRA MANAGED GROK",
+    markerEnd: "# END ARCHESTRA MANAGED GROK",
+  },
   pi: {
     scriptRelpath: ".archestra/pi/startup.sh",
     psScriptRelpath: ".archestra/pi/startup.ps1",

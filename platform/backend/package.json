@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.5.0-rc.28",
+  "version": "1.5.0-rc.29",
   "description": "",
   "author": "",
   "private": true,
@@ -39,6 +39,7 @@
     "knip:production": "tsx ../scripts/heavy-lane.ts --label \"knip --production (backend)\" -- knip --production",
     "type-check": "tsx ../scripts/type-check.ts --noEmit",
     "update:openappa-template": "node scripts/update-openappa-template.mjs",
+    "generate:grok-toml": "node scripts/generate-grok-toml.mjs",
     "check:migrations": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-drizzle-migration-journal.ts && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:layers": "node scripts/check-layers.mjs",

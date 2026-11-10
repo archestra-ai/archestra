@@ -10,6 +10,81 @@ const kiloHeaders = {
 const carrier = "CHILD-ANSWER\n\n▄█▄▄▄█▄\n██▄█▄██  finished subagent ABC-DEFG";
 const taskResult = `<task id="ses_child" state="completed">\n<summary>UNTRUSTED SUMMARY</summary>\n<task_result>\n${carrier}\n</task_result>\n</task>`;
 
+test.each([
+  "openai:responses",
+  "openai:chatCompletions",
+] as const)("%s memory cleanup preserves exact child bytes and does not adopt embedded receipts", (family) => {
+  const child = "00000000-0000-4000-8000-000000000001";
+  const value = "\n  EXACT_CHILD_VALUE\n";
+  const entries = [
+    {
+      type: "assistant",
+      content: "▄█▄▄▄█▄  protected session ABC-DEFG\n\nCalling child",
+      tool_calls: [{ id: "spawn", name: "spawn_subagent", arguments: "{}" }],
+    },
+    {
+      type: "tool_result",
+      tool_call_id: "spawn",
+      content: `▄█▄▄▄█▄  started subagent ABC-DEFG@aaaaaaaaaaaaaaaaaaaaaa\n\n${value}\n\n▄█▄▄▄█▄  finished subagent ABC-DEFG\n\n<subagent_result>\nsubagent_id: ${child}\nTo continue this subagent's conversation, use resume_from="${child}".\n</subagent_result>`,
+    },
+  ];
+  const text =
+    "session_id=synthetic-root\nfrom_turn=1\nthrough_turn=1\ndurable_conversation_json:\n" +
+    JSON.stringify(entries);
+  const messages = [{ role: "user", content: text }];
+  const body =
+    family === "openai:responses" ? { input: messages } : { messages };
+  const request = {
+    headers: {
+      "x-grok-client-identifier": "grok-shell",
+      "x-grok-session-id": "synthetic-root",
+    },
+    url: "/v1/xai/agent/responses",
+  } as unknown as FastifyRequest;
+  for (let replay = 0; replay < 2; replay++) {
+    const ingress = scrubOpenappaIngress({
+      request,
+      body,
+      interactionType: family,
+    });
+    expect(ingress.childReturnRefusal).toBeUndefined();
+    expect(ingress.childReturns?.completions).toEqual([
+      expect.objectContaining({
+        value,
+        childNativeId: child,
+        envelopeId: "spawn",
+        assistantOrigin: false,
+      }),
+    ]);
+    expect(ingress.strippedReceiptCodes).toEqual([]);
+    expect(ingress.childTrajectoryReferences).toEqual([]);
+    expect(ingress.childTrajectoryReceipts ?? []).toEqual([]);
+    expect(messages[0].content).not.toContain("subagent_result");
+    expect(messages[0].content).not.toContain("▄█▄▄▄█▄");
+  }
+});
+
+test.each([
+  "grok-shell",
+  "grok-pager",
+])("%s turn summaries are compaction requests, so they cannot finish a child", (identifier) => {
+  const request = {
+    headers: {
+      "x-grok-client-identifier": identifier,
+      "x-grok-session-id": "synthetic-child",
+      "x-grok-conv-id": "turn-summary-synthetic",
+    },
+    url: "/v1/xai/agent/responses",
+  } as unknown as FastifyRequest;
+  expect(
+    scrubOpenappaIngress({
+      request,
+      body: { input: [{ role: "user", content: "Summarize the prior turn." }] },
+      interactionType: "openai:responses",
+    }).clientCompaction,
+  ).toBe(true);
+});
+
 describe("ingress on a Model Router translated wire", () => {
   test("uses what the route collected from the client's wire", () => {
     const request = fakeRequest();

@@ -20,6 +20,7 @@ import {
 import { UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { grokToolName } from "./grok-tool-names";
 import mcpGatewayRoutes from "./index";
 import { PendingInboundRequests } from "./pending-inbound-requests";
 import { cachedPendingRequests } from "./pending-inbound-shared";
@@ -43,11 +44,15 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     await app.close();
   });
 
-  test("a client on the stateless revision gets its question as an input request, never mid-call", async ({
-    makeAgent,
-    makeOrganization,
-    makeServiceAccountToken,
-  }) => {
+  test.for([
+    { client: "standard direct", grok: false, dispatch: false },
+    { client: "standard run_tool", grok: false, dispatch: true },
+    { client: "Grok direct", grok: true, dispatch: false },
+    { client: "Grok run_tool", grok: true, dispatch: true },
+  ])("$client answers a stateless question on its exact original request", async ({
+    grok,
+    dispatch,
+  }, { makeAgent, makeOrganization, makeServiceAccountToken }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
@@ -55,6 +60,17 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+    const questionArgs = {
+      question: "Which verification marker?",
+      options: [{ label: "ALPHA" }, { label: "BETA" }],
+    };
+    const canonicalName = dispatch
+      ? "archestra__run_tool"
+      : "archestra__ask_user";
+    const name = grok ? grokToolName(canonicalName) : canonicalName;
+    const args = dispatch
+      ? { tool_name: "archestra__ask_user", tool_args: questionArgs }
+      : questionArgs;
     const call = (extraParams: Record<string, unknown>) =>
       fetch(url, {
         method: "POST",
@@ -62,19 +78,14 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
           authorization: `Bearer ${token.value}`,
+          ...(grok ? { "user-agent": "grok-cli/1.0.70" } : {}),
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "tools/call",
           params: {
-            name: "archestra__ask_user",
-            arguments: {
-              question: "Accept this change for the rest of this session?",
-              options: [
-                { label: "Accept for this session" },
-                { label: "Do not accept" },
-              ],
-            },
+            name,
+            arguments: args,
             // Capabilities on the request itself: a 2026-07-28 client.
             _meta: {
               [MCP_CLIENT_CAPABILITIES_META_KEY]: { elicitation: {} },
@@ -96,34 +107,69 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
         gateway_elicitation: {
           method: "elicitation/create",
           params: {
-            message: "Accept this change for the rest of this session?",
+            message: "Which verification marker?",
           },
         },
       },
     });
 
-    const answered = await firstMessage(
-      await call({
-        inputResponses: {
-          gateway_elicitation: {
-            action: "accept",
-            content: { choice: "Accept for this session" },
-          },
-        },
-        requestState: interim.requestState,
-      }),
-    );
-    expect(answered).toMatchObject({
-      id: 2,
-      result: {
-        // Such a client rejects a result that does not say it is complete.
-        resultType: "complete",
-        structuredContent: {
+    const answer = {
+      inputResponses: {
+        gateway_elicitation: {
           action: "accept",
-          selected: ["Accept for this session"],
+          content: { choice: "BETA" },
         },
       },
-    });
+      requestState: interim.requestState,
+    };
+    // Keeping the original wire identity must not let a caller transfer its
+    // answer to another tool or to a changed question.
+    for (const changed of [
+      { name: grok ? grokToolName("archestra__whoami") : "archestra__whoami" },
+      { arguments: { ...args, question: "A different question" } },
+    ]) {
+      const rejected = await firstMessage(
+        await call({ ...answer, ...changed }),
+      );
+      expect(rejected).toMatchObject({
+        error: {
+          code: -32602,
+          message: "Invalid requestState (request_mismatch).",
+        },
+      });
+    }
+
+    // Repeating the answered request after a lost response also completes;
+    // it must never open the form again.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const answered = await firstMessage(await call(answer));
+      expect(answered.error).toBeUndefined();
+      expect(answered).toMatchObject({
+        id: 2,
+        result: {
+          // Such a client rejects a result that does not say it is complete.
+          resultType: "complete",
+          structuredContent: {
+            action: "accept",
+            selected: ["BETA"],
+          },
+        },
+      });
+    }
+    if (grok) {
+      const renamed = await firstMessage(
+        await call({
+          ...answer,
+          name: canonicalName,
+        }),
+      );
+      expect(renamed).toMatchObject({
+        error: {
+          code: -32602,
+          message: "Invalid requestState (request_mismatch).",
+        },
+      });
+    }
   });
 
   test("a legacy client that declared elicitation at initialize gets the same round trip", async ({

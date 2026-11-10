@@ -136,7 +136,10 @@ import {
   scrubOpenappaIngress,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
-import { APPA_WITHDRAWN_CHILD_RETURN } from "@/proxy/plugins/appa-plugin-archestra/types";
+import {
+  APPA_WITHDRAWN_CHILD_RETURN,
+  GROK_DEFERRED_TOOLS,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -256,6 +259,7 @@ import {
   redactEncryptedChatInteraction,
   resolveEncryptedChatAuditContext,
 } from "./utils/encrypted-chat-session";
+import { GrokDeferredTools } from "./utils/grok-deferred-tools";
 import type { SessionSource } from "./utils/headers/session-id";
 
 const {
@@ -735,6 +739,11 @@ async function handleObservedLLMProxy<
 
   // Removes gateway tool attestation markers from the body in place
   // before adapters, logs, provider requests, or database records access them.
+  const grokDeferred =
+    utils.headers.clientApp.detectGrokClientId(request.headers) ||
+    request.headers["x-archestra-agent-id"] === "grok-build"
+      ? new GrokDeferredTools(body)
+      : undefined;
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
@@ -1628,6 +1637,14 @@ async function handleObservedLLMProxy<
       organizationId: resolvedAgent.organizationId,
       llmProxyId: resolvedAgent.id,
     });
+    if (appaActive && hasProxyPlugins && grokDeferred)
+      gatewayToolDeclarations.push(
+        ...grokDeferred.prepare({
+          organizationId: resolvedAgent.organizationId,
+          interactionType: provider.interactionType,
+          body,
+        }),
+      );
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
@@ -1635,6 +1652,7 @@ async function handleObservedLLMProxy<
         internalChat: isInternalChat,
         clientBindings,
       });
+    grokDeferred?.bindIdentity(toolIdentity);
 
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
@@ -1893,6 +1911,8 @@ async function handleObservedLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      if (appaActive && grokDeferred)
+        pluginContext.resources.set(GROK_DEFERRED_TOOLS, grokDeferred);
       if (
         (admission.kind === "ungoverned" || admission.kind === "waived") &&
         admission.withdrawnChildReturn
@@ -2113,7 +2133,10 @@ async function handleObservedLLMProxy<
     // Every request owns its upstream work, including retries and pool members.
     const abortSignal = clientDisconnectSignal({ request, reply });
     const createUpstreamClient = (target: {
-      adapter: Pick<typeof provider, "createClient" | "provider">;
+      adapter: Pick<
+        typeof provider,
+        "createClient" | "provider" | "isSubscriptionCredential"
+      >;
       apiKey: string | undefined;
       baseUrl: string | undefined;
       headers: Record<string, string>;
@@ -2141,6 +2164,14 @@ async function handleObservedLLMProxy<
         llmProviderApiKeyId: target.providerApiKeyId,
         sessionId: sessionId ?? undefined,
         onResponseHeaders: (responseHeaders) => {
+          if (target.adapter.provider === "xai") {
+            billingMode = utils.resolveInteractionBillingMode({
+              isSubscriptionCredential:
+                target.adapter.isSubscriptionCredential?.(target.apiKey) ===
+                true,
+              autodetectEnabled: config.llmCost.subscriptionAutodetect,
+            });
+          }
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
@@ -3942,6 +3973,7 @@ async function handleStreaming<
         ? codexError.completion.choices[0].finish_reason
         : "error";
     }
+    if (provider.provider === "xai") billingMode = getBillingMode();
     const eofError =
       error instanceof ResponsesStreamIncompleteError &&
       appaWireFamily(provider.interactionType) === "openai:responses"
@@ -5096,20 +5128,25 @@ async function evaluateProxyPluginToolCalls(
         ? call.arguments
         : JSON.stringify(call.arguments),
   }));
+  const grokDeferred = context.resources.get(GROK_DEFERRED_TOOLS) as
+    | GrokDeferredTools
+    | undefined;
   const outcome = await registry.onToolCalls({
     ...context,
-    toolCalls,
+    toolCalls: grokDeferred?.unwrapCalls(toolCalls) ?? toolCalls,
     canRewriteToolCalls,
     canShowToolCallReview,
   });
   if (outcome.decision === "allow") {
-    const releasedCalls = outcome.toolCalls.map((toolCall) => ({
+    const authorizedCalls = outcome.toolCalls.map((toolCall) => ({
       ...toolCall,
       arguments:
         typeof toolCall.arguments === "string"
           ? toolCall.arguments
           : JSON.stringify(toolCall.arguments),
     }));
+    const releasedCalls =
+      grokDeferred?.wrapCalls(authorizedCalls) ?? authorizedCalls;
     return {
       refusal: null,
       toolCalls: releasedCalls,

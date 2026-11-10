@@ -59,6 +59,9 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "perplexity:responses",
   "groq:chatCompletions",
   "xai:chatCompletions",
+  // Official managed native Grok sessions speak Responses. API-key and virtual
+  // paths stay on chat completions.
+  "xai:responses",
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",

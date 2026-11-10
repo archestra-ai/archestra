@@ -233,6 +233,48 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     }
   };
 
+  const rootOf = async (session) => (await client.query(
+    'SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2',
+    [session.organization_id, session.session_id],
+  )).rows[0].root;
+  // Fails every append to one family's event log, so a dispatch errors before
+  // the runtime keeps anything. Only the trigger and function this call
+  // created are dropped afterwards.
+  const failEventAppend = async (root, fn) => {
+    const name = 'openappa_lease_fail_openappa_events';
+    await client.query(`CREATE OR REPLACE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected event append failure'; END $$`);
+    await client.query(`DROP TRIGGER IF EXISTS ${name} ON openappa_events`);
+    await client.query(`CREATE TRIGGER ${name} BEFORE INSERT ON openappa_events FOR EACH ROW WHEN (NEW.root = '${root}') EXECUTE FUNCTION ${name}()`);
+    try {
+      await fn();
+    } finally {
+      await client.query(`DROP TRIGGER IF EXISTS ${name} ON openappa_events`);
+      await client.query(`DROP FUNCTION IF EXISTS ${name}()`);
+    }
+  };
+  // The attempts the family's log recorded declarations ahead under, in log order.
+  const aheadDeclarations = async (session) => (await client.query(
+    `SELECT convert_from(payload, 'UTF8')::jsonb #>> '{host,attempt,host}' AS attempt FROM openappa_events
+       WHERE root = (SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2)
+         AND convert_from(payload, 'UTF8')::jsonb #>> '{host,kind}' = 'ahead_declared'
+       ORDER BY seq`,
+    [session.organization_id, session.session_id],
+  )).rows.map((row) => row.attempt);
+  const delegation = { control_tool: 'archestra__execute_remedy_plan', supports_delegation: true };
+  const spawnOf = (session, id) => ({
+    ...session, event: 'tool_call', operation_id: `call:${id}`, tool: 'agent__worker',
+    arguments: { message: 'count the days' }, spawn: true, presentation: delegation,
+  });
+  // A return declared ahead of the spawn quotes no offer.
+  const declareAhead = (session, id) => remedy(session, { tool_call_id: id, arguments: { label: {} }, presentation: delegation });
+  // The declaration released exactly one spawn.
+  const releasedOnce = async (session) => {
+    const spawned = await run(spawnOf(session, 's1'));
+    assert.equal(spawned.decision, 'allow_call', JSON.stringify(spawned));
+    assert.ok(spawned.spawn_binding, 'the spawn starts its child under the declared return');
+    assert.equal((await run(spawnOf(session, 's2'))).decision, 'deny_call', 'a declaration covers one spawn');
+  };
+
   t.after(async () => {
     // Answer consults still held so a pod can end, then end any pod still
     // running: a cancelled assertion must not strand a fixture child.
@@ -604,6 +646,48 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.equal(recoveredResult.approved_output, 'worker done');
     assert.deepEqual(await resultReceipts(session), ['s1=complete', 's1:return=complete']);
     assert.deepEqual(await run(spawnResult), recoveredResult, 'the spawn result replays byte-identically');
+  });
+
+  await t.test('a declaration ahead whose append failed keeps nothing and is declared by its retry', async () => {
+    const session = scope();
+    assert.equal((await run(toolCall(session, 'start', 'read_plain'))).decision, 'allow_call');
+    const before = await receipts(session);
+    await failEventAppend(await rootOf(session), async () => {
+      const failed = await declareAhead(session, 'ahead');
+      assert.equal(typeof failed.error, 'string', 'an operational failure, not an answer');
+      assert.equal(failed.result, undefined, JSON.stringify(failed));
+    });
+    assert.deepEqual(await receipts(session), before, 'no remedy receipt stands');
+    assert.deepEqual(await resultReceipts(session), []);
+    assert.deepEqual(await liveLeases(session), []);
+    assert.deepEqual(await aheadDeclarations(session), []);
+
+    const declared = await declareAhead(session, 'ahead');
+    assert.equal(declared.result?.isError, false, JSON.stringify(declared));
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+    assert.deepEqual(await receipts(session), [...before, 'remedy:ahead=complete']);
+    await releasedOnce(session);
+  });
+
+  await t.test('a declaration ahead interrupted before its receipt completes is answered from its record', async () => {
+    const session = scope();
+    assert.equal((await run(toolCall(session, 'start', 'read_plain'))).decision, 'allow_call');
+    await failCompletion('openappa_operations', 'operation_id', 'remedy:ahead', async () => {
+      const failed = await declareAhead(session, 'ahead');
+      assert.equal(typeof failed.error, 'string', 'an operational failure, not an answer');
+      assert.equal(failed.result, undefined, JSON.stringify(failed));
+    });
+    assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=pending']);
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+
+    const committedEvents = await eventCount(session);
+    const recovered = await declareAhead(session, 'ahead');
+    assert.equal(recovered.result?.isError, false, JSON.stringify(recovered));
+    assert.equal(await eventCount(session), committedEvents, 'the retry takes the receipt over and declares nothing again');
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+    assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=complete']);
+    assert.deepEqual(await declareAhead(session, 'ahead'), recovered, 'the completed receipt replays byte-identically');
+    await releasedOnce(session);
   });
 
   await t.test('a cancellation interrupted before its receipt completes replays the withholding', async () => {

@@ -17,6 +17,8 @@ import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
+import { grokToolName } from "@/routes/mcp-gateway/grok-tool-names";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
@@ -454,6 +456,54 @@ describe("APPA feature boundary", () => {
       ),
     ).resolves.toMatchObject({ isError: true });
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "probe__read_note",
+    "gateway__archestra__execute_remedy_plan",
+    "gateway__archestra__ask_user",
+  ])("Grok evaluates the dispatched target %s and cannot borrow control or approval authority", async (target) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "Target is not allowed",
+      }),
+    );
+    const adapter = new AppaGrokAdapter();
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "dispatch",
+          name: "use_tool",
+          arguments: { tool_name: target, tool_input: { path: "private.txt" } },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        nativeDispatch: adapter.nativeDispatch.bind(adapter),
+        control: { name: "archestra__execute_remedy_plan" },
+      },
+    );
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: "Target is not allowed",
+        offers: undefined,
+        recorded: true,
+      },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:dispatch",
+        tool: `unverified.${grokToolName(target)}`,
+        arguments: { path: "private.txt" },
+        dispatch: "use_tool",
+      }),
+    );
   });
 
   test("a turn that began while enabled finishes after the switch turns off", async () => {

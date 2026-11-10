@@ -147,15 +147,89 @@ const INCLUDABLE = ["tool", "annotator", "authority", "sanitizer"] as const;
 type Includable = (typeof INCLUDABLE)[number];
 
 /** The folder of the MCP servers' own rules files, beside `appa.toml`. */
-export const SERVER_RULES_FOLDER = "mcp";
+const SERVER_RULES_FOLDER = "mcp";
 
 /**
- * The include entry for every server rules file the commit holds. It is
- * Archestra's spelling: OpenAPPA itself reads each include entry as one file,
- * so the repository's own `appa` checks cannot load it, and the policy check
- * Archestra posts on each pull request is what checks server files.
+ * The include entry for every server rules file the commit holds: a folder
+ * glob, as OpenAPPA 0.41 reads one, over the servers' folder.
  */
 export const SERVER_RULES_INCLUDE = `${SERVER_RULES_FOLDER}/*.toml`;
+
+/**
+ * An include entry that names every matching file in one folder, as OpenAPPA
+ * reads one: only the file name holds `*`, which matches any run of
+ * characters, and it ends in `.toml`. The matching files load at the entry's
+ * position in name order, as if `include` listed each; a hidden file does
+ * not match, nor does a file another entry names on its own, and two such
+ * entries cannot match the same file. Null for an entry without `*`.
+ * Throws for a glob OpenAPPA would refuse, naming why.
+ */
+export function parseIncludeGlob(
+  entry: string,
+): { folder: string; pattern: string } | null {
+  if (!entry.includes("*")) return null;
+  const slash = entry.lastIndexOf("/");
+  const folder = slash < 0 ? "" : entry.slice(0, slash);
+  const pattern = entry.slice(slash + 1);
+  const refuse = (reason: string) => {
+    throw new Error(
+      `include: ${JSON.stringify(entry)} is not a valid glob: ${reason}`,
+    );
+  };
+  if (folder.includes("*")) refuse("only the file name may hold `*`");
+  if (!pattern.endsWith(".toml")) refuse("the file name must end in `.toml`");
+  if (folder !== "" && !REPOSITORY_FOLDER.test(`${folder}/`))
+    refuse(
+      "the folder must be a folder beside the policy file, outside batteries/, with no `.` or `..` segment",
+    );
+  if (!GLOB_FILE_NAME.test(pattern))
+    refuse("the file name holds a character a policy file name cannot");
+  return { folder, pattern };
+}
+
+/** A folder segment list as a repository include may name, with its trailing slash. */
+const REPOSITORY_FOLDER =
+  /^(?!batteries\/)(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*$/;
+
+/** A glob's file name: the characters a policy file name may hold, and `*`. */
+const GLOB_FILE_NAME = /^[A-Za-z0-9_*-][A-Za-z0-9_.*-]*\.toml$/;
+
+/**
+ * Whether `name` matches a glob's file name, where `*` matches any run of
+ * characters, including none, and every other character matches itself.
+ */
+export function globFileNameMatches(pattern: string, name: string): boolean {
+  if (name.startsWith(".")) return false;
+  const parts = pattern.split("*");
+  const first = parts.shift() ?? "";
+  if (!name.startsWith(first)) return false;
+  let rest = name.slice(first.length);
+  const last = parts.pop();
+  if (last === undefined) return rest === "";
+  for (const part of parts) {
+    const at = rest.indexOf(part);
+    if (at < 0) return false;
+    rest = rest.slice(at + part.length);
+  }
+  return rest.length >= last.length && rest.endsWith(last);
+}
+
+/** Whether a glob entry names this file: same folder, matching name. */
+function globNames(entry: string, path: string): boolean {
+  let glob: ReturnType<typeof parseIncludeGlob>;
+  try {
+    glob = parseIncludeGlob(entry);
+  } catch {
+    return false;
+  }
+  if (!glob) return false;
+  const slash = path.lastIndexOf("/");
+  const folder = slash < 0 ? "" : path.slice(0, slash);
+  return (
+    folder === glob.folder &&
+    globFileNameMatches(glob.pattern, path.slice(slash + 1))
+  );
+}
 
 /** A server rules file by its path, `mcp/<prefix>.toml`; no hidden file. */
 const SERVER_RULES_FILE = /^mcp\/([^/.][^/]*)\.toml$/;
@@ -178,10 +252,15 @@ export const MAX_REPOSITORY_FILES = 512;
 
 /**
  * Whether an `include` entry names a file in the policy repository, or every
- * server rules file at once.
+ * matching file in one of its folders.
  */
 export function isRepositoryInclude(entry: string): boolean {
-  return entry === SERVER_RULES_INCLUDE || REPOSITORY_INCLUDE.test(entry);
+  if (REPOSITORY_INCLUDE.test(entry)) return true;
+  try {
+    return parseIncludeGlob(entry) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /** The file an MCP server's rules are kept in, by its tools' prefix. */
@@ -210,10 +289,11 @@ export function repositoryIncludePaths(content: string): string[] {
   );
 }
 
-/** Whether the root folds in this server rules file, by name or with all. */
+/** Whether the root folds in this server rules file, by name or by a glob. */
 export function includesServerRules(content: string, path: string): boolean {
-  const entries = repositoryIncludePaths(content);
-  return entries.includes(path) || entries.includes(SERVER_RULES_INCLUDE);
+  return repositoryIncludePaths(content).some(
+    (entry) => entry === path || globNames(entry, path),
+  );
 }
 
 /** The identity of one included file's bytes, for fingerprints and views. */
@@ -259,17 +339,22 @@ export function expandRepositoryIncludes(params: {
 } {
   const entries = repositoryIncludePaths(params.content);
   const covered = new Map<string, string[]>();
-  if (entries.length === 0)
+  const malformed = malformedGlobs(params.content);
+  if (entries.length === 0 && malformed.length === 0)
     return { content: params.content, errors: [], paths: [], covered };
   // The text parsed above, so this is a table.
   const document = parsePolicyToml(params.content) as Record<string, unknown>;
-  const errors: string[] = [];
+  const errors: string[] = [...malformed];
   const duplicated = entries.filter(
     (entry, index) => entries.indexOf(entry) !== index,
   );
   for (const entry of new Set(duplicated))
     errors.push(`include: ${JSON.stringify(entry)} is included more than once`);
-  const paths = includedPaths(entries, params.files);
+  const { paths, twice } = includedPaths(entries, params.files);
+  for (const path of twice)
+    errors.push(
+      `include: ${JSON.stringify(path)} matches more than one glob entry; a file loads at one entry only`,
+    );
   if (paths.length > MAX_REPOSITORY_FILES)
     errors.push(
       `include: ${paths.length} repository files are included; at most ${MAX_REPOSITORY_FILES} are allowed`,
@@ -487,21 +572,44 @@ export function governsServerTool(
 }
 
 /**
- * Every file the entries fold in, in order. `mcp/*.toml` stands for each
- * server rules file in `files` that the root does not name on its own, by name.
+ * Every file the entries fold in, in order. A glob entry stands for each
+ * file in `files` it matches that the root does not name on its own, in
+ * name order; `twice` lists the files two globs match, which OpenAPPA refuses.
  */
 function includedPaths(
   entries: readonly string[],
   files: ReadonlyMap<string, string>,
-): string[] {
-  const named = new Set(entries);
-  return [...named].flatMap((entry) =>
-    entry === SERVER_RULES_INCLUDE
-      ? [...files.keys()]
-          .filter((path) => isServerRulesFile(path) && !named.has(path))
-          .sort()
-      : [entry],
-  );
+): { paths: string[]; twice: string[] } {
+  const named = new Set(entries.filter((entry) => !entry.includes("*")));
+  const seen = new Set<string>();
+  const twice: string[] = [];
+  const paths = [...new Set(entries)].flatMap((entry) => {
+    if (!entry.includes("*")) return [entry];
+    const matched = [...files.keys()]
+      .filter((path) => !named.has(path) && globNames(entry, path))
+      .sort();
+    for (const path of matched)
+      if (seen.has(path)) twice.push(path);
+      else seen.add(path);
+    return matched.filter((path) => !twice.includes(path));
+  });
+  return { paths, twice: [...new Set(twice)] };
+}
+
+/** Why each `include` entry with `*` that OpenAPPA would refuse is refused. */
+function malformedGlobs(content: string): string[] {
+  if (!content.includes("*")) return [];
+  const include = parsePolicyToml(content)?.include;
+  if (!Array.isArray(include)) return [];
+  return include.flatMap((entry) => {
+    if (typeof entry !== "string" || !entry.includes("*")) return [];
+    try {
+      parseIncludeGlob(entry);
+      return [];
+    } catch (error) {
+      return [error instanceof Error ? error.message : String(error)];
+    }
+  });
 }
 
 function helperNames(entries: unknown): Set<string> {

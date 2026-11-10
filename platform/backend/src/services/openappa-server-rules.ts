@@ -82,6 +82,10 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     path: server.path,
     included,
     content: accepted,
+    // A server without a file yet starts from one that names every tool.
+    ...(accepted === null
+      ? { starter: starterServerRules(server, root.content) }
+      : {}),
     repository: repositoryView(source),
     tools: server.tools,
     // The organization's own rules for these tools come first, so they win.
@@ -93,9 +97,62 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
         ? "The user may read these rules but not propose a change: that takes edit access to this MCP server in the MCP registry."
-        : "To change these rules, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
+        : accepted === null
+          ? "This server has no rules file yet. Start from `starter`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees."
+          : "To change these rules, write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.",
     expectedCommit: source?.sourceCommit ?? null,
   };
+}
+
+/** The most tools the starter file lists one by one. */
+const STARTER_TOOLS = 60;
+
+/**
+ * The first version of a server's rules file: every tool named, with no
+ * rule, so the first proposal decides about each one on purpose. A tool the
+ * file writes no rule for keeps the organization's own defaults.
+ */
+function starterServerRules(
+  server: { name: string; prefix: string; tools: string[] },
+  root: string,
+): string {
+  const governed = new Set(
+    rootToolRules(root)
+      .filter((rule) => governsServerTool(server.prefix, rule))
+      .map((rule) => rule.name),
+  );
+  const lines = [
+    `# Guardrails rules for the MCP server ${server.name} (tools ${server.prefix}__*),`,
+    "# kept by the people who may edit the server in the MCP registry. The",
+    `# organization's appa.toml includes this file through ${SERVER_RULES_INCLUDE}.`,
+    "# A rule appa.toml keeps for the same tool wins over one written here.",
+    "",
+    "[policy]",
+    "version = 2",
+    "",
+    "# Each tool of the server. A tool with no rule here keeps the organization's",
+    "# defaults. Write a rule for one by uncommenting its entry; a rule for",
+    `# "${server.prefix}__*" covers every tool this file names no rule for,`,
+    "# including tools the server gains later.",
+  ];
+  for (const tool of server.tools.slice(0, STARTER_TOOLS)) {
+    lines.push(
+      "",
+      governed.has(tool)
+        ? `# ${tool}: appa.toml keeps its own rule for this tool, which wins.`
+        : `# ${tool}`,
+      "# [[policy.tool]]",
+      `# name = ${JSON.stringify(tool)}`,
+      "# requires = {}",
+      "# delta = {}",
+    );
+  }
+  if (server.tools.length > STARTER_TOOLS)
+    lines.push(
+      "",
+      `# ... and ${server.tools.length - STARTER_TOOLS} more tools, all ${server.prefix}__*.`,
+    );
+  return `${lines.join("\n")}\n`;
 }
 
 /** Check a proposed file for one server; saves and opens nothing. */

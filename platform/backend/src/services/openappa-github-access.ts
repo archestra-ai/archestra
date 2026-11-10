@@ -15,13 +15,12 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import ToolModel from "@/models/tool";
 import {
   expandRepositoryIncludes,
+  globFileNameMatches,
   isRepositoryInclude,
-  isServerRulesFile,
   MAX_REPOSITORY_FILES,
+  parseIncludeGlob,
   repositoryFileHash,
   repositoryIncludePaths,
-  SERVER_RULES_FOLDER,
-  SERVER_RULES_INCLUDE,
   serverCatchAllPrefixes,
   serverFilesDeclareAnnotators,
   withoutRepositoryIncludes,
@@ -501,17 +500,25 @@ class OpenAppaRepositoryIncludes {
       // Each file the entries name, by include entry, with its blob id.
       const wanted = new Map<string, string>();
       for (const entry of params.paths) {
-        if (entry === SERVER_RULES_INCLUDE) {
-          const names = await listed(SERVER_RULES_FOLDER);
-          if (names.size > MAX_REPOSITORY_FILES)
+        let glob: ReturnType<typeof parseIncludeGlob> = null;
+        try {
+          glob = parseIncludeGlob(entry);
+        } catch {
+          // The fold names the malformed entry; nothing to read for it.
+          continue;
+        }
+        if (glob) {
+          const names = await listed(glob.folder);
+          const matched = [...names].filter(([name]) =>
+            globFileNameMatches(glob.pattern, name),
+          );
+          if (matched.length > MAX_REPOSITORY_FILES)
             throw new ApiError(
               400,
-              `${SERVER_RULES_FOLDER}/ holds ${names.size} files; at most ${MAX_REPOSITORY_FILES} server rules files are read`,
+              `${entry} names ${matched.length} files; at most ${MAX_REPOSITORY_FILES} repository files are read`,
             );
-          for (const [name, blob] of names) {
-            const path = `${SERVER_RULES_FOLDER}/${name}`;
-            if (isServerRulesFile(path)) wanted.set(path, blob);
-          }
+          for (const [name, blob] of matched)
+            wanted.set(glob.folder ? `${glob.folder}/${name}` : name, blob);
           continue;
         }
         const slash = entry.lastIndexOf("/");

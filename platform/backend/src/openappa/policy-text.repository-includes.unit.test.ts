@@ -213,7 +213,8 @@ hint = "the root's"
     ])
       expect(isRepositoryInclude(entry)).toBe(false);
     expect(isRepositoryInclude("mcp/*.toml")).toBe(true);
-    expect(isRepositoryInclude("teams/*.toml")).toBe(false);
+    expect(isRepositoryInclude("teams/*.toml")).toBe(true);
+    expect(isRepositoryInclude("teams/*/rules.toml")).toBe(false);
     expect(serverRulesPath("payments_api")).toBe("mcp/payments_api.toml");
     expect(repositoryIncludePaths(ROOT)).toEqual([
       "mcp/payments_api.toml",
@@ -289,6 +290,85 @@ confined_results = ["crm__read_contact"]
       expandRepositoryIncludes({ content: root, files: files({}) }).errors,
     ).toEqual([
       'include: "mcp/helpdesk.toml" names no file in the policy repository at this commit',
+    ]);
+  });
+
+  test("any folder glob folds in the matching files in name order, once, as OpenAPPA reads one; a malformed glob or a file two globs match refuses the fold", () => {
+    const root = `include = ["batteries/archestra/appa.toml", "teams/payments.toml", "teams/*.toml", "policies/ops-*.toml", "mcp/*.toml"]
+[policy]
+version = 2
+`;
+    const rule = (name: string) =>
+      `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "${name}"\ndelta = {}\n`;
+    const expanded = expandRepositoryIncludes({
+      content: root,
+      files: files({
+        // Named on its own: loads at its entry, not again through the glob.
+        "teams/payments.toml": rule("payments_api__refund_payment"),
+        "teams/support.toml": rule("helpdesk__read_ticket"),
+        "teams/data.toml": rule("warehouse__query"),
+        // Not matched: a hidden file, a nested folder, another pattern.
+        "teams/.draft.toml": "not read",
+        "teams/archive/old.toml": "not read",
+        "policies/ops-shell.toml": rule("shell__run"),
+        "policies/dev-shell.toml": "not read",
+        "mcp/crm.toml": rule("crm__read_contact"),
+      }),
+    });
+    expect(expanded.errors).toEqual([]);
+    expect(expanded.paths).toEqual([
+      "teams/payments.toml",
+      "teams/data.toml",
+      "teams/support.toml",
+      "policies/ops-shell.toml",
+      "mcp/crm.toml",
+    ]);
+    const document = parse(expanded.content) as {
+      include: string[];
+      policy: { tool: Array<{ name: string }> };
+    };
+    expect(document.include).toEqual(["batteries/archestra/appa.toml"]);
+    expect(document.policy.tool.map((tool) => tool.name)).toEqual([
+      "payments_api__refund_payment",
+      "warehouse__query",
+      "helpdesk__read_ticket",
+      "shell__run",
+      "crm__read_contact",
+    ]);
+    // A server file is included through any glob that names it.
+    expect(
+      includesServerRules(
+        'include = ["mcp/pay*.toml"]',
+        "mcp/payments_api.toml",
+      ),
+    ).toBe(true);
+    expect(
+      includesServerRules('include = ["mcp/pay*.toml"]', "mcp/crm.toml"),
+    ).toBe(false);
+    expect(isRepositoryInclude("teams/*.toml")).toBe(true);
+    expect(isRepositoryInclude("*.toml")).toBe(true);
+    expect(isRepositoryInclude("teams/*/rules.toml")).toBe(false);
+    expect(isRepositoryInclude("batteries/*.toml")).toBe(false);
+    // What OpenAPPA refuses, refused here with its reason.
+    expect(
+      expandRepositoryIncludes({
+        content:
+          'include = ["teams/*/rules.toml", "mcp/*", "../x/*.toml"]\n[policy]\nversion = 2\n',
+        files: files({}),
+      }).errors,
+    ).toEqual([
+      'include: "teams/*/rules.toml" is not a valid glob: only the file name may hold `*`',
+      'include: "mcp/*" is not a valid glob: the file name must end in `.toml`',
+      'include: "../x/*.toml" is not a valid glob: the folder must be a folder beside the policy file, outside batteries/, with no `.` or `..` segment',
+    ]);
+    expect(
+      expandRepositoryIncludes({
+        content:
+          'include = ["teams/*.toml", "teams/pay*.toml"]\n[policy]\nversion = 2\n',
+        files: files({ "teams/payments.toml": rule("payments_api__x") }),
+      }).errors,
+    ).toEqual([
+      'include: "teams/payments.toml" matches more than one glob entry; a file loads at one entry only',
     ]);
   });
 

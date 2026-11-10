@@ -73,7 +73,9 @@ include = [
 ]
 ```
 
-OpenAPPA 0.41 and later read `mcp/*.toml` too, so `appa replay` in the repository's CI sees the server files. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, server files included, and that the person who asked may change each file.
+Any include entry may name every matching file in one folder this way, as OpenAPPA 0.41 and later read one: `teams/*.toml`, `policies/ops-*.toml`. Only the file name holds `*`, it ends in `.toml`, and the files load at the entry's position in name order, each once. Lay the repository out as you like and move files between folders freely; Git sync reads the files the commit holds. Only `mcp/<tool prefix>.toml` is a server's own file, held to that server's tools; a file anywhere else is organization policy, with no scope. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, every included file folded in.
+
+When two files write a rule for the same tool, the first one in the composed policy wins for a call, whole: the root's rules come first, then each included file's in `include` order, and a glob's files in name order. An exact tool name always beats `*`. So `appa.toml` overrides any included file, and an entry listed before `mcp/*.toml` overrides a server's file while one listed after it yields to it. Nothing merges and nothing warns: a shadowed rule is dead for that call. Two files cannot declare the same annotator.
 
 ### Before Editors Start
 
@@ -87,7 +89,7 @@ To merge, an editor needs write access to the repository on GitHub, or someone w
 
 ### Change a Server's Rules
 
-1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server.
+1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server. A server with no file yet starts from a file that names each of its tools with no rule, so the first change decides about every tool on purpose; a tool left without a rule keeps the organization's defaults.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
 4. When the **Guardrails Policy Admission** check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
@@ -100,14 +102,12 @@ What to know:
 
 ## Protect Each Server's File
 
-Only a server's own editors can change its rules file, and they need no one's approval: the policy check on each pull request decides who may change what, by the MCP Registry, and the branch rules make that check the gate. Archestra never merges anything itself. At each sync it keeps two things:
+A change from the APPA Keeper needs no one's approval: the policy check on its pull request confirms that the person who asked may edit that server, and the branch rules make the check the gate, so a server's only editor merges their own change. A pull request a person opens on GitHub is the repository's own business: who may open and merge one, and who reviews it, is set by GitHub's permissions, rulesets and any `CODEOWNERS` file you keep, none of which Archestra writes or reads. Archestra never merges anything itself. At each sync it keeps two things:
 
-- **The policy check:** every pull request into the synced branch gets the **Guardrails Policy Admission** check within a minute. It fails when Git sync would refuse the result, and when the person who asked may not change a file it touches: a server's file takes edit access to that server; `appa.toml`, any other `.toml` beside it and the validations take [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Files Git sync never reads are not checked. The check's name, and the ruleset's, is [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME).
+- **The policy check:** every pull request into the synced branch gets the **Guardrails Policy Admission** check within a minute. It is skipped, and passes, when the pull request changes nothing Git sync reads. Otherwise it fails when Git sync would refuse the result, whoever opened it, and, for a pull request Archestra opened, when the person who asked may no longer edit the server or someone else pushed a commit onto its branch. The check's name, and the ruleset's, is [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME).
 - **Branch rules:** the **Guardrails Policy Admission** ruleset on the synced branch blocks force pushes and deletion. A merge needs a pull request that is up to date with the branch and the passing check, and no approval. To require a second pair of eyes as well, raise the approval count on the ruleset on GitHub: Archestra keeps it. The check is required only while the App may post it: without the Checks permission, the rules do without it until it is granted. Archestra adds no bypass; one an administrator adds on GitHub stays, and Settings shows it.
 
-Who asked is read from what GitHub vouches for. A pull request the APPA Keeper or **Settings → Guardrails** opened names the person who asked in its commits, which GitHub signs for the App; a commit someone else pushes onto that branch fails the check. A pull request a person opened on GitHub is theirs, through the GitHub account they connected under [**Settings → Credentials**](/docs/admin/credentials#add-a-credential); without one, the check fails and says so.
-
-Git sync checks the same thing again before it applies a commit: a policy file changed outside a pull request it can attribute, or by one the check would have refused, is not applied, and the last accepted policy stays, as for an invalid policy. So a ruleset turned off or bypassed delays a bad change at most; it cannot apply it.
+Who asked for a pull request Archestra opened is read from what GitHub vouches for: its commits are signed for the App, and their author is the person who asked. Git sync itself applies any valid commit that reaches the branch, whoever merged it, and refuses an invalid one, keeping the last accepted policy.
 
 **Settings → Guardrails** shows the branch rules under **Repository protection**.
 

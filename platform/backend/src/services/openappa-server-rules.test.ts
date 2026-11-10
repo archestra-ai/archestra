@@ -1165,6 +1165,18 @@ test("a server's editors propose its rules as a pull request; readers and outsid
     tools: ["payments_api__get_invoice", "payments_api__refund_payment"],
     organizationHelpers: { authorities: [], sanitizers: [] },
   });
+  // No file yet: a starter names every tool, and is itself a valid file.
+  expect(read.starter).toContain('# name = "payments_api__refund_payment"');
+  expect(read.starter).toContain("[policy]\nversion = 2");
+  expect(
+    await previewServerRulesChange({
+      organizationId: org.id,
+      userId: pat.id,
+      catalogId: catalog.id,
+      content: read.starter ?? "",
+      expectedCommit: FIRST,
+    }),
+  ).toMatchObject({ valid: true });
   // Sam may use the server, and read its rules, but not edit it.
   expect(
     await getServerRules({

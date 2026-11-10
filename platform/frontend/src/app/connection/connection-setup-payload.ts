@@ -112,20 +112,38 @@ export function initialConnectProvider(params: {
 
 /**
  * The account a per-user provider's setup binds when the user picked none:
- * null when they have their own sign-in (the server binds it), else the first
- * organization plan (GitHub App key) they can use.
+ * null when they have their own sign-in (the server binds it), else their one
+ * organization plan (GitHub App key). Plans of several GitHub organizations
+ * and no sign-in leave the choice to the user (`perUserAccountChoiceNeeded`):
+ * each organization is billed for its own requests and serves its own models.
  */
 export function defaultPerUserKeyId(
-  keys: readonly {
-    id: string;
-    provider: string;
-    isGithubAppKey?: boolean | null;
-  }[],
+  keys: readonly PerUserAccountKey[],
   provider: SupportedProvider,
 ): string | null {
   const forProvider = keys.filter((key) => key.provider === provider);
   if (forProvider.some((key) => !key.isGithubAppKey)) return null;
-  return forProvider.find((key) => key.isGithubAppKey)?.id ?? null;
+  return forProvider.length === 1 ? forProvider[0].id : null;
+}
+
+/**
+ * Whether the user must pick the account a per-user provider bills: they have
+ * no sign-in of their own and plans of several organizations.
+ */
+export function perUserAccountChoiceNeeded(
+  keys: readonly PerUserAccountKey[],
+  provider: SupportedProvider,
+): boolean {
+  const forProvider = keys.filter((key) => key.provider === provider);
+  return (
+    forProvider.length > 1 && forProvider.every((key) => key.isGithubAppKey)
+  );
+}
+
+interface PerUserAccountKey {
+  id: string;
+  provider: string;
+  isGithubAppKey?: boolean | null;
 }
 
 /**
@@ -391,6 +409,12 @@ export function firstConnectionSetupInputs(params: {
     !!activeLlmProxyId &&
     providerIsPerUser &&
     !configuredProviders.has(provider);
+  // The page waits for the person to pick the account first.
+  const accountChoiceNeeded =
+    !!activeLlmProxyId &&
+    providerIsPerUser &&
+    !!provider &&
+    perUserAccountChoiceNeeded(availableKeys, provider);
   const supportsModelChoice =
     client.id === "copilot-cli" ||
     client.id === "claude-desktop" ||
@@ -450,6 +474,7 @@ export function firstConnectionSetupInputs(params: {
       !(client.id === "grok-build" && provider === "xai")) ||
     !hasRunnableAnything ||
     needsPerUserConnect ||
+    accountChoiceNeeded ||
     selectionProblem
   ) {
     return null;

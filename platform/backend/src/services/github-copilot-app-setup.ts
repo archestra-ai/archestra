@@ -107,6 +107,13 @@ class CopilotGithubAppSetup {
           `This plan is for ${login}, but the new App is installed on ${app.account}.`,
         );
     }
+    // Before the App is saved: a refused plan must leave no credential.
+    await this.assertNoOtherPlan({
+      organizationId: params.organizationId,
+      organization: app.account,
+      githubUrl: app.web,
+      replaceKeyId: params.replaceKeyId,
+    });
     const models = await fetchCopilotModelIds({
       appId: app.appId,
       installationId: String(installation.id),
@@ -148,10 +155,16 @@ class CopilotGithubAppSetup {
     // Only provider keys: someone who can just reuse a connected App must get
     // past this step too. The https-only parse below bounds what it fetches.
     await authorize(params, ["llmProviderApiKey"]);
-    const { api, login } = parseAccount(params.organization);
+    const { web, api, login } = parseAccount(params.organization);
     const account = await lookupAccount({ api, login });
     if (account.type !== "Organization")
       throw new ApiError(400, NOT_AN_ORGANIZATION);
+    // Say so before an App is registered for an organization that has a plan.
+    await this.assertNoOtherPlan({
+      organizationId: params.organizationId,
+      organization: account.login,
+      githubUrl: web,
+    });
     return { organization: account.login };
   }
 
@@ -332,6 +345,7 @@ class CopilotGithubAppSetup {
     await this.assertCanStore({
       ...params,
       organization: checked.organization,
+      githubUrl: checked.web,
     });
     const previousValue = known
       ? await this.replaceAppPrivateKey({
@@ -447,6 +461,12 @@ class CopilotGithubAppSetup {
     },
   ) {
     assertCopilotRequests(params.installation, params.reference.organization);
+    await this.assertNoOtherPlan({
+      organizationId: params.organizationId,
+      organization: params.reference.organization,
+      githubUrl: params.reference.githubUrl,
+      replaceKeyId: params.replaceKeyId,
+    });
     return this.storeKey({
       ...params,
       apiKey: encodeGithubAppReference(params.reference),
@@ -687,6 +707,8 @@ class CopilotGithubAppSetup {
   private async assertCanStore(
     params: Owner & {
       organization: string;
+      /** The web address of the GitHub the organization is on. */
+      githubUrl: string;
       replaceKeyId?: string;
       grants?: ResourcePermissionGrant[];
       name?: string;
@@ -694,8 +716,10 @@ class CopilotGithubAppSetup {
   ) {
     if (params.replaceKeyId) {
       await this.ownKey({ ...params, keyId: params.replaceKeyId }, "update");
+      await this.assertNoOtherPlan(params);
       return;
     }
+    await this.assertNoOtherPlan(params);
     const grants = params.grants ?? EVERYONE_IN_ORGANIZATION;
     if (grants.length)
       await ResourcePermissions.validateInitialGrants({
@@ -710,6 +734,47 @@ class CopilotGithubAppSetup {
           authorId: null,
         },
       });
+  }
+
+  /**
+   * One plan per GitHub organization: a second key would bill the same
+   * organization and list the same models. Organizations of one enterprise
+   * each get their own plan. A plan reconnected on its own organization adds
+   * none, so it passes even where an older release left two plans for one
+   * organization.
+   */
+  private async assertNoOtherPlan(params: {
+    organizationId: string;
+    /** The organization's login on GitHub. */
+    organization: string;
+    /** The web address of the GitHub the organization is on. */
+    githubUrl: string;
+    replaceKeyId?: string;
+  }) {
+    const target = {
+      login: params.organization.toLowerCase(),
+      host: normalizeGithubWeb(params.githubUrl),
+    };
+    const isTarget = (value: string | null) => {
+      const reference = decodeGithubAppReference(value);
+      return (
+        reference?.organization.toLowerCase() === target.login &&
+        normalizeGithubWeb(reference.githubUrl) === target.host
+      );
+    };
+    const plans = await LlmProviderApiKeyModel.findGithubAppKeyValues(
+      params.organizationId,
+    );
+    const replaced = plans.find((plan) => plan.id === params.replaceKeyId);
+    if (replaced && isTarget(replaced.value)) return;
+    const taken = plans.some(
+      (plan) => plan.id !== params.replaceKeyId && isTarget(plan.value),
+    );
+    if (taken)
+      throw new ApiError(
+        409,
+        `${params.organization} already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.`,
+      );
   }
 
   /** An organization's GitHub Copilot key the user may act on. */
@@ -909,6 +974,11 @@ async function findInstallation(params: {
   if (installation.account.type === "User")
     throw new ApiError(400, NOT_AN_ORGANIZATION);
   return installation;
+}
+
+/** A GitHub web address in one spelling, to compare two. */
+function normalizeGithubWeb(url: string): string {
+  return url.trim().replace(/\/+$/, "").toLowerCase();
 }
 
 function assertCopilotRequests(

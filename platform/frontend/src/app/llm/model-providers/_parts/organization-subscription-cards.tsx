@@ -1,6 +1,7 @@
 "use client";
 
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   githubOrganizationLabel,
   organizationSubscriptionName,
@@ -14,7 +15,10 @@ import {
  * Subscriptions an organization pays for, which members use without a seat of
  * their own: today, GitHub Copilot through a GitHub App on the organization.
  * The cards are the personal subscription cards, one per connected
- * organization, with the same states and actions.
+ * organization, with the same states and actions. Each GitHub organization
+ * has its own plan, billing and models, so someone who can add provider keys
+ * also gets a card to connect another organization, such as another
+ * organization of the same enterprise.
  */
 export function OrganizationSubscriptionCards({
   name,
@@ -40,6 +44,9 @@ export function OrganizationSubscriptionCards({
     credential: LlmProviderApiKeyResponse,
   ) => string | null;
 }) {
+  const { data: canConnect } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
   return (
     <SubscriptionCardsSection
       id="organization-subscriptions-heading"
@@ -87,6 +94,19 @@ export function OrganizationSubscriptionCards({
           />
         ))
       )}
+      {credentials.length > 0 && canConnect ? (
+        <SubscriptionCard
+          testId="copilot-plan-connect-another"
+          kind="github-copilot"
+          provider="github-copilot"
+          name="Another GitHub organization"
+          description="Connect the Copilot plan of another GitHub organization. Each organization has its own plan and models."
+          isLoading={isLoading}
+          status="not-connected"
+          onConnect={onConnect}
+          connectPermissions={{ llmProviderApiKey: ["create"] }}
+        />
+      ) : null}
     </SubscriptionCardsSection>
   );
 }

@@ -7,6 +7,7 @@ import {
   type V1NetworkPolicy,
 } from "@kubernetes/client-node";
 import { expect, test } from "vitest";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { buildAgentRuntimePlatformEgressPolicy } from "./manifests";
 import { buildAgentRuntimeEnvironmentEgressPolicies } from "./network-policy";
 import { resolvePlatformServiceDestination } from "./platform-service";
@@ -175,14 +176,18 @@ test.skipIf(process.env.ARCHESTRA_TEST_SERVICE_EGRESS_CONTEXT !== "orbstack")(
         ownerReferences: undefined,
         effectiveNetworkPolicy: { source: "built_in" as const, policy: null },
       };
-      const floor = buildAgentRuntimeEnvironmentEgressPolicies({ spec })[0]
-        .object as V1NetworkPolicy;
+      const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(coreApi);
+      expect(clusterDnsIps.length).toBeGreaterThan(0);
+      const floor = buildAgentRuntimeEnvironmentEgressPolicies({
+        spec,
+        clusterDnsIps,
+      })[0].object as V1NetworkPolicy;
       const params = {
         spec,
         platformNamespace: namespace,
         platformPodLabels: { app: "api" },
         platformPorts: [9000],
-        clusterDnsIps: [],
+        clusterDnsIps,
       };
       const oldPolicy = buildAgentRuntimePlatformEgressPolicy(params);
       apply(floor);

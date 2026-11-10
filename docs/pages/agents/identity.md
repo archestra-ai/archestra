@@ -25,17 +25,21 @@ Each tool acts as the person who asked, or as one shared account. A Jira tool sh
 
 With [IdP token exchange](/docs/mcp/authentication/idp-token-exchange), nobody installs anything: Archestra trades the person's company sign-in for a token the server accepts.
 
-## Give an Agent Its Own Entra Identity
+## Give Each Agent Its Own Identity
 
-With Microsoft Entra, give each agent its own [agent identity](/docs/admin/identity/entra-agent-id), so Entra can tell your agents apart. Each downstream token then names the person and the agent. Revoke one agent's consent in Entra, and only that agent stops.
-
-1. Set up [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id) on your identity provider.
-2. On the agent's **Advanced** step, under **Identity**, paste the agent identity's ID into **Entra agent identity app ID**, and click **Save changes**.
+Your identity provider can register each agent as an identity of its own, so it can tell your agents apart. Each downstream token then names the person and the agent that acted for them. Revoke one agent's access in your identity provider, and only that agent stops.
 
 What to know:
 
 - The API still grants the person's access, not less. To limit an agent to part of the data, the API or MCP server must check which agent called.
-- Changing the binding takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update).
+- Changing an agent's identity takes [`identityProvider:update`](/docs/reference/permissions#identityProvider:update).
+
+### Microsoft Entra Agent ID
+
+Archestra supports agent identities from Microsoft Entra. Need them from another identity provider? [Open a GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose) and tell us which one.
+
+1. Set up [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id) on your identity provider.
+2. On the agent's **Advanced** step, under **Identity**, paste the agent identity's ID into **Entra agent identity app ID**, and click **Save changes**.
 
 ## See Who Did What
 

@@ -472848,21 +472848,6 @@
                       "action": {
                         "type": "string",
                         "enum": [
-                          "require-check"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "action"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "action": {
-                        "type": "string",
-                        "enum": [
                           "schedule"
                         ]
                       },
@@ -473339,7 +473324,6 @@
                             "missing",
                             "disabled",
                             "needs_permission",
-                            "not_managed",
                             "unavailable",
                             "unsupported",
                             "error"
@@ -473360,15 +473344,7 @@
                         "checkRule": {
                           "type": "string",
                           "enum": [
-                            "omitted",
                             "unposted"
-                          ]
-                        },
-                        "scope": {
-                          "type": "string",
-                          "enum": [
-                            "full",
-                            "check"
                           ]
                         }
                       },

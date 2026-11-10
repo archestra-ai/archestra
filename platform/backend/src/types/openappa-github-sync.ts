@@ -138,7 +138,6 @@ export const AppaRepositoryProtectionSchema = z
         "missing",
         "disabled",
         "needs_permission",
-        "not_managed",
         "unavailable",
         "unsupported",
         "error",
@@ -147,13 +146,8 @@ export const AppaRepositoryProtectionSchema = z
       detail: z.string().optional(),
       /** Bypass entries an administrator added on GitHub; they skip the rules. */
       bypassActors: z.number().int().positive().optional(),
-      /**
-       * The policy check while the GitHub App cannot post it: left out of the
-       * rules until it can, or required by a rule it cannot satisfy.
-       */
-      checkRule: z.enum(["omitted", "unposted"]).optional(),
-      /** The rules kept: every rule, or the required check alone (a shared repository). */
-      scope: z.enum(["full", "check"]).optional(),
+      /** A ruleset requires the check while the GitHub App cannot post it. */
+      checkRule: z.enum(["unposted"]).optional(),
     }),
   })
   .nullable();
@@ -171,8 +165,6 @@ export const AppaGithubSyncStatusSchema = z.object({
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),
   z.object({ action: z.literal("disconnect") }).strict(),
-  /** Require the policy check on the synced branch of a shared repository. */
-  z.object({ action: z.literal("require-check") }).strict(),
   z
     .object({ action: z.literal("schedule"), interval: AppaSyncIntervalSchema })
     .strict(),

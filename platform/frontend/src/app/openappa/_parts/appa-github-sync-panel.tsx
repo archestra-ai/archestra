@@ -329,7 +329,6 @@ type ProtectionView = {
 function RepositoryProtection() {
   const { data, refetch, isFetching } = useAppaRepositoryProtection(true);
   const appName = useAppName();
-  const update = useUpdateAppaGithubSync();
   if (!data) return null;
   const missing = (data.app?.permissions ?? []).filter(
     (permission) => !permission.granted,
@@ -376,18 +375,6 @@ function RepositoryProtection() {
                 {view.detail && (
                   <p className="text-muted-foreground">{view.detail}</p>
                 )}
-                {label === "Branch rules" &&
-                  data.branchRules.state === "not_managed" && (
-                    <Button
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                      disabled={update.isPending}
-                      onClick={() => update.mutate({ action: "require-check" })}
-                    >
-                      Require the {data.checkName} check
-                    </Button>
-                  )}
               </dd>
             </div>
           ))}
@@ -495,12 +482,7 @@ function branchRulesView(
   switch (rules.state) {
     case "active":
       return {
-        status:
-          rules.scope === "check"
-            ? `Merges need the ${checkName} check, skipped when no policy file changed; no other rule was added to this branch`
-            : rules.checkRule === "omitted"
-              ? `Merges need an up-to-date pull request; ${appName} adds the ${checkName} check, which decides who may change each file, once the App may post it`
-              : `Merges need an up-to-date pull request that passes the ${checkName} check, which decides who may change each file`,
+        status: `Merges need the ${checkName} check, skipped when no policy file changed; nothing else about the branch is changed`,
         tone: "ok",
         link,
         detail,
@@ -528,13 +510,6 @@ function branchRulesView(
       // An App created before Archestra kept rulesets: an opt-in, not a fault.
       return {
         status: "Off until the GitHub App has the Administration permission",
-        tone: "off",
-        detail: rules.detail,
-      };
-    case "not_managed":
-      return {
-        status:
-          "Not added: the policy lives in a folder of a repository that holds other work",
         tone: "off",
         detail: rules.detail,
       };

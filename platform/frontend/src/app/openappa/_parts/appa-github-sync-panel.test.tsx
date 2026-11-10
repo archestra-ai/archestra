@@ -201,38 +201,6 @@ test("lists the permissions an existing GitHub App lacks, with where to grant an
   opened.mockRestore();
 });
 
-test("offers to require the check on a shared repository's branch, where no rules were added", async () => {
-  const actions: unknown[] = [];
-  server.use(
-    http.get(`${url}/protection`, () =>
-      HttpResponse.json({
-        checkName: "Guardrails Policy Admission",
-        branchRules: {
-          state: "not_managed",
-          detail:
-            "The policy lives in guardrails/ of a repository that holds other work.",
-        },
-      }),
-    ),
-    http.patch(url, async ({ request }) => {
-      actions.push(await request.json());
-      return HttpResponse.json(state);
-    }),
-  );
-  show();
-  expect(
-    await screen.findByText(
-      "Not added: the policy lives in a folder of a repository that holds other work",
-    ),
-  ).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Require the Guardrails Policy Admission check",
-    }),
-  );
-  await waitFor(() => expect(actions).toEqual([{ action: "require-check" }]));
-});
-
 test("says when pull requests wait on a policy check the GitHub App cannot post", async () => {
   server.use(
     http.get(`${url}/protection`, () =>

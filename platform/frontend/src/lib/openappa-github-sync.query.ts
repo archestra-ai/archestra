@@ -130,9 +130,7 @@ export function useUpdateAppaGithubSync() {
           ? "Sync complete"
           : body.action === "disconnect"
             ? "Sync stopped. The last accepted policy is kept."
-            : body.action === "require-check"
-              ? "The policy check is now required on the branch"
-              : "Sync schedule updated",
+            : "Sync schedule updated",
       );
     },
   });

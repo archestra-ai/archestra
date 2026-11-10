@@ -99,6 +99,16 @@ export function withholdErrorContent(
   record: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...record };
+  // Codex terminal diagnostics copy these fields from the upstream response.
+  // Only the protocol's terminal classifications are metadata; an unexpected
+  // status can be arbitrary provider text just like its code and reason.
+  if (
+    "incompleteReason" in result &&
+    result.status !== "failed" &&
+    result.status !== "incomplete"
+  ) {
+    result.status = "[not stored: log content mode]";
+  }
   for (const key of [
     "stack",
     "rawErrorJson",
@@ -106,6 +116,10 @@ export function withholdErrorContent(
     "errorBody",
     "upstreamError",
     "errorMessage",
+    "errorCode",
+    "errorType",
+    "incompleteReason",
+    "rawFinishReason",
     "responseBody",
     "requestBody",
     "requestBodyValues",

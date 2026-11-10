@@ -354,3 +354,24 @@ test("metadata-only withholds separate stack and provider-controlled code fields
   expect(records[0]).toMatchObject({ err: { type: "Error" } });
   expect(records[1].statusCode).toBe(500);
 });
+
+test("metadata-only classifies terminal status and withholds provider diagnostic aliases", () => {
+  const { logger, records } = createCapturingLogger("metadata_only");
+  const marker = "synthetic-private-provider-echo";
+  for (const status of ["failed", "incomplete", marker]) {
+    logger.warn(
+      {
+        status,
+        incompleteReason: marker,
+        errorCode: marker,
+        errorMessage: marker,
+        rawFinishReason: marker,
+        usagePresent: true,
+      },
+      "Codex subscription response ended without completing",
+    );
+  }
+  expect(JSON.stringify(records)).not.toContain(marker);
+  expect(records[0]).toMatchObject({ status: "failed", usagePresent: true });
+  expect(records[1].status).toBe("incomplete");
+});

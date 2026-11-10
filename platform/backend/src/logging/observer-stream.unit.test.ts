@@ -226,11 +226,20 @@ test("metadata-only suppresses echoed provider response text in stdout and OTEL"
       },
       "HTTP 50x request error occurred",
     );
+    logger.warn(
+      {
+        status: marker,
+        incompleteReason: marker,
+        errorCode: marker,
+        errorMessage: marker,
+      },
+      "Codex subscription response ended without completing",
+    );
     await provider.forceFlush();
     const exported = exporter.getFinishedLogRecords();
-    expect(stdout).toHaveLength(4);
-    expect(retained).toHaveLength(4);
-    expect(exported).toHaveLength(4);
+    expect(stdout).toHaveLength(5);
+    expect(retained).toHaveLength(5);
+    expect(exported).toHaveLength(5);
     expect(JSON.stringify([stdout, retained, exported])).not.toContain(marker);
     expect(exported[0].attributes.err).toMatchObject({ statusCode: 400 });
   } finally {

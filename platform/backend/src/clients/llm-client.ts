@@ -46,7 +46,10 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  isServiceAccountUserId,
+  serviceAccountIdFromUserId,
+} from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -283,7 +286,9 @@ export function createLLMModel(params: {
   // tells OpenAPPA to skip enforcement, so only its own calls send it.
   const clientHeaders: Record<string, string> = params.internalCall
     ? guardrailCallHeader()
-    : internalCallHeader();
+    : internalCallHeader(
+        userId ? (serviceAccountIdFromUserId(userId) ?? undefined) : undefined,
+      );
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }

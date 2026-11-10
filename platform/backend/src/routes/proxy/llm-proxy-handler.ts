@@ -1,3 +1,4 @@
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
@@ -1281,12 +1282,23 @@ async function handleObservedLLMProxy<
     personalTokenUserId ??
     regularVirtualKeyUserId;
 
+  if (
+    proof.serviceAccountId &&
+    serviceAccountId &&
+    proof.serviceAccountId !== serviceAccountId
+  ) {
+    throw new ApiError(401, "Credentials identify different service accounts.");
+  }
+  serviceAccountId ??= proof.serviceAccountId;
   if (serviceAccountId && authenticatedUserId) {
     throw new ApiError(
       401,
       "Credentials identify both a user and a service account.",
     );
   }
+  const authenticatedPrincipalId = serviceAccountId
+    ? serviceAccountUserId(serviceAccountId)
+    : authenticatedUserId;
   if (serviceAccountId) {
     // A caller-supplied user hint cannot change the credential's principal.
     userId = undefined;
@@ -1428,7 +1440,7 @@ async function handleObservedLLMProxy<
       provider: providerName,
       modelId: alias,
       organizationId: resolvedAgent.organizationId,
-      authenticatedUserId,
+      authenticatedUserId: authenticatedPrincipalId,
     });
     if (!aliasAccess.allowed) throw new ApiError(403, aliasAccess.message);
   }
@@ -1824,7 +1836,7 @@ async function handleObservedLLMProxy<
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
-      authenticatedUserId,
+      authenticatedUserId: authenticatedPrincipalId,
       catalogModel: catalogModel ?? undefined,
       policySnapshot: catalogModel
         ? {
@@ -2234,7 +2246,7 @@ async function handleObservedLLMProxy<
             provider: member.provider,
             modelId,
             organizationId: resolvedAgent.organizationId,
-            authenticatedUserId,
+            authenticatedUserId: authenticatedPrincipalId,
           });
           if (!access.allowed) throw new ApiError(403, access.message);
         }

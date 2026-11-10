@@ -44177,6 +44177,7 @@ export type GetBootstrapResponses = {
             requireTwoFactor: boolean;
             sessionMaxAgeSeconds: number | null;
             oauthAccessTokenLifetimeSeconds: number;
+            connectionPageHidden: boolean;
             connectionDefaultMcpGatewayId: string | null;
             connectionDefaultLlmProxyId: string | null;
             connectionDefaultClientId: string | null;
@@ -127761,6 +127762,7 @@ export type GetOrganizationResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -128229,6 +128231,7 @@ export type UpdateAppearanceSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -128465,6 +128468,7 @@ export type UpdateSecuritySettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -128697,6 +128701,7 @@ export type UpdateMcpSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -128928,6 +128933,7 @@ export type UpdateSkillsSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -129386,6 +129392,7 @@ export type UpdateAgentSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -129468,6 +129475,7 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 
 export type UpdateConnectionSettingsData = {
     body: {
+        connectionPageHidden?: boolean;
         connectionDefaultMcpGatewayId?: string | null;
         connectionClientFutureProviders?: {
             [key: string]: boolean;
@@ -129640,6 +129648,7 @@ export type UpdateConnectionSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -129928,6 +129937,7 @@ export type UpdateIntegrationSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -130169,6 +130179,7 @@ export type UpdateDefaultEnvironmentResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -130405,6 +130416,7 @@ export type UpdateAuthSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -130643,6 +130655,7 @@ export type UpdateKnowledgeSettingsResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -130871,6 +130884,7 @@ export type DropEmbeddingConfigResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
@@ -131461,6 +131475,7 @@ export type CompleteOnboardingResponses = {
         requireTwoFactor: boolean;
         sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
+        connectionPageHidden: boolean;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;

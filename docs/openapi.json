@@ -165058,6 +165058,9 @@
                           "minimum": 300,
                           "maximum": 31536000
                         },
+                        "connectionPageHidden": {
+                          "type": "boolean"
+                        },
                         "connectionDefaultMcpGatewayId": {
                           "nullable": true,
                           "type": "string",
@@ -165441,6 +165444,7 @@
                         "requireTwoFactor",
                         "sessionMaxAgeSeconds",
                         "oauthAccessTokenLifetimeSeconds",
+                        "connectionPageHidden",
                         "connectionDefaultMcpGatewayId",
                         "connectionDefaultLlmProxyId",
                         "connectionDefaultClientId",
@@ -495430,6 +495434,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -495813,6 +495820,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -497157,6 +497165,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -497540,6 +497551,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -498629,6 +498641,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -499012,6 +499027,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -499709,6 +499725,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -500092,6 +500111,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -500786,6 +500806,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -501169,6 +501192,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -502640,6 +502664,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -503023,6 +503050,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -503313,6 +503341,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "connectionPageHidden": {
+                    "type": "boolean"
+                  },
                   "connectionDefaultMcpGatewayId": {
                     "nullable": true,
                     "type": "string",
@@ -503849,6 +503880,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -504232,6 +504266,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -505112,6 +505147,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -505495,6 +505533,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -506259,6 +506298,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -506642,6 +506684,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -507350,6 +507393,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -507733,6 +507779,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -508472,6 +508519,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -508855,6 +508905,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -509531,6 +509582,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -509914,6 +509968,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
@@ -511794,6 +511849,9 @@
                       "minimum": 300,
                       "maximum": 31536000
                     },
+                    "connectionPageHidden": {
+                      "type": "boolean"
+                    },
                     "connectionDefaultMcpGatewayId": {
                       "nullable": true,
                       "type": "string",
@@ -512177,6 +512235,7 @@
                     "requireTwoFactor",
                     "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
+                    "connectionPageHidden",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",

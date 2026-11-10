@@ -77,6 +77,7 @@ export function makeOrganization(
     requireTwoFactor: false,
     sessionMaxAgeSeconds: null,
     oauthAccessTokenLifetimeSeconds: 3600,
+    connectionPageHidden: false,
     connectionDefaultMcpGatewayId: null,
     connectionDefaultLlmProxyId: null,
     connectionDefaultClientId: null,

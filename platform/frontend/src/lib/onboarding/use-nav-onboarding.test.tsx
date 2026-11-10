@@ -8,6 +8,7 @@ vi.mock("@/lib/shell-deferral", () => ({
 }));
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
 
 const markMutate = vi.fn();
 const mockSeenQuery: { data?: { items: string[] }; isSuccess: boolean } = {
@@ -26,6 +27,7 @@ vi.mock("@/lib/onboarding/onboarding.query", () => ({
 
 import { usePathname } from "next/navigation";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useNavOnboarding } from "./use-nav-onboarding";
 
 const allPermissions = {
@@ -38,6 +40,9 @@ const allPermissions = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useOrganization).mockReturnValue({
+    data: { connectionPageHidden: false },
+  } as ReturnType<typeof useOrganization>);
   mockShellReady.mockReturnValue(true);
   mockSeenQuery.data = { items: [] };
   mockSeenQuery.isSuccess = true;
@@ -49,6 +54,17 @@ beforeEach(() => {
 });
 
 describe("useNavOnboarding", () => {
+  it("does not leave an unseen Connect dot when Connect is hidden", () => {
+    mockSeenQuery.data = { items: ["nav:projects", "nav:apps"] };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionPageHidden: true },
+    } as ReturnType<typeof useOrganization>);
+    const { result } = renderHook(() => useNavOnboarding());
+    expect(result.current.unseenKeys.has("nav:connect")).toBe(false);
+    expect(result.current.showChatsDot).toBe(false);
+    expect(result.current.showStudioDot).toBe(true);
+  });
+
   it("shows all dots for a fresh user, including the aggregates", () => {
     const { result } = renderHook(() => useNavOnboarding());
 

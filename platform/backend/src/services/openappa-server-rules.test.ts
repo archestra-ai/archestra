@@ -27,7 +27,6 @@ import { expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
-import { GitHubUserIdSchema } from "@/types";
 import {
   getServerRules,
   getServerRulesChangeStatus,
@@ -1809,7 +1808,7 @@ test("the ruleset requires the policy check only while the App may post it, and 
   ]);
 });
 
-test("the policy check refuses a pull request whose requester may not change its files, and says when it cannot tell who asked", async ({
+test("the policy check judges who asked for a pull request Archestra opened, reads the policy alone for one a person opened, and skips one that changes nothing it reads", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -1858,46 +1857,6 @@ test("the policy check refuses a pull request whose requester may not change its
     });
   }
   await connectApp({ organizationId: org.id });
-  // Riley connected a GitHub account; Sam did not.
-  await RuntimeCredentialDefinitionModel.create({
-    organizationId: org.id,
-    createdBy: admin.id,
-    definition: {
-      description: "",
-      icon: null,
-      key: "repository-app",
-      name: "Repository App",
-      kind: "github_app",
-      allowPersonal: false,
-      allowOrganization: true,
-      githubUrl: "https://api.github.com",
-      appId: "123",
-      installationId: "456",
-      githubClientId: "test-client",
-    },
-  });
-  await RuntimeCredentialDefinitionModel.create({
-    organizationId: org.id,
-    createdBy: admin.id,
-    definition: {
-      description: "",
-      icon: null,
-      key: "github-user",
-      name: "GitHub",
-      kind: "github_app_user",
-      allowPersonal: true,
-      allowOrganization: false,
-      githubAppCredentialKey: "repository-app",
-    },
-  });
-  await RuntimeCredentialConnectionModel.upsert({
-    organizationId: org.id,
-    scope: "personal",
-    userId: riley.id,
-    credentialId: "github-user",
-    value: "token",
-    githubId: GitHubUserIdSchema.parse(1004),
-  });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
   const results = Object.fromEntries(
     [1, 2, 3, 4, 5, 6].map((number) => [number, String(number).repeat(40)]),
@@ -1958,19 +1917,20 @@ test("the policy check refuses a pull request whose requester may not change its
         },
       ],
     },
-    // Opened by Riley, connected, who may not change the policy file.
+    // Opened by a person on GitHub, changing the policy file: GitHub's own
+    // permissions and reviews decide; the policy alone is checked.
     4: {
       user: { id: 1004, login: "riley-gh", type: "User" },
       files: ["appa.toml"],
       commits: [],
     },
-    // Opened by Sam, who has not connected GitHub, on a server Sam edits.
+    // Opened by a person on GitHub, changing a server file: the same.
     5: {
       user: { id: 1002, login: "sam-gh", type: "User" },
       files: ["mcp/helpdesk.toml"],
       commits: [],
     },
-    // Opened by Riley, changing nothing Git sync reads.
+    // Changing nothing Git sync reads: skipped, not held.
     6: {
       user: { id: 1004, login: "riley-gh", type: "User" },
       files: ["README.md", ".github/workflows/validate.yml"],
@@ -2028,161 +1988,20 @@ test("the policy check refuses a pull request whose requester may not change its
     title: "Could not tell who asked for this change",
     summary: expect.stringContaining("commits Archestra did not make"),
   });
-  expect(posted[results[4] as string]).toEqual({
-    conclusion: "failure",
-    title: "The requester may not change the policy",
-    summary:
-      "riley@example.com may not change appa.toml: that takes the guardrailsPolicy:update permission.",
+  // A person's pull request is the repository's business: the policy alone is checked.
+  expect(posted[results[4] as string]).toMatchObject({
+    conclusion: "success",
+    title: "Git sync would accept this policy",
   });
   expect(posted[results[5] as string]).toMatchObject({
-    conclusion: "failure",
-    title: "Could not tell who asked for this change",
-    summary: expect.stringMatching(
-      /^@sam-gh has not connected a GitHub account in Archestra, so Archestra cannot tell whether they may change mcp\/helpdesk\.toml\./,
-    ),
+    conclusion: "success",
   });
-  expect(posted[results[6] as string]).toMatchObject({ conclusion: "success" });
+  expect(posted[results[6] as string]).toMatchObject({
+    conclusion: "skipped",
+    title: "No policy files changed",
+  });
   expect(runs).toHaveLength(6);
   // Nothing moved: nothing is posted again.
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(6);
-});
-
-test("a pull refuses a commit that changed a server's file outside an authorized pull request, and applies one merged by its editor", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-  makeTeam,
-  makeTeamMember,
-}) => {
-  config.openappa.enabled = true;
-  const org = await makeOrganization();
-  const admin = await makeUser({ email: "admin@example.com" });
-  await makeMember(admin.id, org.id, { role: "admin" });
-  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
-  const pat = await makeUser({ email: "pat@example.com" });
-  await makeTeamMember(payments.id, pat.id);
-  const sam = await makeUser({ email: "sam@example.com" });
-  await makeMember(sam.id, org.id);
-  const catalog = await InternalMcpCatalogModel.create(
-    {
-      name: "payments_api",
-      serverType: "remote",
-      serverUrl: "https://payments.example.com/mcp",
-      scope: "org",
-    },
-    {
-      organizationId: org.id,
-      initialPermissionGrants: [
-        {
-          subject: { type: "team", id: payments.id },
-          actions: ["read", "use", "update"],
-        },
-      ],
-    },
-  );
-  await ToolModel.createToolIfNotExists({
-    name: "payments_api__read",
-    description: "read",
-    parameters: {},
-    catalogId: catalog.id,
-  });
-  await connectApp({ organizationId: org.id });
-  const root = `include = ["mcp/*.toml"]\n${RULES}`;
-  const state = {
-    head: FIRST,
-    files: {
-      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
-      [SECOND]: { "appa.toml": root, "mcp/payments_api.toml": INVOICES },
-      [THIRD]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
-    },
-  };
-  serveRepository(state);
-  const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
-  const signed = (email: string, sha: string) => ({
-    sha,
-    commit: {
-      author: { email },
-      verification: { verified: true, reason: "valid" },
-    },
-    committer: { login: "acme-guardrails[bot]", type: "Bot" },
-  });
-  let closed: Array<Record<string, unknown>> = [];
-  const pulls: Record<number, { email: string; sha: string }> = {
-    1: { email: pat.email, sha: SECOND },
-    2: { email: sam.email, sha: THIRD },
-  };
-  server.use(
-    http.get("https://api.github.com/app", () =>
-      HttpResponse.json({ slug: "acme-guardrails" }),
-    ),
-    http.get(`${REPO}/compare/:range`, ({ params }) => {
-      const [, to] = String(params.range).split("...");
-      return HttpResponse.json({
-        files: [{ filename: "mcp/payments_api.toml" }],
-        commits: [{ sha: to }],
-      });
-    }),
-    http.get(`${REPO}/pulls`, ({ request }) =>
-      HttpResponse.json(
-        new URL(request.url).searchParams.get("state") === "closed"
-          ? closed
-          : [],
-      ),
-    ),
-    http.get(`${REPO}/pulls/:number/files`, () =>
-      HttpResponse.json([{ filename: "mcp/payments_api.toml" }]),
-    ),
-    http.get(`${REPO}/pulls/:number/commits`, ({ params }) => {
-      const pull = pulls[Number(params.number)];
-      return HttpResponse.json(pull ? [signed(pull.email, pull.sha)] : []);
-    }),
-  );
-  await syncAppaGithubPolicy(org.id);
-  expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
-    FIRST,
-  );
-
-  // The file changed on the branch with no pull request behind it.
-  state.head = SECOND;
-  await syncAppaGithubPolicy(org.id);
-  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
-    sourceCommit: FIRST,
-    lastSyncError: expect.stringMatching(
-      /^mcp\/payments_api\.toml changed between 1111111 and 2222222 outside a pull request Archestra can attribute\./,
-    ),
-  });
-
-  // The same commit turns out to be Pat's pull request, merged: applied.
-  closed = [
-    {
-      number: 1,
-      merged_at: "2026-11-10T10:00:00Z",
-      merge_commit_sha: SECOND,
-      user: bot,
-    },
-  ];
-  await syncAppaGithubPolicy(org.id);
-  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
-    sourceCommit: SECOND,
-    lastSyncError: null,
-  });
-
-  // A merge of Sam's pull request, who may not edit Payments API: refused.
-  state.head = THIRD;
-  closed = [
-    {
-      number: 2,
-      merged_at: "2026-11-10T11:00:00Z",
-      merge_commit_sha: THIRD,
-      user: bot,
-    },
-    ...closed,
-  ];
-  await syncAppaGithubPolicy(org.id);
-  expect(await OpenAppaGithubSyncModel.find(org.id)).toMatchObject({
-    sourceCommit: SECOND,
-    lastSyncError:
-      "Pull request #2: sam@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server payments_api in the MCP registry.",
-  });
 });

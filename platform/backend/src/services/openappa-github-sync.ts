@@ -28,7 +28,6 @@ import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { port } from "@/models/ports";
 import RoleCompositionModel from "@/models/role-composition";
-import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import {
   catalogToolPrefixes,
   openappaBatteriesService,
@@ -599,15 +598,6 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       commitSha: commit.sha,
       content,
     });
-    // The ruleset keeps an unauthorized change from merging; should one reach
-    // the branch all the same (ruleset off, a bypass, a direct push), the
-    // pull refuses it the way it refuses an invalid policy.
-    if (row.sourceCommit && row.sourceCommit !== commit.sha)
-      await assertPulledAuthorship({
-        source: { ...row, repo, path },
-        from: row.sourceCommit,
-        to: commit.sha,
-      });
     const contentHash = createHash("sha256").update(content).digest("hex");
     const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
@@ -828,10 +818,13 @@ class CheckRefused extends ApiError {
 type CheckedResult = {
   accepted: boolean;
   reason: string | null;
-  /** The policy's own check, the deployment it was checked against, and when. */
-  policy: Verdict & { deployment: string };
-  /** Who asked, and whether they may change what the pull request changes. */
-  authorship: Verdict;
+  /**
+   * The policy's own check, the deployment it was checked against, and when;
+   * absent while the pull request changes nothing Git sync reads.
+   */
+  policy: (Verdict & { deployment: string }) | null;
+  /** What the pull request changes that Git sync reads, and whether it may. */
+  judged: Verdict & { governed: string[] };
 };
 
 /** One check's outcome as stored. */
@@ -881,6 +874,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const keys = checking.map((pull) =>
     checkKey(
       "checked",
+      "v2",
       organizationId,
       source.repo,
       POLICY_CHECK_NAME,
@@ -892,50 +886,62 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   for (const [index, pull] of checking.entries()) {
     const key = keys[index] as AllowedCacheKey;
     const stored = checked.get(key);
-    // A result stored before authorship was checked is checked again whole.
-    const previous = stored?.policy && stored.authorship ? stored : undefined;
+    // A result stored in an earlier shape is checked again whole.
+    const previous = stored?.judged ? stored : undefined;
     const now = Date.now();
-    // The policy's check stands while the deployment it was checked against
-    // does, a refusal for a while; authorship for a while either way.
-    const policyStands =
-      previous?.policy.deployment === deployment &&
-      (previous.policy.accepted ||
-        now - previous.policy.checkedAt < RECHECK_REFUSED);
-    const authorshipStands =
+    // What the pull request changes, and who asked, stand for a while; the
+    // policy's check while the deployment it was checked against does, a
+    // refusal for a while.
+    const judgedStands =
       previous !== undefined &&
-      now - previous.authorship.checkedAt < RECHECK_AUTHORSHIP;
-    if (policyStands && authorshipStands) continue;
-    const policy = policyStands
-      ? previous.policy
-      : verdict(await outcomeAt({ source, commitSha: pull.result }), {
-          deployment,
-          checkedAt: now,
-        });
+      now - previous.judged.checkedAt < RECHECK_AUTHORSHIP;
+    const policyStands =
+      previous !== undefined &&
+      (previous.policy === null ||
+        (previous.policy.deployment === deployment &&
+          (previous.policy.accepted ||
+            now - previous.policy.checkedAt < RECHECK_REFUSED)));
+    if (judgedStands && policyStands) continue;
+    const judged = judgedStands
+      ? previous.judged
+      : await (async () => {
+          const read = pull.judge
+            ? await pull.judge()
+            : // A host that cannot tell: check the policy for every request.
+              { governed: ["*"], outcome: { accepted: true } as PullOutcome };
+          const made = verdict(read?.outcome ?? null, { checkedAt: now });
+          return made && read ? { ...made, governed: read.governed } : null;
+        })();
     // A read or a check that failed for now is checked again next minute.
-    if (!policy) continue;
-    const authorship = authorshipStands
-      ? previous.authorship
-      : verdict(
-          pull.authorship ? await pull.authorship() : { accepted: true },
-          {
+    if (!judged) continue;
+    // Nothing Git sync reads changed: nothing to check, and the check says so
+    // rather than hold the pull request.
+    const unrelated = judged.governed.length === 0 && judged.accepted;
+    const policy = unrelated
+      ? null
+      : policyStands && previous?.policy
+        ? previous.policy
+        : verdict(await outcomeAt({ source, commitSha: pull.result }), {
+            deployment,
             checkedAt: now,
-          },
-        );
-    if (!authorship) continue;
+          });
+    if (!unrelated && !policy) continue;
     // The policy's own fault first: it is the one a reviewer fixes in the diff.
-    const failed = [policy, authorship].find((check) => !check.accepted);
+    const failed = [policy, judged].find((check) => check && !check.accepted);
     const outcome: PullOutcome = failed
       ? {
           accepted: false,
           title: failed.title ?? undefined,
           reason: failed.reason ?? "",
         }
-      : { accepted: true };
+      : unrelated
+        ? { accepted: true, skipped: true }
+        : { accepted: true };
     const result: CheckedResult = {
       accepted: outcome.accepted,
       reason: outcome.accepted ? null : outcome.reason,
       policy,
-      authorship,
+      judged,
     };
     // A changed deployment that leaves the outcome as posted posts nothing.
     if (
@@ -1028,7 +1034,8 @@ async function deploymentState(
 }
 
 type PullOutcome =
-  | { accepted: true }
+  /** Passed; `skipped` when the pull request changes nothing Git sync reads. */
+  | { accepted: true; skipped?: true }
   | { accepted: false; title?: string; reason: string };
 
 type CheckedPull = {
@@ -1037,11 +1044,16 @@ type CheckedPull = {
   result: string;
   post: (outcome: PullOutcome) => Promise<void>;
   /**
-   * Who asked for the change and whether they may make it; null for a read
-   * that failed for now. Absent where the host cannot tell who asked.
+   * The files Git sync reads that the pull request changes, and, for one
+   * Archestra opened, whether the person who asked may change them; null for
+   * a read that failed for now. Absent where the host cannot tell, in which
+   * case the policy is checked for every pull request.
    */
-  authorship?: () => Promise<PullOutcome | null>;
+  judge?: () => Promise<Judged | null>;
 };
+
+/** What a pull request changes that Git sync reads, and whether it may. */
+type Judged = { governed: string[]; outcome: PullOutcome };
 
 type PolicySource = RepositorySource & {
   path: string;
@@ -1103,6 +1115,11 @@ async function outcomeAt(params: {
 }
 
 function checkSummary(outcome: PullOutcome) {
+  if (outcome.accepted && outcome.skipped)
+    return {
+      title: "No policy files changed",
+      summary: `This pull request changes nothing Git sync reads: not the policy file, no file it includes, no MCP server rules file and no validation. ${archestraMcpBranding.appName} checked nothing.`,
+    };
   return outcome.accepted
     ? {
         title: "Git sync would accept this policy",
@@ -1161,8 +1178,8 @@ async function githubPullRequests(
           postGithubCheck({ base, token, head, appId, outcome }),
         ...(number
           ? {
-              authorship: () =>
-                githubAuthorship({
+              judge: () =>
+                judgeGithubPull({
                   source,
                   token,
                   api,
@@ -1195,18 +1212,18 @@ type GithubPullUser = { id?: number; login?: string; type?: string };
  * A pull request a person opened is theirs, found by the GitHub account they
  * connected in Archestra. Null for a read that failed for now.
  */
-async function githubAuthorship(params: {
-  source: PolicySource;
-  token: string;
-  api: string;
-  base: string;
-  number: number;
-  user: GithubPullUser | null;
-}): Promise<PullOutcome | null> {
-  return (await judgeGithubPull(params))?.outcome ?? null;
-}
-
-/** A pull request's authorship verdict, with the governed files it changes. */
+/**
+ * What a pull request changes that Git sync reads, and whether the person who
+ * asked may change it. Who asked is judged for a pull request Archestra
+ * opened, from the APPA Keeper or Settings: its commits are signed by GitHub
+ * for Archestra's App, and their author is the requester, who must still
+ * hold edit access to each MCP server whose file it changes (the policy file
+ * and the rest take guardrailsPolicy:update); a commit someone else pushed
+ * onto that branch refuses it. A pull request a person opened on GitHub is
+ * the repository's own business: who may open and merge one is decided by
+ * GitHub's permissions and reviews, and this check reads its policy alone.
+ * Null for a read that failed for now.
+ */
 async function judgeGithubPull(params: {
   source: PolicySource;
   token: string;
@@ -1246,7 +1263,17 @@ async function judgeGithubPull(params: {
   const paths = governed.map((file) => file.path);
   if (governed.length === 0)
     return { governed: paths, outcome: { accepted: true } };
-  const requester = await pullRequester({ ...params, governed });
+  const own = await ownIdentity({ source });
+  if (own === null) return null;
+  const byArchestra =
+    own !== undefined &&
+    own.login.toLowerCase() === params.user?.login?.toLowerCase();
+  if (!byArchestra) return { governed: paths, outcome: { accepted: true } };
+  const requester = await archestraPullRequester({
+    ...params,
+    own,
+    governed,
+  });
   if (requester === null) return null;
   if ("refused" in requester)
     return { governed: paths, outcome: requester.refused };
@@ -1307,105 +1334,6 @@ async function judgeGithubPull(params: {
 }
 
 /**
- * The pull's own authorship rule, for what reached the branch since the
- * accepted commit: every governed file changed in between must come from a
- * merged pull request whose requester may change it; a file changed outside
- * one, or by one the check would have refused, refuses the pull. Throws an
- * ApiError naming why, as the policy checks do; a read that fails for now
- * throws a 503 and the next sync tries again.
- */
-async function assertPulledAuthorship(params: {
-  source: PolicySource;
-  from: string;
-  to: string;
-}): Promise<void> {
-  const { source, from, to } = params;
-  // Only an App vouches for who asked; a source without one is not judged here.
-  if (!source.githubAppConfigId) return;
-  const appName = archestraMcpBranding.appName;
-  const { token, api } = await resolveOpenAppaGithubAccess(source, {
-    contents: "read",
-    pull_requests: "read",
-  });
-  if (!token) return;
-  const base = `${api}/repos/${source.repo}`;
-  const later = () =>
-    new ApiError(
-      503,
-      `${appName} could not read what changed since the accepted commit. Git sync tries again at its next sync.`,
-    );
-  const compared = await githubCall<{
-    files?: Array<{ filename?: string; previous_filename?: string }>;
-    commits?: Array<{ sha?: string }>;
-  }>({ token, url: `${base}/compare/${from}...${to}?per_page=250` });
-  if (!compared.ok) throw later();
-  const files = compared.body.files ?? [];
-  const commits = compared.body.commits ?? [];
-  const governed = governedFiles(
-    source,
-    files.flatMap((file) =>
-      [file.filename, file.previous_filename].filter(
-        (path): path is string => typeof path === "string",
-      ),
-    ),
-  );
-  if (governed.length === 0) return;
-  // GitHub lists at most 300 files and 250 commits of a comparison.
-  if (files.length >= 300 || commits.length >= 250)
-    throw new ApiError(
-      400,
-      `More than ${files.length >= 300 ? "300 files" : "250 commits"} changed since the accepted commit ${from.slice(0, 7)}, so ${appName} cannot tell who changed each policy file. Apply the changes in smaller steps.`,
-    );
-  const range = new Set(commits.flatMap((entry) => entry.sha ?? []));
-  const branch = source.ref ?? (await defaultBranch({ token, base }));
-  const closed = await pagedGithub<{
-    number?: number;
-    merged_at?: string | null;
-    merge_commit_sha?: string | null;
-    user?: GithubPullUser | null;
-  }>({
-    token,
-    url: `${base}/pulls?state=closed&base=${encodeURIComponent(branch)}&sort=updated&direction=desc`,
-    max: 300,
-  });
-  if (closed === null) throw later();
-  const merged =
-    closed === "over"
-      ? []
-      : closed.filter(
-          (pull) =>
-            pull.number &&
-            pull.merged_at &&
-            pull.merge_commit_sha &&
-            range.has(pull.merge_commit_sha),
-        );
-  const covered = new Set<string>();
-  for (const pull of merged) {
-    const judged = await judgeGithubPull({
-      source,
-      token,
-      api,
-      base,
-      number: pull.number as number,
-      user: pull.user ?? null,
-    });
-    if (judged === null) throw later();
-    if (!judged.outcome.accepted)
-      throw new ApiError(
-        400,
-        `Pull request #${pull.number}: ${judged.outcome.reason}`,
-      );
-    for (const path of judged.governed) covered.add(path);
-  }
-  const outside = governed.filter((file) => !covered.has(file.path));
-  if (outside.length > 0)
-    throw new ApiError(
-      400,
-      `${outside.map((file) => file.path).join(", ")} changed between ${from.slice(0, 7)} and ${to.slice(0, 7)} outside a pull request ${appName} can attribute. Policy files change through pull requests that pass the ${POLICY_CHECK_NAME} check; revert the commit, or make the change again as a pull request.`,
-    );
-}
-
-/**
  * The changed files Git sync reads, with the tool prefix of each server
  * rules file: the policy file and any `.toml` beside or below it, and the
  * validations folder.
@@ -1439,105 +1367,63 @@ function governedFiles(
 }
 
 /**
- * The member who asked for a pull request, or why that cannot be told. A
- * pull request opened by Archestra's own credential is read from its
- * commits; one opened by a person from the account they connected.
+ * The member who asked for a pull request Archestra's App opened, read from
+ * its commits: every one must be signed by GitHub for the App, and their
+ * author, which Archestra set when it opened the request, names the member.
+ * Otherwise why that cannot be told; null for a read that failed for now.
  */
-async function pullRequester(params: {
+async function archestraPullRequester(params: {
   source: PolicySource;
   token: string;
-  api: string;
   base: string;
   number: number;
-  user: GithubPullUser | null;
+  own: { login: string };
   governed: Array<{ path: string }>;
 }): Promise<
   { userId: string; email: string } | { refused: PullOutcome } | null
 > {
-  const { source, token, api, base, number, user } = params;
+  const { source, token, base, number, own } = params;
   const appName = archestraMcpBranding.appName;
-  const own = await ownIdentity({ source });
-  if (own === null) return null;
-  const byArchestra =
-    own !== undefined && own.login.toLowerCase() === user?.login?.toLowerCase();
-  if (byArchestra) {
-    const commits = await pagedGithub<{
-      sha?: string;
-      commit?: {
-        author?: { email?: string };
-        verification?: { verified?: boolean };
-      };
-      committer?: { login?: string } | null;
-    }>({
-      token,
-      url: `${base}/pulls/${number}/commits`,
-      max: MAX_PULL_COMMITS,
-    });
-    if (commits === null) return null;
-    const foreign =
-      commits === "over" ||
-      commits.some(
-        (entry) =>
-          entry.commit?.verification?.verified !== true ||
-          entry.committer?.login?.toLowerCase() !== own.login.toLowerCase(),
-      );
-    if (!foreign) {
-      const emails = new Set(
-        commits.map((entry) => entry.commit?.author?.email?.toLowerCase()),
-      );
-      const [email] = [...emails];
-      const member =
-        emails.size === 1 && email
-          ? await MemberModel.findByIdOrEmail(email, source.organizationId)
-          : null;
-      if (member) return { userId: member.id, email: member.email };
-      if (user?.type === "Bot")
-        return {
-          refused: {
-            accepted: false,
-            title: "Could not tell who asked for this change",
-            reason: `${appName} opened this pull request for someone who is no longer a member. Propose the change again from the APPA Keeper or Settings → Guardrails.`,
-          },
-        };
-    } else if (user?.type === "Bot")
-      return {
-        refused: {
-          accepted: false,
-          title: "Could not tell who asked for this change",
-          reason: `This pull request has commits ${appName} did not make, so ${appName} cannot tell who asked for them. Propose the change again from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
-        },
-      };
-  }
-  if (user?.type !== "User" || user.id === undefined)
+  const commits = await pagedGithub<{
+    sha?: string;
+    commit?: {
+      author?: { email?: string };
+      verification?: { verified?: boolean };
+    };
+    committer?: { login?: string } | null;
+  }>({ token, url: `${base}/pulls/${number}/commits`, max: MAX_PULL_COMMITS });
+  if (commits === null) return null;
+  const foreign =
+    commits === "over" ||
+    commits.some(
+      (entry) =>
+        entry.commit?.verification?.verified !== true ||
+        entry.committer?.login?.toLowerCase() !== own.login.toLowerCase(),
+    );
+  if (foreign)
     return {
       refused: {
         accepted: false,
         title: "Could not tell who asked for this change",
-        reason: `This pull request was opened by ${user?.login ? `@${user.login}` : "an account"} that is not a person ${appName} knows. Propose the change from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
+        reason: `This pull request has commits ${appName} did not make, so ${appName} cannot tell who asked for them. Propose the change again from the APPA Keeper or Settings → Guardrails, or open a pull request as yourself.`,
       },
     };
-  // The accounts Archestra holds are github.com's.
-  const roster =
-    api === "https://api.github.com"
-      ? await RuntimeCredentialConnectionModel.listGitHubRoster(
-          source.organizationId,
-        )
-      : new Map<unknown, string>();
-  const email = [...roster.entries()].find(
-    ([githubId]) => Number(githubId) === user.id,
-  )?.[1];
-  const member = email
-    ? await MemberModel.findByIdOrEmail(email, source.organizationId)
-    : null;
-  if (!member)
-    return {
-      refused: {
-        accepted: false,
-        title: "Could not tell who asked for this change",
-        reason: `@${user.login ?? user.id} has not connected a GitHub account in ${appName}, so ${appName} cannot tell whether they may change ${params.governed[0]?.path ?? source.path}. Connect one under Settings → Credentials, or ask an editor to propose the change from the APPA Keeper.`,
-      },
-    };
-  return { userId: member.id, email: member.email };
+  const emails = new Set(
+    commits.map((entry) => entry.commit?.author?.email?.toLowerCase()),
+  );
+  const [email] = [...emails];
+  const member =
+    emails.size === 1 && email
+      ? await MemberModel.findByIdOrEmail(email, source.organizationId)
+      : null;
+  if (member) return { userId: member.id, email: member.email };
+  return {
+    refused: {
+      accepted: false,
+      title: "Could not tell who asked for this change",
+      reason: `${appName} opened this pull request for someone who is no longer a member. Propose the change again from the APPA Keeper or Settings → Guardrails.`,
+    },
+  };
 }
 
 /**
@@ -1617,7 +1503,11 @@ async function postGithubCheck(params: {
   const body = {
     name: POLICY_CHECK_NAME,
     status: "completed",
-    conclusion: outcome.accepted ? "success" : "failure",
+    conclusion: !outcome.accepted
+      ? "failure"
+      : outcome.skipped
+        ? "skipped"
+        : "success",
     output: { title, summary: summary.slice(0, 60_000) },
   };
   // Every run of this App on the head takes the name and the outcome, so a
@@ -1675,6 +1565,7 @@ async function gitlabPullRequests(
             .json(`${project}/statuses/${head}`, {
               body: {
                 state: outcome.accepted ? "success" : "failed",
+                // GitLab has no skipped state: a skipped check passes, and says so.
                 name: POLICY_CHECK_NAME,
                 description: (outcome.accepted ? title : summary).slice(0, 255),
               },

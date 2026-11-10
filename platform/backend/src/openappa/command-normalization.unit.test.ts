@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  argumentSpellingConflict,
   isCommandExecutionTool,
   normalizeToolArgumentsForPolicy,
   withoutArgumentCopies,
@@ -78,6 +79,39 @@ describe("command-normalization", () => {
       expect(
         normalizeToolArgumentsForPolicy("read", { filePath: "/repo/.env" }),
       ).toEqual({ filePath: "/repo/.env" });
+    });
+  });
+
+  describe("argumentSpellingConflict", () => {
+    test.each([
+      ["Bash", { command: "ls", cmd: "ls" }, false],
+      ["Bash", { command: "ls" }, false],
+      ["exec_command", { cmd: "cat ~/.aws/credentials", command: "ls" }, true],
+      ["Bash", { command: "ls", cmd: null }, false],
+      ["Bash", { command: "ls", cmd: ["ls"] }, true],
+      ["Read", { file_path: "/repo/.env", path: "/repo/.env" }, false],
+      ["Read", { file_path: "C:/repo/.env", path: "C:\\repo\\.env" }, false],
+      ["Read", { file_path: "/repo/README.md", path: "/repo/.env" }, true],
+      ["host/archestra/Edit", { file_path: "", path: "/repo/.env" }, true],
+      ["Read", { file_path: 1, path: "/repo/.env" }, true],
+      ["Grep", { file_path: "/repo/README.md", path: "/repo/.env" }, false],
+    ])("%s %j conflicts: %s", (tool, args, conflict) => {
+      expect(argumentSpellingConflict(tool, args) !== null).toBe(conflict);
+    });
+
+    test("a null spelling is absent, so the other is copied over it", () => {
+      expect(
+        normalizeToolArgumentsForPolicy("Read", {
+          path: "/repo/.env",
+          file_path: null,
+        }),
+      ).toEqual({ path: "/repo/.env", file_path: "/repo/.env" });
+      expect(
+        normalizeToolArgumentsForPolicy("exec_command", {
+          cmd: "ls",
+          command: null,
+        }),
+      ).toEqual({ cmd: "ls", command: "ls" });
     });
   });
 

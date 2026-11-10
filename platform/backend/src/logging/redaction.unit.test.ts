@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { Writable } from "node:stream";
 import { APICallError, RetryError } from "ai";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test } from "vitest";
 import { createLogger } from "./create-logger";
 
@@ -499,4 +500,92 @@ test("metadata-only withholds raw provider usage without mutating accounting inp
   const full = createCapturingLogger("full");
   full.logger.warn({ usage }, "Provider failed");
   expect(JSON.stringify(full.records)).toContain(marker);
+});
+
+describe("metadata-only database failures", () => {
+  test("keeps database diagnostics, not SQL values, under error aliases and nested causes", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const marker = "synthetic-private-database-value";
+    const cause = Object.assign(new Error(`invalid input: ${marker}`), {
+      code: "23514",
+      severity: "ERROR",
+      constraint: "messages_content_check",
+      detail: marker,
+      where: marker,
+      internalQuery: `select '${marker}'`,
+    });
+    const error = new DrizzleQueryError(
+      `insert into messages (content) values ($1) /* ${marker} */`,
+      [marker, { text: marker }],
+      cause,
+    );
+    const original = {
+      message: error.message,
+      stack: error.stack,
+      params: error.params,
+    };
+    logger.error(
+      { err: error, conversationId: "synthetic-id" },
+      "Persistence failed",
+    );
+    logger.error({ error }, "Persistence failed");
+    logger.error({ persistError: error }, "Persistence failed");
+    logger.error(
+      { error: new Error(`wrapper ${marker}`, { cause: error }) },
+      "Persistence failed",
+    );
+    logger.error(error);
+    expect(JSON.stringify(records)).not.toContain(marker);
+    const expected = {
+      type: "DrizzleQueryError",
+      statement: "INSERT",
+      parameterCount: 2,
+      cause: {
+        code: "23514",
+        severity: "ERROR",
+        constraint: "messages_content_check",
+      },
+    };
+    expect(records[0]).toMatchObject({
+      conversationId: "synthetic-id",
+      err: expected,
+    });
+    expect(records[1].error).toMatchObject(expected);
+    expect(records[2].persistError).toMatchObject(expected);
+    expect(records[3].error).toMatchObject({ cause: expected });
+    expect(records[4].err).toMatchObject(expected);
+    expect(error).toMatchObject(original);
+    expect(error.cause).toBe(cause);
+    expect(cause.detail).toBe(marker);
+  });
+
+  test("does not treat provider codes or malformed database fields as safe metadata", () => {
+    const { logger, records } = createCapturingLogger("metadata_only");
+    const cause = Object.assign(new Error("private"), {
+      code: "private-value",
+      severity: "private-value",
+      constraint: "private value",
+    });
+    logger.error({
+      err: new DrizzleQueryError("unknown private SQL", [], cause),
+    });
+    logger.error({
+      err: Object.assign(new Error("provider"), { code: "ABCDE" }),
+    });
+    expect(records[0].err).toEqual({
+      type: "DrizzleQueryError",
+      parameterCount: 0,
+      cause: { type: "Error" },
+    });
+    expect(records[1].err).toEqual({ type: "Error" });
+  });
+
+  test("preserves existing full-mode database diagnostics", () => {
+    const { logger, records } = createCapturingLogger("full");
+    const marker = "synthetic-full-mode-db-value";
+    logger.error({
+      err: new DrizzleQueryError("select $1", [marker], new Error("failed")),
+    });
+    expect(JSON.stringify(records)).toContain(marker);
+  });
 });

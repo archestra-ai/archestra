@@ -250,7 +250,9 @@ export function formatApprovalReviewText(
     if (escapeText(text.slice(0, mid)).length <= maxLength) low = mid;
     else high = mid - 1;
   }
-  return `${escapeText(text.slice(0, low))}\n… (truncated)`;
+  // Never split a surrogate pair: Telegram rejects malformed UTF-16.
+  const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
+  return `${escapeText(text.slice(0, end))}\n… (truncated)`;
 }
 
 /**

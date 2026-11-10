@@ -503,4 +503,8 @@ describe("formatApprovalReviewText", () => {
     );
     expect(formatApprovalReviewText("a<", 12, escapeText)).toBe("a&lt;");
   });
+
+  test("never ends the kept text inside a surrogate pair", () => {
+    expect(formatApprovalReviewText("ab😀c", 3)).toBe("ab\n… (truncated)");
+  });
 });

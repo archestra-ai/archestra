@@ -5,6 +5,7 @@ import {
   buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
+  formatApprovalReviewText,
   formatApprovalToolArgs,
   isLlmProviderAuthError,
   isSessionResetCommand,
@@ -490,5 +491,16 @@ describe("isSessionResetCommand", () => {
     ]) {
       expect(isSessionResetCommand(text), text).toBe(false);
     }
+  });
+});
+
+describe("formatApprovalReviewText", () => {
+  const escape = (text: string) => text.replaceAll("<", "&lt;");
+
+  test("fits the escaped text without splitting an escape sequence", () => {
+    expect(formatApprovalReviewText(`${"a".repeat(9)}<<`, 12, escape)).toBe(
+      `${"a".repeat(9)}\n… (truncated)`,
+    );
+    expect(formatApprovalReviewText("a<", 12, escape)).toBe("a&lt;");
   });
 });

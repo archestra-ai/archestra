@@ -232,35 +232,40 @@ export function formatApprovalToolArgs(
 
 /**
  * Fit an OpenAPPA review into one Slack section (3,000 chars) with room for
- * the code fence around it.
+ * the code fence around it. With `escape`, the escaped form fits, and the cut
+ * falls between source characters, so no escape sequence is split.
  */
 export function formatApprovalReviewText(
   text: string,
   maxLength = 2800,
+  escape: (text: string) => string = (text) => text,
 ): string {
-  return text.length > maxLength
-    ? `${text.slice(0, maxLength)}\n… (truncated)`
-    : text;
+  const escaped = escape(text);
+  if (escaped.length <= maxLength) return escaped;
+  // Longest source prefix whose escaped form fits.
+  let low = 0;
+  let high = Math.min(text.length, maxLength);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (escape(text.slice(0, mid)).length <= maxLength) low = mid;
+    else high = mid - 1;
+  }
+  return `${escape(text.slice(0, low))}\n… (truncated)`;
 }
 
 /**
- * What approving also accepts, escaped for the surface; undefined when
- * nothing. Truncated before escaping, so no entity is cut, and short enough
- * that even escaping every character keeps it inside one Slack section or
- * Telegram message with the rest of the prompt.
+ * What approving also accepts, escaped for the surface and sized like a
+ * review text; undefined when nothing.
  */
 export function formatApprovalAlsoAccepts(
   lines: string[] | undefined,
-  escape: (text: string) => string = (text) => text,
+  escape?: (text: string) => string,
 ): string | undefined {
   if (!lines?.length) return undefined;
-  return escape(
-    formatApprovalReviewText(
-      ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join(
-        "\n",
-      ),
-      400,
-    ),
+  return formatApprovalReviewText(
+    ["Approving also accepts:", ...lines.map((line) => `- ${line}`)].join("\n"),
+    2800,
+    escape,
   );
 }
 

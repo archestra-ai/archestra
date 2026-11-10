@@ -2097,8 +2097,8 @@ describe("SlackProvider.addApprovalRequestForm", () => {
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
-    expect(blocks[0].text.text).toBe(
-      "*Approval required*\n`send_email`\nReview this tool call before it can continue.\n\nApproving also accepts:\n- readers &lt;!channel&gt;",
+    expect(blocks[1].text.text).toBe(
+      "Approving also accepts:\n- readers &lt;!channel&gt;",
     );
   });
 

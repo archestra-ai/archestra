@@ -227,6 +227,54 @@ export type PoolOptions = ReturnType<typeof usePoolOptions>;
  * Why the form can't be saved yet, or null when it can. The name is what a
  * request asks for, so it takes one pool.
  */
+/** A retry setting a field edits, by its key in the settings or retry policy. */
+export type RetryKey =
+  | "numRetries"
+  | "initialDelayMs"
+  | "maxDelayMs"
+  | keyof NonNullable<ModelPoolRetrySettings["retryPolicy"]>;
+
+const TOP_LEVEL_RETRY_KEYS = new Set<RetryKey>([
+  "numRetries",
+  "initialDelayMs",
+  "maxDelayMs",
+]);
+
+export function getRetryValue(
+  settings: ModelPoolRetrySettings | null | undefined,
+  key: RetryKey,
+): number | undefined {
+  if (!settings) return undefined;
+  if (key === "numRetries" || key === "initialDelayMs" || key === "maxDelayMs")
+    return settings[key];
+  return settings.retryPolicy?.[key];
+}
+
+/**
+ * Sets or clears one retry setting. Settings whose fields are all blank go
+ * back to null: a pool then uses the defaults, and a member the pool's values.
+ */
+export function withRetryValue(
+  settings: ModelPoolRetrySettings | null | undefined,
+  key: RetryKey,
+  value: number | undefined,
+): ModelPoolRetrySettings | null {
+  const next: ModelPoolRetrySettings = { ...settings };
+  if (TOP_LEVEL_RETRY_KEYS.has(key)) {
+    const top = key as "numRetries" | "initialDelayMs" | "maxDelayMs";
+    if (value === undefined) delete next[top];
+    else next[top] = value;
+  } else {
+    const policy = { ...next.retryPolicy };
+    const policyKey = key as keyof typeof policy;
+    if (value === undefined) delete policy[policyKey];
+    else policy[policyKey] = value;
+    if (Object.keys(policy).length > 0) next.retryPolicy = policy;
+    else delete next.retryPolicy;
+  }
+  return Object.keys(next).length > 0 ? next : null;
+}
+
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,

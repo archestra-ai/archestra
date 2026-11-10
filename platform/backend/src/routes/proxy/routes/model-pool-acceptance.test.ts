@@ -740,12 +740,15 @@ labTest(
 );
 
 labTest(
-  "AC-C3 / AC-N2 a lone member's 401 stays a 401, one attempt each",
+  "AC-C3 / AC-N2 a lone member's 401 stays a 401, then it cools down",
   async ({ lab }) => {
     const [only] = await lab.deploy([{ priority: 1 }]);
     only.mode = { kind: "status", status: 401 };
-    for (let i = 0; i < 3; i++) expect((await lab.ask()).status).toBe(401);
-    expect(only.hits).toBe(3);
+    expect((await lab.ask()).status).toBe(401);
+    // A refused key is never retried. While it cools down, requests fail
+    // without reaching the provider.
+    for (let i = 0; i < 2; i++) expect((await lab.ask()).status).toBe(503);
+    expect(only.hits).toBe(1);
   },
 );
 

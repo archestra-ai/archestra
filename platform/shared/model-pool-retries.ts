@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+/** What a pool with retries turned on uses for a blank setting. */
+export const MODEL_POOL_RETRY_DEFAULTS = {
+  numRetries: 2,
+  initialDelayMs: 500,
+  maxDelayMs: 8000,
+} as const;
+
+export const MODEL_POOL_RETRY_LIMITS = {
+  numRetries: { min: 0, max: 10 },
+  initialDelayMs: { min: 100, max: 8000 },
+  maxDelayMs: { min: 100, max: 60000 },
+} as const;
+
 const retryCount = z.number().int().min(0).max(10);
 
 /** Additional attempts after the first failure, with per-error overrides.

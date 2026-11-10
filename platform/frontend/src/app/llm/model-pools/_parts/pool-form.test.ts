@@ -5,6 +5,7 @@ import {
   type PoolFormMember,
   toFormValues,
   toPoolInput,
+  withRetryValue,
 } from "./pool-form";
 
 function member(
@@ -77,6 +78,18 @@ describe("retry settings", () => {
       retryPolicy: { timeoutError: 0 },
     });
     expect(toPoolInput(toFormValues(null)).retrySettings).toBeNull();
+  });
+});
+
+describe("withRetryValue", () => {
+  it("goes back to null, the defaults, once the last field is cleared", () => {
+    const set = withRetryValue(null, "rateLimitError", 3);
+    expect(set).toEqual({ retryPolicy: { rateLimitError: 3 } });
+    expect(withRetryValue(set, "rateLimitError", undefined)).toBeNull();
+  });
+
+  it("keeps 0 as a value", () => {
+    expect(withRetryValue(null, "numRetries", 0)).toEqual({ numRetries: 0 });
   });
 });
 

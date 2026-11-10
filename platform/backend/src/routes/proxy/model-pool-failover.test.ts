@@ -410,6 +410,9 @@ describe("a pool's own timeouts and cooldown", () => {
           member(second.id, "claude-haiku-4-5", 2),
         ],
         cooldownSeconds,
+        // One bench to measure: a retry after the Retry-After could hit the
+        // first member again once its cooldown ends.
+        retrySettings: { numRetries: 0 },
       },
     });
     const plan = (await planModelPool({
@@ -880,9 +883,10 @@ describe("openThroughModelPool", () => {
       { providerApiKeyId: keyA, failureReason: "key_unavailable" },
     ]);
     // On the last member there is nowhere to go: its own error is returned.
+    // keyA is cooling down from the call above, so use keyB.
     await expect(
       openThroughModelPool({
-        plan: { ...plan, members: [plan.members[0]] },
+        plan: { ...plan, members: [plan.members[1]] },
         attempt: {},
         transportFor: async () => {
           throw vaultDown;
@@ -895,33 +899,29 @@ describe("openThroughModelPool", () => {
     ).rejects.toBe(vaultDown);
   });
 
-  test("waits on the last member however slow, and retries only that one", async () => {
+  test("waits on the last member however slow", async () => {
     const attempt: UpstreamAttempt = {};
     const opened: string[] = [];
-    const dropped = Object.assign(new Error("socket hang up"), {
-      code: "ECONNRESET",
-    });
 
     const result = await openThroughModelPool({
-      plan,
+      plan: { ...plan, retrySettings: { initialDelayMs: 100 } },
       attempt,
       ...openKey(() => null),
       open: async (t) => {
         const key = (await t.execute({})) as string;
         opened.push(key);
         if (key === keyA) throw httpError(503);
-        if (opened.filter((k) => k === keyB).length === 1) throw dropped;
         await new Promise((resolve) => setTimeout(resolve, 40));
         return `answer from ${key}`;
       },
       memberTimeoutMs: 20,
-      isRetryable: (error) => error === dropped,
+      isRetryable: () => false,
       shouldContinue: () => true,
       prepareFailedAttempt: async () => async () => {},
     });
 
     expect(result).toBe(`answer from ${keyB}`);
-    expect(opened).toEqual([keyA, keyB, keyB]);
+    expect(opened).toEqual([keyA, keyB]);
   });
 
   test("does not retry a member's dropped connection while a sibling is left", async () => {

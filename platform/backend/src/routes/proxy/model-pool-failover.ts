@@ -6,7 +6,9 @@
  * member is a provider key plus the model id that provider knows the model by,
  * reached through its own transport (see `model-pool-transport.ts`). A member
  * that fails before the provider answered (see `poolFailoverReason`) is
- * benched for a while, and the request moves on to the next member. So is a
+ * benched for a while. A transient failure is retried on another healthy
+ * member of the same order, up to the pool's retry count (2 unless set), then
+ * the request moves on to the next order. So is a
  * member that is silent too long while another member is left to try (see
  * `MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS`), and one whose key can't be loaded. Once
  * output has reached the client, a failure goes to the client as before,
@@ -15,7 +17,10 @@
 import { createHash } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SupportedProvider } from "@archestra/shared";
-import type { ModelPoolRetrySettings } from "@archestra/shared/model-pool-retries";
+import {
+  MODEL_POOL_RETRY_DEFAULTS,
+  type ModelPoolRetrySettings,
+} from "@archestra/shared/model-pool-retries";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,7 +38,6 @@ import {
   type MemberTransport,
   type PoolWire,
 } from "./model-pool-transport";
-import { openUpstreamWithRetry } from "./upstream-connection-retry";
 
 /**
  * How long a pool member's stream may stay silent before the request moves to
@@ -306,8 +310,8 @@ export function orderPoolMembers(params: {
 }
 
 /**
- * Opens the upstream call with configured group reselection or the existing
- * one-pass member failover. Each dispatched attempt rechecks access and spend,
+ * Opens the upstream call with LiteLLM-style group reselection: retries within
+ * an order, then later orders as fallbacks. Each dispatched attempt rechecks access and spend,
  * uses a fresh transport, and settles its failure before another admission.
  * A terminal failure goes to the caller with `attempt` describing it.
  */
@@ -370,16 +374,11 @@ export async function openThroughModelPool<T>(params: {
   let hiddenError: ApiError | undefined;
   let attempted = 0;
   let creditCoolingDown = false;
-  // Configured retries reselect within the group, then use explicit order
-  // fallbacks. Unconfigured pools retain their existing one-pass failover.
-  const selection =
-    plan.retrySettings ||
-    plan.requestNumRetries !== undefined ||
-    plan.members.some((member) => member.retrySettings)
-      ? new PoolRetrySelection(plan)
-      : undefined;
-  for (let index = 0; ; index++) {
-    const member = selection ? await selection.next() : plan.members[index];
+  // Retries reselect within the group, then use explicit order fallbacks.
+  // A pool without settings uses the defaults.
+  const selection = new PoolRetrySelection(plan);
+  for (;;) {
+    const member = await selection.next();
     if (!member) break;
     if (params.signal?.aborted || !params.shouldContinue()) {
       if (lastFailure) break;
@@ -416,7 +415,7 @@ export async function openThroughModelPool<T>(params: {
         throw error;
       }
       hiddenError = error;
-      selection?.skip(member);
+      selection.skip(member);
       continue;
     }
     try {
@@ -428,14 +427,10 @@ export async function openThroughModelPool<T>(params: {
       throw error;
     }
     attempted++;
-    // Unconfigured pools keep their plan-based last-member behavior. A fresh
-    // weighted retry can select the original tail early, so configured pools
-    // only waive the timeout when no other eligible selection can follow.
-    const isLast = selection
-      ? !(await selection.canTryAnother(member))
-      : member === plan.members.at(-1);
+    // A fresh weighted retry can select the original tail early, so only
+    // waive the timeout when no other eligible selection can follow.
+    const isLast = !(await selection.canTryAnother(member));
     const abort = new AbortController();
-    let retryFailure: unknown;
     try {
       const transport = await params
         .transportFor(member, abort.signal)
@@ -443,33 +438,18 @@ export async function openThroughModelPool<T>(params: {
           throw new MemberUnavailableError(error);
         });
       const timeoutMs = isLast ? undefined : params.memberTimeoutMs;
-      const result = await openUpstreamWithRetry({
-        open: () => withTimeout(params.open(transport), timeoutMs, abort),
-        // With a sibling left, a dropped connection moves on at once rather
-        // than retrying a member that may be down.
-        isRetryable:
-          selection === undefined && isLast ? params.isRetryable : () => false,
-        shouldContinue: params.shouldContinue,
-        onRetry: (event) => {
-          retryFailure = event.error;
-          params.onRetry?.(event);
-        },
-      });
+      const result = await withTimeout(
+        params.open(transport),
+        timeoutMs,
+        abort,
+      );
       await recordPreviousFailure("failed_over");
       attempt.attemptOutcome = "answered";
       return result;
-    } catch (caught) {
-      // A hide during connection-retry backoff stops the retry, but the
-      // dispatched member still failed: retain that failure and its accounting.
-      const error =
-        caught instanceof ApiError &&
-        caught.internalCode === "model_hidden" &&
-        retryFailure !== undefined
-          ? retryFailure
-          : caught;
+    } catch (error) {
       if (error instanceof ApiError && error.internalCode === "model_hidden") {
         hiddenError = error;
-        selection?.skip(member);
+        selection.skip(member);
         attempted--;
         continue;
       }
@@ -487,7 +467,7 @@ export async function openThroughModelPool<T>(params: {
       // the row's response.
       attempt.failureReason = failover?.reason ?? "error";
       if (!failover) throw error;
-      const delayMs = selection?.failed({
+      const delayMs = selection.failed({
         member,
         failover,
         connectionRetryable: params.isRetryable(error),
@@ -503,7 +483,7 @@ export async function openThroughModelPool<T>(params: {
           retryAfterMs: failover.retryAfterMs,
           cooldownMs: plan.cooldownMs,
         });
-      if ((!selection && isLast) || !params.shouldContinue()) {
+      if (!params.shouldContinue()) {
         throw error instanceof MemberUnavailableError ? error.cause : error;
       }
       if (delayMs === undefined) {
@@ -534,7 +514,7 @@ export async function openThroughModelPool<T>(params: {
       }
       if (delayMs !== undefined) {
         params.onRetry?.({
-          attempt: selection?.retryCount ?? 1,
+          attempt: selection.retryCount,
           delayMs,
           error,
         });
@@ -553,15 +533,17 @@ export async function openThroughModelPool<T>(params: {
     throw lastFailure.error;
   }
   if (hiddenError) throw hiddenError;
-  if (creditCoolingDown)
+  // Selection skips benched members, so a pool whose members all ran out of
+  // credit reaches here without trying any of them.
+  if (
+    creditCoolingDown ||
+    (attempted === 0 && (await everyMemberOutOfCredit(plan)))
+  )
     throw new ApiError(
       503,
       "All compatible model pool members are cooling down after credit exhaustion. Try again after their cooldown expires.",
     );
-  if (selection)
-    throw new ApiError(503, "No healthy model pool members are available");
-  // The plan must have at least one member.
-  throw new Error("Model pool plan has no members");
+  throw new ApiError(503, "No healthy model pool members are available");
 }
 
 // === Internal helpers ===
@@ -578,16 +560,11 @@ function parseRetryCountHeader(value: string | string[] | undefined) {
   return Number(value);
 }
 
+/** The member's settings over the pool's; blank ones use the defaults. */
 function resolveRetrySettings(
   plan: ModelPoolPlan,
   member: PlannedMember,
-): ModelPoolRetrySettings | undefined {
-  if (
-    !plan.retrySettings &&
-    !member.retrySettings &&
-    plan.requestNumRetries === undefined
-  )
-    return undefined;
+): ModelPoolRetrySettings {
   return {
     ...plan.retrySettings,
     ...member.retrySettings,
@@ -615,7 +592,7 @@ function retryDelayMs(params: {
   );
   if (limit === undefined) return undefined;
   if (retryCount >= limit) return undefined;
-  const max = settings.maxDelayMs ?? 8_000;
+  const max = settings.maxDelayMs ?? MODEL_POOL_RETRY_DEFAULTS.maxDelayMs;
   const retryAfter = failover.retryAfterMs;
   // A reset hours away should fail over, never turn into a busy retry loop.
   if (
@@ -627,7 +604,8 @@ function retryDelayMs(params: {
   }
   const exponential = Math.min(
     max,
-    (settings.initialDelayMs ?? 500) * 2 ** retryCount,
+    (settings.initialDelayMs ?? MODEL_POOL_RETRY_DEFAULTS.initialDelayMs) *
+      2 ** retryCount,
   );
   // Downward jitter matches common SDK semantics and stays within the cap.
   return Math.max(1, Math.ceil(exponential * (0.75 + Math.random() * 0.25)));
@@ -646,7 +624,7 @@ function retryLimit(
     requestNumRetries ??
     settings.retryPolicy?.[errorClass] ??
     settings.numRetries ??
-    2
+    MODEL_POOL_RETRY_DEFAULTS.numRetries
   );
 }
 
@@ -736,7 +714,7 @@ class PoolRetrySelection {
     const timeoutRetries =
       this.settings?.numRetries ??
       retryLimit(
-        resolveRetrySettings(this.plan, member) ?? {},
+        resolveRetrySettings(this.plan, member),
         this.plan.requestNumRetries,
         { reason: "timeout" },
         false,
@@ -759,7 +737,7 @@ class PoolRetrySelection {
     connectionRetryable: boolean;
   }): number | undefined {
     if (!this.settings) {
-      const settings = resolveRetrySettings(this.plan, params.member) ?? {};
+      const settings = resolveRetrySettings(this.plan, params.member);
       this.settings = {
         ...settings,
         numRetries:
@@ -905,6 +883,21 @@ async function readBenches(pool: {
     if (bench) byMember.set(member.id, bench);
   }
   return byMember;
+}
+
+async function everyMemberOutOfCredit(plan: ModelPoolPlan) {
+  const benches = await readBenches({
+    id: plan.poolId,
+    members: plan.members.map((member) => ({ id: member.memberId })),
+  });
+  return plan.members.every((member) => {
+    const bench = benches.get(member.memberId);
+    return (
+      bench !== undefined &&
+      bench.until > Date.now() &&
+      bench.reason.startsWith("credit_exhausted")
+    );
+  });
 }
 
 function toMs(seconds: number | null): number | undefined {

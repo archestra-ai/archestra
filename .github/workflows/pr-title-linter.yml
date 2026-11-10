@@ -7,8 +7,8 @@ on:
       - edited
       - reopened
       - synchronize
-  # This check can be required with merge queue enabled. The actual title lint
-  # only needs PR metadata, but required checks must also post on merge_group.
+  # This check can be required with merge queue enabled. The shared action
+  # passes on merge_group, where there is no title to lint.
   merge_group:
 
 permissions: {}
@@ -18,28 +18,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The rules live in archestra-ai/.github (actions/lint-pr-title/commitlint.config.js).
   lint-pr-title:
     name: PR Title Linter
     runs-on: ubuntu-latest
-    permissions:
-      contents: read # Required to checkout the repository and read commitlint config.
-      pull-requests: read # Required by lint-pr-title to read PR metadata.
+    timeout-minutes: 5
+    permissions: {}
     steps:
-      - name: Pass for merge queue
-        if: ${{ github.event_name == 'merge_group' }}
-        run: echo "PR title was already linted before entering merge queue."
-
-      - name: Checkout project
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
       - name: Lint PR title
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: grafana/shared-workflows/actions/lint-pr-title@70c40e5b6522c854a55334124545261cae3d4c73 # v1.2.4
-        with:
-          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: archestra-ai/.github/actions/lint-pr-title@dbb529ba77ba07dd8f71f16ccb1b2317f4587312 # v1.24.0

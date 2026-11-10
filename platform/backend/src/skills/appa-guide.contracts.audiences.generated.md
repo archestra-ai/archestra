@@ -230,3 +230,4 @@ A battery binds the membership service it ships in its own `appa.toml`, with the
 ##### Source probe at start and reload
 
 Before it serves a configuration, and before it switches to a reloaded one, OpenAPPA reads every selector the policy references once, asks each configured `lookup` entry for one member those answers owe, and applies the reader ID rule to each answer. A service that fails or returns a malformed reader ID stops the start or the reload with the provider, the selector or member, and the reason. A service that refuses its declared templates fails this probe, so a policy whose `selectors` disagree with the service never serves. A failed reload leaves the previous configuration serving. Replay does not probe.
+

@@ -194,3 +194,4 @@ After the agent reads the original ticket, it can email readers identified as co
 If the agent receives only the cleaned, public version of the ticket, that result does not restrict it to internal readers. The same applies to a cleaned answer from a child agent.
 
 The example authority has no tags, so it can approve sharing to any audience for any tool. See Validation for ways to check policy behavior.
+

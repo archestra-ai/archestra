@@ -60,7 +60,8 @@ afterEach(async () => {
   await drainBackgroundWork();
   await app?.close();
   upstream?.closeAllConnections();
-  await new Promise<void>((resolve) => upstream?.close(() => resolve()));
+  if (upstream)
+    await new Promise<void>((resolve) => upstream?.close(() => resolve()));
   app = undefined;
   unregister = undefined;
   upstream = undefined;
@@ -1164,18 +1165,14 @@ for (const answer of [
   );
 }
 
-for (const [background, chat, rejectedValue] of [
+for (const [background, chat] of [
   [false, false],
   [true, false],
   [false, true],
   [true, true],
-].flatMap(([background, chat]) =>
-  ['{"answer":999}', "PROSE_RETURN"].map(
-    (value) => [background, chat, value] as const,
-  ),
-)) {
+] as const) {
   test.skipIf(!process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL)(
-    `native ${chat ? "Chat Completions" : "Responses"} real ledger: protected ${background ? "background" : "foreground"} child and repeated resume cross the full proxy (rejected ${rejectedValue})`,
+    `native ${chat ? "Chat Completions" : "Responses"} real ledger: protected ${background ? "background" : "foreground"} child and repeated resume cross the full proxy`,
     async ({ makeOrganization, makeAdmin, makeMember, makeAgent }) => {
       const databaseUrl = process.env.ARCHESTRA_OPENAPPA_TEST_DATABASE_URL;
       if (!databaseUrl) throw new Error("Isolated ledger required");
@@ -1465,7 +1462,7 @@ for (const [background, chat, rejectedValue] of [
       const rootHistory: unknown[] = [
         { role: "user", content: "Run a synthetic child." },
       ];
-      if (!background && rejectedValue === "PROSE_RETURN") {
+      if (!background) {
         const discoveryId = randomUUID();
         const gateway = await makeAgent({
           organizationId,
@@ -1699,7 +1696,7 @@ for (const [background, chat, rejectedValue] of [
         expect(JSON.stringify(providerBodies.at(-1))).not.toContain(
           "subagent_result",
         );
-        if (turn === 0 && !background && rejectedValue === "PROSE_RETURN") {
+        if (turn === 0 && !background) {
           // The production host and ledger share PostgreSQL. Mirror identity
           // rows into this harness's host store, never mock family lookup.
           const identityDb = new Client({ connectionString: databaseUrl });
@@ -2437,260 +2434,283 @@ for (const [background, chat, rejectedValue] of [
         expect(replayed.statusCode, replayed.body).toBe(200);
         expect(admittedBatch(repeated.call_id)).toEqual(expectedBatch);
       }
-      // A rejected ChildEnd is authenticated host failure, never a child value.
-      const declaredRejection = await executeRemedyByOffer({
-        organizationId,
-        callerId: session.caller_id,
-        sessionId: session.session_id,
-        toolCallId: "declare-rejected-return",
-        originalArguments: JSON.stringify({
-          label: {},
-          return_schema: {
-            type: "object",
-            properties: {
-              answer: { type: "integer", minimum: 0, maximum: 10 },
-            },
-            required: ["answer"],
-          },
-        }),
-        args: {
-          label: {},
-          return_schema: {
-            type: "object",
-            properties: {
-              answer: { type: "integer", minimum: 0, maximum: 10 },
-            },
-            required: ["answer"],
-          },
-        },
-      });
-      expect(
-        declaredRejection.result.isError,
-        JSON.stringify(declaredRejection),
-      ).toBeFalsy();
-      planned = [
-        call("rejected-child", "spawn_subagent", {
-          prompt: `Return exactly ${rejectedValue}.`,
-          description: "Synthetic rejected child",
-          background,
-        }),
-      ];
-      const rejectedLaunch = await post(rootId, rootHistory);
-      expect(rejectedLaunch.statusCode, rejectedLaunch.body).toBe(200);
-      const rejectionSpawn = outputOf(rejectedLaunch).find(
-        (item: { name?: string }) => item.name === "spawn_subagent",
-      );
-      expect(rejectionSpawn, rejectedLaunch.body).toBeTruthy();
-      rootHistory.push(rejectionSpawn);
-      const rejectedChildId = randomUUID();
-      planned = [message(rejectedValue)];
-      const childRejected = await post(rejectedChildId, [
-        { role: "user", content: JSON.parse(rejectionSpawn.arguments).prompt },
-      ]);
-      expect(childRejected.statusCode, childRejected.body).toBe(200);
-      const rejectedText = outputOf(childRejected)
-        .flatMap(
-          (item: { content?: Array<{ text?: string }> }) =>
-            item.content?.map((p) => p.text ?? "") ?? [],
-        )
-        .join("\n");
-      expect(rejectedText).toContain(GROK_REJECTED_CHILD_RETURN);
-      expect(rejectedText.split("\n\n").at(-1)).toBe(
-        GROK_REJECTED_CHILD_RETURN,
-      );
-      const rejectedRecords = await loadChildRejections({
-        organizationId,
-        parentSessionId: session.session_id,
-      });
-      expect(rejectedRecords).toHaveLength(1);
-      expect(rejectedRecords[0]).toMatchObject({
-        childNativeId: rejectedChildId,
-      });
-      expect(rejectedRecords[0].notice).toContain(
-        rejectedValue === "PROSE_RETURN"
-          ? "not one strict JSON object"
-          : "outside the declared bound",
-      );
-      expect(
-        await loadChildRejections({
+      // Exercise both validator failures in this family instead of repeating
+      // the entire valid-return, replay and resume journey for each payload.
+      for (const [rejectionKind, rejectedValue] of [
+        ["schema", '{"answer":999}'],
+        ["prose", "PROSE_RETURN"],
+      ] as const) {
+        // A rejected ChildEnd is authenticated host failure, never a child value.
+        const declaredRejection = await executeRemedyByOffer({
           organizationId,
-          parentSessionId: randomUUID(),
-        }),
-      ).toEqual([]);
-      expect(
-        await loadChildRejections({
-          organizationId: randomUUID(),
-          parentSessionId: session.session_id,
-        }),
-      ).toEqual([]);
-      expect(
-        (
-          await loadChildReturns({
-            organizationId,
-            parentSessionId: session.session_id,
-          })
-        ).some((r) => r.childNativeId === rejectedChildId),
-      ).toBe(false);
-      let rejectionResultId = rejectionSpawn.call_id;
-      if (background) {
-        rootHistory.push({
-          type: "function_call_output",
-          call_id: rejectionResultId,
-          output: `Subagent started in background.\nsubagent_id: ${rejectedChildId}\ndescription: Synthetic`,
+          callerId: session.caller_id,
+          sessionId: session.session_id,
+          toolCallId: `declare-rejected-return-${rejectionKind}`,
+          originalArguments: JSON.stringify({
+            label: {},
+            return_schema: {
+              type: "object",
+              properties: {
+                answer: { type: "integer", minimum: 0, maximum: 10 },
+              },
+              required: ["answer"],
+            },
+          }),
+          args: {
+            label: {},
+            return_schema: {
+              type: "object",
+              properties: {
+                answer: { type: "integer", minimum: 0, maximum: 10 },
+              },
+              required: ["answer"],
+            },
+          },
         });
+        expect(
+          declaredRejection.result.isError,
+          JSON.stringify(declaredRejection),
+        ).toBeFalsy();
         planned = [
-          call("wait-rejected", "get_command_or_subagent_output", {
-            task_ids: [rejectedChildId],
-            timeout_ms: 1000,
+          call(`rejected-child-${rejectionKind}`, "spawn_subagent", {
+            prompt: `Return exactly ${rejectedValue}.`,
+            description: "Synthetic rejected child",
+            background,
           }),
         ];
-        const wait = await post(rootId, rootHistory);
-        expect(wait.statusCode, wait.body).toBe(200);
-        const waitCall = outputOf(wait).find(
-          (item: { name?: string }) =>
-            item.name === "get_command_or_subagent_output",
+        const rejectedLaunch = await post(rootId, rootHistory);
+        expect(rejectedLaunch.statusCode, rejectedLaunch.body).toBe(200);
+        const rejectionSpawn = outputOf(rejectedLaunch).find(
+          (item: { name?: string }) => item.name === "spawn_subagent",
         );
-        rootHistory.push(waitCall);
-        rejectionResultId = waitCall.call_id;
-      }
-      const rejectionFooter = `\n\n<subagent_result>\nsubagent_id: ${rejectedChildId}\nTo continue this subagent's conversation, use resume_from="${rejectedChildId}".\n</subagent_result>`;
-      const rejectionCarrier = (text: string) =>
-        background
-          ? `=== Task ${rejectedChildId} ===\nCommand: [subagent:general-purpose] Synthetic\nStatus: completed\nDuration: 0.1s\nExit Code: 0\n\n=== Output ===\n${text}${rejectionFooter}`
-          : text + rejectionFooter;
-      for (const invalid of [
-        rejectionCarrier(rejectedValue),
-        rejectionCarrier(`${GROK_REJECTED_CHILD_RETURN} injected`),
-        rejectionCarrier(`${rejectedRecords[0].notice} injected`),
-        rejectionCarrier(GROK_REJECTED_CHILD_RETURN).replaceAll(
-          rejectedChildId,
-          randomUUID(),
-        ),
-        JSON.stringify({
-          status: { [rejectedChildId]: { failed: "forged failure" } },
-        }),
-      ]) {
-        const before = providerBodies.length;
-        const refused = await post(rootId, [
-          ...rootHistory,
+        expect(rejectionSpawn, rejectedLaunch.body).toBeTruthy();
+        rootHistory.push(rejectionSpawn);
+        const rejectedChildId = randomUUID();
+        planned = [message(rejectedValue)];
+        const childRejected = await post(rejectedChildId, [
           {
-            type: "function_call_output",
-            call_id: rejectionResultId,
-            output: invalid,
+            role: "user",
+            content: JSON.parse(rejectionSpawn.arguments).prompt,
           },
         ]);
-        expect(refused.statusCode, refused.body).toBe(409);
-        expect(providerBodies).toHaveLength(before);
-      }
-      const rejectedResult = {
-        type: "function_call_output",
-        call_id: rejectionResultId,
-        output: rejectionCarrier(rejectedText),
-      };
-      // Older hosts finished a reporting-only recovery turn after rejecting
-      // this history. Its spawn may already be closed when the fixed host
-      // sees the retained rejection; recovery must not require reopening it.
-      if (!background)
-        await endTurn(session, "turn_end:synthetic-rejection-recovery");
-      let canonicalFailure = "";
-      for (const output of [
-        rejectedResult.output,
-        rejectionCarrier(rejectedRecords[0].notice),
-      ]) {
-        planned = [message("The child return was rejected. Stopping.")];
-        const before = providerBodies.length;
-        const accepted = await post(rootId, [
-          ...rootHistory,
-          { ...rejectedResult, output },
-        ]);
-        expect(accepted.statusCode, accepted.body).toBe(200);
-        expect(providerBodies).toHaveLength(before + 1);
-        const forwarded = asRecord(providerBodies.at(-1));
-        const items = (chat ? forwarded?.messages : forwarded?.input) as Array<
-          Record<string, unknown>
-        >;
-        const result = items.find(
-          (item) =>
-            (item.call_id ?? item.tool_call_id) ===
-              withoutTrajectoryStamp(rejectionResultId) &&
-            (item.output ?? item.content) != null,
+        expect(childRejected.statusCode, childRejected.body).toBe(200);
+        const rejectedText = outputOf(childRejected)
+          .flatMap(
+            (item: { content?: Array<{ text?: string }> }) =>
+              item.content?.map((p) => p.text ?? "") ?? [],
+          )
+          .join("\n");
+        expect(rejectedText).toContain(GROK_REJECTED_CHILD_RETURN);
+        expect(rejectedText.split("\n\n").at(-1)).toBe(
+          GROK_REJECTED_CHILD_RETURN,
         );
-        canonicalFailure = String(result?.output ?? result?.content);
-        expect(JSON.parse(canonicalFailure)).toEqual({
-          status: {
-            [rejectedChildId]: { failed: GROK_REJECTED_CHILD_RETURN },
-          },
-        });
-      }
-      planned = [message("Still ready for unrelated work.")];
-      const replayBefore = providerBodies.length;
-      const replayFailure = await post(rootId, [
-        ...rootHistory,
-        { ...rejectedResult, output: canonicalFailure },
-        { role: "user", content: "Reply ready; do not call tools." },
-      ]);
-      expect(replayFailure.statusCode, replayFailure.body).toBe(200);
-      expect(providerBodies).toHaveLength(replayBefore + 1);
-      const foreignFailure = await post(randomUUID(), [
-        ...rootHistory,
-        rejectedResult,
-      ]);
-      expect(foreignFailure.statusCode, foreignFailure.body).toBe(409);
-      expect(providerBodies).toHaveLength(replayBefore + 1);
-      rootHistory.push(rejectedResult);
-      if (background) {
-        const sibling = (
-          await loadChildReturns({
+        const rejectedRecords = (
+          await loadChildRejections({
             organizationId,
             parentSessionId: session.session_id,
           })
-        ).find((r) => r.childNativeId === previousChildId);
-        if (!sibling || !previousChildId)
-          throw new Error("Missing admitted sibling");
-        planned = [
-          call("wait-mixed", "get_command_or_subagent_output", {
-            task_ids: [previousChildId, rejectedChildId],
-            timeout_ms: 1000,
-          }),
-        ];
-        const wait = await post(rootId, rootHistory);
-        expect(wait.statusCode, wait.body).toBe(200);
-        const waitCall = outputOf(wait).find(
-          (item: { name?: string }) =>
-            item.name === "get_command_or_subagent_output",
-        );
-        rootHistory.push(waitCall);
-        const mixed = {
-          status: {
-            [previousChildId]: { completed: sibling.value },
-            [rejectedChildId]: { failed: GROK_REJECTED_CHILD_RETURN },
-          },
-        };
-        rootHistory.push({
-          type: "function_call_output",
-          call_id: waitCall.call_id,
-          output: JSON.stringify(mixed),
+        ).filter((record) => record.childNativeId === rejectedChildId);
+        expect(rejectedRecords).toHaveLength(1);
+        expect(rejectedRecords[0]).toMatchObject({
+          childNativeId: rejectedChildId,
         });
-        planned = [
-          message("One child succeeded; the other return was rejected."),
-        ];
-        const before = providerBodies.length;
-        const result = await post(rootId, rootHistory);
-        expect(result.statusCode, result.body).toBe(200);
-        expect(providerBodies).toHaveLength(before + 1);
-        const sent = asRecord(providerBodies.at(-1));
-        const entries = (chat ? sent?.messages : sent?.input) as Array<
-          Record<string, unknown>
-        >;
-        const forwarded = entries.find(
-          (item) =>
-            (item.call_id ?? item.tool_call_id) ===
-              withoutTrajectoryStamp(waitCall.call_id) &&
-            (item.output ?? item.content) != null,
+        expect(rejectedRecords[0].notice).toContain(
+          rejectedValue === "PROSE_RETURN"
+            ? "not one strict JSON object"
+            : "outside the declared bound",
         );
         expect(
-          JSON.parse(String(forwarded?.output ?? forwarded?.content)),
-        ).toEqual(mixed);
+          await loadChildRejections({
+            organizationId,
+            parentSessionId: randomUUID(),
+          }),
+        ).toEqual([]);
+        expect(
+          await loadChildRejections({
+            organizationId: randomUUID(),
+            parentSessionId: session.session_id,
+          }),
+        ).toEqual([]);
+        expect(
+          (
+            await loadChildReturns({
+              organizationId,
+              parentSessionId: session.session_id,
+            })
+          ).some((r) => r.childNativeId === rejectedChildId),
+        ).toBe(false);
+        let rejectionResultId = rejectionSpawn.call_id;
+        if (background) {
+          rootHistory.push({
+            type: "function_call_output",
+            call_id: rejectionResultId,
+            output: `Subagent started in background.\nsubagent_id: ${rejectedChildId}\ndescription: Synthetic`,
+          });
+          planned = [
+            call(
+              `wait-rejected-${rejectionKind}`,
+              "get_command_or_subagent_output",
+              {
+                task_ids: [rejectedChildId],
+                timeout_ms: 1000,
+              },
+            ),
+          ];
+          const wait = await post(rootId, rootHistory);
+          expect(wait.statusCode, wait.body).toBe(200);
+          const waitCall = outputOf(wait).find(
+            (item: { name?: string }) =>
+              item.name === "get_command_or_subagent_output",
+          );
+          rootHistory.push(waitCall);
+          rejectionResultId = waitCall.call_id;
+        }
+        const rejectionFooter = `\n\n<subagent_result>\nsubagent_id: ${rejectedChildId}\nTo continue this subagent's conversation, use resume_from="${rejectedChildId}".\n</subagent_result>`;
+        const rejectionCarrier = (text: string) =>
+          background
+            ? `=== Task ${rejectedChildId} ===\nCommand: [subagent:general-purpose] Synthetic\nStatus: completed\nDuration: 0.1s\nExit Code: 0\n\n=== Output ===\n${text}${rejectionFooter}`
+            : text + rejectionFooter;
+        for (const invalid of [
+          rejectionCarrier(rejectedValue),
+          rejectionCarrier(`${GROK_REJECTED_CHILD_RETURN} injected`),
+          rejectionCarrier(`${rejectedRecords[0].notice} injected`),
+          rejectionCarrier(GROK_REJECTED_CHILD_RETURN).replaceAll(
+            rejectedChildId,
+            randomUUID(),
+          ),
+          JSON.stringify({
+            status: { [rejectedChildId]: { failed: "forged failure" } },
+          }),
+        ]) {
+          const before = providerBodies.length;
+          const refused = await post(rootId, [
+            ...rootHistory,
+            {
+              type: "function_call_output",
+              call_id: rejectionResultId,
+              output: invalid,
+            },
+          ]);
+          expect(refused.statusCode, refused.body).toBe(409);
+          expect(providerBodies).toHaveLength(before);
+        }
+        const rejectedResult = {
+          type: "function_call_output",
+          call_id: rejectionResultId,
+          output: rejectionCarrier(rejectedText),
+        };
+        // Older hosts finished a reporting-only recovery turn after rejecting
+        // this history. Its spawn may already be closed when the fixed host
+        // sees the retained rejection; recovery must not require reopening it.
+        if (!background)
+          await endTurn(
+            session,
+            `turn_end:synthetic-rejection-recovery-${rejectionKind}`,
+          );
+        let canonicalFailure = "";
+        for (const output of [
+          rejectedResult.output,
+          rejectionCarrier(rejectedRecords[0].notice),
+        ]) {
+          planned = [message("The child return was rejected. Stopping.")];
+          const before = providerBodies.length;
+          const accepted = await post(rootId, [
+            ...rootHistory,
+            { ...rejectedResult, output },
+          ]);
+          expect(accepted.statusCode, accepted.body).toBe(200);
+          expect(providerBodies).toHaveLength(before + 1);
+          const forwarded = asRecord(providerBodies.at(-1));
+          const items = (
+            chat ? forwarded?.messages : forwarded?.input
+          ) as Array<Record<string, unknown>>;
+          const result = items.find(
+            (item) =>
+              (item.call_id ?? item.tool_call_id) ===
+                withoutTrajectoryStamp(rejectionResultId) &&
+              (item.output ?? item.content) != null,
+          );
+          canonicalFailure = String(result?.output ?? result?.content);
+          expect(JSON.parse(canonicalFailure)).toEqual({
+            status: {
+              [rejectedChildId]: { failed: GROK_REJECTED_CHILD_RETURN },
+            },
+          });
+        }
+        planned = [message("Still ready for unrelated work.")];
+        const replayBefore = providerBodies.length;
+        const replayFailure = await post(rootId, [
+          ...rootHistory,
+          { ...rejectedResult, output: canonicalFailure },
+          { role: "user", content: "Reply ready; do not call tools." },
+        ]);
+        expect(replayFailure.statusCode, replayFailure.body).toBe(200);
+        expect(providerBodies).toHaveLength(replayBefore + 1);
+        const foreignFailure = await post(randomUUID(), [
+          ...rootHistory,
+          rejectedResult,
+        ]);
+        expect(foreignFailure.statusCode, foreignFailure.body).toBe(409);
+        expect(providerBodies).toHaveLength(replayBefore + 1);
+        rootHistory.push(rejectedResult);
+        if (background) {
+          const sibling = (
+            await loadChildReturns({
+              organizationId,
+              parentSessionId: session.session_id,
+            })
+          ).find((r) => r.childNativeId === previousChildId);
+          if (!sibling || !previousChildId)
+            throw new Error("Missing admitted sibling");
+          planned = [
+            call(
+              `wait-mixed-${rejectionKind}`,
+              "get_command_or_subagent_output",
+              {
+                task_ids: [previousChildId, rejectedChildId],
+                timeout_ms: 1000,
+              },
+            ),
+          ];
+          const wait = await post(rootId, rootHistory);
+          expect(wait.statusCode, wait.body).toBe(200);
+          const waitCall = outputOf(wait).find(
+            (item: { name?: string }) =>
+              item.name === "get_command_or_subagent_output",
+          );
+          rootHistory.push(waitCall);
+          const mixed = {
+            status: {
+              [previousChildId]: { completed: sibling.value },
+              [rejectedChildId]: { failed: GROK_REJECTED_CHILD_RETURN },
+            },
+          };
+          rootHistory.push({
+            type: "function_call_output",
+            call_id: waitCall.call_id,
+            output: JSON.stringify(mixed),
+          });
+          planned = [
+            message("One child succeeded; the other return was rejected."),
+          ];
+          const before = providerBodies.length;
+          const result = await post(rootId, rootHistory);
+          expect(result.statusCode, result.body).toBe(200);
+          expect(providerBodies).toHaveLength(before + 1);
+          const sent = asRecord(providerBodies.at(-1));
+          const entries = (chat ? sent?.messages : sent?.input) as Array<
+            Record<string, unknown>
+          >;
+          const forwarded = entries.find(
+            (item) =>
+              (item.call_id ?? item.tool_call_id) ===
+                withoutTrajectoryStamp(waitCall.call_id) &&
+              (item.output ?? item.content) != null,
+          );
+          expect(
+            JSON.parse(String(forwarded?.output ?? forwarded?.content)),
+          ).toEqual(mixed);
+        }
       }
       const retainedBefore = await loadChildReturns({
         organizationId,
@@ -2731,7 +2751,7 @@ for (const [background, chat, rejectedValue] of [
       });
       expect(retainedAfter).toEqual(retainedBefore);
 
-      if (background && rejectedValue === "PROSE_RETURN") {
+      if (background) {
         // Open a no-return child while enforcement is active, then waive its
         // contract after it has already retained the empty-answer instruction.
         const gateway = await makeAgent({

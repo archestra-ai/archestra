@@ -24,9 +24,20 @@ function grokShellChanges(state, install) {
     "}",
     "Remove-Variable archGrokNative,archAgentNative -ErrorAction SilentlyContinue"
   ].join("\r\n");
+  // Grok installs agent as a link to the same executable. Check file identity
+  // as well as command lookup: a shared bin directory can hold another agent.
+  // Preserve aliases/functions and recheck at invocation in case PATH changed.
+  // Subshells keep command lookup and temporary variables out of the profile.
+  const unixAgentCheck = 'archGrok=$(command -v grok) && archAgent=$(command -v agent) && [ -f "$archGrok" ] && [ -x "$archGrok" ] && [ -f "$archAgent" ] && [ -x "$archAgent" ] && [ "$archAgent" -ef "$archGrok" ]';
+  const unixBody = [
+    'grok() { if [ -f ' + sh(connection) + ' ]; then ' + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command grok "$@"; fi; }',
+    'if (unset -f grok; ' + unixAgentCheck + '); then',
+    '  agent() ( unset -f agent grok; if ' + unixAgentCheck + ' && [ -f ' + sh(connection) + ' ]; then ' + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command agent "$@"; fi )',
+    'fi'
+  ].join("\n");
   const body = process.platform === "win32"
     ? start + "\r\n" + windowsBody + "\r\n" + end
-    : start + "\ngrok() { if [ -f " + sh(connection) + " ]; then " + sh(process.execPath) + " " + sh(launcher) + ' "$@"; else command grok "$@"; fi; }\n' + end;
+    : start + "\n" + unixBody + "\n" + end;
   const newline = process.platform === "win32" ? "\r\n" : "\n";
   const changes = [], profiles = [];
   for (const file of grokShellProfiles()) {

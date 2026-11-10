@@ -158,3 +158,4 @@ An authority can use a built-in reviewer, an HTTP service, or a local program. C
 | `url` or `command` | Asks an external service or local program to approve or deny the call. |
 
 Every implementation is limited by the authority's `permits`, including automatic approvers.
+

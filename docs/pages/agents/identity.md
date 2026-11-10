@@ -36,7 +36,7 @@ What to know:
 
 ### Microsoft Entra Agent ID
 
-Archestra supports agent identities from Microsoft Entra. Need them from another identity provider? [Open a GitHub issue](https://github.com/archestra-ai/archestra/issues/new/choose) and tell us which one.
+Archestra supports agent identities from Microsoft Entra. Need them from another identity provider? [Open a GitHub issue](https://github.com/archestra-ai/archestra/issues/new?template=create-issue.md) and tell us which one.
 
 1. Set up [Microsoft Entra Agent ID](/docs/admin/identity/entra-agent-id) on your identity provider.
 2. On the agent's **Advanced** step, under **Identity**, paste the agent identity's ID into **Entra agent identity app ID**, and click **Save changes**.

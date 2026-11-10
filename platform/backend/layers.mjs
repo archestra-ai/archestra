@@ -793,6 +793,7 @@ const layerTable = [
           "src/routes/proxy/llm-proxy-handler.ts",
           "src/routes/proxy/llm-proxy-helpers.ts",
           "src/routes/proxy/llm-proxy-resource-auth.ts",
+          "src/routes/proxy/model-pool-capabilities.ts",
           "src/routes/proxy/model-pool-failover.ts",
           "src/routes/proxy/model-pool-transport.ts",
           "src/routes/proxy/model-router-access.ts",

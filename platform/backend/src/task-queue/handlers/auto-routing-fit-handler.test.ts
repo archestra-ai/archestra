@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import {
   activeFit,
   makeScorerVersion,
-  setOrganizationTrio,
+  setAutoRoutingTiers,
 } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
@@ -62,6 +62,35 @@ describe("auto routing plan fit", () => {
     const refit = await RoutingPlanModel.findActive(org.organizationId);
     expect(refit?.id).not.toBe(active?.id);
     expect(refit?.trigger).toBe("nightly");
+  });
+
+  test("a preset without a custom budget is dispatched and fitted on the budget it resolves", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+    await db
+      .update(schema.agentsTable)
+      .set({ autoRoutingBudgetUsdPerDay: null })
+      .where(eq(schema.agentsTable.organizationId, org.organizationId));
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetPreset: "intelligence",
+    });
+
+    await autoRoutingDispatcher.dispatch();
+    const [task] = await pendingFits(org.organizationId);
+    await handleAutoRoutingFit(task.payload);
+
+    const active = await RoutingPlanModel.findActive(org.organizationId);
+    const summary = z
+      .object({
+        tier_session_share: z.tuple([z.number(), z.number(), z.number()]),
+      })
+      .passthrough()
+      .parse(active?.summary);
+    expect(Number(active?.budgetUsdPerDay)).toBeGreaterThan(0);
+    expect(summary.tier_session_share[2]).toBeGreaterThanOrEqual(2 / 3);
+    expect(await isDirty(org.organizationId)).toBe(false);
   });
 
   test("names an unrequested fit by what moved: nothing yet, then a finished backfill", async ({
@@ -376,7 +405,7 @@ async function configuredOrganization(
     await pricedModel("3.00", "15.00"),
     await pricedModel("15.00", "75.00"),
   ];
-  await setOrganizationTrio(organizationId, { fast, normal, smart });
+  await setAutoRoutingTiers(organizationId, { fast, normal, smart });
   await AutoRoutingSettingsModel.update(organizationId, {
     enabled: true,
     budgetUsdPerDay: "25.00",

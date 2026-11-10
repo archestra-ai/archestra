@@ -57,7 +57,6 @@ import {
 } from "@/archestra-mcp-server";
 import { repairEnvelopedToolArgs } from "@/archestra-mcp-server/run-tool";
 import { repairStringifiedToolCallArgs } from "@/archestra-mcp-server/tool-args-repair";
-import { followsOrganizationRouting } from "@/auto-routing/organization-default";
 import {
   assertNotAutoOnNativeRoute,
   routeInternalAutoSession,
@@ -137,6 +136,7 @@ import {
   scrubOpenappaIngress,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
+import { APPA_WITHDRAWN_CHILD_RETURN } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -151,6 +151,7 @@ import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -216,6 +217,7 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import { compatiblePoolMembers } from "./model-pool-capabilities";
 import {
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
   MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
@@ -1549,18 +1551,19 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A user's chat or agent call on the organization default model, from an
-    // agent with no model of its own, is routed across the organization trio.
-    // The router picks the session's tier and key, which the call is sent with
-    // the way a pool member is, even when the tier is the default model
-    // itself: the call's own key when it serves the tier, else the user's
-    // ranked one. A call the router cannot route runs on the model it names.
-    // A pooled call is accounted for by its pool; it is never also routed.
+    // A user's chat or agent call on `auto` (marked by the in-process caller,
+    // which resolved the chat or agent to it) is routed across the auto-routing
+    // tiers. The router picks the session's tier and key, which the call is
+    // sent with the way a pool member is, even when the tier is the model the
+    // call names: the tier's key first, else one the user may use. A call the
+    // router cannot route runs on the model it names (the normal tier). Agent
+    // Runtime agents are never routed. A pooled call is accounted for by its
+    // pool; it is never also routed.
     const autoRouteWire =
       internalCall &&
       config.autoRouting.enabled &&
       headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
-      followsOrganizationRouting(resolvedAgent) &&
+      resolvedAgent.runtime === null &&
       !modelPoolPlan
         ? poolWire
         : null;
@@ -1662,7 +1665,6 @@ async function handleObservedLLMProxy<
             request,
             organizationId: resolvedAgent.organizationId,
             userId: autoRouteUser.id,
-            named: { provider: providerName, modelId: requestedModel },
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
@@ -1884,6 +1886,11 @@ async function handleObservedLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      if (
+        (admission.kind === "ungoverned" || admission.kind === "waived") &&
+        admission.withdrawnChildReturn
+      )
+        pluginContext.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
       if (admission.kind !== "ungoverned") {
         const prepared = await prepareOpenappaRequest({
           admission,
@@ -2507,6 +2514,14 @@ async function handleObservedLLMProxy<
         ? { ...asRecord(providerRequest), tool_choice: "none" }
         : providerRequest
     ) as TRequest;
+
+    if (modelPoolPlan && poolWire) {
+      modelPoolPlan.members = await compatiblePoolMembers({
+        members: modelPoolPlan.members,
+        wire: poolWire,
+        request: finalRequest,
+      });
+    }
 
     // The native Converse routes receive the complete client history. Check
     // the outbound text against the catalog window before calling Bedrock;
@@ -3698,6 +3713,14 @@ async function handleStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    // Before the calls reach the client, so the gateway finds their session.
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? toolCalls,
+      });
 
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
@@ -3709,9 +3732,18 @@ async function handleStreaming<
         }) ?? contentMessage;
       childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
-      // Its text comes from APPA when enabled.
-      const refusalEvents =
-        streamAdapter.formatCompleteTextSSE(fullContentMessage);
+      // A root's preface may already be visible. Separate the ruling from
+      // that text; buffered child prose was discarded and needs no separator.
+      const precedingText = bufferModelResponse ? "" : streamAdapter.state.text;
+      const separator =
+        !precedingText || precedingText.endsWith("\n\n")
+          ? ""
+          : precedingText.endsWith("\n")
+            ? "\n"
+            : "\n\n";
+      const refusalEvents = streamAdapter.formatCompleteTextSSE(
+        `${separator}${fullContentMessage}`,
+      );
       for (const event of refusalEvents) {
         childStream.emitPolicy(event);
       }
@@ -3880,8 +3912,7 @@ async function handleStreaming<
     }
     const eofError =
       error instanceof ResponsesStreamIncompleteError &&
-      provider.provider === "openai" &&
-      provider.interactionType === "openai:responses"
+      appaWireFamily(provider.interactionType) === "openai:responses"
         ? error
         : undefined;
     const responsesError =
@@ -4505,6 +4536,13 @@ async function handleNonStreaming<
       refused: toolInvocationRefusal !== null,
       held: !!hostedHold,
     });
+    if (!toolInvocationRefusal)
+      await llmToolCallSessions.remember({
+        organizationId: agent.organizationId,
+        userId,
+        sessionId,
+        toolCalls: rewrittenToolCalls ?? emittedToolCalls,
+      });
     // Record metrics for tool calls substituted with denial notices.
     blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {

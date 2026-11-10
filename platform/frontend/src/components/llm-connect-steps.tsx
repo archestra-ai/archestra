@@ -31,6 +31,7 @@ import {
 import { poolAnswers } from "@/components/credential-billing/model-pool-access";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
@@ -50,13 +51,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   RequestExample,
@@ -1001,7 +995,7 @@ function KeyField({
  * feature — `useIdentityProviders` stays disabled without it, so only the setup
  * link shows.
  */
-const NONE_VALUE = "__none__";
+const _NONE_VALUE = "__none__";
 
 function useIdentityProviderStep(): {
   configured: boolean;
@@ -1030,27 +1024,17 @@ function useIdentityProviderStep(): {
           <Label htmlFor={selectId} className="sr-only">
             Identity provider
           </Label>
-          <Select
-            value={idpId ?? NONE_VALUE}
+          <IdentityProviderSelect
+            id={selectId}
+            identityProviders={identityProviders ?? []}
+            value={idpId ?? null}
             disabled={updateProxy.isPending}
-            onValueChange={(value) =>
-              updateProxy.mutate({
-                identityProviderId: value === NONE_VALUE ? null : value,
-              })
+            onChange={(next) =>
+              updateProxy.mutate({ identityProviderId: next })
             }
-          >
-            <SelectTrigger id={selectId} className="w-64">
-              <SelectValue placeholder="No identity provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>No identity provider</SelectItem>
-              {identityProviders?.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            noneLabel="No identity provider"
+            className="w-72"
+          />
         </>
       ) : (
         <Button asChild size="sm">

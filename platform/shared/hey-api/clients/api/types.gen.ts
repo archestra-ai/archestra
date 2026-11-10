@@ -17202,7 +17202,9 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
+                autoModel: boolean;
                 identityProviderId: string | null;
+                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17602,7 +17604,9 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             identityProviderId: string | null;
+            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -17769,7 +17773,9 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
+        autoModel?: boolean;
         identityProviderId?: string | null;
+        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -18051,7 +18057,9 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -18496,6 +18504,7 @@ export type GetChatAgentRosterResponses = {
         modelId: string | null;
         llmApiKeyId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         sharedByName: boolean;
     }>;
 };
@@ -18642,6 +18651,7 @@ export type GetChatAgentRosterPageResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             sharedByName: boolean;
         }>;
         pagination: {
@@ -19326,7 +19336,9 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19645,7 +19657,9 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             identityProviderId: string | null;
+            entraAgentIdentityId: string | null;
             environmentId: string | null;
             networkPolicy?: {
                 egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -19973,7 +19987,9 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20122,7 +20138,9 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
+        autoModel?: boolean;
         identityProviderId?: string | null;
+        entraAgentIdentityId?: string | null;
         environmentId?: string | null;
         networkPolicy?: {
             egressMode?: 'off' | 'restricted' | 'unrestricted';
@@ -20310,7 +20328,9 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -20919,7 +20939,9 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -21179,7 +21201,9 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -23675,7 +23699,9 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         identityProviderId: string | null;
+        entraAgentIdentityId: string | null;
         environmentId: string | null;
         networkPolicy?: {
             egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -33946,24 +33972,41 @@ export type GetAutoRoutingSettingsResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             normal: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             smart: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
         };
-        routedAgentCount: number;
+        eligibleApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33978,6 +34021,10 @@ export type GetAutoRoutingSettingsResponses = {
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
         };
     };
 };
@@ -33988,6 +34035,21 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
+        budgetPreset?: 'cost_efficient' | 'balanced' | 'intelligence' | null;
+        tiers?: {
+            fast: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            normal: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+            smart: {
+                modelId: string;
+                providerApiKeyId: string;
+            };
+        };
     };
     path?: never;
     query?: never;
@@ -34069,24 +34131,41 @@ export type UpdateAutoRoutingSettingsResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             normal: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             smart: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
         };
-        routedAgentCount: number;
+        eligibleApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
         generation: number;
         plannedGeneration: number;
         status: {
@@ -34101,6 +34180,10 @@ export type UpdateAutoRoutingSettingsResponses = {
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
         };
         fit: {
             status: 'active';
@@ -34209,7 +34292,7 @@ export type GetAutoRoutingPlansResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -34319,7 +34402,7 @@ export type GetAutoRoutingPlanResponses = {
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
-        budgetUsdPerDay: number;
+        budgetUsdPerDay: number | null;
         scorerVersion: {
             id: string;
             name: string;
@@ -34429,24 +34512,41 @@ export type ReplanAutoRoutingResponses = {
     200: {
         enabled: boolean;
         budgetUsdPerDay: number | null;
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence' | null;
         tiers: {
             fast: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             normal: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
             smart: {
                 id: string;
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 modelId: string;
+                apiKey: {
+                    id: string;
+                    name: string;
+                };
             } | null;
         };
-        routedAgentCount: number;
+        eligibleApiKeyIds: Array<string>;
+        usage: {
+            agentCount: number;
+            organizationDefault: boolean;
+        };
         generation: number;
         plannedGeneration: number;
         status: {
@@ -34461,6 +34561,10 @@ export type ReplanAutoRoutingResponses = {
             };
             lastFitError: string | null;
             scorer: 'ready' | 'no_jev_key';
+            scorerApiKey: {
+                id: string;
+                name: string;
+            } | null;
         };
         fit: {
             status: 'active';
@@ -34599,6 +34703,9 @@ export type SimulateAutoRoutingData = {
     body: {
         budgetUsdPerDay: number;
         volumeMultiplier: number;
+    } | {
+        budgetPreset: 'cost_efficient' | 'balanced' | 'intelligence';
+        volumeMultiplier: number;
     };
     path?: never;
     query?: never;
@@ -34689,6 +34796,7 @@ export type SimulateAutoRoutingResponses = {
      */
     200: {
         status: 'feasible';
+        budgetUsdPerDay: number;
         summary: {
             [key: string]: unknown;
         };
@@ -42546,6 +42654,7 @@ export type GetBootstrapResponses = {
             defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             defaultModelId: string | null;
             defaultLlmApiKeyId: string | null;
+            defaultAutoModel: boolean;
             defaultFastModelId: string | null;
             defaultSmartModelId: string | null;
             defaultUserLimitValue: number | null;
@@ -42905,6 +43014,7 @@ export type GetNewChatBootstrapResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             sharedByName: boolean;
         }>;
         apiKeys: Array<{
@@ -43051,7 +43161,9 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
+                autoModel: boolean;
                 identityProviderId: string | null;
+                entraAgentIdentityId: string | null;
                 environmentId: string | null;
                 networkPolicy?: {
                     egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -43369,6 +43481,7 @@ export type GetConversationBootstrapResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -43498,6 +43611,7 @@ export type GetConversationBootstrapResponses = {
                 modelId: string | null;
                 llmApiKeyId: string | null;
                 modelPoolId: string | null;
+                autoModel: boolean;
                 sharedByName: boolean;
             }>;
             apiKeys: Array<{
@@ -43644,7 +43758,9 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
+                    autoModel: boolean;
                     identityProviderId: string | null;
+                    entraAgentIdentityId: string | null;
                     environmentId: string | null;
                     networkPolicy?: {
                         egressMode: 'off' | 'restricted' | 'unrestricted';
@@ -44790,6 +44906,7 @@ export type GetChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44881,6 +44998,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoModel?: boolean;
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
@@ -44973,6 +45091,7 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45140,6 +45259,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45402,6 +45522,7 @@ export type GetChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45485,6 +45606,7 @@ export type UpdateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoModel?: boolean;
         agentId?: string;
         artifact?: string | null;
         projectId?: string | null;
@@ -45581,6 +45703,7 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -46295,6 +46418,7 @@ export type ForkChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -46557,6 +46681,7 @@ export type RestoreChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -46829,6 +46954,7 @@ export type CompactChatConversationResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoModel: boolean;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -47004,6 +47130,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -47178,6 +47305,7 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -87044,7 +87172,7 @@ export type GetInternalMcpCatalogResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -87210,6 +87338,8 @@ export type CreateInternalMcpCatalogItemData = {
             audience?: string;
             clientIdOverride?: string;
             clientSecretOverride?: string;
+            privateKeyPemOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -87432,7 +87562,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -88511,7 +88641,7 @@ export type GetInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -88665,6 +88795,8 @@ export type UpdateInternalMcpCatalogItemData = {
             audience?: string;
             clientIdOverride?: string;
             clientSecretOverride?: string;
+            privateKeyPemOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -88868,7 +89000,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -89566,7 +89698,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -89796,7 +89928,7 @@ export type ApproveCatalogItemImageResponses = {
             scopes?: Array<string>;
             audience?: string;
             clientIdOverride?: string;
-            clientSecretOverride?: string;
+            privateKeyIdOverride?: string;
             tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
             headerName?: string;
             envVarName?: string;
@@ -108565,6 +108697,8 @@ export type GetMcpToolCallsResponses = {
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
+            credentialClientId: string | null;
+            credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
             durationMs: number | null;
             createdAt: string;
             userName: string | null;
@@ -108689,6 +108823,8 @@ export type GetMcpToolCallResponses = {
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
+        credentialClientId: string | null;
+        credentialClientType: 'identity_provider' | 'mcp_server' | 'entra_agent_identity';
         durationMs: number | null;
         createdAt: string;
         userName: string | null;
@@ -124974,6 +125110,7 @@ export type GetOrganizationResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -125161,6 +125298,7 @@ export type GetOrganizationDefaultModelResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             displayName: string;
         } | null;
+        defaultAutoModel: boolean;
         autoRouting: {
             active: false;
         } | {
@@ -125431,6 +125569,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -125656,6 +125795,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -125877,6 +126017,7 @@ export type UpdateMcpSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -126097,6 +126238,7 @@ export type UpdateSkillsSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -126429,6 +126571,7 @@ export type UpdateAgentSettingsData = {
         defaultAgentId?: string | null;
         defaultFastModelId?: string | null;
         defaultSmartModelId?: string | null;
+        defaultAutoModel?: boolean;
     };
     path?: never;
     query?: never;
@@ -126543,6 +126686,7 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -126786,6 +126930,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -127054,6 +127199,7 @@ export type UpdateIntegrationSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -127284,6 +127430,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -127509,6 +127656,7 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -127736,6 +127884,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -127953,6 +128102,7 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -128532,6 +128682,7 @@ export type CompleteOnboardingResponses = {
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
+        defaultAutoModel: boolean;
         defaultFastModelId: string | null;
         defaultSmartModelId: string | null;
         defaultUserLimitValue: number | null;
@@ -136859,6 +137010,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoModel: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -150643,6 +150795,14 @@ export type GetIdentityProvidersResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -150742,7 +150902,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -150780,6 +150940,14 @@ export type CreateIdentityProviderData = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -150988,6 +151156,14 @@ export type CreateIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -151087,7 +151263,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -151653,6 +151829,14 @@ export type GetIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -151752,7 +151936,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -151790,6 +151974,14 @@ export type UpdateIdentityProviderData = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -151999,6 +152191,14 @@ export type UpdateIdentityProviderResponses = {
                 privateKeyId?: string;
                 clientAssertionAudience?: string;
                 subjectTokenType?: 'urn:ietf:params:oauth:token-type:access_token' | 'urn:ietf:params:oauth:token-type:id_token' | 'urn:ietf:params:oauth:token-type:jwt';
+                entraAgentId?: {
+                    blueprintClientId: string;
+                    clientSecret?: string;
+                    privateKeyPem?: string;
+                    certificateThumbprint?: string;
+                    blueprintScope?: string;
+                    requireAgentIdentity?: boolean;
+                };
             };
             /**
              * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
@@ -152098,7 +152298,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
-        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.entraAgentId.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 

@@ -236,7 +236,7 @@ describe("OpenAI Responses execution terminal guard", () => {
     expect(received).toEqual([terminal]);
   });
 
-  test("does not reclassify upstream iterator errors or impose the guard on aliases", async () => {
+  test("preserves upstream iterator errors and guards Responses aliases", async () => {
     const originalError = new Error("Provider connection failed");
     const throwingClient = {
       responses: {
@@ -266,19 +266,28 @@ describe("OpenAI Responses execution terminal guard", () => {
       ...openAiResponsesAdapterFactory,
       provider: "github-copilot" as const,
     };
-    const empty = await alias.executeStream(
-      {
-        responses: {
-          create: async () => ({
-            async *[Symbol.asyncIterator]() {},
-          }),
-        },
-      },
-      { model: "test-model", input: "Test" },
-    );
-    const received: OpenAi.Types.ResponseChunk[] = [];
-    for await (const chunk of empty) received.push(chunk);
-    expect(received).toEqual([]);
+    const nativeCopilot = {
+      ...alias,
+      interactionType: "github-copilot:responses" as const,
+    };
+    for (const adapter of [alias, nativeCopilot]) {
+      await expect(
+        (async () => {
+          for await (const _chunk of await adapter.executeStream(
+            {
+              responses: {
+                create: async () => ({
+                  async *[Symbol.asyncIterator]() {},
+                }),
+              },
+            },
+            { model: "test-model", input: "Synthetic." },
+          )) {
+            throw new Error("Unexpected native output");
+          }
+        })(),
+      ).rejects.toBeInstanceOf(ResponsesStreamIncompleteError);
+    }
   });
 });
 

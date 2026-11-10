@@ -118,6 +118,7 @@ import {
   clearAllAppDiagnostics,
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
+import { AUTO_MODEL_CHOICE } from "@/lib/chat/auto-model";
 import {
   fetchAgentMcpTools,
   fetchConversationEnabledTools,
@@ -184,6 +185,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -543,6 +545,13 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
+  // Whether `auto` can be picked, and whether the organization default is
+  // `auto`, which a new chat on an agent without a model of its own starts on.
+  // While routing is off, a chat on `auto` shows the normal tier it runs on.
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
+  const organizationDefaultModel = useOrganizationDefaultModel({
+    enabled: autoRoutingEnabled,
+  });
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
@@ -559,9 +568,17 @@ export function ChatPageContent({
   const initialModelPoolId =
     initialModelPoolChoice !== undefined
       ? initialModelPoolChoice
-      : initialModelSource === "agent"
-        ? (initialRuntimeCandidate?.modelPoolId ?? null)
-        : null;
+      : initialModelSource !== "user" &&
+          organizationDefaultModel.auto &&
+          initialRuntimeCandidate?.runtime === null &&
+          (initialRuntimeCandidate.autoModel ||
+            (organizationDefaultModel.defaultAutoModel &&
+              initialModelSource !== "agent" &&
+              !initialRuntimeCandidate.modelPoolId))
+        ? AUTO_MODEL_CHOICE
+        : initialModelSource === "agent"
+          ? (initialRuntimeCandidate?.modelPoolId ?? null)
+          : null;
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1422,10 +1439,11 @@ export function ChatPageContent({
   const handleConversationModelPoolChange = useCallback(
     (modelPoolId: string | null) => {
       if (!conversation) return;
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        modelPoolId,
-      });
+      updateConversationMutateRef.current(
+        modelPoolId === AUTO_MODEL_CHOICE
+          ? { id: conversation.id, autoModel: true }
+          : { id: conversation.id, modelPoolId },
+      );
     },
     [conversation],
   );
@@ -2506,6 +2524,11 @@ export function ChatPageContent({
   }, [organization?.playwrightMcpEnabled]);
   const isRightPanelOpen =
     isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
+  // On mobile an open app shares the screen with the thread instead of
+  // replacing it: the user chats with the app, so hiding the replies would
+  // leave a composer that sends into a thread nobody can see.
+  const isMobileAppSplit =
+    isMobile && isRightPanelOpen && activeRightTab === "apps";
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
@@ -3338,7 +3361,12 @@ export function ChatPageContent({
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+                <div
+                  className={cn(
+                    "flex flex-col min-h-0 overflow-hidden md:hidden",
+                    isMobileAppSplit ? "flex-[3]" : "flex-1",
+                  )}
+                >
                   {activeRightTab === "runs" && scheduledRun && (
                     <MobileScheduleRuns
                       triggerId={scheduledRun.triggerId}
@@ -3390,14 +3418,18 @@ export function ChatPageContent({
 
               {conversationId ? (
                 <>
-                  {/* Chat content - hidden on mobile when panels are open.
+                  {/* Chat content - hidden on mobile when a panel is open,
+                      except an app, which splits the screen with it.
                       The ViewTransition eases the thread in when the splash
                       (or another page) hands off to a conversation. */}
                   <ViewTransition enter="chat-thread-enter" default="none">
                     <div
                       className={cn(
-                        "flex-1 min-h-0 relative",
-                        isRightPanelOpen && "hidden md:block",
+                        "min-h-0 relative",
+                        isMobileAppSplit ? "flex-[2] border-t" : "flex-1",
+                        isRightPanelOpen &&
+                          !isMobileAppSplit &&
+                          "hidden md:block",
                       )}
                     >
                       {isReadOnlyConversation && isScheduledRunInProgress ? (
@@ -3687,7 +3719,12 @@ export function ChatPageContent({
                               onThinkingEffortChange={
                                 handleThinkingEffortChange
                               }
-                              modelPoolId={conversation?.modelPoolId ?? null}
+                              modelPoolId={
+                                conversation?.autoModel &&
+                                organizationDefaultModel.auto
+                                  ? AUTO_MODEL_CHOICE
+                                  : (conversation?.modelPoolId ?? null)
+                              }
                               onModelPoolChange={
                                 handleConversationModelPoolChange
                               }

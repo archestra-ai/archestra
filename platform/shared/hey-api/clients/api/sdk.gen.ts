@@ -2389,7 +2389,7 @@ export const previewAutoRouting = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Fit a plan at a budget and a scaled traffic volume without publishing it
+ * Fit a plan at a budget, or a budget preset, and a scaled traffic volume without publishing it
  *
  * Authentication:
  *
@@ -8746,7 +8746,7 @@ export const bulkDeleteMembers = <ThrowOnError extends boolean = false>(options:
 export const getMfilesVafAddOnScript = <ThrowOnError extends boolean = false>(options?: Options<GetMfilesVafAddOnScriptData, ThrowOnError>) => (options?.client ?? client).get<GetMfilesVafAddOnScriptResponses, unknown, ThrowOnError>({ url: '/api/mfiles-vaf-add-on/script', ...options });
 
 /**
- * Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (the dev source-ref CI build or the package compiled into this platform image — both served by the backend's package route — or a release asset), or null when the install script compiles from source instead. The connector form probes this for its download link.
+ * Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (the package compiled into this platform image, served by the backend's package route, or a release asset), or null when the install script compiles from source instead. The connector form probes this for its download link.
  *
  * Authentication:
  *
@@ -8759,7 +8759,7 @@ export const getMfilesVafAddOnScript = <ThrowOnError extends boolean = false>(op
 export const getMfilesVafAddOnDistribution = <ThrowOnError extends boolean = false>(options?: Options<GetMfilesVafAddOnDistributionData, ThrowOnError>) => (options?.client ?? client).get<GetMfilesVafAddOnDistributionResponses, GetMfilesVafAddOnDistributionErrors, ThrowOnError>({ url: '/api/mfiles-vaf-add-on/distribution', ...options });
 
 /**
- * Serve the M-Files connector's VAF Add On package: the CI build of the development source-ref override (ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF) when one resolves, else the package compiled into this platform image. 404 when neither exists.
+ * Serve the M-Files connector's VAF Add On package compiled into this platform image. 404 when the image carries none.
  *
  * Authentication:
  *
@@ -10927,7 +10927,7 @@ export const getAgentRuntimeTiers = <ThrowOnError extends boolean = false>(optio
 export const getDefaultModelRuntimeDependents = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultModelRuntimeDependentsData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultModelRuntimeDependentsResponses, GetDefaultModelRuntimeDependentsErrors, ThrowOnError>({ url: '/api/organization/agent-settings/default-model-dependents', ...options });
 
 /**
- * Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)
+ * Update agent settings (default model or auto routing, default agent, skill slash commands, Agent Runtime tiers)
  *
  * Authentication:
  *

@@ -29,6 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
+import { EntraAgentIdFields } from "./entra-agent-id-fields.ee";
 import {
   type EnterpriseSubjectTokenType,
   getDefaultSubjectTokenType,
@@ -544,6 +545,7 @@ export function OidcConfigForm({
           subjectTokenTypeDefault={subjectTokenTypeDefault}
           embedded={!!activeSection}
           isSecretStored={isSecretStored}
+          showEntraAgentId={inferredEnterpriseExchangeType === "entra_obo"}
         />
       )}
 
@@ -576,6 +578,8 @@ function EnterpriseManagedCredentialsForm(props: {
   embedded?: boolean;
   /** See `OidcConfigForm`'s `configuredSecretPaths`. */
   isSecretStored: (path: IdentityProviderSecretPath) => boolean;
+  /** Microsoft Entra issuers also configure per-agent identities. */
+  showEntraAgentId: boolean;
 }) {
   const {
     authenticationDefault,
@@ -583,6 +587,7 @@ function EnterpriseManagedCredentialsForm(props: {
     subjectTokenTypeDefault,
     embedded = false,
     isSecretStored,
+    showEntraAgentId,
   } = props;
   const appName = useAppName();
 
@@ -813,6 +818,10 @@ function EnterpriseManagedCredentialsForm(props: {
           </FormItem>
         )}
       />
+
+      {showEntraAgentId && (
+        <EntraAgentIdFields form={form} isSecretStored={isSecretStored} />
+      )}
     </>
   );
 

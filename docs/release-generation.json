@@ -1,46 +1,46 @@
 {
   "schema": 1,
-  "sourceSha": "1ef9cb19299005118f54dbaa46165172cdc61728",
-  "baseSha": "72029670b0bee29660545174b9340d0cbcc32bb2",
-  "runId": 42502548510,
+  "sourceSha": "7bc3da33592be88c161f7cc075a592282e5c45aa",
+  "baseSha": "74dbdc53cf399483ac0738209fede8e036e7f9e8",
+  "runId": 42719700371,
   "attempt": 1,
-  "platformTree": "535b332f1c750223edd3fbafdc284197c9a8f6f3",
+  "platformTree": "b43771065da0f74ba338e50e9bf959d9f3897179",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "75accae58c06a72741ead8d3a5a62725a1f83766"
+      "blob": "44c8f44e4f8115281a9eb532e5d345840666b385"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_settings.dark.webp",
-      "blob": "31af2ba096d53f4417c8f6646992007c89b65e08"
+      "blob": "111e07b3897f8053dd3ad4be05a60dfb72d85971"
     },
     {
       "path": "docs/assets/automated_screenshots/knowledge_settings.webp",
-      "blob": "743e8905ed39981b3bc631f6ef69023ff94e9c71"
+      "blob": "cbb510be71e30c34a50f213146e0f5cfdfdb2d73"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.dark.webp",
+      "blob": "f4b37c6c12c399198b05c80a234aa6e29974b0e6"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/mcp-gateway_gateways.webp",
+      "blob": "36477ec17d317e4be4e9906994c431b8b14f3248"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-agent-skills-sharing_connection-setup.dark.webp",
-      "blob": "af496fa142f907f916a3e1c1fa972c7f640c548f"
+      "blob": "e2ef3db27a56d0adfa3bf5e44037e2b55f42ef50"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.dark.webp",
-      "blob": "4a6b18a43e07c18cb5a7fb80ed39289e315d57e1"
+      "blob": "4f863d43780e3548bbfea454e1ad70f7ff9c0c4f"
     },
     {
       "path": "docs/assets/automated_screenshots/platform-connection_connect-with-ai.webp",
-      "blob": "7e42a16de015763761625b9dd81514c40424fc00"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
-      "blob": "8f97d045b800e8d35898a4a0da4071178c027d7a"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
-      "blob": "cae9d062c0c4314beb6dddc588c60ad716900cc6"
+      "blob": "aba7c0eedbcd61f1a1a0378bf4ad76a8febee80f"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "539a7b540f58a87a1b10ffa290b888a6554faf8b"
+      "blob": "d98b771929bfa33b14466ce3a6feee670c7de3cb"
     }
   ]
 }

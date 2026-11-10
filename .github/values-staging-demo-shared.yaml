@@ -7,8 +7,6 @@ archestra:
 
   orchestrator:
     kubernetes:
-      networkPolicy:
-        create: true
       rbac:
         # The CI deployer can only write the release namespaces (infra
         # gke/access-lockdown.tf), so it cannot create the kube-system Role.
@@ -46,7 +44,6 @@ archestra:
     ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
-    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"

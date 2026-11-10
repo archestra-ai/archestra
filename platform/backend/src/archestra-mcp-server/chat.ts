@@ -198,6 +198,7 @@ const registry = defineArchestraTools([
         ? await getHitlAskUserArguments({
             session,
             offerIds: liveOffers,
+            presentation: "form",
           })
         : undefined;
       // SPDX-SnippetBegin
@@ -251,7 +252,10 @@ const registry = defineArchestraTools([
         requestedSchema: withTextField({
           schema: effectiveArgs.allowMultiple
             ? buildMultiChoiceSchema(effectiveArgs.options)
-            : buildSingleChoiceSchema(effectiveArgs.options),
+            : buildSingleChoiceSchema(
+                effectiveArgs.options,
+                hitlArgs ? "Decision" : "Choice",
+              ),
           allowText,
         }),
         toolCallId: context.currentToolCallId,
@@ -400,6 +404,7 @@ async function sealOrReturnStoredRuling(params: {
 
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
+  title = "Choice",
 ) {
   const enumDescriptions = options.map((option) => option.description);
   return {
@@ -407,7 +412,7 @@ function buildSingleChoiceSchema(
     properties: {
       choice: {
         type: "string" as const,
-        title: "Choice",
+        title,
         enum: options.map((option) => option.label),
         ...(enumDescriptions.some((description) => description)
           ? { enumDescriptions }

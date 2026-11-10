@@ -498,12 +498,45 @@ export async function peekHitlDecision(params: {
 export async function getHitlAskUserArguments(params: {
   session: OpenAppaSession;
   offerIds: readonly string[];
+  /** Some MCP form renderers discard every line break in the message. */
+  presentation?: "form";
 }): Promise<HitlAskUserArguments | undefined> {
   if (params.offerIds.length !== 1) return undefined;
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
-  return buildHitlAskUserCard(review);
+  const card = buildHitlAskUserCard(review);
+  if (params.presentation !== "form" || !review.tool) return card;
+  const shown = displayedReview(review);
+  const args = parseReviewedArguments(shown.arguments);
+  const accepted = acceptedCoverage(shown.text);
+  // Grok's MCP form removes line breaks and renders Markdown literally.
+  // Flow YAML keeps complete typed values (including multiline strings) on a
+  // single logical line, while the client wraps to the actual terminal width.
+  return {
+    ...card,
+    question: [
+      card.shortQuestion ?? "Approve this call?",
+      ...(args
+        ? [
+            `Arguments: ${dumpYaml(withoutProxyCopies(shown.tool ?? "", args), { flowLevel: 0, lineWidth: -1, noRefs: true }).trimEnd()}`,
+          ]
+        : shown.arguments
+          ? [`Arguments (unparsed): ${JSON.stringify(shown.arguments)}`]
+          : []),
+      ...(accepted
+        ? accepted.map((line) => `Also accepts: ${JSON.stringify(line)}`)
+        : [
+            `Policy review: ${JSON.stringify(formatReviewQuestion(shown.text))}`,
+          ]),
+      ...(shown.summary
+        ? [
+            `Generated summary (may omit details): ${JSON.stringify(shown.summary)}`,
+          ]
+        : []),
+      "Approve allows only this exact call. Deny keeps it blocked.",
+    ].join("  •  "),
+  };
 }
 
 /**

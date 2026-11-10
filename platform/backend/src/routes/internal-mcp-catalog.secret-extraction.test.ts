@@ -6,7 +6,10 @@ import { InternalMcpCatalogModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types";
+import {
+  ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
+  ENTERPRISE_MANAGED_PRIVATE_KEY_OVERRIDE_SECRET_KEY,
+} from "@/types";
 
 /**
  * Registry passwords and enterprise-managed client-secret overrides: the two
@@ -236,5 +239,69 @@ describe("Internal MCP Catalog - secret extraction", () => {
     expect(
       bag?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY],
     ).toBe("override-plaintext");
+  });
+
+  test("stores an exchange client's private key in the bag and never returns either secret", async () => {
+    const created = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "enterprise-override-private-key",
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          enterpriseManagedConfig: {
+            clientIdOverride: "client-abc",
+            clientSecretOverride: "override-plaintext",
+            privateKeyPemOverride: "private-key-plaintext",
+            privateKeyIdOverride: "key-1",
+          },
+        },
+      })
+    ).json();
+
+    const row = await InternalMcpCatalogModel.findById(created.id, {
+      expandSecrets: false,
+    });
+    expect(JSON.stringify(row?.enterpriseManagedConfig)).not.toContain(
+      "private-key-plaintext",
+    );
+    const bag = await secretManager().getSecret(row?.clientSecretId ?? "");
+    expect(
+      bag?.secret[ENTERPRISE_MANAGED_PRIVATE_KEY_OVERRIDE_SECRET_KEY],
+    ).toBe("private-key-plaintext");
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${created.id}`,
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog",
+    });
+    for (const response of [read, list]) {
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain("override-plaintext");
+      expect(response.body).not.toContain("private-key-plaintext");
+    }
+    expect(read.json().enterpriseManagedConfig).toMatchObject({
+      clientIdOverride: "client-abc",
+      privateKeyIdOverride: "key-1",
+    });
+
+    // A save that leaves the secrets blank keeps the stored values.
+    const put = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${created.id}`,
+      payload: { enterpriseManagedConfig: read.json().enterpriseManagedConfig },
+    });
+    expect(put.statusCode).toBe(200);
+    const kept = await secretManager().getSecret(row?.clientSecretId ?? "");
+    expect(kept?.secret).toMatchObject({
+      [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+        "override-plaintext",
+      [ENTERPRISE_MANAGED_PRIVATE_KEY_OVERRIDE_SECRET_KEY]:
+        "private-key-plaintext",
+    });
   });
 });

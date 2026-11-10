@@ -67,6 +67,7 @@ import {
 import { buildNoticeArguments, readNotice } from "@/openappa/notice";
 import * as appaService from "@/openappa/service";
 import { appendSessionReceipt } from "@/openappa/session-token";
+import { mintSubagentBinding } from "@/openappa/subagent-binding";
 import {
   parseTrajectoryStamp,
   stampToolCallId,
@@ -516,7 +517,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       native.dispatchHook.mockImplementation(async (raw: string) =>
         JSON.parse(raw).event === "tool_result"
           ? JSON.stringify({
-              decision: "deny_call",
+              decision: "replace_output",
               feedback: refusal,
               approved_output: refusal,
               output_source: "runtime",
@@ -1525,6 +1526,269 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent).toHaveLength(2);
     expect(JSON.stringify(sent[1])).not.toContain("RAW DENIED COPILOT RESULT");
     expect(JSON.stringify(sent[1])).toContain("Tool output denied");
+  });
+
+  test.for([
+    { wire: "responses", restart: false },
+    { wire: "responses", restart: true },
+    { wire: "anthropic", restart: false },
+    { wire: "anthropic", restart: true },
+  ] as const)("delivers a waived child's withdrawal to a $wire provider continue (restart=$restart)", async ({
+    wire,
+    restart,
+  }) => {
+    config.openappa.offerSigningSecret = "synthetic-waived-child-secret";
+    const binding = mintSubagentBinding({
+      agentId: agent.id,
+      parent: {
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: `user:${userId}|parent-continue`,
+      },
+      spawnCallId: "spawn-continue",
+    });
+    const priorContract = "Your final message must be empty.";
+    if (wire === "responses") {
+      await app.register(openAiProxyRoutes);
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+        responses: {
+          create: async (request: unknown) => {
+            providerRequests.push(structuredClone(request));
+            return {
+              id: "resp_child_continue",
+              object: "response",
+              created_at: 1,
+              status: "completed",
+              model: "gpt-5.5",
+              output: [
+                {
+                  type: "function_call",
+                  call_id: "call_weather_continue",
+                  name: "get_weather",
+                  arguments: '{"location":"SF"}',
+                },
+              ],
+              usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            };
+          },
+        },
+      } as never);
+    }
+    const send = (continuing: boolean) =>
+      app.inject({
+        method: "POST",
+        url: wire === "responses" ? `/v1/openai/${agent.id}/responses` : url(),
+        headers: {
+          ...internalCallHeader(),
+          ...headers(),
+          "x-archestra-source": "api",
+          "x-archestra-appa-subagent": binding.token,
+          ...(wire === "responses" ? { authorization: "Bearer test-key" } : {}),
+        },
+        payload:
+          wire === "responses"
+            ? {
+                model: "gpt-5.5",
+                stream: false,
+                input: [
+                  {
+                    role: "user",
+                    content: continuing
+                      ? "The command finished."
+                      : priorContract,
+                  },
+                ],
+                ...(continuing
+                  ? { previous_response_id: "resp_child_continue" }
+                  : {}),
+                tools: [
+                  {
+                    type: "function",
+                    name: "get_weather",
+                    parameters: { type: "object", properties: {} },
+                  },
+                ],
+              }
+            : {
+                ...payload(false),
+                ...(continuing
+                  ? {
+                      thread: {
+                        type: "continue",
+                        previous_message_id: "msg_child_continue",
+                      },
+                    }
+                  : { system: priorContract, thread: { type: "create" } }),
+                messages: [
+                  {
+                    role: "user",
+                    content: continuing
+                      ? "The command finished."
+                      : "Start the task.",
+                  },
+                ],
+              },
+      });
+    const opened = await send(false);
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(JSON.stringify(providerRequests[0])).toContain(priorContract);
+    expect(
+      await OpenAppaSessionModel.find({
+        organizationId: agent.organizationId,
+        sessionId: binding.session.session_id,
+      }),
+    ).not.toBeNull();
+    await superyellSession(binding.session);
+    if (restart) {
+      unregisterAppaPlugin();
+      unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+    }
+    providerRequests.length = 0;
+    events.length = 0;
+    const continued = await send(true);
+    expect(continued.statusCode, continued.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(JSON.stringify(providerRequests[0])).toContain(
+      "withdrawn its earlier protected-return instructions",
+    );
+    expect(JSON.stringify(providerRequests[0])).toContain(
+      "The command finished.",
+    );
+    expect(providerRequests[0]).toMatchObject(
+      wire === "responses"
+        ? { previous_response_id: "resp_child_continue" }
+        : {
+            thread: {
+              type: "continue",
+              previous_message_id: "msg_child_continue",
+            },
+          },
+    );
+    expect(events).toEqual([]);
+  });
+
+  test("Codex child history binds to its parent before root fork tracing", async () => {
+    config.openappa.offerSigningSecret = "synthetic-codex-admission-secret";
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-5.5",
+      provider: "openai",
+      modelId: "gpt-5.5",
+      inputModalities: null,
+      outputModalities: null,
+      lastSyncedAt: new Date(),
+    });
+    const sent: unknown[] = [];
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async (params: unknown) => {
+          sent.push(structuredClone(params));
+          return {
+            id: "resp_codex_child",
+            object: "response",
+            created_at: 1,
+            status: "completed",
+            model: "gpt-5.5",
+            output: [
+              {
+                type: "function_call",
+                call_id: "call_read",
+                name: "read_file",
+                arguments: '{"target_file":"synthetic.txt"}',
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          };
+        },
+      },
+    } as never);
+    const parent = "00000000-0000-4000-8000-000000000010";
+    const child = "00000000-0000-4000-8000-000000000011";
+    const prompt = "Read the synthetic file";
+    const marker = mintDelegationMarker({
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      parentId: parent,
+      spawnerNativeId: parent,
+      prompt,
+      spawnCallId: "call_spawn",
+    });
+    // A native child can replay stamped context even though its bare CLI ID
+    // has never opened a root: its governed ID is parent:child.
+    const callId = stampToolCallId({
+      callId: "call_title",
+      sessionId: child,
+      organizationId: agent.organizationId,
+      callerId: `user:${userId}`,
+      secret: config.openappa.offerSigningSecret,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      headers: {
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformKey,
+        originator: "codex_cli_rs",
+        "session-id": child,
+        "x-codex-turn-metadata": JSON.stringify({
+          parent_thread_id: parent,
+          thread_id: child,
+        }),
+      },
+      payload: {
+        model: "gpt-5.5",
+        stream: false,
+        input: [
+          {
+            role: "user",
+            content: `${prompt}\n\n${marker}`,
+          },
+          {
+            type: "function_call",
+            call_id: callId,
+            name: "session_title",
+            arguments: '{"title":"Synthetic child"}',
+          },
+          {
+            type: "function_call_output",
+            call_id: callId,
+            output: "Title set",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "read_file",
+            parameters: {
+              type: "object",
+              properties: { target_file: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: `user:${userId}|${parent}:${child}`,
+        parent_id: `user:${userId}|${parent}`,
+      }),
+    );
+    expect(
+      events
+        .filter((event) => event.event === "session_start")
+        .every((event) => event.fork_of === undefined),
+    ).toBe(true);
   });
 
   test("Copilot CLI subagents bind through the task prompt's delegation marker and are refused without one", async () => {
@@ -15940,6 +16204,54 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       // The client receives neither call.
       expect(providerRequests).toHaveLength(1);
       expect(nested.body).not.toContain('"name":"get_time"');
+    });
+
+    test("separates a streamed root preface from the tool refusal", async () => {
+      const unregister = registerLlmProxyPlugin({
+        id: "root-refusal-spacing-test",
+        async onPrepareToolCalls({ toolCalls }) {
+          const blocked = toolCalls[0];
+          if (!blocked) return;
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: "OpenAPPA refused the tool",
+              contentMessage: "OpenAPPA refused the tool",
+              reason: "test_refusal",
+              blockedToolName: blocked.name,
+              toolInput: {},
+              allToolCallNames: [blocked.name],
+            },
+          };
+        },
+      });
+      try {
+        options = { toolUseBetweenText: true, streamStopReason: "tool_use" };
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          headers: {
+            ...internalCallHeader(),
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": "root-refusal-spacing",
+          },
+          payload: payload(true),
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const text = response.body
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => JSON.parse(line.slice(6)))
+          .filter((event) => event.delta?.type === "text_delta")
+          .map((event) => event.delta.text)
+          .join("");
+        expect(text).toContain(
+          "Let me check.Then I will summarise.\n\nOpenAPPA refused the tool",
+        );
+      } finally {
+        unregister();
+      }
     });
 
     test("preserves a streaming child refusal after the start proof is in history", async () => {

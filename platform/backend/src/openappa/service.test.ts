@@ -621,7 +621,7 @@ describe("APPA feature boundary", () => {
       { canonicalize: (name) => name },
     );
 
-    expect(decisions[0]).toMatchObject({ kind: "deny" });
+    expect(decisions[0]).toMatchObject({ kind: "deny", unanswered: true });
     expect(decisions[1]).toEqual({ kind: "allow" });
     expect(
       native.dispatchHook.mock.calls.map(

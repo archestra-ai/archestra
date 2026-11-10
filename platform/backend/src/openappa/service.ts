@@ -1497,7 +1497,14 @@ export async function evaluateToolCalls(
         target.toolCallName,
         JSON.parse(target.toolCallArgs),
       );
-      if (conflict) return { kind: "deny" as const, feedback: conflict };
+      // Like an unanswered annotator, a refusal no remedy can lift: the
+      // notice says how to correct the call.
+      if (conflict)
+        return {
+          kind: "deny" as const,
+          feedback: conflict,
+          unanswered: true as const,
+        };
       // The target is already canonical, so it is read, not re-canonicalized.
       const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =

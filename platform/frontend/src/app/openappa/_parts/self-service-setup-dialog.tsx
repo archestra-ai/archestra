@@ -238,12 +238,6 @@ function AppStep({
     (name) =>
       grants.permissions.find((entry) => entry.name === name)?.granted !== true,
   );
-  const grantedChip = (
-    <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-      <Check className="size-4 text-emerald-600" aria-hidden />
-      <span>Granted</span>
-    </span>
-  );
   return (
     <div className="space-y-4">
       <ol className="overflow-hidden rounded-lg border bg-card">
@@ -264,7 +258,8 @@ function AppStep({
           waiting={false}
           error={error}
           onCheckAgain={onCheckAgain}
-          result={ready ? grantedChip : null}
+          result={null}
+          done={ready}
           action={
             <GitHubConnectButton
               label="Update App"
@@ -281,7 +276,8 @@ function AppStep({
           inlineAction
           waiting={false}
           onCheckAgain={onCheckAgain}
-          result={ready ? grantedChip : null}
+          result={null}
+          done={ready}
           action={
             grants.installationUrl ? (
               <Button

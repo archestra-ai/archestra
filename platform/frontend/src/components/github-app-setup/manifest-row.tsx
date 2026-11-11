@@ -22,6 +22,7 @@ export function ManifestRow({
   action,
   inlineAction = false,
   error,
+  done: finished,
 }: {
   index: number;
   title: React.ReactNode;
@@ -39,8 +40,10 @@ export function ManifestRow({
   action: React.ReactNode;
   /** Short actions sit beside the text; wide ones (a form) go underneath. */
   inlineAction?: boolean;
+  /** Done without a result to show: the step's own styling says so. */
+  done?: boolean;
 }) {
-  const done = !!result;
+  const done = finished ?? !!result;
   // While GitHub is waiting the action keeps its place, hidden, so the text
   // beside it keeps its width.
   const showAction = !(done || locked);
@@ -66,9 +69,11 @@ export function ManifestRow({
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-sm font-medium">{title}</p>
         {done ? (
-          <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
-            {result}
-          </div>
+          result ? (
+            <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
+              {result}
+            </div>
+          ) : null
         ) : (
           // The hint holds its lines; waiting or an error is laid over them.
           <div className="relative">

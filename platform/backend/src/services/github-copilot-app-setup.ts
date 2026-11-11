@@ -43,7 +43,7 @@ import {
   lookupAccount,
   parseAccount,
 } from "@/services/github-app-manifest-setup";
-import { assertModelProviderAllowed } from "@/services/integration-overrides";
+import { assertCopilotPlanAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -829,13 +829,13 @@ githubAppManifestSetup.register("copilot", {
 });
 
 /**
- * Admins can turn GitHub Copilot off for the organization: then no plan is
- * set up, connected or reconnected.
+ * Admins can turn GitHub Copilot off for the organization, or only its
+ * enterprise plans: then no plan is set up, connected or reconnected.
  */
 async function assertCopilotAllowed(owner: Owner) {
-  await assertModelProviderAllowed({
+  await assertCopilotPlanAllowed({
     organizationId: owner.organizationId,
-    provider: "github-copilot",
+    plan: "enterprise",
   });
 }
 

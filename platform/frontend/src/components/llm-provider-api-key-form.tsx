@@ -698,13 +698,14 @@ export function LlmProviderApiKeyForm({
               key as CreateLlmProviderApiKeyBody["provider"],
             ),
         )
-        // Providers the admins turned off are not offered. The one already
+        // Providers the admins turned off are not offered, and neither is
+        // GitHub Copilot with personal subscriptions off. The one already
         // selected stays in the list even when hidden, so an existing key's
         // disabled trigger still renders its own provider.
         .filter(
           ([key]) =>
             key === provider ||
-            !providerCatalog.isHidden(
+            providerCatalog.canAddKey(
               key as CreateLlmProviderApiKeyBody["provider"],
             ),
         )

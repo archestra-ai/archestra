@@ -43463,6 +43463,15 @@ export type GetBootstrapResponses = {
                 [key: string]: {
                     hidden?: boolean;
                     displayName?: string | null;
+                    plans?: {
+                        personal?: {
+                            hidden?: boolean;
+                        };
+                        enterprise?: {
+                            hidden?: boolean;
+                            displayName?: string | null;
+                        };
+                    };
                 };
             } | null;
             messagingChannelOverrides: {
@@ -126051,6 +126060,15 @@ export type GetOrganizationResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -126510,6 +126528,15 @@ export type UpdateAppearanceSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -126737,6 +126764,15 @@ export type UpdateSecuritySettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -126960,6 +126996,15 @@ export type UpdateMcpSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -127182,6 +127227,15 @@ export type UpdateSkillsSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -127631,6 +127685,15 @@ export type UpdateAgentSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -127876,6 +127939,15 @@ export type UpdateConnectionSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -127957,6 +128029,15 @@ export type UpdateIntegrationSettingsData = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides?: {
@@ -128146,6 +128227,15 @@ export type UpdateIntegrationSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -128378,6 +128468,15 @@ export type UpdateDefaultEnvironmentResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -128605,6 +128704,15 @@ export type UpdateAuthSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -128834,6 +128942,15 @@ export type UpdateKnowledgeSettingsResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -129053,6 +129170,15 @@ export type DropEmbeddingConfigResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {
@@ -129634,6 +129760,15 @@ export type CompleteOnboardingResponses = {
             [key: string]: {
                 hidden?: boolean;
                 displayName?: string | null;
+                plans?: {
+                    personal?: {
+                        hidden?: boolean;
+                    };
+                    enterprise?: {
+                        hidden?: boolean;
+                        displayName?: string | null;
+                    };
+                };
             };
         } | null;
         messagingChannelOverrides: {

@@ -4,8 +4,11 @@ import {
   builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
+  type CopilotPlan,
+  copilotEnterprisePlanLabel,
   type IntegrationToggle,
   integrationLabel,
+  isCopilotPlanHidden,
   isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
@@ -38,6 +41,23 @@ export type NamedIntegrationCatalog<Id extends string> =
     overrides: Partial<Record<Id, ModelProviderOverride>> | null;
     /** The organization's name for an entry, or the built-in one. */
     label: (id: Id) => string;
+    /**
+     * A GitHub Copilot plan the admin turned off, alone or with GitHub
+     * Copilot itself. Never offer to set one up.
+     */
+    isCopilotPlanHidden: (plan: CopilotPlan) => boolean;
+    /**
+     * The GitHub Copilot enterprise plan's name: the admin's, or "GitHub
+     * Copilot Organization". A plan whose GitHub organization is known shows
+     * that organization instead.
+     */
+    enterprisePlanName: string;
+    /**
+     * Whether a person may add a new key or subscription for this provider.
+     * A new GitHub Copilot key is always a personal sign-in (the enterprise
+     * plan has its own setup), so it also needs personal subscriptions on.
+     */
+    canAddKey: (id: SupportedProvider) => boolean;
   };
 
 /**
@@ -76,6 +96,13 @@ export function useModelProviderCatalog(
       overrides,
       label: (id: SupportedProvider) =>
         integrationLabel(overrides, id, builtInProviderLabel(id)),
+      isCopilotPlanHidden: (plan: CopilotPlan) =>
+        isCopilotPlanHidden(overrides, plan),
+      enterprisePlanName: copilotEnterprisePlanLabel(overrides),
+      canAddKey: (id: SupportedProvider) =>
+        id === "github-copilot"
+          ? !isCopilotPlanHidden(overrides, "personal")
+          : !isIntegrationHidden(overrides, id),
     }),
     [overrides],
   );

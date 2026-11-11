@@ -147,6 +147,7 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
     isHidden: (provider: string) => hiddenProviders.has(provider),
+    canAddKey: (provider: string) => !hiddenProviders.has(provider),
   }),
 }));
 

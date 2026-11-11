@@ -95,7 +95,10 @@ import {
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { organizationSubscriptionSubtitle } from "@/lib/organization-subscription";
+import {
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import {
   isDeliverablePlugin,
   type PluginListItem,
@@ -641,10 +644,16 @@ export function ConnectCommandPanel({
     null;
   const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
     key.isGithubAppKey
-      ? `Enterprise plan · ${key.githubOrganization ?? key.name}`
+      ? organizationSubscriptionName(key, providerCatalog.enterprisePlanName)
       : ownSignIns.length > 1
         ? `Personal subscription · ${key.name}`
         : "Personal subscription";
+  // An enterprise plan's name already says GitHub Copilot, so it stands alone
+  // where a personal subscription follows the provider's name.
+  const routedAccountLabel = (key: (typeof perUserKeys)[number]) =>
+    key.isGithubAppKey
+      ? perUserKeyLabel(key)
+      : `${provider ? providerCatalog.label(provider) : "Your provider"} · ${perUserKeyLabel(key)}`;
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -1463,13 +1472,18 @@ export function ConnectCommandPanel({
   // The GitHub Copilot accounts still to connect, as on the Model Providers
   // page: both before any is connected, then the one not in use. They have one
   // place, under the provider, on the command page and the approval page alike.
+  const hiddenCopilotPlans = {
+    personal: providerCatalog.isCopilotPlanHidden("personal"),
+    enterprise: providerCatalog.isCopilotPlanHidden("enterprise"),
+  };
   const accountCards =
     proxyActive &&
     provider === "github-copilot" &&
     providerIsPerUser &&
-    copilotAccountMissing(perUserKeys) ? (
+    copilotAccountMissing(perUserKeys, hiddenCopilotPlans) ? (
       <CopilotAccountCards
         keys={perUserKeys}
+        hiddenPlans={hiddenCopilotPlans}
         pending={createPerUserKey.isPending}
         onToken={connectOwnCopilot}
       />
@@ -2008,11 +2022,15 @@ export function ConnectCommandPanel({
                   <>
                     Route{" "}
                     <span className="font-medium text-foreground">
-                      {providerCatalog.label(provider)}
+                      {providerIsPerUser && boundPerUserKey?.isGithubAppKey
+                        ? perUserKeyLabel(boundPerUserKey)
+                        : providerCatalog.label(provider)}
                     </span>{" "}
-                    {providerIsPerUser && boundPerUserKey && (
-                      <span>({perUserKeyLabel(boundPerUserKey)}) </span>
-                    )}
+                    {providerIsPerUser &&
+                      boundPerUserKey &&
+                      !boundPerUserKey.isGithubAppKey && (
+                        <span>({perUserKeyLabel(boundPerUserKey)}) </span>
+                      )}
                     through{" "}
                     <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                     using{" "}
@@ -2200,7 +2218,7 @@ export function ConnectCommandPanel({
                         : providers.map((p) => providerCatalog.label(p)),
                     accountLabel:
                       providerIsPerUser && boundPerUserKey
-                        ? perUserKeyLabel(boundPerUserKey)
+                        ? routedAccountLabel(boundPerUserKey)
                         : null,
                     providerPicker: grokCredentialPicker ? (
                       <div className="grid min-w-0 gap-3 sm:grid-cols-2">

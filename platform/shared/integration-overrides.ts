@@ -74,11 +74,29 @@ export type IntegrationToggle = z.infer<typeof IntegrationToggleSchema>;
 export const StoredIntegrationToggleSchema = z.object(integrationToggleShape);
 
 /**
+ * The two ways into GitHub Copilot: a person's own Copilot subscription
+ * (`personal`, a sign-in with their GitHub account) and the organization's
+ * Copilot plan connected through a GitHub App (`enterprise`). An admin can
+ * turn each one off while the provider stays on.
+ */
+export const CopilotPlanSchema = z.enum(["personal", "enterprise"]);
+export type CopilotPlan = z.infer<typeof CopilotPlanSchema>;
+
+/**
+ * The name the enterprise plan shows under until an admin gives it one. The
+ * personal plan has no name of its own: it shows under the provider's name.
+ */
+export const GITHUB_COPILOT_ORGANIZATION_LABEL = "GitHub Copilot Organization";
+
+/**
  * Model providers additionally take the organization's own name for the
  * provider, which replaces the built-in one everywhere it is rendered.
  * Messaging channels and knowledge connectors are deliberately toggle-only:
  * they name a single external service each, so there is nothing to rename that
  * would not make the setup instructions harder to follow.
+ *
+ * `plans` is for GitHub Copilot only; the input schema refuses it on any other
+ * provider.
  */
 const modelProviderOverrideShape = {
   ...integrationToggleShape,
@@ -89,17 +107,48 @@ const modelProviderOverrideShape = {
     .nullish(),
 };
 
-export const ModelProviderOverrideSchema = z.strictObject(
-  modelProviderOverrideShape,
-);
+export const ModelProviderOverrideSchema = z.strictObject({
+  ...modelProviderOverrideShape,
+  plans: z
+    .strictObject({
+      personal: IntegrationToggleSchema.optional(),
+      enterprise: z.strictObject(modelProviderOverrideShape).optional(),
+    })
+    .optional(),
+});
 export type ModelProviderOverride = z.infer<typeof ModelProviderOverrideSchema>;
 
 // ---- Input: what PATCH /api/organization/integration-settings accepts ----
 
-export const ModelProviderOverridesSchema = z.partialRecord(
-  SupportedProvidersSchema,
-  ModelProviderOverrideSchema,
-);
+export const ModelProviderOverridesSchema = z
+  .partialRecord(SupportedProvidersSchema, ModelProviderOverrideSchema)
+  .superRefine((overrides, ctx) => {
+    for (const [provider, override] of Object.entries(overrides)) {
+      if (!override?.plans) continue;
+      if (provider !== "github-copilot") {
+        ctx.addIssue({
+          code: "custom",
+          path: [provider, "plans"],
+          message: "Only GitHub Copilot has plans to turn off.",
+        });
+        continue;
+      }
+      // Both plans off is GitHub Copilot off. Keep one switch for that, so
+      // every place that asks whether the provider is offered gets one answer.
+      if (
+        CopilotPlanSchema.options.every(
+          (plan) => override.plans?.[plan]?.hidden === true,
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: [provider, "plans"],
+          message:
+            "To turn off both plans, turn off GitHub Copilot as a provider.",
+        });
+      }
+    }
+  });
 
 export const MessagingChannelOverridesSchema = z.partialRecord(
   MessagingChannelIdSchema,
@@ -145,7 +194,15 @@ export type PopularAgentOverrides = z.infer<
 
 export const StoredModelProviderOverridesSchema = z.partialRecord(
   SupportedProvidersSchema,
-  z.object(modelProviderOverrideShape),
+  z.object({
+    ...modelProviderOverrideShape,
+    plans: z
+      .object({
+        personal: StoredIntegrationToggleSchema.optional(),
+        enterprise: z.object(modelProviderOverrideShape).optional(),
+      })
+      .optional(),
+  }),
 );
 export type ModelProviderOverrides = z.infer<
   typeof StoredModelProviderOverridesSchema
@@ -197,6 +254,27 @@ export function isIntegrationHidden<Id extends string>(
 }
 
 /**
+ * True when one GitHub Copilot plan is not offered: either GitHub Copilot as a
+ * whole is off, or an admin turned off just this plan.
+ */
+export function isCopilotPlanHidden(
+  overrides: ModelProviderOverrides | null,
+  plan: CopilotPlan,
+): boolean {
+  const copilot = overrides?.["github-copilot"];
+  return copilot?.hidden === true || copilot?.plans?.[plan]?.hidden === true;
+}
+
+/** The name the GitHub Copilot enterprise plan shows under. */
+export function copilotEnterprisePlanLabel(
+  overrides: ModelProviderOverrides | null,
+): string {
+  const custom =
+    overrides?.["github-copilot"]?.plans?.enterprise?.displayName?.trim();
+  return custom ? custom : GITHUB_COPILOT_ORGANIZATION_LABEL;
+}
+
+/**
  * The label to render for a catalog entry: the admin's override when they set
  * one, otherwise the built-in name.
  */
@@ -225,10 +303,14 @@ export function pruneIntegrationOverrides<Id extends string>(
     if (!override) continue;
     const displayName = override.displayName?.trim() || null;
     const hidden = override.hidden === true;
-    if (!hidden && !displayName) continue;
+    const plans = prunePlans(override.plans);
+    if (!hidden && !displayName && !plans) continue;
     pruned[id] = {
       ...(hidden ? { hidden: true } : {}),
       ...(displayName ? { displayName } : {}),
+      // Kept while the provider is off too, so switching it back on restores
+      // the plan the admin had turned off.
+      ...(plans ? { plans } : {}),
     };
   }
   return Object.keys(pruned).length > 0 ? pruned : null;
@@ -298,4 +380,28 @@ export function withOrderedPopularAgentIds(
       ];
     }),
   );
+}
+
+// ===================================================================
+// Internal
+// ===================================================================
+
+/**
+ * The plans an admin turned off or named, or undefined when every plan is
+ * offered under its default name.
+ */
+function prunePlans(
+  plans: ModelProviderOverride["plans"],
+): ModelProviderOverride["plans"] {
+  const pruned: NonNullable<ModelProviderOverride["plans"]> = {};
+  if (plans?.personal?.hidden === true) pruned.personal = { hidden: true };
+  const enterpriseHidden = plans?.enterprise?.hidden === true;
+  const enterpriseName = plans?.enterprise?.displayName?.trim() || null;
+  if (enterpriseHidden || enterpriseName) {
+    pruned.enterprise = {
+      ...(enterpriseHidden ? { hidden: true } : {}),
+      ...(enterpriseName ? { displayName: enterpriseName } : {}),
+    };
+  }
+  return Object.keys(pruned).length > 0 ? pruned : undefined;
 }

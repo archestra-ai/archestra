@@ -1,3 +1,5 @@
+import { GITHUB_COPILOT_ORGANIZATION_LABEL } from "@archestra/shared";
+
 /**
  * Display helpers for an organization subscription: GitHub Copilot paid by a
  * GitHub organization through a GitHub App key. Pickers list it in its own
@@ -5,7 +7,6 @@
  * provider API keys.
  */
 interface OrganizationSubscriptionKey {
-  name?: string | null;
   isGithubAppKey?: boolean;
   githubOrganization?: string | null;
 }
@@ -19,17 +20,19 @@ export function isOrganizationSubscription(
 }
 
 /**
- * The plan's own name, as set when it was connected. A plan still named by
- * default reads "GitHub Copilot · acme".
+ * How every surface names a connected plan: the Model Providers card, the
+ * pickers, Connect and the logs. "GitHub Copilot acme", after its GitHub
+ * organization. Without a known organization, `planName`: the name set under
+ * Settings → LLM → Model providers (the model provider catalog's
+ * `enterprisePlanName`).
  */
 export function organizationSubscriptionName(
   key: OrganizationSubscriptionKey,
+  planName: string = GITHUB_COPILOT_ORGANIZATION_LABEL,
 ): string {
-  const name = key.name?.trim();
-  const organization = key.githubOrganization ?? "organization";
-  return name && name !== `GitHub Copilot (${organization})`
-    ? name
-    : `GitHub Copilot · ${organization}`;
+  return key.githubOrganization
+    ? `${ORGANIZATION_PLAN_NAME_PREFIX} ${key.githubOrganization}`
+    : planName;
 }
 
 /** "Billed to acme on GitHub". */
@@ -39,13 +42,22 @@ export function organizationSubscriptionSubtitle(
   return `Billed to ${key.githubOrganization ?? "the organization"} on GitHub`;
 }
 
-/** "Enterprise plan · acme" or "Personal sign-in", for the logs. */
+/**
+ * "GitHub Copilot acme" or "Personal sign-in", for the logs. A plan is named
+ * as in every picker.
+ */
 export function copilotCredentialSourceLabel(
   source:
     | { kind: "organization"; organization: string | null }
     | { kind: "personal" },
+  planName?: string,
 ): string {
   return source.kind === "organization"
-    ? `Enterprise plan · ${source.organization ?? "unknown organization"}`
+    ? organizationSubscriptionName(
+        { githubOrganization: source.organization },
+        planName,
+      )
     : "Personal sign-in";
 }
+
+const ORGANIZATION_PLAN_NAME_PREFIX = "GitHub Copilot";

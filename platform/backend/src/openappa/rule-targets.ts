@@ -15,7 +15,7 @@ export type RuleTarget =
   | { kind: "unverifiable"; rule: string };
 
 /** A touched tool's stored metadata, as the server that published it describes it. */
-export type DescribedTool = {
+type DescribedTool = {
   name: string;
   description: string | null;
   parameters: unknown;

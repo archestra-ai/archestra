@@ -326,7 +326,6 @@ export function getArchestraToolInputSchema(
 export function getArchestraToolArgsSchema(
   toolName: string,
 ): ZodType | undefined {
-  if (toolName === SELF_FORK_TOOL_NAME) return selfForkToolArgsSchema;
   if (isAgentTool(toolName) || isSkillTool(toolName))
     return delegationToolArgsSchema;
   return findToolEntry(toolName)?.toolEntry.schema;

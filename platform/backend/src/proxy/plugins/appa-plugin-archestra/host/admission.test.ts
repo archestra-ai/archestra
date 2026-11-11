@@ -6,7 +6,7 @@ import { scopedSessionId } from "@/openappa/actor";
 import { isUnenforcedSession } from "@/openappa/unenforced";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import * as runtimeIdentity from "@/services/agent-runtime/runtime-identity";
-import { expect, test } from "@/test";
+import { afterEach, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { admitOpenappaRequest } from "./admission";
 import { scrubOpenappaIngress } from "./ingress";
@@ -62,8 +62,13 @@ async function admission(params: {
   };
 }
 
+const configuredSoftBlockMode = config.openappa.softBlockMode;
+afterEach(() => {
+  config.openappa.softBlockMode = configuredSoftBlockMode;
+});
+
 function waiveClientRefusals() {
-  config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "allow" };
+  config.openappa.softBlockMode = "allow";
 }
 
 function sessionOf(
@@ -86,7 +91,7 @@ test("a client-side refusal proceeds ungoverned only when blocked calls are allo
   const user = await makeUser();
   const unrecognizedClient = () =>
     admission({ agent, principal: { authenticatedUserId: user.id } });
-  config.openappa.breakTheGlassOverrides = { unapprovableBlockMode: "refuse" };
+  config.openappa.softBlockMode = "refuse";
   await expect(
     admitOpenappaRequest(await unrecognizedClient()),
   ).rejects.toMatchObject({ statusCode: 400 });
@@ -139,34 +144,34 @@ test("a platform authentication refusal is never waived", async ({
   waiveClientRefusals();
   const virtualKeyId = randomUUID();
   const workloadName = `workload-${randomUUID()}`;
-  const actor = {
-    organizationId: agent.organizationId,
-    agentId: agent.id,
-    actorKind: "user" as const,
-    actorId: "someone-else",
-    workloadName,
-  };
-  await expect(
-    admitOpenappaRequest(
-      await admission({
-        agent,
-        principal: { authenticatedUserId: user.id, virtualKeyId },
-        overrides: {
-          runtimeSnapshot: {
-            organizationId: agent.organizationId,
-            virtualKeyIds: [virtualKeyId],
-            candidates: [
-              {
-                virtualKeyId,
-                run: { ...actor, actorUserId: null, taskId: randomUUID() },
-                workspace: { ...actor, id: randomUUID(), state: "active" },
-              },
-            ],
-          },
-        },
-      }),
-    ),
-  ).rejects.toMatchObject({ statusCode: 401 });
+  const lookup = vi
+    .spyOn(runtimeIdentity, "resolveRuntimeIdentityByVirtualKeys")
+    .mockResolvedValue({
+      status: "bound",
+      identity: {
+        principal: workloadName,
+        workspaceId: randomUUID(),
+        workloadName,
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: "someone-else",
+        actorUserId: null,
+        taskId: randomUUID(),
+      },
+    });
+  try {
+    await expect(
+      admitOpenappaRequest(
+        await admission({
+          agent,
+          principal: { authenticatedUserId: user.id, virtualKeyId },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  } finally {
+    lookup.mockRestore();
+  }
   expect(await isUnenforcedSession(sessionOf(agent, `user:${user.id}`))).toBe(
     false,
   );

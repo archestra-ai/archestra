@@ -55,11 +55,12 @@ crate-type = ["cdylib"]
 # (#888), and a return declared ahead kept in the family log (#887);
 # then an authority's `except_tags`, and plans that need only stock `approve`
 # authorities applied at the block and recorded (#889); then a remedy whose
-# annotator gave no answer refused as unanswered (#890).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0fbd34ac0434e917ae64421e02d35ddba67ec4ad", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0fbd34ac0434e917ae64421e02d35ddba67ec4ad" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0fbd34ac0434e917ae64421e02d35ddba67ec4ad", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0fbd34ac0434e917ae64421e02d35ddba67ec4ad" }
+# annotator gave no answer refused as unanswered (#890), and a refusal of numbers
+# whose canonical form is an unsafe integer (#891).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

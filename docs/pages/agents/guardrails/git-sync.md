@@ -49,7 +49,7 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Self-service MCP Guardrails
 
-With self-service on, the people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) change its Guardrails rules themselves, through a pull request, with no Guardrails permission. Each server's rules live in their own file, `mcp/<tool prefix>.toml` by default, which `appa.toml` includes with one line:
+Users who are permitted to edit an MCP server can also manage its Guardrails rules themselves. Each MCP gets its own policy file under the `mcp/` folder by default:
 
 ```toml
 include = [

@@ -30,8 +30,7 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Credential | Where to get it | Runs as |
 | --- | --- | --- |
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
-| Team token | **Settings → Teams**, then the team's token | The team |
-| Organization token | **Settings → Auth** | The organization |
+| Legacy team or organization token | Its migrated account in **Settings → Service Accounts** | The migrated service account |
 | Service account API key | **Settings → Service Accounts**, then the account's API key | The account |
 | OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
@@ -40,7 +39,7 @@ For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilit
 
 Client-credentials tokens can invoke in-process agents, but cannot start or continue dedicated Agent Runtime runs. Binding the OAuth client to a service account does not remove this restriction. A service-account API key or a user authorization-code token is a different credential, subject to that account's agent, runtime and model access.
 
-Use a service account API key for automations. Team and organization tokens get no code sandbox: the agent cannot run commands, attached files it cannot read inline are dropped, and large tool results are truncated.
+Use a service account API key for automations. Legacy team and organization tokens run as their migrated service account, with the same sandbox behavior as other service-account keys.
 
 What to know:
 

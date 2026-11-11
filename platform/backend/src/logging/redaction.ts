@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import pino from "pino";
 
 /**
@@ -213,10 +214,12 @@ function errorMetadata({
   value,
   ancestors,
   depth,
+  databaseError = false,
 }: {
   value: unknown;
   ancestors: WeakSet<object>;
   depth: number;
+  databaseError?: boolean;
 }): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== "object") return "[not stored: log content mode]";
@@ -224,6 +227,33 @@ function errorMetadata({
   ancestors.add(value);
   const error = value as Record<string, unknown>;
   const metadata: Record<string, unknown> = {};
+  databaseError ||= value instanceof DrizzleQueryError;
+  if (value instanceof DrizzleQueryError) {
+    // SQL itself may contain literals; only keep its statement classification.
+    const statement =
+      /^\s*(select|insert|update|delete|with|create|alter|drop|truncate)\b/i.exec(
+        value.query,
+      );
+    if (statement) metadata.statement = statement[1].toUpperCase();
+    metadata.parameterCount = value.params.length;
+  }
+  if (databaseError) {
+    // Only trust protocol fields in a database error chain, not provider codes
+    // or the driver's message/detail/where, which may echo bound values.
+    if (typeof error.code === "string" && /^[0-9A-Z]{5}$/.test(error.code))
+      metadata.code = error.code;
+    if (
+      typeof error.severity === "string" &&
+      /^(ERROR|FATAL|PANIC|WARNING|NOTICE|DEBUG|INFO|LOG)$/.test(error.severity)
+    )
+      metadata.severity = error.severity;
+    // This is a schema identifier, not the constraint's rejected value.
+    if (
+      typeof error.constraint === "string" &&
+      /^[a-z_][a-z0-9_$]{0,62}$/i.test(error.constraint)
+    )
+      metadata.constraint = error.constraint;
+  }
   // Constructor identity comes from code, whereas SDK name/type/code fields
   // can be populated directly from the provider's response.
   if (value instanceof Error) metadata.type = value.constructor.name;
@@ -245,6 +275,7 @@ function errorMetadata({
         value: error[key],
         ancestors,
         depth: depth + 1,
+        databaseError,
       });
   }
   if (Array.isArray(error.errors)) {

@@ -18,7 +18,9 @@ use crate::{
     session::session_actor,
 };
 use appa_eventlog::encryption::StorageCipher;
-use appa_runtime::api::{ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation, RemedyRefusal};
+use appa_runtime::api::{
+    ExecuteRemedyPlanArgs, NoAnswerClass, RemedyOutcome, RemedyPresentation, RemedyRefusal,
+};
 use appa_runtime_api::ProposedCall;
 use napi_derive::napi;
 use serde::Serialize;
@@ -428,6 +430,8 @@ pub(crate) struct RemedyAct<'a> {
     pub(crate) owner: &'a OfferOwner,
     pub(crate) offer_id: &'a str,
     pub(crate) ruling: Option<RulingInput>,
+    /// The control tool as the client was presented it.
+    pub(crate) control_tool: &'a str,
 }
 
 pub(crate) fn render_remedy_outcome(
@@ -460,6 +464,16 @@ pub(crate) fn render_remedy_outcome(
                 "OpenAPPA remedy interrupted: {detail}"
             )));
         }
+        // Nothing was applied and the offer stands, so the model learns how to go on rather
+        // than the turn ending on a runtime failure.
+        RemedyOutcome::Refused {
+            reason: RemedyRefusal::Unanswered { annotator, class },
+        } => (
+            OutputSource::Runtime,
+            None,
+            true,
+            render_unanswered(&annotator, class, act.control_tool),
+        ),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
         } => {
@@ -472,7 +486,7 @@ pub(crate) fn render_remedy_outcome(
             OutputSource::Runtime,
             unknown_control_reason(&reason),
             true,
-            reason.detail().to_owned(),
+            reason.detail().into_owned(),
         ),
     };
     serde_json::to_value(HostMcpResult {
@@ -541,6 +555,19 @@ fn denied_block(feedback: &str) -> &str {
     }
 }
 
+/// Built from the typed class: the runtime's own text may change wording or grow detail.
+fn render_unanswered(annotator: &str, class: NoAnswerClass, control_tool: &str) -> String {
+    let next = match class.is_transient() {
+        true => format!("Call the {control_tool} tool again with the same offer id."),
+        false => format!(
+            "A retry will not help until an administrator checks the configuration of `{annotator}`."
+        ),
+    };
+    format!(
+        "[appa] Not applied: the policy check `{annotator}` gave no answer ({class}). Nothing changed and the offer still stands. {next}"
+    )
+}
+
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
         // A superseded offer was a live one gone stale, reported before as an unknown offer.
@@ -555,6 +582,7 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
+        | RemedyRefusal::Unanswered { .. }
         | RemedyRefusal::Runtime { .. } => None,
     }
 }
@@ -1123,6 +1151,7 @@ mod typed_tests {
                 owner: &owner,
                 offer_id: "offer-1",
                 ruling: None,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap();
@@ -1229,6 +1258,7 @@ mod remedy_tests {
                 owner,
                 offer_id: QUOTED,
                 ruling,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap()

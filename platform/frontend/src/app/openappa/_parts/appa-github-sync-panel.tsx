@@ -370,7 +370,7 @@ function SelfServiceRow({
         {selfService.environment ? (
           <DeploymentSettingRow
             compact
-            title="Self-service"
+            title="Self-service MCP Guardrails"
             description={description}
             value={selfService.enabled ? "enabled" : "disabled"}
             disabled
@@ -384,7 +384,7 @@ function SelfServiceRow({
         ) : (
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">Self-service</p>
+              <p className="text-sm font-medium">Self-service MCP Guardrails</p>
               <p className="text-sm text-muted-foreground">{description}</p>
             </div>
             {selfService.enabled ? (

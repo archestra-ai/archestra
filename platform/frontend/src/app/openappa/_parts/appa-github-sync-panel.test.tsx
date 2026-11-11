@@ -195,7 +195,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
   const dialog = await screen.findByRole("dialog", {
-    name: "Turn on self-service",
+    name: "Self-service MCP Guardrails",
   });
   expect(
     await within(dialog).findByText(
@@ -303,7 +303,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
 
   fireEvent.click(enable);
   const dialog = await screen.findByRole("dialog", {
-    name: "Turn on self-service",
+    name: "Self-service MCP Guardrails",
   });
   expect(
     await within(dialog).findByText(/every permission self-service needs/),
@@ -386,7 +386,9 @@ test("locks self-service while the environment variable sets it, naming the vari
     ),
   );
   show();
-  const locked = await screen.findByRole("combobox", { name: "Self-service" });
+  const locked = await screen.findByRole("combobox", {
+    name: "Self-service MCP Guardrails",
+  });
   expect(locked).toHaveTextContent("On");
   expect(locked).toBeDisabled();
   expect(locked).toHaveAccessibleDescription(
@@ -400,7 +402,9 @@ test("locks self-service while the environment variable sets it, naming the vari
     ),
   ).toBeVisible();
   expect(
-    screen.getByRole("button", { name: "Self-service environment values" }),
+    screen.getByRole("button", {
+      name: "Self-service MCP Guardrails environment values",
+    }),
   ).toBeEnabled();
   // In force: the protection shows all the same.
   expect(
@@ -1186,7 +1190,7 @@ test("links the pull request that includes the servers' folder while it waits, a
   // Already on: the setup starts at the App step, and the folder is fixed.
   fireEvent.click(finish);
   const dialog = await screen.findByRole("dialog", {
-    name: "Turn on self-service",
+    name: "Self-service MCP Guardrails",
   });
   expect(
     await within(dialog).findByText(/every permission self-service needs/),

@@ -181,7 +181,7 @@ export function SelfServiceSetupDialog({
 function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "app")
     return {
-      title: "Turn on self-service",
+      title: "Self-service MCP Guardrails",
       description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs two more permissions for that.`,
     };
   if (step === "folder")

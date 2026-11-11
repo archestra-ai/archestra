@@ -60,19 +60,6 @@ include = [
 
 Enable it in the Guardrails setting when setting up git sync or afterwards. Can also be controlled with the [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) env var.
 
-### Edit a Server's Rules
-
-1. Click **Edit Guardrails rules** for an owned server in the **MCP Registry**. The APPA Keeper opens on that server; a server without a file starts from one that names each tool with no rule.
-2. Ask for the change, for example "refunds need a trusted session". The Keeper shows the diff.
-3. Click **Approve**. The Keeper opens a pull request that changes only that file.
-4. When the check passes, merge it. Git sync applies it at the next sync.
-
-What to know:
-
-- A rule in `appa.toml` wins over a server file's rule for the same tool.
-- A server file holds rules for its own server's tools only; `<tool prefix>__*` covers every tool the file names no rule for. Git sync refuses a file that reaches further, whoever approved it.
-- To merge, an editor needs write access to the repository, or someone who has it merges for them. Nobody needs to approve.
-
 ### The Check and the Ruleset
 
 While self-service is on, Archestra keeps two things on the synced branch at each sync, and never merges anything itself:

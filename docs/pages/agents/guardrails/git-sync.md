@@ -22,7 +22,7 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
    - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
    - **Use an existing repository:** one that already holds an OpenAPPA policy.
-2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with the [permissions below](#github-app-permissions) and no keys to copy. Install it on the policy repository only: its tokens never reach past that repository, and so GitHub's own grant need not either. To let the people who edit an MCP server change its rules themselves, check **Enable MCP servers Guardrails self-service** on this step; a new App then asks for the Checks and Administration permissions too. You can [turn it on later](#let-each-servers-team-own-its-rules).
+2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with the [permissions below](#github-app-permissions) and no keys to copy. Install it on the policy repository only: its tokens never reach past that repository, and so GitHub's own grant need not either. To let the people who edit an MCP server change its rules themselves, check **Enable MCP servers Guardrails self-service** on this step; a new App then asks for the Checks and Administration permissions too, and the repository step asks for the **Self-service folder**. You can [turn it on later](#let-each-servers-team-own-its-rules).
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
 If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
@@ -64,7 +64,7 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Let Each Server's Team Own Its Rules
 
-With **Self-service** on, the people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) change its Guardrails rules themselves, through a pull request, without a Guardrails permission. They do it in a chat with the **APPA Keeper** agent, which only administrators can use until you [share the agent](/docs/admin/access-control#share-a-resource) with their team. Each server's rules live in their own file in the policy repository, `mcp/<tool prefix>.toml`. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
+With **Self-service** on, the people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) change its Guardrails rules themselves, through a pull request, without a Guardrails permission. They do it in a chat with the **APPA Keeper** agent, which only administrators can use until you [share the agent](/docs/admin/access-control#share-a-resource) with their team. Each server's rules live in their own file in the **Self-service folder** beside the policy file, `mcp/<tool prefix>.toml` unless you chose another folder. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
 
 ```toml
 include = [
@@ -73,7 +73,7 @@ include = [
 ]
 ```
 
-Any include entry may name every matching file in one folder this way, as OpenAPPA 0.41 and later read one: `teams/*.toml`, `policies/ops-*.toml`. Only the file name holds `*`, it ends in `.toml`, and the files load at the entry's position in name order, each once. Lay the repository out as you like and move files between folders freely; Git sync reads the files the commit holds. Only `mcp/<tool prefix>.toml` is a server's own file, held to that server's tools; a file anywhere else is organization policy, with no scope. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, every included file folded in.
+Any include entry may name every matching file in one folder this way, as OpenAPPA 0.41 and later read one: `teams/*.toml`, `policies/ops-*.toml`. Only the file name holds `*`, it ends in `.toml`, and the files load at the entry's position in name order, each once. Lay the repository out as you like and move files between folders freely; Git sync reads the files the commit holds. Only a file in the self-service folder, `mcp/<tool prefix>.toml`, is a server's own file, held to that server's tools; a file anywhere else is organization policy, with no scope. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, every included file folded in.
 
 When two files write a rule for the same tool, the first one in the composed policy wins for a call, whole: the root's rules come first, then each included file's in `include` order, and a glob's files in name order. An exact tool name always beats `*`. So `appa.toml` overrides any included file, and an entry listed before `mcp/*.toml` overrides a server's file while one listed after it yields to it. Nothing merges and nothing warns: a shadowed rule is dead for that call. Two files cannot declare the same annotator.
 
@@ -81,11 +81,11 @@ When two files write a rule for the same tool, the first one in the composed pol
 
 Self-service is off until you turn it on. Off, only people with [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) change the policy, the MCP registry shows no **Edit Guardrails rules**, and Archestra posts no check and keeps no branch rules. Three things put a server's rules in its editors' hands; each is in place once and holds for every server.
 
-1. **Self-service on, with a GitHub App source.** Check **Enable MCP servers Guardrails self-service** when you set Git sync up, or turn **Self-service** on later on the Git sync card in **Settings → Guardrails**. On brings the branch ruleset at once; an App that lacks a permission is listed under **Self-service** with **Update App permissions**. A GitLab project or a token cannot: the check and the branch rules are the App's. [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead, and the switch is then locked.
+1. **Self-service on, with a GitHub App source.** Check **Enable MCP servers Guardrails self-service** when you set Git sync up, or click **Enable** under **Self-service** on the Git sync card in **Settings → Guardrails** later. Either way you pick the **Self-service folder**, `mcp` unless you change it. **Enable** walks you through it: the App's two extra permissions, with **Update App permissions** and the installation to accept them on, then the folder, then the branch ruleset and a pull request in your name that starts the folder and adds `<folder>/*.toml` to `appa.toml`. A repository the setup creates includes the folder from its first commit. **Self-service** links the pull request until it is merged, and offers **Finish setup** while a part is still missing. The folder cannot move while self-service is on: click **Disable**, then **Enable** with the new folder. A GitLab project or a token cannot: the check and the branch rules are the App's. [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead, and the switch is then locked.
 2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules**, and the policy check passes their own changes.
 3. **The APPA Keeper for those teams.** Only administrators can use the agent until you share it with the editors' teams for use.
 
-Turning **Self-service** off deletes Archestra's ruleset, takes its check out of any other ruleset that required it, and hides the registry action again. Open pull requests stay open under the repository's own rules.
+**Disable** deletes Archestra's ruleset, takes its check out of any other ruleset that required it, and hides the registry action again. Open pull requests stay open under the repository's own rules.
 
 To merge, an editor needs write access to the repository on GitHub, or someone who has it clicks **Merge** for them. Nobody needs to approve.
 
@@ -93,7 +93,7 @@ To merge, an editor needs write access to the repository on GitHub, or someone w
 
 1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server. A server with no file yet starts from a file that names each of its tools with no rule, so the first change decides about every tool on purpose; a tool left without a rule keeps the organization's defaults.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
-3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include `mcp/*.toml` yet, the first pull request adds it.
+3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include the self-service folder yet, the first pull request adds its `<folder>/*.toml` line.
 4. When the **Guardrails Policy Admission** check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
 
 What to know:
@@ -119,8 +119,8 @@ The policy can live in a folder of a repository that holds other work, such as `
 
 What to know:
 
-- An App created before Archestra kept these lacks the Checks and Administration permissions; **Self-service** lists them with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
-- To be rid of the ruleset, turn **Self-service** off on the Git sync card. A ruleset turned off or stripped of the rule on GitHub is put back at the next sync.
+- An App created before Archestra kept these lacks the Checks and Administration permissions; **Enable** asks for them first, with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
+- To be rid of the ruleset, click **Disable** under **Self-service** on the Git sync card. A ruleset turned off or stripped of the rule on GitHub is put back at the next sync.
 
 ## Validations in Git
 

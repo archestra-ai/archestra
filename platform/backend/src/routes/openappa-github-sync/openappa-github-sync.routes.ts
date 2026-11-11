@@ -1,14 +1,20 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
+import logger from "@/logging";
 import {
   configureAppaGithubSync,
   createAppaGithubRepository,
+  getAppaGithubAppGrants,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
+import {
+  ensureSelfServiceInclude,
+  selfServiceIncludeState,
+} from "@/services/openappa-server-rules";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
   AppaGithubAppAccountsSchema,
@@ -23,6 +29,7 @@ import {
   StartAppaGithubAppSchema,
 } from "@/types/openappa-github-app-setup";
 import {
+  AppaGithubAppGrantsSchema,
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
@@ -53,8 +60,33 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(AppaRepositoryProtectionSchema),
       },
     },
+    async (request, reply) => {
+      const protection = await getRepositoryProtection(request.organizationId);
+      return reply.send(
+        protection && {
+          ...protection,
+          include: await selfServiceIncludeState(request.organizationId),
+        },
+      );
+    },
+  );
+  app.get(
+    "/api/openappa/github-sync/app-grants",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppGrants,
+        description:
+          "The GitHub App's permissions against what self-service needs, with the pages that grant them",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(
+          AppaGithubAppGrantsSchema.nullable(),
+        ),
+      },
+    },
     async (request, reply) =>
-      reply.send(await getRepositoryProtection(request.organizationId)),
+      reply.send(
+        (await getAppaGithubAppGrants(request.organizationId)) ?? null,
+      ),
   );
   app.get(
     "/api/openappa/github-sync/self-service",
@@ -80,14 +112,14 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(AppaGithubSyncStatusSchema),
       },
     },
-    async (request, reply) =>
-      reply.send(
-        await configureAppaGithubSync({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          source: request.body,
-        }),
-      ),
+    async (request, reply) => {
+      const status = await configureAppaGithubSync({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        source: request.body,
+      });
+      return reply.send(await withServersIncluded(request, status));
+    },
   );
   app.post(
     "/api/openappa/github-sync/repository",
@@ -99,14 +131,14 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(AppaGithubSyncStatusSchema),
       },
     },
-    async (request, reply) =>
-      reply.send(
-        await createAppaGithubRepository({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          ...request.body,
-        }),
-      ),
+    async (request, reply) => {
+      const status = await createAppaGithubRepository({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        ...request.body,
+      });
+      return reply.send(await withServersIncluded(request, status));
+    },
   );
   app.post(
     "/api/openappa/github-app/manifest",
@@ -286,6 +318,15 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         request.auditBefore = { syncRequested: false };
         request.auditAfter = { syncRequested: true };
       }
+      if (request.body.action === "include_servers") {
+        await ensureSelfServiceInclude({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+        return reply.send(await getAppaGithubSync(request.organizationId));
+      }
+      // The switch's dialog opens the pull request that includes the
+      // servers' folder as its own step, with include_servers.
       return reply.send(
         await updateAppaGithubSync({
           organizationId: request.organizationId,
@@ -296,3 +337,29 @@ const routes: FastifyPluginAsyncZod = async (app) => {
   );
 };
 export default routes;
+
+/**
+ * After a source change or a switch that turned self-service on: open the
+ * pull request that includes the servers' folder when the policy file lacks
+ * it, in the caller's name. A pull request that cannot open does not undo
+ * what was saved; the Git sync card offers it again.
+ */
+async function withServersIncluded<
+  T extends { selfService: { enabled: boolean }; source: unknown },
+>(request: { organizationId: string; user: { id: string } }, status: T) {
+  if (!status.selfService.enabled) return status;
+  try {
+    const opened = await ensureSelfServiceInclude({
+      organizationId: request.organizationId,
+      userId: request.user.id,
+    });
+    if (!opened) return status;
+  } catch (error) {
+    logger.warn(
+      { organizationId: request.organizationId, error },
+      "OpenAPPA could not open the pull request that includes the self-service folder",
+    );
+    return status;
+  }
+  return getAppaGithubSync(request.organizationId);
+}

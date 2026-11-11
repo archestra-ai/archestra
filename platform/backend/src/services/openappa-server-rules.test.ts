@@ -1726,6 +1726,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
   expect((await getAppaGithubSync(org.id)).selfService).toEqual({
     enabled: false,
     setting: false,
+    directory: "mcp",
   });
   await expect(
     getServerRules({
@@ -1744,7 +1745,11 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     action: "self_service",
     enabled: true,
   });
-  expect(on.selfService).toEqual({ enabled: true, setting: true });
+  expect(on.selfService).toEqual({
+    enabled: true,
+    setting: true,
+    directory: "mcp",
+  });
   expect(calls).toEqual(["POST rulesets"]);
   listed = [
     { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
@@ -1765,6 +1770,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     expect((await getAppaGithubSync(org.id)).selfService).toEqual({
       enabled: false,
       setting: true,
+      directory: "mcp",
       environment: {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
         value: "disabled",
@@ -1808,7 +1814,11 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     action: "self_service",
     enabled: false,
   });
-  expect(off.selfService).toEqual({ enabled: false, setting: false });
+  expect(off.selfService).toEqual({
+    enabled: false,
+    setting: false,
+    directory: "mcp",
+  });
   expect(calls).toEqual(["DELETE 5", "PUT 7"]);
   expect(written).toEqual({
     name: "Release rules",

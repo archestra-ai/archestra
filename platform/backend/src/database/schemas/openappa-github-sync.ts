@@ -32,6 +32,11 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   // requests: the policy check, the branch ruleset and the registry action.
   // ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, wins over it.
   selfService: boolean("self_service").notNull().default(false),
+  // The folder beside the policy file that holds one rules file per MCP
+  // server, which `<folder>/*.toml` in the policy includes.
+  selfServiceDirectory: text("self_service_directory")
+    .notNull()
+    .default("mcp"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
 });

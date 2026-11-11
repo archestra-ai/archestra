@@ -32,6 +32,21 @@ const AppaPolicyPathSchema = z
     "Use a repository-relative .toml file path",
   );
 
+/**
+ * The self-service folder: beside the policy file, one rules file per MCP
+ * server. Outside `batteries/`, no `.` or `..` segment, no `*`, no slash at
+ * either end.
+ */
+export const SelfServiceDirectorySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(
+    /^(?!batteries(?:\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$/,
+    "Use a folder beside the policy file, such as mcp or rules/servers",
+  );
+
 export const AppaGithubSourceSchema = z
   .object({
     repo: z
@@ -58,6 +73,8 @@ export const AppaGithubSourceSchema = z
      * only; ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, wins over it.
      */
     selfService: z.boolean().default(false),
+    /** Where each server's rules file lives, beside the policy file. */
+    selfServiceDirectory: SelfServiceDirectorySchema.default("mcp"),
   })
   .strict()
   .refine(
@@ -103,6 +120,8 @@ export const CreateAppaGithubRepositorySchema = z
     replace: z.boolean().optional(),
     /** Let each server's editors change its own rules; GitHub App sources only. */
     selfService: z.boolean().optional(),
+    /** Where each server's rules file lives, beside the policy file; mcp unless set. */
+    selfServiceDirectory: SelfServiceDirectorySchema.optional(),
   })
   .strict()
   .refine(
@@ -117,28 +136,28 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
  * ruleset Archestra keeps, which makes the policy check the gate. Null while
  * self-service is off, or without a connected GitHub App source.
  */
+/**
+ * The GitHub App's grants against what self-service needs, with where to
+ * change them: the App's permissions page, and the installation that accepts
+ * a change.
+ */
+export const AppaGithubAppGrantsSchema = z.object({
+  settingsUrl: z.string(),
+  installationUrl: z.string().nullable(),
+  permissions: z.array(
+    z.object({
+      name: z.enum(["contents", "pull_requests", "checks", "administration"]),
+      granted: z.boolean(),
+    }),
+  ),
+});
+
 export const AppaRepositoryProtectionSchema = z
   .object({
     /** The name of the policy check, and of the ruleset that requires it. */
     checkName: z.string(),
     /** The GitHub App's grants against what the feature needs, and where to change them. */
-    app: z
-      .object({
-        settingsUrl: z.string(),
-        installationUrl: z.string().nullable(),
-        permissions: z.array(
-          z.object({
-            name: z.enum([
-              "contents",
-              "pull_requests",
-              "checks",
-              "administration",
-            ]),
-            granted: z.boolean(),
-          }),
-        ),
-      })
-      .optional(),
+    app: AppaGithubAppGrantsSchema.optional(),
     branchRules: z.object({
       state: z.enum([
         "active",
@@ -155,6 +174,16 @@ export const AppaRepositoryProtectionSchema = z
       /** A ruleset requires the check while the GitHub App cannot post it. */
       checkRule: z.enum(["unposted"]).optional(),
     }),
+    /**
+     * Whether the policy file includes the self-service folder, which is
+     * what makes the servers' files apply: `included`, or `pull_open` while
+     * the pull request that adds the line waits, or `missing`.
+     */
+    include: z.object({
+      folder: z.string(),
+      state: z.enum(["included", "pull_open", "missing"]),
+      pull: z.object({ number: z.number().int(), url: z.string() }).optional(),
+    }),
   })
   .nullable();
 
@@ -168,6 +197,8 @@ export const AppaSelfServiceSchema = z.object({
   enabled: z.boolean(),
   /** The setting saved with the Git sync source. */
   setting: z.boolean(),
+  /** The folder beside the policy file that holds each server's rules file. */
+  directory: z.string(),
   /** The environment variable that sets it, while one does, with its value. */
   environment: z
     .object({ variable: z.string(), value: SelfServiceChoiceSchema })
@@ -192,8 +223,18 @@ export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
     .strict(),
   /** Turn self-service on or off; refused while the environment variable sets it. */
   z
-    .object({ action: z.literal("self_service"), enabled: z.boolean() })
+    .object({
+      action: z.literal("self_service"),
+      enabled: z.boolean(),
+      /** The self-service folder to use when turning on; the saved one unless set. */
+      directory: SelfServiceDirectorySchema.optional(),
+    })
     .strict(),
+  /**
+   * Open the pull request that adds the self-service folder's include to the
+   * policy file, in the caller's name, when the file lacks it and none waits.
+   */
+  z.object({ action: z.literal("include_servers") }).strict(),
 ]);
 /** Whether the caller's organization lets server editors change their own rules now. */
 export const AppaSelfServiceAvailabilitySchema = z.object({

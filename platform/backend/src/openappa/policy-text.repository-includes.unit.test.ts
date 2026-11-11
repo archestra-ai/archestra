@@ -215,7 +215,10 @@ hint = "the root's"
     expect(isRepositoryInclude("mcp/*.toml")).toBe(true);
     expect(isRepositoryInclude("teams/*.toml")).toBe(true);
     expect(isRepositoryInclude("teams/*/rules.toml")).toBe(false);
-    expect(serverRulesPath("payments_api")).toBe("mcp/payments_api.toml");
+    expect(serverRulesPath("mcp", "payments_api")).toBe("mcp/payments_api.toml");
+    expect(serverRulesPath("rules/servers", "payments_api")).toBe(
+      "rules/servers/payments_api.toml",
+    );
     expect(repositoryIncludePaths(ROOT)).toEqual([
       "mcp/payments_api.toml",
       "mcp/helpdesk.toml",

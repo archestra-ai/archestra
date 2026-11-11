@@ -1,0 +1,582 @@
+"use client";
+
+import type { archestraApiTypes } from "@archestra/shared";
+import { ArrowLeft, Check, ExternalLink, LoaderCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { SetupStepper } from "@/components/git/git-setup-chrome";
+import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
+import { ManifestRow } from "@/components/github-app-setup/manifest-row";
+import { GitHubConnectButton } from "@/components/github-connect-button";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  useAppaGithubAppGrants,
+  useAppaRepositoryProtection,
+  useUpdateAppaGithubSync,
+} from "@/lib/openappa-github-sync.query";
+import { cn } from "@/lib/utils/tailwind";
+
+type Step = "app" | "folder" | "enable";
+type Grants = NonNullable<
+  archestraApiTypes.GetAppaGithubAppGrantsResponses["200"]
+>;
+type Protection = NonNullable<
+  archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
+>;
+
+const STEPS: { id: Step; label: string }[] = [
+  { id: "app", label: "GitHub App" },
+  { id: "folder", label: "Folder" },
+  { id: "enable", label: "Turn on" },
+];
+const NEEDED = ["checks", "administration"] as const;
+const DEFAULT_FOLDER = "mcp";
+/** A folder beside the policy file: no `.` or `..` segment, no slash at either end. */
+const FOLDER =
+  /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$/;
+const GITHUB_WINDOW = "archestra-github-app";
+
+/**
+ * Turning self-service on, in the Git sync setup's own steps: the GitHub
+ * App's permissions, the folder the servers' files go in, then the switch
+ * itself with what it brings, the branch ruleset and the pull request that
+ * starts the folder and includes it. Already on, the folder is fixed and
+ * the last step brings what is still missing.
+ */
+export function SelfServiceSetupDialog({
+  open,
+  onOpenChange,
+  repo,
+  policyPath,
+  directory,
+  alreadyOn,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  repo: string;
+  policyPath: string;
+  /** The saved folder, the dialog's starting value. */
+  directory: string;
+  /** Self-service is on: the folder cannot move, the last step repairs. */
+  alreadyOn: boolean;
+}) {
+  const appName = useAppName();
+  const [step, setStep] = useState<Step>("app");
+  const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
+  const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
+  const folderValid = FOLDER.test(chosen) && !chosen.startsWith("batteries");
+  const grants = useAppaGithubAppGrants(open);
+  const granted = (name: Grants["permissions"][number]["name"]) =>
+    grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
+    true;
+  const ready = NEEDED.every(granted);
+  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  const header = headerFor(step, appName);
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && step === "enable") return;
+        onOpenChange(next);
+      }}
+      title={header.title}
+      description={header.description}
+      size="medium"
+      bodyClassName="space-y-5"
+      footer={
+        <>
+          {step === "folder" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={() => setStep("app")}
+            >
+              <ArrowLeft />
+              <span>Back</span>
+            </Button>
+          ) : null}
+          {step !== "enable" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Cancel</span>
+            </Button>
+          ) : null}
+          {step === "app" ? (
+            <Button
+              type="button"
+              disabled={!ready}
+              onClick={() => setStep(alreadyOn ? "enable" : "folder")}
+            >
+              <span>Continue</span>
+            </Button>
+          ) : null}
+          {step === "folder" ? (
+            <Button
+              type="button"
+              disabled={!folderValid}
+              onClick={() => setStep("enable")}
+            >
+              <span>Turn on</span>
+            </Button>
+          ) : null}
+          {step === "enable" ? (
+            <EnableFooter onClose={() => onOpenChange(false)} />
+          ) : null}
+        </>
+      }
+    >
+      <SetupStepper
+        steps={STEPS.map((entry) => entry.label)}
+        current={STEPS.findIndex((entry) => entry.id === step)}
+      />
+      {step === "app" ? (
+        <AppStep
+          grants={grants.data ?? null}
+          loading={grants.isPending}
+          error={grants.isError ? grants.error.message : undefined}
+          checking={grants.isFetching}
+          ready={ready}
+          onCheckAgain={() => void grants.refetch()}
+        />
+      ) : null}
+      {step === "folder" ? (
+        <div className="space-y-2">
+          <Label htmlFor="self-service-folder">Self-service folder</Label>
+          <FieldDescription>
+            Each managed MCP server gets its own rules file here, beside{" "}
+            {policyFile} in {repo}. A pull request starts the folder and adds
+            its include to {policyFile}.
+          </FieldDescription>
+          <Input
+            id="self-service-folder"
+            value={folder}
+            placeholder={DEFAULT_FOLDER}
+            autoComplete="off"
+            data-1p-ignore
+            spellCheck={false}
+            aria-invalid={!folderValid}
+            onChange={(event) => setFolder(event.target.value)}
+          />
+        </div>
+      ) : null}
+      {step === "enable" ? (
+        <EnableStep
+          directory={alreadyOn ? directory : chosen}
+          alreadyOn={alreadyOn}
+          policyFile={policyFile}
+        />
+      ) : null}
+    </StandardDialog>
+  );
+}
+
+function headerFor(step: Step, appName: string) {
+  if (step === "app")
+    return {
+      title: "Turn on self-service",
+      description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The GitHub App needs two more permissions for that.`,
+    };
+  if (step === "folder")
+    return {
+      title: "Choose the self-service folder",
+      description: "Where each MCP server's own rules file lives.",
+    };
+  return {
+    title: "Turning self-service on",
+    description: "This takes a few seconds.",
+  };
+}
+
+const PERMISSION_LABELS = {
+  contents: "Contents",
+  pull_requests: "Pull requests",
+  checks: "Checks",
+  administration: "Administration",
+} as const;
+
+/** The App's permissions: what it has, and where to grant the rest. */
+function AppStep({
+  grants,
+  loading,
+  error,
+  checking,
+  ready,
+  onCheckAgain,
+}: {
+  grants: Grants | null;
+  loading: boolean;
+  error?: string;
+  checking: boolean;
+  ready: boolean;
+  onCheckAgain: () => void;
+}) {
+  if (loading)
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden />
+        <span>Reading the GitHub App's permissions…</span>
+      </p>
+    );
+  if (!grants)
+    return (
+      <InlineNotice variant="warning">
+        <InlineNoticeText className="flex-1">
+          {error ??
+            "Self-service needs a GitHub App: connect the policy repository through one first."}
+        </InlineNoticeText>
+      </InlineNotice>
+    );
+  const missing = NEEDED.filter(
+    (name) =>
+      grants.permissions.find((entry) => entry.name === name)?.granted !== true,
+  );
+  const grantedChip = (
+    <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+      <Check className="size-4 text-emerald-600" aria-hidden />
+      <span>Granted</span>
+    </span>
+  );
+  return (
+    <div className="space-y-4">
+      <ol className="overflow-hidden rounded-lg border bg-card">
+        <ManifestRow
+          index={1}
+          title="Grant Checks and Administration on the App"
+          hint="Both as read and write, on the App's permissions page. Contents and Pull requests stay as they are."
+          inlineAction
+          waiting={checking}
+          error={error}
+          onCheckAgain={onCheckAgain}
+          result={ready ? grantedChip : null}
+          action={
+            <GitHubConnectButton
+              label="Update App permissions"
+              onClick={() =>
+                openGithubWindow(grants.settingsUrl, GITHUB_WINDOW)
+              }
+            />
+          }
+        />
+        <ManifestRow
+          index={2}
+          title="Accept the change on the installation"
+          hint="GitHub asks the account the App is installed on to accept new permissions."
+          inlineAction
+          waiting={checking}
+          onCheckAgain={onCheckAgain}
+          result={ready ? grantedChip : null}
+          action={
+            grants.installationUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  openGithubWindow(grants.installationUrl ?? "", GITHUB_WINDOW)
+                }
+              >
+                <span>Accept on the installation</span>
+                <ExternalLink className="size-3" aria-hidden />
+              </Button>
+            ) : null
+          }
+        />
+      </ol>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+        {ready ? (
+          <span>The App has every permission self-service needs.</span>
+        ) : (
+          <span>
+            Missing:{" "}
+            {missing.map((name) => PERMISSION_LABELS[name]).join(" and ")}.
+            Check again once both are accepted.
+          </span>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          disabled={checking}
+          onClick={onCheckAgain}
+        >
+          <span>{checking ? "Checking…" : "Check again"}</span>
+        </Button>
+      </div>
+      {grants.permissions.some((entry) => entry.granted) ? (
+        <p className="text-xs text-muted-foreground">
+          Granted now:{" "}
+          {grants.permissions
+            .filter((entry) => entry.granted)
+            .map((entry) => PERMISSION_LABELS[entry.name])
+            .join(", ")}
+          .
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+type Progress = "waiting" | "running" | "done" | "failed";
+
+/**
+ * The switch and what it brings, each with its own progress: the setting,
+ * the branch ruleset, and the pull request that starts the folder and
+ * includes it. Runs once when shown; a failed part offers a retry.
+ */
+function EnableStep({
+  directory,
+  alreadyOn,
+  policyFile,
+}: {
+  directory: string;
+  alreadyOn: boolean;
+  policyFile: string;
+}) {
+  const update = useUpdateAppaGithubSync();
+  const protection = useAppaRepositoryProtection(false);
+  const [switched, setSwitched] = useState<Progress>(
+    alreadyOn ? "done" : "waiting",
+  );
+  const [rules, setRules] = useState<{
+    state: Progress;
+    detail?: Protection["branchRules"];
+  }>({ state: "waiting" });
+  const [include, setInclude] = useState<{
+    state: Progress;
+    detail?: Protection["include"];
+    error?: string;
+  }>({ state: "waiting" });
+  const started = useRef(false);
+  const mutate = update.mutateAsync;
+  const refetch = protection.refetch;
+
+  async function run() {
+    try {
+      if (!alreadyOn) {
+        setSwitched("running");
+        await mutate({ action: "self_service", enabled: true, directory });
+        setSwitched("done");
+      }
+      setRules({ state: "running" });
+      setInclude({ state: "running" });
+      const read = (await refetch()).data ?? null;
+      setRules(
+        read?.branchRules.state === "active"
+          ? { state: "done", detail: read.branchRules }
+          : { state: "failed", detail: read?.branchRules },
+      );
+      if (
+        read?.include.state === "included" ||
+        read?.include.state === "pull_open"
+      ) {
+        setInclude({ state: "done", detail: read.include });
+        return;
+      }
+      try {
+        await mutate({ action: "include_servers" });
+        const again = (await refetch()).data ?? null;
+        setInclude(
+          again && again.include.state !== "missing"
+            ? { state: "done", detail: again.include }
+            : { state: "failed", detail: again?.include },
+        );
+      } catch (error) {
+        setInclude({
+          state: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } catch (error) {
+      setSwitched("failed");
+      setRules({ state: "waiting" });
+      setInclude({
+        state: "waiting",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  // Runs once, when the step is shown.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one run per showing
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void run();
+  }, []);
+
+  const rulesLine = (() => {
+    const detail = rules.detail;
+    if (rules.state === "done" && detail?.url)
+      return (
+        <span>
+          Branch ruleset created:{" "}
+          <a
+            href={detail.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            {detail.state === "active"
+              ? "Guardrails Policy Admission"
+              : "ruleset"}
+          </a>
+        </span>
+      );
+    if (rules.state === "failed")
+      return (
+        <span>
+          Branch ruleset not created yet
+          {detail?.detail ? `: ${detail.detail}` : "."}{" "}
+          <span>It is set up at the next sync.</span>
+        </span>
+      );
+    return <span>Create the branch ruleset</span>;
+  })();
+  const includeLine = (() => {
+    const detail = include.detail;
+    if (include.state === "done" && detail?.state === "included")
+      return (
+        <span>
+          {policyFile} already includes <code>{directory}/*.toml</code>.
+        </span>
+      );
+    if (include.state === "done" && detail?.pull)
+      return (
+        <span>
+          Pull request opened:{" "}
+          <a
+            href={detail.pull.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            #{detail.pull.number}
+          </a>{" "}
+          starts <code>{directory}/</code> and adds{" "}
+          <code>{directory}/*.toml</code> to {policyFile}. Merge it so the
+          servers&apos; files apply.
+        </span>
+      );
+    if (include.state === "failed")
+      return (
+        <span>
+          Could not open the pull request
+          {include.error ? `: ${include.error}` : "."}
+        </span>
+      );
+    return (
+      <span>
+        Open the pull request that starts <code>{directory}/</code> and adds{" "}
+        <code>{directory}/*.toml</code> to {policyFile}
+      </span>
+    );
+  })();
+  return (
+    <div className="space-y-3">
+      <ul
+        className="space-y-3 rounded-lg border bg-card p-4"
+        aria-live="polite"
+      >
+        <ProgressRow state={switched}>
+          <span>
+            {switched === "done"
+              ? "Self-service is on"
+              : switched === "failed"
+                ? `Could not turn self-service on${include.error ? `: ${include.error}` : "."}`
+                : "Turn self-service on"}
+          </span>
+        </ProgressRow>
+        <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
+        <ProgressRow state={include.state}>{includeLine}</ProgressRow>
+      </ul>
+      {switched === "failed" || include.state === "failed" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={update.isPending}
+          onClick={() => {
+            if (switched === "failed") void run();
+            else {
+              setInclude({ state: "running" });
+              mutate({ action: "include_servers" })
+                .then(() => refetch())
+                .then((result) =>
+                  setInclude({
+                    state:
+                      result.data?.include.state === "missing"
+                        ? "failed"
+                        : "done",
+                    detail: result.data?.include,
+                  }),
+                )
+                .catch((error: unknown) =>
+                  setInclude({
+                    state: "failed",
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  }),
+                );
+            }
+          }}
+        >
+          <span>Try again</span>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ProgressRow({
+  state,
+  children,
+}: {
+  state: Progress;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex items-start gap-3 text-sm">
+      {state === "running" ? (
+        <LoaderCircle
+          className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground"
+          aria-label="In progress"
+        />
+      ) : state === "done" ? (
+        <Check
+          className="mt-0.5 size-4 shrink-0 text-emerald-600"
+          aria-label="Done"
+        />
+      ) : state === "failed" ? (
+        <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
+          <span className="size-2 rounded-full bg-amber-500" />
+          <span className="sr-only">Failed</span>
+        </span>
+      ) : (
+        <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
+          <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+        </span>
+      )}
+      <span className={cn(state === "waiting" && "text-muted-foreground")}>
+        {children}
+      </span>
+    </li>
+  );
+}
+
+/** Close, once the last step has settled; the dialog cannot be dismissed before. */
+function EnableFooter({ onClose }: { onClose: () => void }) {
+  const update = useUpdateAppaGithubSync();
+  return (
+    <Button type="button" disabled={update.isPending} onClick={onClose}>
+      <span>Done</span>
+    </Button>
+  );
+}

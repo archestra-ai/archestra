@@ -213,6 +213,11 @@ export function GithubSyncSetupDialog({
   const [validations, setValidations] = useState(
     editing?.validationDirectory || DEFAULT_VALIDATIONS,
   );
+  // Where each MCP server's rules file goes, beside the policy file, with
+  // self-service on: the policy then includes `<folder>/*.toml`.
+  const [selfServiceFolder, setSelfServiceFolder] = useState(
+    editing?.selfServiceDirectory || DEFAULT_SELF_SERVICE_FOLDER,
+  );
   const [interval, setSyncInterval] = useState<SyncInterval>(
     editing?.interval ?? DEFAULT_INTERVAL,
   );
@@ -263,10 +268,17 @@ export function GithubSyncSetupDialog({
         ? validations.trim().replace(/\/+$/, "")
         : undefined,
   };
+  const serversFolder = selfServiceFolder.trim().replace(/^\/+|\/+$/g, "");
+  const serversFolderValid =
+    !selfService ||
+    gitlab ||
+    (SELF_SERVICE_FOLDER.test(serversFolder) &&
+      !serversFolder.startsWith("batteries"));
   const locationValid =
     (!location.path || POLICY_PATH.test(location.path)) &&
     (!location.validationDirectory ||
-      DIRECTORY_PATH.test(location.validationDirectory));
+      DIRECTORY_PATH.test(location.validationDirectory)) &&
+    serversFolderValid;
   const validationFolder = location.validationDirectory ?? DEFAULT_VALIDATIONS;
   const lookupKey =
     repo && locationValid ? JSON.stringify([repo, location]) : null;
@@ -423,6 +435,7 @@ export function GithubSyncSetupDialog({
           gitlabTokenId: null,
           ...credential,
           selfService: !gitlab && selfService,
+          selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
         },
         { onSuccess: () => onOpenChange(false), onError },
       );
@@ -438,6 +451,11 @@ export function GithubSyncSetupDialog({
         ...credential,
         interval,
         selfService: !gitlab && selfService,
+        ...(!gitlab &&
+        selfService &&
+        serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
+          ? { selfServiceDirectory: serversFolder }
+          : {}),
         existing: !creatingProject,
         // Editing moves the running sync to the new repository, created or not.
         ...((!creatingProject || editing) && { replace: !!editing }),
@@ -1179,6 +1197,27 @@ export function GithubSyncSetupDialog({
               gitlab={gitlab}
             />
           ) : null}
+          {selfService && !gitlab ? (
+            <div className="space-y-2">
+              <Label htmlFor="github-sync-self-service-folder">
+                Self-service folder
+              </Label>
+              <FieldDescription>
+                Each managed MCP server gets its own rules file here, beside the
+                policy file, and the policy includes the folder.
+              </FieldDescription>
+              <Input
+                id="github-sync-self-service-folder"
+                value={selfServiceFolder}
+                placeholder={DEFAULT_SELF_SERVICE_FOLDER}
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                aria-invalid={!serversFolderValid}
+                onChange={(event) => setSelfServiceFolder(event.target.value)}
+              />
+            </div>
+          ) : null}
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
@@ -1749,9 +1788,15 @@ type EditedSource = {
   webUrl: string;
   /** Whether the servers' editors change their own rules through this source. */
   selfService: boolean;
+  /** The folder beside the policy file that holds each server's rules file. */
+  selfServiceDirectory: string;
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
+const DEFAULT_SELF_SERVICE_FOLDER = "mcp";
+/** A folder beside the policy file: no `.` or `..` segment, no slash at either end. */
+const SELF_SERVICE_FOLDER =
+  /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$/;
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";

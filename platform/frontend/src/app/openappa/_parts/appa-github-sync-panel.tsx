@@ -17,7 +17,6 @@ import {
   GitSourceError,
   GitSourceNotice,
 } from "@/components/git/git-source-card";
-import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -58,10 +57,8 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
-import {
-  GITHUB_WINDOW,
-  GithubSyncSetupDialog,
-} from "./github-sync-setup-dialog";
+import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { SelfServiceSetupDialog } from "./self-service-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -305,6 +302,7 @@ export function AppaGithubSyncPanel() {
               validationDirectory,
               webUrl: githubWebUrl,
               selfService: source.selfService,
+              selfServiceDirectory: source.selfServiceDirectory,
             }}
           />
         ) : (
@@ -352,36 +350,81 @@ function SelfServiceRow({
 }) {
   const update = useUpdateAppaGithubSync();
   const eligible = !!source.githubAppConfigId;
+  const [setup, setSetup] = useState(false);
+  const description = (
+    <>
+      {eligible
+        ? "Let MCP server owners manage its guardrails rules. This requests additional permissions to check corresponding pull requests."
+        : "Connect the policy repository through a GitHub App to let MCP server owners manage its guardrails rules."}{" "}
+      <SelfServiceDocsLink />
+    </>
+  );
   return (
     <GitSourceNotice>
       <div className="space-y-2">
-        <DeploymentSettingRow
-          compact
-          title="Self-service"
-          description={
-            <>
-              {eligible
-                ? "Let MCP server owners manage its guardrails rules. This requests additional permissions to check corresponding pull requests."
-                : "Connect the policy repository through a GitHub App to let MCP server owners manage its guardrails rules."}{" "}
-              <SelfServiceDocsLink />
-            </>
-          }
-          value={selfService.enabled ? "enabled" : "disabled"}
-          disabled={!canManage || !eligible || update.isPending}
-          environmentVariable={selfService.environment?.variable}
-          options={[
-            { value: "enabled", label: "On" },
-            { value: "disabled", label: "Off" },
-          ]}
-          onChange={(value) =>
-            update.mutate({
-              action: "self_service",
-              enabled: value === "enabled",
-            })
-          }
-        />
-        {selfService.enabled ? <RepositoryProtection /> : null}
+        {selfService.environment ? (
+          <DeploymentSettingRow
+            compact
+            title="Self-service"
+            description={description}
+            value={selfService.enabled ? "enabled" : "disabled"}
+            disabled
+            environmentVariable={selfService.environment.variable}
+            options={[
+              { value: "enabled", label: "On" },
+              { value: "disabled", label: "Off" },
+            ]}
+            onChange={() => {}}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">Self-service</p>
+              <p className="text-sm text-muted-foreground">{description}</p>
+            </div>
+            {selfService.enabled ? (
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                disabled={!canManage || update.isPending}
+                onClick={() =>
+                  update.mutate({ action: "self_service", enabled: false })
+                }
+              >
+                <span>{update.isPending ? "Disabling…" : "Disable"}</span>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                type="button"
+                className="shrink-0"
+                disabled={!canManage || !eligible}
+                onClick={() => setSetup(true)}
+              >
+                <span>Enable</span>
+              </Button>
+            )}
+          </div>
+        )}
+        {selfService.enabled ? (
+          <RepositoryProtection
+            policyPath={source.path ?? "appa.toml"}
+            onFinishSetup={canManage ? () => setSetup(true) : undefined}
+          />
+        ) : null}
       </div>
+      {setup && source.repo ? (
+        <SelfServiceSetupDialog
+          open
+          onOpenChange={setSetup}
+          repo={source.repo}
+          policyPath={source.path ?? "appa.toml"}
+          directory={selfService.directory}
+          alreadyOn={selfService.enabled}
+        />
+      ) : null}
     </GitSourceNotice>
   );
 }
@@ -406,88 +449,81 @@ function SelfServiceDocsLink() {
   );
 }
 
-function RepositoryProtection() {
-  const { data, refetch, isFetching } = useAppaRepositoryProtection(true);
+function RepositoryProtection({
+  policyPath,
+  onFinishSetup,
+}: {
+  policyPath: string;
+  /** Opens the self-service setup again, for a part that is still missing. */
+  onFinishSetup?: () => void;
+}) {
+  const { data } = useAppaRepositoryProtection(true);
   const appName = useAppName();
   if (!data) return null;
-  const missing = (data.app?.permissions ?? []).filter(
-    (permission) => !permission.granted,
-  );
+  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  const unfinished =
+    data.branchRules.state !== "active" || data.include.state === "missing";
   return (
     <>
       <p className="text-sm text-muted-foreground">
         {protectionSentence(data.branchRules, appName)}
       </p>
-      {data.app && missing.length > 0 && (
-        <InlineNotice variant="warning">
-          <AlertTriangle className="size-4 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1 space-y-2">
-            <InlineNoticeText>
-              The GitHub App lacks{" "}
-              {missing.map((permission, index) => (
-                <span key={permission.name}>
-                  {index > 0 && (index === missing.length - 1 ? " and " : ", ")}
-                  <strong>{APP_PERMISSION_LABELS[permission.name]}</strong> (
-                  {APP_PERMISSION_PURPOSES[permission.name]})
-                </span>
-              ))}
-              . Grant {missing.length === 1 ? "it" : "them"} on the App, as read
-              and write, then accept the change on the installation.
-            </InlineNoticeText>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                type="button"
-                onClick={() => {
-                  openGithubWindow(data.app?.settingsUrl ?? "", GITHUB_WINDOW);
-                }}
-              >
-                Update App permissions
-                <ExternalLink className="size-3" aria-hidden />
-              </Button>
-              {data.app.installationUrl && (
-                <a
-                  href={data.app.installationUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-                >
-                  <span>Accept on the installation</span>
-                  <ExternalLink className="size-3" aria-hidden />
-                </a>
-              )}
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                disabled={isFetching}
-                onClick={() => {
-                  void refetch();
-                }}
-              >
-                Check again
-              </Button>
-            </div>
-          </div>
-        </InlineNotice>
-      )}
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        {includeSentence(data.include, policyFile)}
+        {unfinished && onFinishSetup ? (
+          <Button
+            size="xs"
+            type="button"
+            variant="outline"
+            onClick={onFinishSetup}
+          >
+            Finish setup
+          </Button>
+        ) : null}
+      </p>
     </>
   );
 }
 
-const APP_PERMISSION_LABELS = {
-  contents: "Contents",
-  pull_requests: "Pull requests",
-  checks: "Checks",
-  administration: "Administration",
-} as const;
-
-const APP_PERMISSION_PURPOSES = {
-  contents: "reads the policy and writes proposals",
-  pull_requests: "finds and opens pull requests",
-  checks: "posts the policy check",
-  administration: "keeps the branch rules",
-} as const;
+/**
+ * One sentence on the include that makes the servers' files apply: where
+ * they live, or the pull request that adds the line, or that it is missing.
+ */
+function includeSentence(
+  include: Protection["include"],
+  policyFile: string,
+): ReactNode {
+  const entry = <code>{`${include.folder}/*.toml`}</code>;
+  switch (include.state) {
+    case "included":
+      return (
+        <span>
+          Each server&apos;s rules file lives in <code>{include.folder}/</code>.
+        </span>
+      );
+    case "pull_open":
+      return (
+        <span>
+          <a
+            href={include.pull?.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+          >
+            Pull request #{include.pull?.number}
+          </a>{" "}
+          adds {entry} to {policyFile}. Merge it so the servers&apos; files
+          apply.
+        </span>
+      );
+    default:
+      return (
+        <span>
+          {policyFile} does not include {entry} yet.
+        </span>
+      );
+  }
+}
 
 /**
  * One sentence on the ruleset: on, with a link to it, or why not yet. The

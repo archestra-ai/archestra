@@ -29,6 +29,19 @@ export function useAppaGithubSync() {
  * Archestra keeps. The server reads it at most once a
  * minute, so polling more often only reads its cache.
  */
+/** The GitHub App's permissions against what self-service needs, on demand. */
+export function useAppaGithubAppGrants(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: [...appaGithubSyncQueryKey, "app-grants"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaGithubAppGrants();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+  });
+}
+
 export function useAppaRepositoryProtection(enabled: boolean) {
   const { data: canRead } = useHasPermissions({
     organizationSettings: ["read"],
@@ -145,6 +158,12 @@ export function useUpdateAppaGithubSync() {
           body.enabled
             ? "Self-service turned on. Server editors can change their servers' rules."
             : "Self-service turned off. The branch ruleset was removed.",
+        );
+        return;
+      }
+      if (body.action === "include_servers") {
+        toast.success(
+          "Pull request opened. Merge it so the servers' files apply.",
         );
         return;
       }

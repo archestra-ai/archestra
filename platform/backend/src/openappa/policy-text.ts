@@ -146,14 +146,34 @@ const INCLUDABLE = ["tool", "annotator", "authority", "sanitizer"] as const;
 
 type Includable = (typeof INCLUDABLE)[number];
 
-/** The folder of the MCP servers' own rules files, beside `appa.toml`. */
-const SERVER_RULES_FOLDER = "mcp";
+/**
+ * The folder of the MCP servers' own rules files, beside `appa.toml`, unless
+ * the Git sync source names another: its self-service folder.
+ */
+const DEFAULT_SERVER_RULES_FOLDER = "mcp";
 
 /**
  * The include entry for every server rules file the commit holds: a folder
  * glob, as OpenAPPA 0.41 reads one, over the servers' folder.
  */
-export const SERVER_RULES_INCLUDE = `${SERVER_RULES_FOLDER}/*.toml`;
+export function serverRulesInclude(folder: string): string {
+  return `${folder}/*.toml`;
+}
+
+/**
+ * Whether `folder` may hold the servers' files: a folder beside the policy
+ * file, outside `batteries/`, with no `.` or `..` segment and no `*`.
+ */
+export function isServerRulesFolder(folder: string): boolean {
+  return folder !== "" && REPOSITORY_FOLDER.test(`${folder}/`);
+}
+
+/** The folder of a self-service source, or the default for one without. */
+export function serverRulesFolderOf(
+  source: { selfServiceDirectory?: string | null } | null | undefined,
+): string {
+  return source?.selfServiceDirectory || DEFAULT_SERVER_RULES_FOLDER;
+}
 
 /**
  * An include entry that names every matching file in one folder, as OpenAPPA
@@ -231,8 +251,19 @@ function globNames(entry: string, path: string): boolean {
   );
 }
 
-/** A server rules file by its path, `mcp/<prefix>.toml`; no hidden file. */
-const SERVER_RULES_FILE = /^mcp\/([^/.][^/]*)\.toml$/;
+/**
+ * The tool prefix a server rules file in `folder` is named for, read from a
+ * policy-relative path, `<folder>/<prefix>.toml`; null for another path, a
+ * hidden file, or a file deeper down.
+ */
+function serverRulesFilePrefix(folder: string, path: string): string | null {
+  if (!path.startsWith(`${folder}/`)) return null;
+  const name = path.slice(folder.length + 1);
+  if (!name.endsWith(".toml") || name.startsWith(".") || name.includes("/"))
+    return null;
+  const prefix = name.slice(0, -".toml".length);
+  return prefix === "" ? null : prefix;
+}
 
 /** A tool prefix as Archestra writes one: a slugified server name. */
 const SERVER_PREFIX = /^[a-z0-9_-]+$/;
@@ -264,18 +295,46 @@ export function isRepositoryInclude(entry: string): boolean {
 }
 
 /** The file an MCP server's rules are kept in, by its tools' prefix. */
-export function serverRulesPath(toolPrefix: string): string {
-  return `${SERVER_RULES_FOLDER}/${toolPrefix}.toml`;
+export function serverRulesPath(folder: string, toolPrefix: string): string {
+  return `${folder}/${toolPrefix}.toml`;
 }
 
-/** Whether a repository path is a server rules file `mcp/*.toml` takes in. */
-export function isServerRulesFile(path: string): boolean {
-  return SERVER_RULES_FILE.test(path);
+/** Whether a policy-relative path is a server rules file `<folder>/*.toml` takes in. */
+export function isServerRulesFile(folder: string, path: string): boolean {
+  return serverRulesFilePrefix(folder, path) !== null;
 }
 
 /** The tool prefix a server rules file is named for, or null for another path. */
-export function serverRulesPrefix(path: string): string | null {
-  return SERVER_RULES_FILE.exec(path)?.[1] ?? null;
+export function serverRulesPrefix(folder: string, path: string): string | null {
+  return serverRulesFilePrefix(folder, path);
+}
+
+/**
+ * The root with `entry` added to its `include` list, through OpenAPPA's own
+ * editor so the rest of the text keeps its shape; throws what it refuses.
+ */
+export async function withIncludeEntry(
+  root: string,
+  entry: string,
+): Promise<string> {
+  const native = await import("@archestra/openappa-rs");
+  const edited = await native.editOpenappaPolicy(root, [
+    { kind: "addInclude", entry },
+  ]);
+  if (edited.content === undefined || edited.content === null)
+    throw new Error(edited.errors.join("\n"));
+  return edited.content;
+}
+
+/**
+ * Whether the root folds in every file of the servers' folder through one
+ * glob entry over it, such as `mcp/*.toml`.
+ */
+export function includesServerRulesFolder(
+  content: string,
+  folder: string,
+): boolean {
+  return includesServerRules(content, serverRulesPath(folder, "a"));
 }
 
 /** The repository include entries a root document lists, in its order. */
@@ -306,8 +365,12 @@ export function repositoryFileHash(content: string): string {
  * fold makes, scope included, for a caller that refuses a file before any
  * review sees it.
  */
-export function includedFileErrors(path: string, content: string): string[] {
-  const parsed = parseIncluded(path, content);
+export function includedFileErrors(
+  path: string,
+  content: string,
+  folder: string = DEFAULT_SERVER_RULES_FOLDER,
+): string[] {
+  const parsed = parseIncluded(path, content, 2, folder);
   return "errors" in parsed ? parsed.errors : [];
 }
 
@@ -330,6 +393,8 @@ export function expandRepositoryIncludes(params: {
    * of the same name, so a server file may declare none of these.
    */
   batteryHelpers?: ReadonlyMap<string, string>;
+  /** The servers' folder; a file there is held to its server. */
+  serverRulesFolder?: string;
 }): {
   content: string;
   errors: string[];
@@ -339,6 +404,7 @@ export function expandRepositoryIncludes(params: {
 } {
   const entries = repositoryIncludePaths(params.content);
   const covered = new Map<string, string[]>();
+  const folder = params.serverRulesFolder ?? DEFAULT_SERVER_RULES_FOLDER;
   const malformed = malformedGlobs(params.content);
   if (entries.length === 0 && malformed.length === 0)
     return { content: params.content, errors: [], paths: [], covered };
@@ -385,12 +451,12 @@ export function expandRepositoryIncludes(params: {
       );
       continue;
     }
-    const parsed = parseIncluded(path, text, policy.version);
+    const parsed = parseIncluded(path, text, policy.version, folder);
     if ("errors" in parsed) {
       errors.push(...parsed.errors);
       continue;
     }
-    const prefix = SERVER_RULES_FILE.exec(path)?.[1];
+    const prefix = serverRulesFilePrefix(folder, path) ?? undefined;
     const replaced =
       prefix === undefined
         ? []
@@ -458,10 +524,11 @@ export function expandRepositoryIncludes(params: {
  */
 export function serverFilesDeclareAnnotators(
   files: ReadonlyMap<string, string>,
+  folder: string = DEFAULT_SERVER_RULES_FOLDER,
 ): boolean {
   for (const [path, text] of files)
     if (
-      isServerRulesFile(path) &&
+      isServerRulesFile(folder, path) &&
       tablesOf(asRecord(parsePolicyToml(text)?.policy)?.annotator).length > 0
     )
       return true;
@@ -474,11 +541,12 @@ export function serverFilesDeclareAnnotators(
  */
 export function serverCatchAllPrefixes(
   files: ReadonlyMap<string, string>,
+  folder: string = DEFAULT_SERVER_RULES_FOLDER,
 ): string[] {
   const prefixes = new Set<string>();
   for (const [path, text] of files) {
-    const prefix = SERVER_RULES_FILE.exec(path)?.[1];
-    if (prefix === undefined) continue;
+    const prefix = serverRulesFilePrefix(folder, path);
+    if (prefix === null) continue;
     // The parsed names, as the fold reads them: an escaped spelling counts.
     const rules = tablesOf(asRecord(parsePolicyToml(text)?.policy)?.tool);
     if (rules.some((rule) => isServerCatchAll(prefix, rule)))
@@ -641,6 +709,8 @@ function parseIncluded(
   content: string,
   /** The root's `policy.version`, which an included file must state too. */
   version: unknown = 2,
+  /** The servers' folder: a file there may set only its server's rules. */
+  folder: string = DEFAULT_SERVER_RULES_FOLDER,
 ): IncludedFile | { errors: string[] } {
   let document: Record<string, unknown>;
   try {
@@ -704,9 +774,9 @@ function parseIncluded(
       errors.push(
         `${path}: confined_results may list only tools this file declares; ${JSON.stringify(name)} is not one`,
       );
-  const prefix = SERVER_RULES_FILE.exec(path)?.[1];
-  if (prefix !== undefined)
-    errors.push(...serverScopeErrors(path, prefix, policy));
+  const prefix = serverRulesFilePrefix(folder, path);
+  if (prefix !== null)
+    errors.push(...serverScopeErrors(path, folder, prefix, policy));
   if (errors.length > 0) return { errors };
   return {
     policy: policy as Partial<Record<Includable, unknown[]>>,
@@ -722,12 +792,13 @@ function parseIncluded(
  */
 function serverScopeErrors(
   path: string,
+  folder: string,
   prefix: string,
   policy: Record<string, unknown>,
 ): string[] {
   if (!SERVER_PREFIX.test(prefix) || prefix.includes("__"))
     return [
-      `${path}: ${SERVER_RULES_FOLDER}/ holds one file per MCP server, named by its tools' prefix; ${JSON.stringify(prefix)} is not a tool prefix`,
+      `${path}: ${folder}/ holds one file per MCP server, named by its tools' prefix; ${JSON.stringify(prefix)} is not a tool prefix`,
     ];
   const outside = [
     ...tablesOf(policy.tool)
@@ -805,7 +876,7 @@ const KEY_SEGMENT = /"[^"]*"|'[^']*'|[A-Za-z0-9_-]+/g;
  * committer, so the person who asked is named in the message, which the
  * signature covers, and never as the git author.
  */
-export const REQUESTED_BY_TRAILER = "Requested-by";
+const REQUESTED_BY_TRAILER = "Requested-by";
 
 /** A commit message with the requester's trailer. */
 export function withRequester(message: string, email: string): string {

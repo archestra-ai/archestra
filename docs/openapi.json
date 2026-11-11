@@ -472040,6 +472040,9 @@
                         "selfService": {
                           "type": "boolean"
                         },
+                        "selfServiceDirectory": {
+                          "type": "string"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -472063,6 +472066,7 @@
                         "sourceCommit",
                         "setupPullRequestNumber",
                         "selfService",
+                        "selfServiceDirectory",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -472076,6 +472080,9 @@
                         },
                         "setting": {
                           "type": "boolean"
+                        },
+                        "directory": {
+                          "type": "string"
                         },
                         "environment": {
                           "type": "object",
@@ -472100,7 +472107,8 @@
                       },
                       "required": [
                         "enabled",
-                        "setting"
+                        "setting",
+                        "directory"
                       ],
                       "additionalProperties": false
                     },
@@ -472454,6 +472462,13 @@
                   "selfService": {
                     "default": false,
                     "type": "boolean"
+                  },
+                  "selfServiceDirectory": {
+                    "default": "mcp",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
                   }
                 },
                 "required": [
@@ -472551,6 +472566,9 @@
                         "selfService": {
                           "type": "boolean"
                         },
+                        "selfServiceDirectory": {
+                          "type": "string"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -472574,6 +472592,7 @@
                         "sourceCommit",
                         "setupPullRequestNumber",
                         "selfService",
+                        "selfServiceDirectory",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -472587,6 +472606,9 @@
                         },
                         "setting": {
                           "type": "boolean"
+                        },
+                        "directory": {
+                          "type": "string"
                         },
                         "environment": {
                           "type": "object",
@@ -472611,7 +472633,8 @@
                       },
                       "required": [
                         "enabled",
-                        "setting"
+                        "setting",
+                        "directory"
                       ],
                       "additionalProperties": false
                     },
@@ -472963,11 +472986,32 @@
                       },
                       "enabled": {
                         "type": "boolean"
+                      },
+                      "directory": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
                       }
                     },
                     "required": [
                       "action",
                       "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
+                          "include_servers"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "action"
                     ],
                     "additionalProperties": false
                   }
@@ -473061,6 +473105,9 @@
                         "selfService": {
                           "type": "boolean"
                         },
+                        "selfServiceDirectory": {
+                          "type": "string"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -473084,6 +473131,7 @@
                         "sourceCommit",
                         "setupPullRequestNumber",
                         "selfService",
+                        "selfServiceDirectory",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -473097,6 +473145,9 @@
                         },
                         "setting": {
                           "type": "boolean"
+                        },
+                        "directory": {
+                          "type": "string"
                         },
                         "environment": {
                           "type": "object",
@@ -473121,7 +473172,8 @@
                       },
                       "required": [
                         "enabled",
-                        "setting"
+                        "setting",
+                        "directory"
                       ],
                       "additionalProperties": false
                     },
@@ -473496,11 +473548,51 @@
                         "state"
                       ],
                       "additionalProperties": false
+                    },
+                    "include": {
+                      "type": "object",
+                      "properties": {
+                        "folder": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "included",
+                            "pull_open",
+                            "missing"
+                          ]
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "number": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "number",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "folder",
+                        "state"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "checkName",
-                    "branchRules"
+                    "branchRules",
+                    "include"
                   ],
                   "additionalProperties": false
                 }
@@ -473747,6 +473839,306 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels"
+      }
+    },
+    "/api/openappa/github-sync/app-grants": {
+      "get": {
+        "operationId": "getAppaGithubAppGrants",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "The GitHub App's permissions against what self-service needs, with the pages that grant them\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "settingsUrl": {
+                      "type": "string"
+                    },
+                    "installationUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "contents",
+                              "pull_requests",
+                              "checks",
+                              "administration"
+                            ]
+                          },
+                          "granted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "granted"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "settingsUrl",
+                    "installationUrl",
+                    "permissions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:read"
+          ]
+        }
       }
     },
     "/api/openappa/github-sync/self-service": {
@@ -474085,6 +474477,12 @@
                   },
                   "selfService": {
                     "type": "boolean"
+                  },
+                  "selfServiceDirectory": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
                   }
                 },
                 "required": [
@@ -474182,6 +474580,9 @@
                         "selfService": {
                           "type": "boolean"
                         },
+                        "selfServiceDirectory": {
+                          "type": "string"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -474205,6 +474606,7 @@
                         "sourceCommit",
                         "setupPullRequestNumber",
                         "selfService",
+                        "selfServiceDirectory",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -474218,6 +474620,9 @@
                         },
                         "setting": {
                           "type": "boolean"
+                        },
+                        "directory": {
+                          "type": "string"
                         },
                         "environment": {
                           "type": "object",
@@ -474242,7 +474647,8 @@
                       },
                       "required": [
                         "enabled",
-                        "setting"
+                        "setting",
+                        "directory"
                       ],
                       "additionalProperties": false
                     },

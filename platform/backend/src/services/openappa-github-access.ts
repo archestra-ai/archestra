@@ -23,6 +23,7 @@ import {
   repositoryIncludePaths,
   serverCatchAllPrefixes,
   serverFilesDeclareAnnotators,
+  serverRulesFolderOf,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
@@ -395,10 +396,15 @@ class OpenAppaRepositoryIncludes {
     organizationId: string;
     content: string;
     files?: ReadonlyMap<string, string>;
+    /** The servers' folder; the source's, or the default, unless given. */
+    serverRulesFolder?: string;
   }): Promise<ExpandedRoot> {
     const paths = repositoryIncludePaths(params.content);
     if (paths.length === 0)
       return { content: params.content, errors: [], included: [] };
+    const serverRulesFolder =
+      params.serverRulesFolder ??
+      (await serverRulesFolderFor(params.organizationId));
     const files = new Map(params.files ?? []);
     const missing = [...new Set(paths)].filter((path) => !files.has(path));
     if (missing.length > 0) {
@@ -423,8 +429,17 @@ class OpenAppaRepositoryIncludes {
     return fold({
       content: params.content,
       files,
-      serverTools: await serverToolsFor(params.organizationId, files),
-      batteryHelpers: await batteryHelpersFor({ ...params, files }),
+      serverRulesFolder,
+      serverTools: await serverToolsFor(
+        params.organizationId,
+        files,
+        serverRulesFolder,
+      ),
+      batteryHelpers: await batteryHelpersFor({
+        ...params,
+        files,
+        serverRulesFolder,
+      }),
     });
   }
 
@@ -436,12 +451,22 @@ class OpenAppaRepositoryIncludes {
     organizationId: string;
     content: string;
     files: ReadonlyMap<string, string>;
+    /** The servers' folder; the source's, or the default, unless given. */
+    serverRulesFolder?: string;
   }): Promise<ExpandedRoot> {
+    const serverRulesFolder =
+      params.serverRulesFolder ??
+      (await serverRulesFolderFor(params.organizationId));
     return fold({
       content: params.content,
       files: params.files,
-      serverTools: await serverToolsFor(params.organizationId, params.files),
-      batteryHelpers: await batteryHelpersFor(params),
+      serverRulesFolder,
+      serverTools: await serverToolsFor(
+        params.organizationId,
+        params.files,
+        serverRulesFolder,
+      ),
+      batteryHelpers: await batteryHelpersFor({ ...params, serverRulesFolder }),
     });
   }
 
@@ -574,9 +599,15 @@ export function repositoryPath(
 
 export const openappaRepositoryIncludes = new OpenAppaRepositoryIncludes();
 
+/** The self-service folder of the organization's source, or the default. */
+async function serverRulesFolderFor(organizationId: string): Promise<string> {
+  return serverRulesFolderOf(await OpenAppaGithubSyncModel.find(organizationId));
+}
+
 function fold(params: {
   content: string;
   files: ReadonlyMap<string, string>;
+  serverRulesFolder: string;
   serverTools?: ReadonlyMap<string, readonly string[]>;
   batteryHelpers?: ReadonlyMap<string, string>;
 }): ExpandedRoot {
@@ -602,8 +633,10 @@ async function batteryHelpersFor(params: {
   organizationId: string;
   content: string;
   files: ReadonlyMap<string, string>;
+  serverRulesFolder: string;
 }): Promise<Map<string, string> | undefined> {
-  if (!serverFilesDeclareAnnotators(params.files)) return undefined;
+  if (!serverFilesDeclareAnnotators(params.files, params.serverRulesFolder))
+    return undefined;
   // Loaded when used: the declarations fold repository files through here.
   const { openappaDeclarations } = await import("@/openappa/declarations");
   return openappaDeclarations.batteryHelpers(params);
@@ -616,8 +649,9 @@ async function batteryHelpersFor(params: {
 async function serverToolsFor(
   organizationId: string,
   files: ReadonlyMap<string, string>,
+  serverRulesFolder: string,
 ): Promise<Map<string, string[]> | undefined> {
-  const prefixes = serverCatchAllPrefixes(files);
+  const prefixes = serverCatchAllPrefixes(files, serverRulesFolder);
   if (prefixes.length === 0) return undefined;
   const tools = await ToolModel.getToolNamesByPrefixes({
     scopeCatalogIds:

@@ -16,10 +16,15 @@ class OpenAppaGithubSyncModel {
   }
   static async save(
     organizationId: string,
-    source: Omit<AppaGithubSource, "gitlabTokenId" | "selfService"> & {
+    source: Omit<
+      AppaGithubSource,
+      "gitlabTokenId" | "selfService" | "selfServiceDirectory"
+    > & {
       gitlabTokenId?: string | null;
       /** Off unless the source says otherwise. */
       selfService?: boolean;
+      /** The servers' folder; mcp unless the source says otherwise. */
+      selfServiceDirectory?: string;
       setupPullRequestNumber?: number;
     },
   ) {
@@ -28,12 +33,14 @@ class OpenAppaGithubSyncModel {
       setupPullRequestNumber = null,
       gitlabTokenId = null,
       selfService = false,
+      selfServiceDirectory = "mcp",
       ...policySource
     } = source;
     const values = {
       setupPullRequestNumber,
       gitlabTokenId,
       selfService,
+      selfServiceDirectory,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -69,11 +76,18 @@ class OpenAppaGithubSyncModel {
         .onConflictDoUpdate({ target: table.organizationId, set: values });
     });
   }
-  /** Turn self-service on or off for the source. */
-  static async setSelfService(organizationId: string, selfService: boolean) {
+  /** Turn self-service on or off for the source, and name its folder. */
+  static async setSelfService(
+    organizationId: string,
+    selfService: boolean,
+    selfServiceDirectory?: string,
+  ) {
     await db
       .update(table)
-      .set({ selfService })
+      .set({
+        selfService,
+        ...(selfServiceDirectory ? { selfServiceDirectory } : {}),
+      })
       .where(eq(table.organizationId, organizationId));
   }
   /** Change or stop the schedule. */

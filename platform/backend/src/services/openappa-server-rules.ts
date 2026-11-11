@@ -13,9 +13,12 @@ import {
   governsServerTool,
   includedFileErrors,
   includesServerRules,
+  includesServerRulesFolder,
   parsePolicyToml,
-  SERVER_RULES_INCLUDE,
+  serverRulesFolderOf,
+  serverRulesInclude,
   serverRulesPath,
+  withIncludeEntry,
   withRequester,
 } from "@/openappa/policy-text";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -36,8 +39,9 @@ import { ApiError } from "@/types";
 
 /**
  * An MCP server's own Guardrails rules, kept in its file in the Git sync
- * repository (`mcp/<tool prefix>.toml`) and included by `appa.toml`, by name
- * or with every server's through `mcp/*.toml`.
+ * repository's self-service folder (`mcp/<tool prefix>.toml` by default) and
+ * included by `appa.toml`, by name or with every server's through
+ * `<folder>/*.toml`.
  *
  * Archestra decides only who may propose a change: whoever may edit the
  * server in the MCP registry, by the same rule as the registry's own edit.
@@ -48,6 +52,8 @@ import { ApiError } from "@/types";
 
 /** Pull request branches this deployment opens for a server's rules. */
 const BRANCH_PREFIX = "archestra/openappa-server-";
+/** The branch of the pull request that includes the self-service folder. */
+const INCLUDE_BRANCH = "archestra/openappa-self-service";
 
 /** Whether a branch is one this deployment opened for this server's rules. */
 function isServerBranch(prefix: string, branch: string): boolean {
@@ -61,11 +67,11 @@ type Caller = { organizationId: string; userId: string };
 
 /** What a caller reads about one server's rules. */
 export async function getServerRules(params: Caller & { catalogId: string }) {
-  const server = await serverFor(params);
   const [root, source] = await Promise.all([
     guardrailsPolicyService.get(params.organizationId),
     OpenAppaGithubSyncModel.find(params.organizationId),
   ]);
+  const server = await serverFor(params, serverRulesFolderOf(source));
   // Off, there is nothing to read: the file is the organization's policy,
   // and the registry shows no action. The Keeper passes the reason on.
   if (source?.interval && source.repo && !selfServiceActive(source))
@@ -87,7 +93,13 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     content: accepted,
     // A server without a file yet starts from one that names every tool.
     ...(accepted === null
-      ? { starter: starterServerRules(server, root.content) }
+      ? {
+          starter: starterServerRules(
+            server,
+            root.content,
+            serverRulesInclude(serverRulesFolderOf(source)),
+          ),
+        }
       : {}),
     repository: repositoryView(source),
     tools: server.tools,
@@ -118,6 +130,7 @@ const STARTER_TOOLS = 60;
 function starterServerRules(
   server: { name: string; prefix: string; tools: string[] },
   root: string,
+  include: string,
 ): string {
   const governed = new Set(
     rootToolRules(root)
@@ -127,7 +140,7 @@ function starterServerRules(
   const lines = [
     `# Guardrails rules for the MCP server ${server.name} (tools ${server.prefix}__*),`,
     "# kept by the people who may edit the server in the MCP registry. The",
-    `# organization's appa.toml includes this file through ${SERVER_RULES_INCLUDE}.`,
+    `# organization's appa.toml includes this file through ${include}.`,
     "# A rule appa.toml keeps for the same tool wins over one written here.",
     "",
     "[policy]",
@@ -190,7 +203,7 @@ export async function proposeServerRulesChange(
     params.summary.trim(),
     "",
     `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "a user"}${requester?.email ? ` (${requester.email})` : ""}, who may edit the MCP server ${change.server.name} in the MCP registry.`,
-    `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${SERVER_RULES_INCLUDE}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
+    `This changes \`${change.server.path}\`${change.rootChanged ? `, and adds \`${change.include}\` to \`${change.source.path}\`'s include list, so every MCP server's own rules file applies from then on` : ""}. It applies once merged and pulled by Git sync.`,
   ].join("\n");
   const files = [
     {
@@ -226,8 +239,8 @@ export async function proposeServerRulesChange(
 export async function getServerRulesChangeStatus(
   params: Caller & { catalogId: string; number: number },
 ) {
-  const server = await serverFor(params);
   const source = await requireSource(params.organizationId);
+  const server = await serverFor(params, serverRulesFolderOf(source));
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
   const pull = await github<{
@@ -267,7 +280,11 @@ export async function getServerRulesChangeStatus(
 // ===
 
 /** One server as its rules see it, and whether the caller may change them. */
-async function serverFor(params: Caller & { catalogId: string }) {
+async function serverFor(
+  params: Caller & { catalogId: string },
+  /** The self-service folder its file lives in. */
+  folder: string,
+) {
   const { organizationId, userId, catalogId } = params;
   const catalog = await InternalMcpCatalogModel.findById(catalogId, {
     organizationId,
@@ -325,7 +342,7 @@ async function serverFor(params: Caller & { catalogId: string }) {
     id: catalog.id,
     name: catalog.name,
     prefix,
-    path: serverRulesPath(prefix),
+    path: serverRulesPath(folder, prefix),
     canEdit,
     tools,
   };
@@ -339,27 +356,29 @@ async function checkedChange(
     expectedCommit: string;
   },
 ) {
-  const server = await serverFor(params);
+  const source = await requireSource(params.organizationId);
+  const folder = serverRulesFolderOf(source);
+  const include = serverRulesInclude(folder);
+  const server = await serverFor(params, folder);
   if (!server.canEdit)
     throw new ApiError(
       403,
       `You may propose ${server.name}'s Guardrails rules only if you may edit it in the MCP registry`,
     );
-  const source = await requireSource(params.organizationId);
   if (source.sourceCommit !== params.expectedCommit)
     throw new ApiError(
       409,
       "The policy repository moved on since these rules were read. Read them again.",
     );
   // The same check Git sync makes on every commit, scope included.
-  const shape = includedFileErrors(server.path, params.content);
+  const shape = includedFileErrors(server.path, params.content, folder);
   if (shape.length > 0) throw new ApiError(400, shape.join("\n"));
   const root = await guardrailsPolicyService.get(params.organizationId);
   // A root that folds in no server's file gets them all at once: one review
   // of `appa.toml`, and no server's later file needs another.
   const rootChanged = !includesServerRules(root.content, server.path);
   const rootAfter = rootChanged
-    ? await withInclude(root.content, SERVER_RULES_INCLUDE)
+    ? await withInclude(root.content, include)
     : root.content;
   const before =
     (await acceptedFile({
@@ -374,6 +393,7 @@ async function checkedChange(
   return {
     server,
     source,
+    include,
     rootAfter,
     rootChanged,
     view: {
@@ -436,13 +456,113 @@ function organizationHelpers(root: string) {
 }
 
 async function withInclude(root: string, entry: string): Promise<string> {
-  const native = await import("@archestra/openappa-rs");
-  const edited = await native.editOpenappaPolicy(root, [
-    { kind: "addInclude", entry },
-  ]);
-  if (edited.content === undefined || edited.content === null)
-    throw new ApiError(400, edited.errors.join("\n"));
-  return edited.content;
+  try {
+    return await withIncludeEntry(root, entry);
+  } catch (error) {
+    throw new ApiError(
+      400,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+// =============================================================================
+// The include that makes the servers' files apply
+// =============================================================================
+
+/**
+ * Whether the policy file includes the self-service folder, which is what
+ * makes each server's file apply: included, or the open pull request that
+ * adds the line waits, or neither. Null without a connected GitHub source.
+ */
+export async function selfServiceIncludeState(organizationId: string) {
+  const source = await OpenAppaGithubSyncModel.find(organizationId);
+  const folder = serverRulesFolderOf(source);
+  const root = await guardrailsPolicyService.get(organizationId);
+  if (includesServerRulesFolder(root.content, folder))
+    return { folder, state: "included" as const };
+  if (!source?.interval || !source.repo || !source.githubAppConfigId)
+    return { folder, state: "missing" as const };
+  const { token, api } = await githubWriter({
+    ...source,
+    repo: source.repo,
+    githubAppConfigId: source.githubAppConfigId,
+  });
+  const pull = await openPullFor({
+    token,
+    base: `${api}/repos/${source.repo}`,
+    repo: source.repo,
+    head: INCLUDE_BRANCH,
+  });
+  return pull
+    ? { folder, state: "pull_open" as const, pull }
+    : { folder, state: "missing" as const };
+}
+
+/**
+ * Open the pull request that adds `<folder>/*.toml` to the policy file's
+ * include list, in the caller's name, when the file lacks it and no such
+ * pull request waits. Returns what was opened, or null when nothing was.
+ */
+export async function ensureSelfServiceInclude(params: Caller) {
+  const source = await requireSource(params.organizationId);
+  const folder = serverRulesFolderOf(source);
+  const entry = serverRulesInclude(folder);
+  const root = await guardrailsPolicyService.get(params.organizationId);
+  if (includesServerRulesFolder(root.content, folder)) return null;
+  const { token, api } = await githubWriter(source);
+  const base = `${api}/repos/${source.repo}`;
+  if (await openPullFor({ token, base, repo: source.repo, head: INCLUDE_BRANCH }))
+    return null;
+  const after = await withInclude(root.content, entry);
+  const requester = await UserModel.getById(params.userId);
+  const title = `Include each MCP server's Guardrails rules file`;
+  // Git keeps no empty folder: a README starts it, and says what goes there.
+  const readme = repositoryPath(source, `${folder}/README.md`);
+  const folderExists = await githubFetch({
+    url: `${base}/contents/${repositoryPath(source, folder)}?ref=${source.sourceCommit}`,
+    token,
+  })
+    .then((response) => response.ok)
+    .catch(() => false);
+  const body = [
+    `Adds \`${entry}\` to \`${source.path}\`'s include list, so the rules file each MCP server keeps in \`${folder}/\` applies once merged and pulled by Git sync.${folderExists ? "" : ` Starts \`${folder}/\` with a README.`}`,
+    "",
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "an administrator"}${requester?.email ? ` (${requester.email})` : ""}, who turned self-service Guardrails on.`,
+  ].join("\n");
+  // A branch left by an earlier, closed pull request would refuse the new ref.
+  await deleteBranch({ token, base, head: INCLUDE_BRANCH });
+  return openGithubPull({
+    source,
+    title,
+    message: requester ? withRequester(title, requester.email) : title,
+    body,
+    files: [
+      { path: source.path, content: after },
+      ...(folderExists
+        ? []
+        : [
+            {
+              path: readme,
+              content: serverRulesReadme(folder, source.path),
+            },
+          ]),
+    ],
+    head: INCLUDE_BRANCH,
+  });
+}
+
+/** What the servers' folder is for, for whoever opens it on GitHub. */
+function serverRulesReadme(folder: string, policyPath: string): string {
+  const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
+  return [
+    "# Guardrails rules per MCP server",
+    "",
+    `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per server, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules for its own server's tools only; a rule in \`${policyFile}\` for the same tool wins.`,
+    "",
+    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails rules** there, which opens a pull request. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
+    "",
+  ].join("\n");
 }
 
 /** The file at the accepted commit, or null when the repository has none. */
@@ -634,7 +754,12 @@ async function deleteBranch(params: {
     );
 }
 
-async function githubWriter(source: Source) {
+async function githubWriter(
+  source: Pick<
+    Source,
+    "organizationId" | "repo" | "githubPatId" | "githubAppConfigId"
+  >,
+) {
   const { token, api } = await resolveOpenAppaGithubAccess(source, {
     contents: "write",
     pull_requests: "write",

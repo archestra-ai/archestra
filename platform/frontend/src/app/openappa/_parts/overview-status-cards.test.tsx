@@ -62,6 +62,7 @@ const source = {
   lastSyncError: null,
   setupPullRequestNumber: null,
   selfService: false,
+  selfServiceDirectory: "mcp",
 };
 const validationRun: PolicyTestRun = {
   id: "latest-run",
@@ -109,7 +110,7 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source: null,
-    selfService: { enabled: false, setting: false },
+    selfService: { enabled: false, setting: false, directory: "mcp" },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>

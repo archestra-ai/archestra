@@ -38,9 +38,13 @@ import {
 import {
   asRecord,
   isServerRulesFile,
+  isServerRulesFolder,
   repositoryIncludePaths,
   requesterOf,
+  serverRulesFolderOf,
+  serverRulesInclude,
   serverRulesPrefix,
+  withIncludeEntry,
   withoutRepositoryIncludes,
 } from "@/openappa/policy-text";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
@@ -113,12 +117,15 @@ type SyncRow = NonNullable<
  * requests, and what decides it: ARCHESTRA_OPENAPPA_SELF_SERVICE while it is
  * set, else the setting saved with the source. Off by default.
  */
-function selfServiceState(row: Pick<SyncRow, "selfService"> | null) {
+function selfServiceState(
+  row: Pick<SyncRow, "selfService" | "selfServiceDirectory"> | null,
+) {
   const value = config.openappa.selfService;
   const setting = row?.selfService ?? false;
   return {
     enabled: value ? value === "enabled" : setting,
     setting,
+    directory: serverRulesFolderOf(row),
     ...(value
       ? { environment: { variable: OPENAPPA_SELF_SERVICE_VARIABLE, value } }
       : {}),
@@ -228,6 +235,7 @@ export async function createAppaGithubRepository(params: {
   validationDirectory?: string;
   replace?: boolean;
   selfService?: boolean;
+  selfServiceDirectory?: string;
 }) {
   assertEnabled();
   if (
@@ -238,6 +246,9 @@ export async function createAppaGithubRepository(params: {
       409,
       "Stop the current Git sync before creating a repository",
     );
+  const selfService = params.selfService ?? false;
+  const selfServiceDirectory = params.selfServiceDirectory ?? "mcp";
+  if (selfService) checkSelfServiceDirectory(selfServiceDirectory, params);
   if (
     !(await userHasPermission(
       params.userId,
@@ -263,7 +274,13 @@ export async function createAppaGithubRepository(params: {
   });
   const token = appToken as string;
   const policy = await guardrailsPolicyService.get(params.organizationId);
-  if (Buffer.byteLength(policy.content) > 1024 * 1024)
+  // A repository setup starts gets the servers' folder included from the
+  // first commit, so no later pull request has to add the line.
+  const seed =
+    selfService && params.githubAppConfigId
+      ? await withServerRulesInclude(policy.content, selfServiceDirectory)
+      : policy.content;
+  if (Buffer.byteLength(seed) > 1024 * 1024)
     throw new ApiError(
       400,
       "The current policy exceeds the 1 MiB Git sync limit",
@@ -296,7 +313,7 @@ export async function createAppaGithubRepository(params: {
       api,
       repo,
       token,
-      policy: policy.content,
+      policy: seed,
     });
     created = { full_name: repo, default_branch: seeded.branch, private: true };
     setupPullRequestNumber = seeded.setupPullRequestNumber;
@@ -328,7 +345,8 @@ export async function createAppaGithubRepository(params: {
           gitlabTokenId: null,
           // Kept even before the folder exists: validations run once it does.
           validationDirectory,
-          selfService: params.selfService ?? false,
+          selfService,
+          selfServiceDirectory,
         },
       });
     }
@@ -382,7 +400,7 @@ export async function createAppaGithubRepository(params: {
       if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
         throw new ApiError(502, "The template has no appa.toml file");
       // Identical template bytes need no PR: GitHub cannot open an empty diff.
-      const bytes = Buffer.from(policy.content);
+      const bytes = Buffer.from(seed);
       const policyBlob = createHash("sha1")
         .update(`blob ${bytes.length}\0`)
         .update(bytes)
@@ -491,7 +509,8 @@ export async function createAppaGithubRepository(params: {
     // The template ships this folder, so validations work without a setup step.
     validationDirectory,
     setupPullRequestNumber,
-    selfService: params.selfService ?? false,
+    selfService,
+    selfServiceDirectory,
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
@@ -552,6 +571,7 @@ async function createAppaGitlabProject(params: {
           validationDirectory,
           // A GitLab project never gets the App's check or ruleset.
           selfService: false,
+          selfServiceDirectory: "mcp",
         },
       });
     seeded = {
@@ -601,6 +621,8 @@ export async function updateAppaGithubSync(params: {
   action: "sync" | "disconnect" | "schedule" | "self_service";
   interval?: AppaGithubSource["interval"];
   enabled?: boolean;
+  /** The self-service folder to switch on with; the saved one unless set. */
+  directory?: string;
 }) {
   assertEnabled();
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
@@ -611,6 +633,7 @@ export async function updateAppaGithubSync(params: {
       organizationId: params.organizationId,
       row,
       enabled: params.enabled === true,
+      directory: params.directory,
     });
     return getAppaGithubSync(params.organizationId);
   }
@@ -637,6 +660,7 @@ async function setSelfService(params: {
   organizationId: string;
   row: SyncRow;
   enabled: boolean;
+  directory?: string;
 }) {
   const state = selfServiceState(params.row);
   if (state.environment)
@@ -649,10 +673,28 @@ async function setSelfService(params: {
       409,
       "Self-service needs a GitHub App: connect the policy repository through one first.",
     );
-  if (state.setting !== params.enabled) {
+  // The folder is chosen when turning on. Moving it while on would turn the
+  // servers' files into organization policy, so that takes off and on again.
+  const directory = params.enabled
+    ? (params.directory ?? state.directory)
+    : undefined;
+  if (directory !== undefined) {
+    checkSelfServiceDirectory(directory, {
+      validationDirectory: (
+        await OpenAppaPolicyTestsModel.find(params.organizationId)
+      )?.directory,
+    });
+    if (state.setting && directory !== state.directory)
+      throw new ApiError(
+        409,
+        `Self-service keeps the servers' files in ${state.directory}/. Turn it off before moving them to ${directory}/.`,
+      );
+  }
+  if (state.setting !== params.enabled || directory !== state.directory) {
     await OpenAppaGithubSyncModel.setSelfService(
       params.organizationId,
       params.enabled,
+      directory,
     );
     logger.info(
       { organizationId: params.organizationId, enabled: params.enabled },
@@ -671,6 +713,48 @@ async function setSelfService(params: {
       );
     }
   } else await withdrawRepositoryProtection(params.organizationId);
+}
+
+/** Refuse a self-service folder the servers' files cannot live in. */
+function checkSelfServiceDirectory(
+  directory: string,
+  source: { validationDirectory?: string | null; path?: string | null },
+) {
+  if (!isServerRulesFolder(directory))
+    throw new ApiError(
+      400,
+      `${directory} cannot hold the servers' rules files: use a folder beside the policy file, outside batteries/, such as mcp.`,
+    );
+  const validations = source.validationDirectory || VALIDATION_DIRECTORY;
+  if (
+    directory === validations ||
+    directory.startsWith(`${validations}/`) ||
+    validations.startsWith(`${directory}/`)
+  )
+    throw new ApiError(
+      400,
+      `${directory} is the validations folder, or inside it; keep the servers' rules files apart from the validations.`,
+    );
+}
+
+/**
+ * The policy with the servers' folder included through `<folder>/*.toml`,
+ * or as it is when it includes the folder already.
+ */
+async function withServerRulesInclude(
+  content: string,
+  directory: string,
+): Promise<string> {
+  const entry = serverRulesInclude(directory);
+  if (repositoryIncludePaths(content).includes(entry)) return content;
+  try {
+    return await withIncludeEntry(content, entry);
+  } catch (error) {
+    throw new ApiError(
+      400,
+      `The current policy cannot include ${entry}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function syncAppaGithubPolicy(organizationId: string) {
@@ -1186,6 +1270,7 @@ type PolicySource = RepositorySource & {
   path: string;
   ref: string | null;
   validationDirectory?: string | null;
+  selfServiceDirectory?: string | null;
 };
 
 /** An outcome as stored, or null for one that is not in yet. */
@@ -1476,13 +1561,14 @@ function governedFiles(
   );
   const within = (path: string, parent: string) =>
     parent === "" || path === parent || path.startsWith(`${parent}/`);
+  const servers = serverRulesFolderOf(source);
   const seen = new Set<string>();
   return paths.flatMap((path) => {
     if (seen.has(path)) return [];
     seen.add(path);
     const relative = folder === "" ? path : path.slice(folder.length + 1);
-    if (within(path, folder) && isServerRulesFile(relative))
-      return [{ path, prefix: serverRulesPrefix(relative) }];
+    if (within(path, folder) && isServerRulesFile(servers, relative))
+      return [{ path, prefix: serverRulesPrefix(servers, relative) }];
     if (
       path === source.path ||
       (within(path, folder) && path.endsWith(".toml")) ||
@@ -2328,6 +2414,25 @@ async function repositoryProtection(params: {
     }),
   ]);
   return { checkName: POLICY_CHECK_NAME, ...(app ? { app } : {}), branchRules };
+}
+
+/**
+ * The GitHub App's grants against what self-service needs, read whether or
+ * not self-service is on: the switch's dialog asks before turning it on.
+ * Null without a GitHub App source.
+ */
+export async function getAppaGithubAppGrants(
+  organizationId: string,
+): Promise<RepositoryProtection["app"] | null> {
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.repo || !row.path || !row.githubAppConfigId) return null;
+  const grants = await githubAppReadiness({
+    ...row,
+    repo: row.repo,
+    path: row.path,
+    sourceCommit: row.sourceCommit ?? "",
+  });
+  return grants ?? null;
 }
 
 /** The last protection read or applied, by organization, for a minute. */

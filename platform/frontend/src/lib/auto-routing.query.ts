@@ -1,6 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
-  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
@@ -19,11 +18,9 @@ const {
   createAutoRouter,
   updateAutoRouter,
   deleteAutoRouter,
-  getAutoRoutingPlans,
+  getAutoRoutingUsage,
   getAutoRoutingPlan,
-  previewAutoRouting,
   simulateAutoRouting,
-  getAutoRoutingDiagnostics,
   getAutoRoutingBackfill,
   scanAutoRoutingBackfill,
   scoreAutoRoutingBackfill,
@@ -40,28 +37,18 @@ export type AvailableAutoRouter =
 export type AutoRoutingScorerState = AutoRouter["status"]["scorer"];
 export type AutoRouterCreate = archestraApiTypes.CreateAutoRouterData["body"];
 export type AutoRouterUpdate = archestraApiTypes.UpdateAutoRouterData["body"];
-export type AutoRoutingPlanSummary =
-  archestraApiTypes.GetAutoRoutingPlansResponses["200"][number];
+export type AutoRoutingUsage =
+  archestraApiTypes.GetAutoRoutingUsageResponses["200"];
 export type AutoRoutingPlanDetail =
   archestraApiTypes.GetAutoRoutingPlanResponses["200"];
-export type AutoRoutingPreviewBody =
-  archestraApiTypes.PreviewAutoRoutingData["body"];
-export type AutoRoutingPreview =
-  archestraApiTypes.PreviewAutoRoutingResponses["200"];
 type AutoRoutingSimulateBody =
   archestraApiTypes.SimulateAutoRoutingData["body"];
 export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
-export type AutoRoutingDiagnostics =
-  archestraApiTypes.GetAutoRoutingDiagnosticsResponses["200"];
 export type AutoRoutingBackfillState =
   archestraApiTypes.GetAutoRoutingBackfillResponses["200"];
 type AutoRoutingScoreBackfillBody =
   archestraApiTypes.ScoreAutoRoutingBackfillData["body"];
-export type SimulatedTraffic = Extract<
-  AutoRoutingSimulation,
-  { status: "feasible" }
->["baseline"];
 
 const autoRoutingKeys = {
   all: ["auto-routing"] as const,
@@ -70,8 +57,8 @@ const autoRoutingKeys = {
   available: () => [...autoRoutingKeys.all, "available"] as const,
   router: (routerId: string | null) =>
     [...autoRoutingKeys.all, "router", routerId] as const,
-  plans: (routerId: string | null) =>
-    [...autoRoutingKeys.router(routerId), "plans"] as const,
+  usage: (routerId: string | null) =>
+    [...autoRoutingKeys.router(routerId), "usage"] as const,
   planDetails: (routerId: string | null) =>
     [...autoRoutingKeys.router(routerId), "plan"] as const,
   plan: (routerId: string | null, id: string | null) =>
@@ -80,12 +67,6 @@ const autoRoutingKeys = {
     [...autoRoutingKeys.router(routerId), "simulate"] as const,
   simulation: (routerId: string | null, body: AutoRoutingSimulateBody | null) =>
     [...autoRoutingKeys.simulations(routerId), body] as const,
-  diagnostics: (routerId: string | null, budgetUsdPerDay: number | null) =>
-    [
-      ...autoRoutingKeys.router(routerId),
-      "diagnostics",
-      budgetUsdPerDay,
-    ] as const,
   backfill: () => [...autoRoutingKeys.all, "backfill"] as const,
 };
 
@@ -187,18 +168,21 @@ export function useAutoRouter() {
   };
 }
 
-export function useAutoRoutingPlans() {
+/** The usage windows the router page offers. */
+export type AutoRoutingUsageDays = 7 | 14;
+
+export function useAutoRoutingUsage(days: AutoRoutingUsageDays) {
   const routerId = useAutoRouterId();
   return useQuery({
-    queryKey: autoRoutingKeys.plans(routerId),
+    queryKey: [...autoRoutingKeys.usage(routerId), days],
     queryFn: async () => {
-      if (!routerId) return [];
-      const { data, error } = await getAutoRoutingPlans({
+      if (!routerId) return null;
+      const { data, error } = await getAutoRoutingUsage({
         path: { id: routerId },
-        query: { limit: 50 },
+        query: { days },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      return data ?? null;
     },
     enabled: routerId !== null,
   });
@@ -313,21 +297,6 @@ async function applyFit(
   }
 }
 
-export function usePreviewAutoRouting() {
-  const routerId = useAutoRouterId();
-  return useMutation({
-    mutationFn: async (body: AutoRoutingPreviewBody) => {
-      if (!routerId) return undefined;
-      const { data, error } = await previewAutoRouting({
-        path: { id: routerId },
-        body,
-      });
-      throwOnApiError(error);
-      return data;
-    },
-  });
-}
-
 /**
  * A fit at `body`'s budget and traffic that publishes nothing; idle while
  * `body` is null. The backend runs one simulation per router at a time,
@@ -354,35 +323,6 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
   });
 }
 
-/**
- * The current history re-solved at `budgetUsdPerDay` (the saved budget when
- * null). One runs per router at a time, so a refused call is retried; the
- * previous budget's answer is the placeholder meanwhile.
- */
-export function useAutoRoutingDiagnostics(budgetUsdPerDay: number | null) {
-  const routerId = useAutoRouterId();
-  return useQuery({
-    enabled: routerId !== null,
-    queryKey: autoRoutingKeys.diagnostics(routerId, budgetUsdPerDay),
-    queryFn: async () => {
-      if (!routerId) return null;
-      const { data, error } = await getAutoRoutingDiagnostics({
-        path: { id: routerId },
-        query: budgetUsdPerDay === null ? {} : { budgetUsdPerDay },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-    placeholderData: keepPreviousData,
-    staleTime: DIAGNOSTICS_STALE_MS,
-    retry: (failures, error) =>
-      failures < SIMULATION_RETRIES &&
-      getApiErrorType(error.cause) === "api_rate_limit_error",
-    retryDelay: SIMULATION_RETRY_DELAY_MS,
-  });
-}
-
-const DIAGNOSTICS_STALE_MS = 60_000;
 const SIMULATION_RETRIES = 10;
 const SIMULATION_RETRY_DELAY_MS = 1000;
 

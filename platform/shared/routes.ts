@@ -66,6 +66,7 @@ export const RouteId = {
   UpdateAutoRouter: "updateAutoRouter",
   DeleteAutoRouter: "deleteAutoRouter",
   GetAutoRoutingPlans: "getAutoRoutingPlans",
+  GetAutoRoutingUsage: "getAutoRoutingUsage",
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",

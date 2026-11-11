@@ -34932,6 +34932,106 @@ export type UpdateAutoRouterResponses = {
 
 export type UpdateAutoRouterResponse = UpdateAutoRouterResponses[keyof UpdateAutoRouterResponses];
 
+export type GetAutoRoutingUsageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        days?: number;
+    };
+    url: '/api/auto-routing/routers/{id}/usage';
+};
+
+export type GetAutoRoutingUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingUsageError = GetAutoRoutingUsageErrors[keyof GetAutoRoutingUsageErrors];
+
+export type GetAutoRoutingUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        windowDays: number;
+        sessions: number;
+        requests: number;
+        costUsd: number;
+        allSmartCostUsd: number | null;
+        tiers: Array<{
+            tier: 'fast' | 'normal' | 'smart';
+            sessions: number;
+            requests: number;
+            costUsd: number;
+        }>;
+    };
+};
+
+export type GetAutoRoutingUsageResponse = GetAutoRoutingUsageResponses[keyof GetAutoRoutingUsageResponses];
+
 export type GetAutoRoutingPlansData = {
     body?: never;
     path: {

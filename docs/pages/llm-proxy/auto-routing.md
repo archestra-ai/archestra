@@ -2,8 +2,8 @@
 title: Auto Routing
 description: Create auto routers that pick a fast, normal, or smart model for each session of agents, chats and apps, within a daily budget
 order: 6
-alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-10
+beta: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ An auto router is a model name, `auto` or `auto:<name>`, that sends each session
 5. Pick a daily budget and the decision model.
 6. Turn auto routing on under **Settings → LLM**. This switch covers every router of the organization.
 
-Open a router from the list to see its plan, its plan history and its diagnostics.
+Open a router from the list to see its current plan: expected spend against the budget, quality compared with sending everything to the smart model, and how sessions should split across the fast, normal and smart models. Switch to **7 days** or **14 days** to see what the router actually routed in that window: billed spend, sessions and requests, how sessions split, and how that cost compares with sending every request to the smart model at list price. Requests covered by a subscription count as sessions and requests but add no spend and no savings. To see which model a single request used and why, open it in **LLM Logs**.
 
 ### Daily Budget
 
@@ -59,8 +59,6 @@ A session with an explicit session ID is routed once, on its first request, and 
 
 The scorer assesses the opening user message with a bounded excerpt of the request's system instructions and the full sorted list of tool names. It does not receive tool descriptions, parameter schemas or tool results. If tool names alone exceed 64 KiB, scoring fails instead of silently omitting tools.
 
-Under **Try a prompt**, turn on **Use request JSON** to preview an opening request body copied from LLM Logs, including its system instructions and tools. Text-only previews omit that context. A preview makes a fresh choice under the current plan; it does not replay the session's saved choice or execute the request, and scorer calls are billed.
-
 - **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, initial system instructions and current tool names. Instructions added after the first user message, tool ordering and cache markers do not change this identity. Changing the initial instructions or tool-name list can trigger another scorer call and model choice; send a stable session ID to preserve the choice across those changes.
 - **Plans:** a background job builds each router's routing plan from its past sessions. Changing a router triggers a new plan for it within about a minute, and every router is re-planned at least daily. Each plan is versioned.
 
@@ -68,10 +66,10 @@ Under **Try a prompt**, turn on **Use request JSON** to preview an opening reque
 
 Only the `auto` router that existed before an organization could have several learns from past traffic; routers you create start cold. For that router, past traffic can supply the sessions a plan needs instead of waiting for `auto` traffic.
 
-1. **Find past sessions.** Runs on its own when you first enable auto routing, or from the router's Overview page. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
+1. **Find past sessions.** Runs on its own when you first enable auto routing. Before the router has a plan, its page shows what was found; afterwards, open **⋯ → Score past sessions** in the page header, which counts again when the last count is more than a day old. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
 2. **Score them.** You start this. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
 
-Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the page offers to score the same sessions again.
+Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the router's page shows a notice offering to score the same sessions again, and a scoring run in progress shows there with a way to cancel it.
 
 ## When It Falls Back to the Normal Model
 

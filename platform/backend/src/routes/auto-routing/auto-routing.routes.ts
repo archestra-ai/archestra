@@ -24,6 +24,7 @@ import {
   toPlanSummary,
   updateAutoRouter,
 } from "@/auto-routing/settings";
+import { describeRoutedUsage } from "@/auto-routing/usage";
 import config from "@/config";
 import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -48,6 +49,8 @@ import {
   AutoRoutingSimulateBodySchema,
   AutoRoutingSimulateResponseSchema,
   AutoRoutingStateResponseSchema,
+  AutoRoutingUsageQuerySchema,
+  AutoRoutingUsageResponseSchema,
   CreateAutoRouterBodySchema,
   UpdateAutoRouterBodySchema,
   UpdateAutoRoutingStateBodySchema,
@@ -207,6 +210,25 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await deleteAutoRouter(organizationId, params.id);
       return reply.send({ success: true });
     },
+  );
+
+  fastify.get(
+    "/api/auto-routing/routers/:id/usage",
+    {
+      schema: {
+        operationId: RouteId.GetAutoRoutingUsage,
+        description:
+          "What an auto router routed over the last 7 or 14 days: sessions, requests and spend per tier, and the same tokens priced at its smart model",
+        tags: TAGS,
+        params: RouterParamsSchema,
+        querystring: AutoRoutingUsageQuerySchema,
+        response: constructResponseSchema(AutoRoutingUsageResponseSchema),
+      },
+    },
+    async ({ organizationId, params, query }, reply) =>
+      reply.send(
+        await describeRoutedUsage(organizationId, params.id, query.days),
+      ),
   );
 
   fastify.get(

@@ -111,14 +111,15 @@ export function fingerprintMatches(
   );
 }
 
-type RouterTokenPrices = {
+export type RouterTokenPrices = {
   input: number;
   cache_read: number;
   cache_write: number;
   output: number;
 };
 
-function prices(model: Model, promptTokens?: number): RouterTokenPrices {
+/** USD per million tokens of `model`, at the long-context rate when `promptTokens` passes its threshold. */
+export function prices(model: Model, promptTokens?: number): RouterTokenPrices {
   const pricing = ModelModel.getEffectivePricing(
     model,
     undefined,

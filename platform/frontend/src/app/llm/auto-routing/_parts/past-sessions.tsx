@@ -4,8 +4,8 @@ import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
   clientForExternalAgentIds,
 } from "@archestra/shared";
-import { AlertTriangle } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,19 +43,17 @@ type Backfill = NonNullable<AutoRoutingBackfillState["backfill"]>;
 type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
 
 /**
- * Past sessions from the interaction log the plan can learn from: a free scan
- * counts them, then an explicit, capped scoring run reads a sample with the
- * session scorer. Beside an active plan it is one card with its action until
- * a run starts.
+ * Past sessions from the interaction log the first plan can learn from: a
+ * free scan counts them, then an explicit, capped scoring run reads a sample
+ * with the session scorer. Shown until a plan is active; after that the
+ * header menu opens `PastSessionsDialog` and `PastSessionsNotice` reports runs.
  */
 export function PastSessions({
   routingEnabled,
-  hasActivePlan,
   canUpdate,
   scorer,
 }: {
   routingEnabled: boolean;
-  hasActivePlan: boolean;
   canUpdate: boolean;
   scorer: AutoRoutingScorerState;
 }) {
@@ -90,27 +88,6 @@ export function PastSessions({
       {label}
     </Button>
   );
-
-  if (hasActivePlan && !running) {
-    if (!scoreOffer && !canUpdate) return null;
-    return (
-      <Card className="gap-3 py-4" data-testid="auto-routing-past-traffic">
-        <CardHeader className="px-4">
-          <CardTitle className="text-sm">Past sessions</CardTitle>
-          <CardDescription className="tabular-nums">
-            {!scoreOffer
-              ? "Scan the interaction log for past sessions the plan could learn from. It reads the database only and costs nothing."
-              : scoreOffer.rescore
-                ? `The session scorer changed, so ${count(scoreOffer.remaining)} past sessions need re-scoring before the plan can use them.`
-                : `${count(scoreOffer.remaining)} past sessions are not scored yet. Scoring them lets the plan learn from your real traffic.`}
-          </CardDescription>
-          <CardAction>
-            {scoreOffer ? scoreAction : scanButton("Scan past sessions")}
-          </CardAction>
-        </CardHeader>
-      </Card>
-    );
-  }
 
   return (
     <Card className="gap-3 py-4" data-testid="auto-routing-past-sessions">
@@ -151,6 +128,232 @@ export function PastSessions({
         </CardContent>
       )}
     </Card>
+  );
+}
+
+/**
+ * Beside an active plan: a past-sessions run in progress, a re-score the
+ * plan needs after a scorer change, or why the last run went wrong. Nothing
+ * otherwise.
+ */
+export function PastSessionsNotice({
+  routingEnabled,
+  canUpdate,
+  scorer,
+}: {
+  routingEnabled: boolean;
+  canUpdate: boolean;
+  scorer: AutoRoutingScorerState;
+}) {
+  const { data } = useAutoRoutingBackfill();
+  const cancel = useCancelAutoRoutingBackfill();
+  if (!data) return null;
+  const { backfill, scoreOffer } = data;
+
+  if (backfill?.status === "running") {
+    const scanning = backfill.phase === "scan";
+    return (
+      <InlineNotice variant="info" data-testid="auto-routing-past-sessions">
+        <Loader2 className="animate-spin" />
+        <span className="font-medium">
+          {scanning ? "Scanning past sessions" : "Scoring past sessions"}
+        </span>
+        {!scanning && (
+          <InlineNoticeText className="tabular-nums">
+            {[
+              ...funnel(backfill.eligibleSessions, backfill.progress),
+              spend(backfill),
+            ].join(" · ")}
+          </InlineNoticeText>
+        )}
+        {canUpdate && (
+          <Button
+            size="xs"
+            variant="outline"
+            className="ml-auto"
+            disabled={cancel.isPending}
+            onClick={() => cancel.mutate()}
+          >
+            Cancel
+          </Button>
+        )}
+      </InlineNotice>
+    );
+  }
+  if (scoreOffer?.rescore) {
+    return (
+      <InlineNotice data-testid="auto-routing-past-sessions">
+        <AlertTriangle />
+        <span className="font-medium">Past sessions need re-scoring</span>
+        <InlineNoticeText className="tabular-nums">
+          The session scorer changed, so {count(scoreOffer.remaining)} past
+          sessions no longer count toward the plan.
+        </InlineNoticeText>
+        <span className="ml-auto">
+          {scorer === "no_jev_key" ? (
+            <AddJevKeyLink />
+          ) : (
+            canUpdate && (
+              <ScoreDialogTrigger offer={scoreOffer}>
+                {(open) => (
+                  <Button size="xs" variant="outline" onClick={open}>
+                    {scoreLabel(scoreOffer)}
+                  </Button>
+                )}
+              </ScoreDialogTrigger>
+            )
+          )}
+        </span>
+      </InlineNotice>
+    );
+  }
+  if (backfill?.status === "failed" && backfill.error) {
+    return (
+      <InlineNotice variant="error" data-testid="auto-routing-past-sessions">
+        <AlertTriangle />
+        <span className="font-medium">Scoring past sessions failed</span>
+        <InlineNoticeText>{backfill.error}</InlineNoticeText>
+      </InlineNotice>
+    );
+  }
+  if (routingEnabled && backfill?.fitBlockedReason) {
+    return (
+      <InlineNotice data-testid="auto-routing-past-sessions">
+        <AlertTriangle />
+        <span className="font-medium">No plan is fitted on past sessions</span>
+        <InlineNoticeText>{backfill.fitBlockedReason}</InlineNoticeText>
+      </InlineNotice>
+    );
+  }
+  return null;
+}
+
+/** A scan this recent is still a fair count; an older one is redone when the dialog opens. */
+const SCAN_FRESH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Score past sessions in one step: opening the dialog scans the interaction
+ * log when the last count is stale (it is free), then offers to score what it
+ * found at an estimated cost under a spending limit.
+ */
+export function PastSessionsDialog({
+  scorer,
+  onClose,
+}: {
+  scorer: AutoRoutingScorerState;
+  onClose: () => void;
+}) {
+  const { data } = useAutoRoutingBackfill();
+  const scan = useScanAutoRoutingBackfill();
+  const cancel = useCancelAutoRoutingBackfill();
+  const [scanRequested, setScanRequested] = useState(false);
+  const backfill = data?.backfill ?? null;
+  const scoreOffer = data?.scoreOffer ?? null;
+  const stale =
+    data !== undefined &&
+    backfill?.status !== "running" &&
+    (backfill === null ||
+      Date.now() - new Date(backfill.cutoff).getTime() > SCAN_FRESH_MS);
+
+  useEffect(() => {
+    if (stale && !scanRequested) {
+      setScanRequested(true);
+      scan.mutate();
+    }
+  }, [stale, scanRequested, scan]);
+
+  const scanning =
+    data === undefined ||
+    scan.isPending ||
+    (stale && !scan.isError) ||
+    (backfill?.status === "running" && backfill.phase === "scan");
+
+  if (scoreOffer && !scanning && backfill?.status !== "running") {
+    if (scorer !== "no_jev_key") {
+      return (
+        <ScoreDialog
+          offer={scoreOffer}
+          onDone={onClose}
+          details={backfill && <ScanFindings backfill={backfill} />}
+        />
+      );
+    }
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Score past sessions</DialogTitle>
+        <DialogDescription>
+          The plan learns from scored sessions. Scoring past sessions from the
+          interaction log lets it learn from traffic that went out before
+          routing.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody className="space-y-4 text-sm">
+        {scanning ? (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Looking for past sessions in the interaction log…</span>
+          </p>
+        ) : backfill?.status === "running" ? (
+          <p className="tabular-nums">
+            Scoring:{" "}
+            {[
+              ...funnel(backfill.eligibleSessions, backfill.progress),
+              spend(backfill),
+            ].join(" · ")}
+          </p>
+        ) : (
+          <>
+            {backfill && <ScanFindings backfill={backfill} />}
+            {scoreOffer && scorer === "no_jev_key" ? (
+              <AddJevKeyLink />
+            ) : (
+              <p>
+                {backfill && backfill.eligibleSessions > 0
+                  ? "Every past session the plan can use is already scored."
+                  : "No past sessions the plan can learn from."}
+              </p>
+            )}
+            {backfill?.error && (
+              <InlineNotice
+                variant={backfill.status === "failed" ? "error" : "info"}
+              >
+                <AlertTriangle />
+                <InlineNoticeText>{backfill.error}</InlineNoticeText>
+              </InlineNotice>
+            )}
+          </>
+        )}
+      </DialogBody>
+      <DialogFooter>
+        {backfill?.status === "running" && backfill.phase === "score" && (
+          <Button
+            variant="outline"
+            disabled={cancel.isPending}
+            onClick={() => cancel.mutate()}
+          >
+            Stop scoring
+          </Button>
+        )}
+        <Button onClick={onClose}>Close</Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+/** What the scan found: its window and the sessions per client. */
+function ScanFindings({ backfill }: { backfill: Backfill }) {
+  return (
+    <div className="space-y-2 text-sm" data-testid="auto-routing-scan-findings">
+      <p className="tabular-nums">
+        {count(backfill.eligibleSessions)} past sessions found,{" "}
+        {formatDate({ date: backfill.windowStart, dateFormat: "MMM d" })} –{" "}
+        {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
+      </p>
+      <ClientBreakdown breakdown={backfill.breakdown} />
+    </div>
   );
 }
 
@@ -328,9 +531,12 @@ function ScoreDialogTrigger({
 function ScoreDialog({
   offer,
   onDone,
+  details = null,
 }: {
   offer: ScoreOffer;
   onDone: () => void;
+  /** Shown above the figures: what the scan found, when the dialog also scanned. */
+  details?: ReactNode;
 }) {
   const [ceiling, setCeiling] = useState(offer.suggestedMaxCostUsd.toFixed(2));
   const score = useScoreAutoRoutingBackfill();
@@ -355,6 +561,7 @@ function ScoreDialog({
         </DialogDescription>
       </DialogHeader>
       <DialogBody className="space-y-4">
+        {details}
         {offer.rescore && (
           <p className="text-sm text-muted-foreground">
             The session scorer changed since these sessions were scored, so

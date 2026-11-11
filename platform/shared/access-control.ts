@@ -742,6 +742,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAutoRouter]: { llmProxy: ["update"] },
   [RouteId.DeleteAutoRouter]: { llmProxy: ["update"] },
   [RouteId.GetAutoRoutingPlans]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingUsage]: { llmProxy: ["read"] },
   [RouteId.GetAutoRoutingPlan]: { llmProxy: ["read"] },
   [RouteId.ReplanAutoRouting]: { llmProxy: ["update"] },
   // Preview spends on the scorer, so it needs the same right as changing settings.

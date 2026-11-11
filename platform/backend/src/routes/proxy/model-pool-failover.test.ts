@@ -89,6 +89,73 @@ describe("orderPoolMembers", () => {
 });
 
 describe("planModelPool", () => {
+  test("pool grants never share personal members, including cached plans and explicit selections", async ({
+    makeOrganization,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser();
+    const personal = await makeLlmProviderApiKey(org.id, null, {
+      provider: "github-copilot",
+      userId: owner.id,
+    });
+    const shared = await makeLlmProviderApiKey(org.id, null, {
+      provider: "openai",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "subscription-pool",
+        members: [
+          member(personal.id, "gpt-4.1", 1),
+          member(shared.id, "gpt-4.1", 2),
+        ],
+      },
+    });
+    const plan = (userId?: string) =>
+      planModelPool({
+        organizationId: org.id,
+        name: pool.name,
+        inbound: "openai-chat",
+        caller: {
+          userId,
+          providerApiKeyIds: [shared.id],
+          modelPoolIds: [pool.id],
+        },
+      });
+    expect(
+      (await plan(owner.id))?.members.map((m) => m.providerApiKeyId),
+    ).toEqual([personal.id, shared.id]);
+    expect(
+      (await plan(other.id))?.members.map((m) => m.providerApiKeyId),
+    ).toEqual([shared.id]);
+    expect((await plan())?.members.map((m) => m.providerApiKeyId)).toEqual([
+      shared.id,
+    ]);
+    await ModelPoolModel.update({
+      organizationId: org.id,
+      id: pool.id,
+      input: { name: pool.name, members: [member(personal.id, "gpt-4.1", 1)] },
+    });
+    for (const bypass of [
+      {},
+      { poolId: pool.id },
+      { grantedPoolId: pool.id },
+    ]) {
+      await expect(
+        planModelPool({
+          organizationId: org.id,
+          name: pool.name,
+          inbound: "openai-chat",
+          caller: { providerApiKeyIds: [], modelPoolIds: [pool.id] },
+          ...bypass,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    }
+  });
+
   test("plans every member of the pool with that name, across providers", async ({
     makeOrganization,
     makeLlmProviderApiKey,

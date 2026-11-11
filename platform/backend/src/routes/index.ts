@@ -13,6 +13,7 @@ export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-prox
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as autoRoutingRoutes } from "./auto-routing/auto-routing.routes";
+export { default as blobProviderRoutes } from "./blob-provider/blob-provider.routes";
 export { default as bootstrapRoutes } from "./bootstrap";
 export { default as browserStorageStatesRoutes } from "./browser-storage-state/browser-storage-state.routes";
 export { default as chatRoutes } from "./chat/routes";
@@ -23,6 +24,7 @@ export { default as clientConnectionRoutes } from "./client-connection/client-co
 export { default as configRoutes } from "./config";
 export { default as connectedClientRoutes } from "./connected-client/connected-client.routes";
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
+export { default as costExportRoutes } from "./cost-export/cost-export.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as devFeedbackRoutes } from "./dev-feedback/dev-feedback.routes";
 export { default as environmentRoutes } from "./environment";

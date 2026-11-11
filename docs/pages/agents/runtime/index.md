@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -148,8 +148,8 @@ What to know:
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
-- **A2A:** A2A clients start runs and continue them with the same `contextId`. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
-- **Scripts and CI:** a script starts a run with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) through an MCP Gateway and polls [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run). The run ends when the agent finishes. A failed run says whether to start again: see [Read Why a Run Failed](#read-why-a-run-failed). Continue the saved workspace with [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run).
+- **A2A:** A2A clients start runs and continue them with the same `contextId`. Client-credentials OAuth applications cannot use Agent Runtime, even when bound to a service account. Use a permitted service-account API key or a user credential instead. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
+- **Scripts and CI:** with a permitted service-account API key or user credential, a script starts a run with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) through an MCP Gateway and polls [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run). The run ends when the agent finishes. A failed run says whether to start again: see [Read Why a Run Failed](#read-why-a-run-failed). Continue the saved workspace with [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run).
 
 ### Read Why a Run Failed
 

@@ -1,7 +1,7 @@
 ---
 title: Observability
 description: Connect your monitoring stack and install dashboards
-order: 8
+order: 9
 lastUpdated: 2026-11-03
 ---
 

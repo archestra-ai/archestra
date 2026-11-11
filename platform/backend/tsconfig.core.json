@@ -40,7 +40,8 @@
     "src/observability/**/*.ts",
     "src/integrations/**/*.ts",
     "src/tokenizers/**/*.ts",
-    "src/git-hosts/**/*.ts"
+    "src/git-hosts/**/*.ts",
+    "src/blob-providers/**/*.ts"
   ],
   "exclude": [
     // The schema project's files in these directories.

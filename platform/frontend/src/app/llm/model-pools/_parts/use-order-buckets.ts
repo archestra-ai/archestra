@@ -97,13 +97,13 @@ export function useOrderBuckets({
         .filter((index) => index !== from),
     );
 
-  /** A new member on the next unused shared key, named after the pool. */
+  /** A new member on the next unused provider connection, named after the pool. */
   const newMember = (priority: number): PoolFormMember | null => {
     const key =
-      options.sharedKeys.find(
+      options.availableKeys.find(
         (candidate) =>
           !members.some((member) => member.providerApiKeyId === candidate.id),
-      ) ?? options.sharedKeys[0];
+      ) ?? options.availableKeys[0];
     if (!key) return null;
     return {
       providerApiKeyId: key.id,
@@ -121,7 +121,7 @@ export function useOrderBuckets({
   return {
     buckets,
     count: fields.length,
-    canAdd: options.sharedKeys.length > 0,
+    canAdd: options.availableKeys.length > 0,
     /**
      * Into order `order` (1-based) at `position` (default last); one past the
      * last order makes a new one. Orders left empty close up.

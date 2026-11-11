@@ -2,12 +2,12 @@
 title: Costs & Limits
 description: See what every model call costs and cap spend, tokens, or requests before bills climb
 order: 3
-lastUpdated: 2026-10-30
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Every model call through Archestra—from [Chat](/docs/chat), [Agents](/docs/agents), or an external tool using the [LLM Proxy](/docs/llm-proxy)—is metered as it finishes. Break down spend and token usage across your organization in [Costs](/docs/llm-proxy/costs-and-limits/costs), and cap spend, tokens, or requests in [Limits](/docs/llm-proxy/costs-and-limits/limits) before a runaway loop or shared key drives up your bill.
+Every model call through Archestra—from [Chat](/docs/chat), [Agents](/docs/agents), or an external tool using the [LLM Proxy](/docs/llm-proxy)—is metered as it finishes. Break down spend and token usage across your organization in [Costs](/docs/llm-proxy/costs-and-limits/costs), cap spend, tokens, or requests in [Limits](/docs/llm-proxy/costs-and-limits/limits) before a runaway loop or shared key drives up your bill, and send the numbers to your FinOps tools with [Export Costs](/docs/llm-proxy/costs-and-limits/exports).
 
 ![Costs & Limits → Costs showing API spend, subscription usage estimate, requests, tokens, and the cost explorer](/docs/automated_screenshots/llm-proxy_costs.webp)
 

@@ -1,7 +1,21 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 import {
@@ -12,6 +26,8 @@ import {
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useUpdateVirtualApiKey: vi.fn(),
 }));
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: vi.fn(),
   useModelsWithApiKeys: vi.fn(),
@@ -37,6 +53,13 @@ vi.mock("@/components/resource-access-section", () => ({
 }));
 
 const mutateAsync = vi.fn();
+const server = setupServer();
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "bypass" });
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 const virtualKey = {
   id: "vk-1",
@@ -54,6 +77,13 @@ const virtualKey = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useFeature).mockReturnValue(undefined);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as unknown as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useSession>);
   vi.mocked(useUpdateVirtualApiKey).mockReturnValue({
     isPending: false,
     mutateAsync,
@@ -81,6 +111,81 @@ beforeEach(() => {
 });
 
 describe("EditVirtualKeyDialog", () => {
+  it("retains pool-only access on rename and blocks removing its last pool", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "llmModelPoolsEnabled",
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    server.use(
+      http.get("http://localhost:9000/api/model-pools", () =>
+        HttpResponse.json([
+          {
+            id: "pool-1",
+            name: "subscription-pool",
+            virtualApiKeyIds: [virtualKey.id],
+            members: [
+              {
+                id: "member-1",
+                provider: "github-copilot",
+                modelId: "gpt-4.1",
+                priority: 1,
+                enabled: true,
+              },
+            ],
+          },
+        ]),
+      ),
+    );
+    renderDialog({
+      ...virtualKey,
+      includeFutureProviders: false,
+      providerApiKeys: [],
+    });
+    const save = screen.getByRole("button", { name: "Save Changes" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Pool key renamed");
+    await user.click(save);
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: virtualKey.id,
+      data: expect.objectContaining({
+        name: "Pool key renamed",
+        providerApiKeys: [],
+      }),
+    });
+    expect(mutateAsync.mock.calls[0]?.[0].data).not.toHaveProperty(
+      "modelPoolIds",
+    );
+    await user.click(screen.getByRole("button", { name: "Provider keys" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove subscription-pool" }),
+    );
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a non-manager rename a pool-only key without rewriting its grants", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "llmModelPoolsEnabled",
+    );
+    renderDialog({
+      ...virtualKey,
+      includeFutureProviders: false,
+      providerApiKeys: [],
+    });
+    await user.type(screen.getByLabelText("Name"), " renamed");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mutateAsync).toHaveBeenCalledOnce();
+    expect(mutateAsync.mock.calls[0]?.[0].data).not.toHaveProperty(
+      "modelPoolIds",
+    );
+  });
+
   it("shows reusable connection instructions without revealing the saved key", async () => {
     const user = userEvent.setup();
     renderDialog();

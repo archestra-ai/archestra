@@ -1,4 +1,5 @@
 import { withoutProxyCopies } from "./derived-arguments";
+import type { ReviewScopeItem } from "./review-scope";
 
 /**
  * The reviewed call as an approval prompt shows it: the tool by the name the
@@ -8,23 +9,32 @@ import { withoutProxyCopies } from "./derived-arguments";
 /**
  * The call an approval prompt shows. An OpenAPPA review names the call it
  * rules on, while the paused remedy call's own name and arguments only name
- * the plan; a review without a structured tool falls back to its text.
+ * the plan. A review without a structured tool, or whose scope is unknown,
+ * falls back to its text, so no condition of the ruling is hidden.
  */
 export function approvalPromptCall(params: {
   toolName: string;
   toolArgs?: Record<string, unknown>;
-  review?: { text: string; tool?: string; arguments?: string };
+  review?: {
+    text: string;
+    tool?: string;
+    arguments?: string;
+    scope?: ReviewScopeItem[];
+  };
 }): {
   toolName: string;
   toolArgs?: Record<string, unknown>;
   reviewText?: string;
+  alsoAccepts?: string[];
 } {
   const review = params.review && displayedReview(params.review);
-  if (review?.tool) {
+  const accepted = acceptedScope(review?.scope);
+  if (review?.tool && accepted) {
     const toolArgs = reviewedCallArguments(review);
     return {
       toolName: reviewedToolLabel(review.tool),
       ...(toolArgs ? { toolArgs } : {}),
+      ...(accepted.length ? { alsoAccepts: accepted } : {}),
     };
   }
   return {
@@ -32,6 +42,18 @@ export function approvalPromptCall(params: {
     ...(params.toolArgs ? { toolArgs: params.toolArgs } : {}),
     ...(review ? { reviewText: review.text } : {}),
   };
+}
+
+/**
+ * What approving accepts besides the person's attention, one line per item;
+ * undefined when the review's scope is unknown and its text must be shown.
+ */
+export function acceptedScope(
+  scope: ReviewScopeItem[] | undefined,
+): string[] | undefined {
+  return scope?.flatMap((item) =>
+    item.kind === "attention" ? [] : [redactCredentials(item.text)],
+  );
 }
 
 /**

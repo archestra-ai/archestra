@@ -1,4 +1,11 @@
-import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import type { AppaSyncInterval } from "@/types/openappa-github-sync";
 import organizationsTable from "./organization";
 
@@ -21,6 +28,13 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   sourceCommit: text("source_commit"),
   // Poll the initial policy PR before importing anything from the template branch.
   setupPullRequestNumber: integer("setup_pull_request_number"),
+  // Whether each MCP server's editors change its own rules through pull
+  // requests: the policy check, the branch ruleset and the registry action.
+  // ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, wins over it.
+  selfService: boolean("self_service").notNull().default(false),
+  // The folder beside the policy file that holds one rules file per MCP
+  // server, which `<folder>/*.toml` in the policy includes.
+  selfServiceDirectory: text("self_service_directory").notNull().default("mcp"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
 });

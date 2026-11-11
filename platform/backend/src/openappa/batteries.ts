@@ -419,7 +419,10 @@ class OpenAppaBatteriesService {
       held: new Set(held.map((battery) => battery.name)),
     });
     return {
-      refusal: (composed.content ?? null) === null ? composed.errors : [],
+      refusal:
+        (composed.content ?? null) === null
+          ? [...(planned.foldErrors ?? []), ...composed.errors]
+          : [],
       heldBack: held.map(heldBackNote),
     };
   }
@@ -1128,6 +1131,7 @@ class OpenAppaBatteriesService {
         previousInstalls: previous,
         installs,
         now,
+        foldErrors: planned.foldErrors,
       });
       const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
@@ -1232,6 +1236,8 @@ class OpenAppaBatteriesService {
     installs: readonly BatteryInstall[];
     /** When this composition is stored; its record says it was composed then. */
     now: Date;
+    /** Why the root's repository files could not be read, named in the refusal. */
+    foldErrors?: readonly string[];
   }): Promise<EffectivePolicyValues> {
     const {
       root,
@@ -1277,6 +1283,7 @@ class OpenAppaBatteriesService {
     };
     if (accepted === null) {
       const error = [
+        ...(params.foldErrors ?? []),
         ...result.errors,
         ...heldBack(planned).map(heldBackNote),
       ].join("\n");
@@ -1333,7 +1340,12 @@ class OpenAppaBatteriesService {
       content: params.root.content,
     });
     const { resolution, credentialSource } = bound;
-    const root = { ...params.root, content: bound.content };
+    // A root whose repository files cannot be read composes as written: the
+    // runtime refuses its unanswered entries, and the last composition stays.
+    const root = {
+      ...params.root,
+      content: bound.foldErrors ? params.root.content : bound.content,
+    };
     const [prefixes, bindable] = await Promise.all([
       catalogToolPrefixes(organizationId, {
         targets: resolution.aliases.flatMap((alias) => alias.servers),
@@ -1505,6 +1517,8 @@ class OpenAppaBatteriesService {
       unusedAliases: resolution.aliases.filter(
         (alias) => !declared.has(alias.namespace),
       ),
+      ...(bound.included ? { included: bound.included } : {}),
+      ...(bound.foldErrors ? { foldErrors: bound.foldErrors } : {}),
     };
   }
 
@@ -2057,6 +2071,10 @@ type PlannedComposition = {
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
+  /** The repository files folded into the root, when it includes any. */
+  included?: Array<{ path: string; sha256: string; tools?: string[] }>;
+  /** Why the root's repository files could not be read; it is then refused. */
+  foldErrors?: string[];
 };
 
 type Recomposition = PlannedComposition & {
@@ -2192,6 +2210,10 @@ function compositionFingerprint(params: {
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),
+        // Absent unless the root includes repository files, so every other
+        // organization keeps the fingerprint its stored composition carries.
+        ...(planned.included ? { included: planned.included } : {}),
+        ...(planned.foldErrors ? { foldErrors: planned.foldErrors } : {}),
       }),
     ) +
     (root.revision === 0 ? `:${root.contentHash}` : "")

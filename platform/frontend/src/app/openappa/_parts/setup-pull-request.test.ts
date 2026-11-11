@@ -15,6 +15,8 @@ const source = {
   setupPullRequestNumber: 7,
   lastSyncedAt: null,
   lastSyncError: null,
+  selfService: false,
+  selfServiceDirectory: "mcp",
 };
 
 describe("setupPullRequestOutcome", () => {

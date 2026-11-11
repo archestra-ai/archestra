@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import pino from "pino";
 
 /**
@@ -89,6 +90,82 @@ export function serializeErrorBounded(value: unknown): unknown {
   return serializeError(value, new WeakSet());
 }
 
+/** Provider-controlled text can echo prompts even in a short message or stack. */
+export function serializeErrorMetadata(value: unknown): unknown {
+  return errorMetadata({ value, ancestors: new WeakSet(), depth: 0 });
+}
+
+/** Separate raw diagnostic fields bypass the Error serializers. */
+export function withholdErrorContent(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...record };
+  // Pino's err/error serializers miss ordinary mapped errors and standalone
+  // diagnostics such as lastErrorType. Apply one policy to error-named fields
+  // rather than trusting text because a call site gave it a different alias.
+  // The exact `error` key is handled by its serializer below.
+  for (const [key, value] of Object.entries(result)) {
+    if (
+      key !== "error" &&
+      key.toLowerCase().includes("error") &&
+      value !== null &&
+      typeof value !== "boolean" &&
+      typeof value !== "number"
+    ) {
+      result[key] = serializeErrorMetadata(value);
+    }
+  }
+  // Codex terminal diagnostics copy these fields from the upstream response.
+  // Only the protocol's terminal classifications are metadata; an unexpected
+  // status can be arbitrary provider text just like its code and reason.
+  if (
+    "incompleteReason" in result &&
+    result.status !== "failed" &&
+    result.status !== "incomplete"
+  ) {
+    result.status = "[not stored: log content mode]";
+  }
+  for (const key of [
+    "stack",
+    // Raw provider frames and request/response diagnostics can be logged next
+    // to an error rather than attached to it, including at debug level.
+    "line",
+    "linePreview",
+    "data",
+    "event",
+    "chunk",
+    "body",
+    "payload",
+    "text",
+    "content",
+    "prompt",
+    "messages",
+    "arguments",
+    "params",
+    "parameters",
+    "query",
+    "request",
+    "response",
+    "result",
+    "toolArguments",
+    "toolResult",
+    // Raw SDK usage objects can hold malformed provider text in token fields.
+    "usage",
+    "incompleteReason",
+    "rawFinishReason",
+    "responseBody",
+    "requestBody",
+    "requestBodyValues",
+  ]) {
+    if (key in result) result[key] = "[not stored: log content mode]";
+  }
+  // SDK error codes can be provider-controlled free text too. Numeric protocol
+  // codes are safe; local classifications use mappedCode instead.
+  if (typeof result.code === "string")
+    result.code = "[not stored: log content mode]";
+  return result;
+}
+
 // === Internal ===
 
 function serializeError(value: unknown, ancestors: WeakSet<Error>): unknown {
@@ -144,3 +221,82 @@ function serializeError(value: unknown, ancestors: WeakSet<Error>): unknown {
  * failure, but an unbounded body can echo whole requests.
  */
 const MAX_SERIALIZED_ERROR_FIELD_LENGTH = 2_000;
+
+function errorMetadata({
+  value,
+  ancestors,
+  depth,
+  databaseError = false,
+}: {
+  value: unknown;
+  ancestors: WeakSet<object>;
+  depth: number;
+  databaseError?: boolean;
+}): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== "object") return "[not stored: log content mode]";
+  if (ancestors.has(value) || depth > 5) return "[Circular or nested error]";
+  ancestors.add(value);
+  const error = value as Record<string, unknown>;
+  const metadata: Record<string, unknown> = {};
+  databaseError ||= value instanceof DrizzleQueryError;
+  if (value instanceof DrizzleQueryError) {
+    // SQL itself may contain literals; only keep its statement classification.
+    const statement =
+      /^\s*(select|insert|update|delete|with|create|alter|drop|truncate)\b/i.exec(
+        value.query,
+      );
+    if (statement) metadata.statement = statement[1].toUpperCase();
+    metadata.parameterCount = value.params.length;
+  }
+  if (databaseError) {
+    // Only trust protocol fields in a database error chain, not provider codes
+    // or the driver's message/detail/where, which may echo bound values.
+    if (typeof error.code === "string" && /^[0-9A-Z]{5}$/.test(error.code))
+      metadata.code = error.code;
+    if (
+      typeof error.severity === "string" &&
+      /^(ERROR|FATAL|PANIC|WARNING|NOTICE|DEBUG|INFO|LOG)$/.test(error.severity)
+    )
+      metadata.severity = error.severity;
+    // This is a schema identifier, not the constraint's rejected value.
+    if (
+      typeof error.constraint === "string" &&
+      /^[a-z_][a-z0-9_$]{0,62}$/i.test(error.constraint)
+    )
+      metadata.constraint = error.constraint;
+  }
+  // Constructor identity comes from code, whereas SDK name/type/code fields
+  // can be populated directly from the provider's response.
+  if (value instanceof Error) metadata.type = value.constructor.name;
+  if (
+    error.reason === "maxRetriesExceeded" ||
+    error.reason === "errorNotRetryable" ||
+    error.reason === "abort"
+  ) {
+    metadata.reason = error.reason;
+  }
+  for (const key of ["status", "statusCode", "isRetryable"]) {
+    const field = error[key];
+    if (typeof field === "number" || typeof field === "boolean")
+      metadata[key] = field;
+  }
+  for (const key of ["cause", "lastError", "originalError"]) {
+    if (error[key] !== undefined)
+      metadata[key] = errorMetadata({
+        value: error[key],
+        ancestors,
+        depth: depth + 1,
+        databaseError,
+      });
+  }
+  if (Array.isArray(error.errors)) {
+    metadata.errors = error.errors
+      .slice(0, 10)
+      .map((child) =>
+        errorMetadata({ value: child, ancestors, depth: depth + 1 }),
+      );
+  }
+  ancestors.delete(value);
+  return metadata;
+}

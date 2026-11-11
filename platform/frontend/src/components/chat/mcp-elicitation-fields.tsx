@@ -47,6 +47,8 @@ export const ChatMcpElicitationRequestSchema = z.object({
   reviewedArguments: z.string().optional(),
   /** What approving accepts besides the person's attention. */
   reviewedCoverage: z.array(z.string()).optional(),
+  /** The review text, sent when what approving accepts is unknown. */
+  reviewedText: z.string().optional(),
 });
 
 export type ChatMcpElicitationRequest = z.infer<

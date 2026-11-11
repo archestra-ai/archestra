@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,7 @@ The LLM Proxy sits between your clients and your model providers. Clients keep t
 - No provider keys in your apps. An app gets a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). Archestra holds the real key, and you can revoke one app's access alone.
 - One URL for every provider. The [Unified Model API](/docs/llm-proxy/unified-model) sends `anthropic:claude-sonnet-4-6` to Anthropic and `openai:gpt-5.4` to OpenAI.
 - Failover between provider keys. A [model pool](/docs/llm-proxy/model-pools) serves one model name from several keys, and moves to the next key when one fails.
+- A cheaper model for easy work. An [auto router](/docs/llm-proxy/auto-routing) sends each session to a fast, normal, or smart model, within a daily budget.
 - Cost per person, team, and app, with budgets that block requests when spend reaches them. Claude and ChatGPT subscription traffic shows separately, at $0 billed. See [Costs & Limits](/docs/llm-proxy/costs-and-limits).
 - A log of every request, with the model, the caller, tokens, and cost. See [Logs and Auditing](/docs/admin/logs).
 

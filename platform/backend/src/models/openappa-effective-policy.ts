@@ -24,6 +24,22 @@ class OpenAppaEffectivePolicyModel {
     return row ? read(row) : null;
   }
 
+  /**
+   * What identifies the stored composition, without its text: a read cheap
+   * enough to compare every minute.
+   */
+  static async findState(organizationId: string) {
+    const [row] = await db
+      .select({
+        rootRevision: table.rootRevision,
+        contentHash: table.contentHash,
+        installFingerprint: table.installFingerprint,
+      })
+      .from(table)
+      .where(eq(table.organizationId, organizationId));
+    return row ?? null;
+  }
+
   /** What a helper consult needs to know about the composition the runtime enforces. */
   static async findServed(organizationId: string) {
     const [row] = await db

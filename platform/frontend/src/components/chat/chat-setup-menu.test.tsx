@@ -539,6 +539,60 @@ describe("ChatSetupMenu", () => {
     }
   });
 
+  it("offers the existing reasoning control for verified Bedrock models but not unverified GPT", async () => {
+    models.push(
+      {
+        dbId: "bedrock-nova",
+        id: "eu.amazon.nova-2-lite-v1:0",
+        provider: "bedrock",
+        displayName: "Nova 2 Lite",
+        isBest: false,
+        isFree: false,
+        requiresUserConnection: false,
+        isConnected: true,
+        capabilities: {
+          contextLength: 1_000_000,
+          supportsReasoningEffort: true,
+        },
+      },
+      {
+        dbId: "bedrock-gpt",
+        id: "global.openai.gpt-6-luna",
+        provider: "bedrock",
+        displayName: "Bedrock GPT",
+        isBest: false,
+        isFree: false,
+        requiresUserConnection: false,
+        isConnected: true,
+        capabilities: {
+          contextLength: 1_000_000,
+          supportsReasoningEffort: true,
+        },
+      },
+    );
+    try {
+      const user = userEvent.setup();
+      const props = menuProps({
+        selectedModel: "bedrock-nova",
+        currentProvider: "bedrock",
+      });
+      const { rerender } = render(<ChatSetupMenu {...props} />);
+      const reasoning = screen.getByRole("radiogroup", {
+        name: "Reasoning effort",
+      });
+      await user.click(
+        within(reasoning).getByRole("radio", { name: "Reasoning: Auto" }),
+      );
+      expect(props.onThinkingEffortChange).toHaveBeenCalledWith("low");
+      rerender(<ChatSetupMenu {...props} selectedModel="bedrock-gpt" />);
+      expect(
+        screen.queryByRole("radiogroup", { name: "Reasoning effort" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      models.splice(-2);
+    }
+  });
+
   it("offers reasoning depth only for models that support it", async () => {
     const user = userEvent.setup();
     const props = renderMenu();

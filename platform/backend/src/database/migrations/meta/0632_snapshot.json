@@ -1,5 +1,5 @@
 {
-  "id": "31ecc425-118d-47de-9bc3-319ac144b86b",
+  "id": "90fb8616-5615-4251-8db4-75934ab46791",
   "prevId": "6108b291-b0fb-4eaf-9108-7ab549e45f3b",
   "version": "7",
   "dialect": "postgresql",
@@ -11259,88 +11259,6 @@
           "value": "(\n        (\"files\".\"storage_provider\" =  'db' AND \"files\".\"data\" IS NOT NULL AND \"files\".\"object_key\" IS NULL)\n        OR (\"files\".\"storage_provider\" <> 'db' AND \"files\".\"object_key\" IS NOT NULL AND \"files\".\"data\" IS NULL)\n      )"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.github_app_accounts": {
-      "name": "github_app_accounts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_api_key_id": {
-          "name": "provider_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "github_url": {
-          "name": "github_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "login": {
-          "name": "login",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "github_app_accounts_provider_api_key_id_chat_api_keys_id_fk": {
-          "name": "github_app_accounts_provider_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "github_app_accounts",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "provider_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "github_app_accounts_account_unique": {
-          "name": "github_app_accounts_account_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "github_url",
-            "login"
-          ]
-        },
-        "github_app_accounts_provider_api_key_unique": {
-          "name": "github_app_accounts_provider_api_key_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "provider_api_key_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.guardrails_deployment": {
@@ -35195,6 +35113,20 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "self_service": {
+          "name": "self_service",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "self_service_directory": {
+          "name": "self_service_directory",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'mcp'"
         },
         "last_synced_at": {
           "name": "last_synced_at",

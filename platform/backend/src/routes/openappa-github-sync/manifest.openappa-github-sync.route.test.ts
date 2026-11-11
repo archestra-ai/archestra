@@ -40,12 +40,58 @@ describe("POST /api/openappa/github-app/manifest", () => {
     await app.close();
   });
 
-  const start = (owner: string) =>
+  const start = (owner: string, selfService?: boolean) =>
     app.inject({
       method: "POST",
       url: "/api/openappa/github-app/manifest",
-      payload: { githubUrl: "https://github.com", owner },
+      payload: {
+        githubUrl: "https://github.com",
+        owner,
+        ...(selfService === undefined ? {} : { selfService }),
+      },
     });
+
+  test("the manifest asks for the sync's permissions, and for self-service the policy check's and the branch ruleset's too", async () => {
+    server.use(
+      http.get("https://api.github.com/users/:login", ({ params }) =>
+        HttpResponse.json({ login: params.login, type: "Organization" }),
+      ),
+    );
+    const permissions = async (selfService?: boolean) => {
+      const started = await start("acme", selfService);
+      expect(started.statusCode, started.body).toBe(200);
+      return (
+        JSON.parse(started.json().manifest) as {
+          default_permissions: Record<string, string>;
+        }
+      ).default_permissions;
+    };
+    // Reading and proposing (Contents, Pull requests); Metadata comes with
+    // every App.
+    const sync = {
+      contents: "write",
+      pull_requests: "write",
+      metadata: "read",
+    };
+    expect(await permissions()).toEqual(sync);
+    expect(await permissions(false)).toEqual(sync);
+    // Self-service: the policy check (Checks), the branch ruleset (Administration).
+    const selfService = {
+      ...sync,
+      checks: "write",
+      administration: "write",
+    };
+    expect(await permissions(true)).toEqual(selfService);
+    // The environment variable, while set, decides for every App.
+    config.openappa.selfService = "enabled";
+    try {
+      expect(await permissions(false)).toEqual(selfService);
+      config.openappa.selfService = "disabled";
+      expect(await permissions(true)).toEqual(sync);
+    } finally {
+      delete config.openappa.selfService;
+    }
+  });
 
   test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
     // Anonymous API reads of an Enterprise Managed Users organization get a

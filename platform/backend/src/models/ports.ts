@@ -105,6 +105,21 @@ export interface EmbeddingFinalizationPort {
   ) => Promise<void>;
 }
 
+/**
+ * Whether a person holds an action on one object, by the organization's
+ * resource permission policies: the MCP registry's own edit rule, read by
+ * the policy repository's pull request check.
+ */
+export interface ScopedPermissionsPort {
+  allows: (params: {
+    organizationId: string;
+    userId: string;
+    resource: "mcpRegistry";
+    scope: string;
+    action: "update";
+  }) => Promise<boolean>;
+}
+
 /** Every port, by name. */
 export interface Ports {
   mcpServerRuntime: McpServerRuntimePort;
@@ -117,6 +132,7 @@ export interface Ports {
   mcpInstallationEvents: McpInstallationEventsPort;
   mountedSkillsReadability: MountedSkillsReadabilityPort;
   embeddingFinalization: EmbeddingFinalizationPort;
+  scopedPermissions: ScopedPermissionsPort;
 }
 
 /** A binding for each port: loads the implementation when the port is first used. */
@@ -173,6 +189,7 @@ const PORT_NAMES = [
   "jwksSigningKey",
   "mcpInstallationEvents",
   "mountedSkillsReadability",
+  "scopedPermissions",
   "embeddingFinalization",
 ] as const satisfies readonly (keyof Ports)[];
 

@@ -1569,6 +1569,43 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
+  test("keeps a plan on its organization: reconnecting it cannot move it to another", async () => {
+    vi.stubGlobal("fetch", enterpriseFake(appId));
+    const plan = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(plan.statusCode, plan.body).toBe(200);
+    const keyId = plan.json().id as string;
+    const credentialId = (await storedReference(keyId))?.ref.credentialId;
+
+    for (const [url, payload] of [
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId, organization: "other-org", replaceKeyId: keyId },
+      ],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, privateKey, organization: "other-org", replaceKeyId: keyId },
+      ],
+    ] as const) {
+      const moved = await post(url, payload);
+      expect(moved.statusCode, `${url} ${moved.body}`).toBe(400);
+      expect(moved.json().error.message).toBe(
+        "This plan is for my-org, not other-org. Connect a plan for other-org instead.",
+      );
+    }
+    expect((await storedReference(keyId))?.organization).toBe("my-org");
+
+    // other-org takes a plan of its own.
+    const other = await post("/api/github-copilot-app/credential", {
+      credentialId,
+      organization: "other-org",
+    });
+    expect(other.statusCode, other.body).toBe(200);
+  });
+
   test("refuses a plan when a concurrent connect saved one for its organization first, and keeps nothing", async () => {
     // A connect for my-org that raced this one saved its plan after this one
     // passed the check: only the unique index on the organization sees it.

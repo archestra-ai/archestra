@@ -788,6 +788,16 @@ class CopilotGithubAppSetup {
       (plan) => plan.id !== params.replaceKeyId && isTarget(plan.value),
     );
     if (taken) throw new ApiError(409, planTakenMessage(params.organization));
+    // A plan keeps its organization, as the wizard shows it and as the
+    // install step already requires: its unique-index entry
+    // (`github_app_account`) then always names the organization it bills.
+    if (replaced) {
+      const current = decodeGithubAppReference(replaced.value)?.organization;
+      throw new ApiError(
+        400,
+        `This plan is for ${current ?? "another organization"}, not ${params.organization}. Connect a plan for ${params.organization} instead.`,
+      );
+    }
   }
 
   /** An organization's GitHub Copilot key the user may act on. */

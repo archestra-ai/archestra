@@ -1299,10 +1299,6 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * The organization's GitHub Copilot plan keys (GitHub App keys) with their
-   * stored values, in one query. Personal sign-in tokens are never read.
-   */
-  /**
    * Whether creating a GitHub Copilot plan failed because its GitHub
    * organization already has one (`githubAppAccount`'s unique index).
    */
@@ -1313,6 +1309,10 @@ class LlmProviderApiKeyModel {
     );
   }
 
+  /**
+   * The organization's GitHub Copilot plan keys (GitHub App keys) with their
+   * stored values, in one query. Personal sign-in tokens are never read.
+   */
   static async findGithubAppKeyValues(
     organizationId: string,
   ): Promise<Array<{ id: string; name: string; value: string | null }>> {

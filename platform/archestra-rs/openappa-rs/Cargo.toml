@@ -56,11 +56,13 @@ crate-type = ["cdylib"]
 # then an authority's `except_tags`, and plans that need only stock `approve`
 # authorities applied at the block and recorded (#889); then a remedy whose
 # annotator gave no answer refused as unanswered (#890), and a refusal of numbers
-# whose canonical form is an unsafe integer (#891).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c62fe3ae00590410770965bd73db2f091b728fc8" }
+# whose canonical form is an unsafe integer (#891). The rev is that main
+# revision plus #897, so logs written before #790 still replay: branch
+# `backport/archestra-release-1.4-replay-compat`.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cc4cafbf7c44715163091adb4c148a25bae6812e", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cc4cafbf7c44715163091adb4c148a25bae6812e" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cc4cafbf7c44715163091adb4c148a25bae6812e", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cc4cafbf7c44715163091adb4c148a25bae6812e" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

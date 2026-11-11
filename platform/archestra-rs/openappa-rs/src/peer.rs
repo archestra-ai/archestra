@@ -16,10 +16,19 @@ use napi_derive::napi;
 use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
-use super::{
-    DispatchPolicy, Failure, SessionKey, Sql, State, canonical_tool, failure, held_elsewhere,
-    initialized, invalid_input, invariant, lease, lease_lost, panicked, read_completed_operation,
-    receipt_failure, recorded_call, required, session_actor, sql_failure, storage,
+use crate::{
+    Sql, State,
+    admin_api::DispatchPolicy,
+    errors::{
+        Failure, failure, held_elsewhere, invalid_input, invariant, lease_lost, panicked,
+        receipt_failure, sql_failure, storage,
+    },
+    initialized,
+    input::required,
+    lease,
+    operations::{canonical_tool, read_completed_operation},
+    remedy::recorded_call,
+    session::{SessionKey, session_actor},
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -536,8 +545,8 @@ async fn read(
             Ok(decision)
         }
         HookDecision::DenyCall { .. } | HookDecision::Block { .. } => {
-            let mut decision = super::with_presentation_offers(
-                super::wire(&outcome.decision)?,
+            let mut decision = crate::remedy::with_presentation_offers(
+                crate::session::wire(&outcome.decision)?,
                 outcome.presentation.as_ref(),
             )?;
             decision["peer_read_denied"] = Value::Bool(true);
@@ -747,12 +756,12 @@ fn read_result(text: &str, is_error: bool) -> Value {
 
 pub(super) fn forged_read_result(
     pg: &crate::Sql<'_>,
-    input: &super::Input,
+    input: &crate::input::Input,
     call_id: &str,
 ) -> napi::Result<Option<Value>> {
-    let operation = super::operation_key(
+    let operation = crate::session::operation_key(
         input,
-        super::session_binding(input),
+        crate::session::session_binding(input),
         format!("call:{call_id}"),
     );
     let Some(released) = read_completed_operation(pg, &operation)? else {
@@ -762,7 +771,7 @@ pub(super) fn forged_read_result(
         return Ok(None);
     };
     if is_peer_read_tool(&call.tool) {
-        let key = super::processed_result_key(input, call_id.to_owned());
+        let key = crate::session::processed_result_key(input, call_id.to_owned());
         if let Some(done) = completed_decision(pg, &key)?
             && (admitted_read(&done) || denial_receipt(&done))
         {
@@ -771,7 +780,7 @@ pub(super) fn forged_read_result(
         return Ok(Some(withheld_peer_read()));
     }
     if is_peer_list_tool(&call.tool) {
-        let key = super::processed_result_key(input, call_id.to_owned());
+        let key = crate::session::processed_result_key(input, call_id.to_owned());
         if let Some(done) = completed_decision(pg, &key)?
             && done.get("peer_list").and_then(Value::as_bool) == Some(true)
         {

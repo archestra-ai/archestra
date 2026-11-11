@@ -44,14 +44,25 @@ crate-type = ["cdylib"]
 # and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
 # then the planner-cap lint's redispatch index (#792), the battery scripts'
 # run lines (#793), kagent demo fixes (#794, #796), and a credential link
-# declaration that requires an internal audience (#798);
-# then, on the release/1.4 backport branch, an authority's `except_tags`, and
-# plans that need only stock `approve` authorities applied at the block and
-# recorded (#889).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "61bf298144ffee8aa7867f7f0837f6784a1a9165", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "61bf298144ffee8aa7867f7f0837f6784a1a9165" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "61bf298144ffee8aa7867f7f0837f6784a1a9165", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "61bf298144ffee8aa7867f7f0837f6784a1a9165" }
+# declaration that requires an internal audience (#798); then v0.39.0 and a
+# model sanitizer's rewritten value kept unwrapped (#797), the session module
+# split (#800), credential files and dotenv modes matched as path tokens with a
+# lower-trust return floor (#803), and recorders in place of the runtime file
+# ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
+# v0.40.1 and the LLM log tools labeled in the archestra battery (#852); then
+# v0.42.0 and empty child turns settled under their recorded return contract (#807);
+# then stale call offers refused as superseded (#884), a typed scope on reviews
+# (#888), and a return declared ahead kept in the family log (#887);
+# then an authority's `except_tags`, and plans that need only stock `approve`
+# authorities applied at the block and recorded (#889); then a remedy whose
+# annotator gave no answer refused as unanswered (#890), and a refusal of numbers
+# whose canonical form is an unsafe integer (#891); then battery sanitizers,
+# which stay off until a root binds them (#791), and logs written before #790
+# replaying (#897).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

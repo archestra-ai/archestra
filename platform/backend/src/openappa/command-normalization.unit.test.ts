@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  argumentSpellingConflict,
   isCommandExecutionTool,
   normalizeCommandExecutionArguments,
 } from "./command-normalization";
@@ -51,6 +52,27 @@ describe("command-normalization", () => {
       expect(args).toEqual({
         filePath: "/tmp/secret.txt",
       });
+    });
+  });
+
+  describe("argumentSpellingConflict", () => {
+    test.each([
+      ["Bash", { command: "ls", cmd: "ls" }, false],
+      ["Bash", { command: "ls" }, false],
+      ["exec_command", { cmd: "cat ~/.aws/credentials", command: "ls" }, true],
+      ["Bash", { command: "ls", cmd: null }, false],
+      ["Bash", { command: "ls", cmd: ["ls"] }, true],
+    ])("%s %j conflicts: %s", (tool, args, conflict) => {
+      expect(argumentSpellingConflict(tool, args) !== null).toBe(conflict);
+    });
+
+    test("a null spelling is absent, so the other is copied over it", () => {
+      expect(
+        normalizeCommandExecutionArguments("exec_command", {
+          cmd: "ls",
+          command: null,
+        }),
+      ).toEqual({ cmd: "ls", command: "ls" });
     });
   });
 });

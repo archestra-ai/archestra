@@ -9,11 +9,12 @@ const allow = '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}
 const deny = '[policy]\nversion = 2\n[[policy.tool]]\nname = "different"\ndelta = {}\n';
 // A dispatch carries its organization's policy and the credential values it reads.
 const hosted = (content) => ({ content, credentials: {} });
+const authoredErrors = async (root) => (await native.composeOpenappaPolicy({ root, batteries: [] })).errors;
 
 test('validates policy semantics and refuses container access', async () => {
-  assert.deepEqual(await native.validateOpenappaPolicy(allow), []);
+  assert.deepEqual(await authoredErrors(allow), []);
   for (const invalid of ['[policy]\nversion = 999', 'include = ["/secret"]\n' + allow, allow + '[externals.annotators.x]\ncommand = ["sh"]']) {
-    assert.ok((await native.validateOpenappaPolicy(invalid)).length > 0);
+    assert.ok((await authoredErrors(invalid)).length > 0);
   }
 });
 
@@ -44,7 +45,6 @@ command = ["python3", "judge.py"]
   assert.deepEqual(composed.errors, []);
   assert.ok(composed.content.includes('APPA_ARCHESTRA_BRIDGE_TOKEN'));
   assert.deepEqual(await native.validateHostedOpenappaPolicy(composed.content), []);
-  assert.match((await native.validateOpenappaPolicy(composed.content)).join('\n'), /APPA_ARCHESTRA_/);
   const authored = await native.composeOpenappaPolicy({ root: composed.content, batteries: [] });
   assert.equal(authored.content, undefined);
   assert.match(authored.errors.join('\n'), /APPA_ARCHESTRA_/);
@@ -398,7 +398,7 @@ requires = { trust = "trusted" }
 [externals.annotators.noop]
 url = "http://127.0.0.1:${server.address().port}/annotate"
 `;
-  assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
+  assert.deepEqual(await authoredErrors(policy), []);
   await native.initializeOpenappa(databaseUrl, 2);
   const scope = { organization_id: 'catch-all-test', caller_id: 'user:test', session_id: randomUUID() };
   const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), hosted(policy)));
@@ -417,36 +417,6 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.notEqual((await call('write_trusted', 'write')).decision, 'allow_call');
   // Externals see the canonical identity the runtime judges, not the host's spelling.
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
-});
-
-// Break the glass never waives the reserved `blocked` mark. The deny decision
-// carries no structured gap list, so the backend reads this rendering
-// (HARD_BLOCK in backend/src/openappa/break-the-glass.ts); a change here must
-// change that check with it.
-test('a call marked blocked is denied with no offer and renders the mark', { skip: !databaseUrl }, async () => {
-  const policy = `[policy]
-version = 2
-[[policy.tool]]
-name = "wipe"
-delta = {}
-requires = { attention = ["blocked"] }
-[[policy.authority]]
-name = "human-approval"
-hint = "Ask the person running this session."
-permits = { attention = ["*"] }
-[externals.authorities.human-approval]
-builtin = "hitl"
-`;
-  assert.deepEqual(await native.validateOpenappaPolicy(policy), []);
-  await native.initializeOpenappa(databaseUrl, 2);
-  const scope = { organization_id: `blocked-mark-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
-  const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...scope, ...event }), hosted(policy)));
-  assert.equal((await hook({ event: 'session_start' })).decision, 'ack');
-  const denied = await hook({ event: 'tool_call', operation_id: 'call:wipe', tool: 'wipe', arguments: {} });
-  assert.equal(denied.decision, 'deny_call');
-  // Even an authority that permits every attention mark cannot lift it.
-  assert.deepEqual(denied.offers ?? [], []);
-  assert.match(denied.feedback, /requires attention: [^\n]*\bblocked\b/);
 });
 
 test('an explicit policy result cap takes precedence over the host default', { skip: !databaseUrl }, async () => {

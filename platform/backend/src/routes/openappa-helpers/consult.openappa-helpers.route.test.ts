@@ -269,6 +269,25 @@ describe("battery helper bridge", () => {
     expect(response.statusCode).toBe(502);
   });
 
+  test("a failed consult reports why it failed and with which exit status", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    stubSandbox({ exitCode: 3, stdout: "", stderr: "traceback" });
+
+    const outcome = await openappaHelperBridge.consult({
+      installId: install.id,
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "failed",
+      reason: "the helper exited with status 3",
+      exitStatus: 3,
+    });
+  });
+
   test("the last line a helper wrote to stderr is passed through as X-Appa-Diagnostics", async ({
     makeInternalMcpCatalog,
   }) => {

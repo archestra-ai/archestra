@@ -286,6 +286,43 @@ describe("extractGatewayToolDeclarations", () => {
       ]);
       expect(body.toolConfig.tools[0].toolSpec.description).toBe("Run.");
     });
+
+    test("Anthropic inline tool_addition definitions, as Claude Code loads a tool mid-conversation", () => {
+      const definition = {
+        name: "mcp__gw__archestra__run_tool",
+        description: attested("archestra__run_tool", "Run a tool."),
+        input_schema: { type: "object" },
+      };
+      const body = {
+        tools: [{ name: "Bash" }],
+        messages: [
+          { role: "user", content: "hi" },
+          {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                text: "The following tools just became available",
+              },
+              {
+                type: "tool_addition",
+                tool: { type: "tool_definition", definition },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(extractGatewayToolDeclarations(body)).toEqual([
+        { name: "Bash" },
+        {
+          name: "mcp__gw__archestra__run_tool",
+          marker: markerOf("archestra__run_tool"),
+          contract: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      ]);
+      expect(definition.description).toBe("Run a tool.");
+    });
   });
 
   test("contract evidence ignores spelling and property order but retains schema and invocation differences", () => {

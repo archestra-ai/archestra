@@ -33,7 +33,12 @@ export type HelperConsultOutcome =
       diagnostics?: HelperDiagnostics;
     }
   | { kind: "not_found" }
-  | { kind: "failed"; reason: string; diagnostics?: HelperDiagnostics }
+  | {
+      kind: "failed";
+      reason: string;
+      exitStatus?: number;
+      diagnostics?: HelperDiagnostics;
+    }
   | { kind: "timed_out"; diagnostics?: HelperDiagnostics }
   | { kind: "busy" };
 
@@ -83,7 +88,15 @@ class OpenAppaHelperBridge {
       outcome = { kind: "timed_out" };
     }
     logger.info(
-      { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
+      {
+        ...context,
+        outcome: outcome.kind,
+        ...(outcome.kind === "failed" && {
+          reason: outcome.reason,
+          exitStatus: outcome.exitStatus,
+        }),
+        durationMs: Date.now() - startedAt,
+      },
       "OpenAPPA battery helper consulted",
     );
     return outcome;
@@ -206,6 +219,7 @@ class OpenAppaHelperBridge {
         return {
           kind: "failed",
           reason: `the helper exited with status ${executed.exitCode}`,
+          exitStatus: executed.exitCode,
           diagnostics,
         };
       const answer = parseJsonObject(executed.stdout);
@@ -279,7 +293,7 @@ class OpenAppaHelperBridge {
       });
     } catch (error) {
       logger.warn(
-        { installId: install.id, credential, error },
+        { err: error, installId: install.id, credential },
         "OpenAPPA battery credential could not be resolved",
       );
       value = null;

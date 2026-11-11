@@ -48,10 +48,15 @@ import {
 import {
   OpenappaRootOnlyError,
   openappaFailure,
+  type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
+import {
+  parseReviewScope,
+  type ReviewScopeItem,
+} from "@/openappa/review-scope";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -62,6 +67,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
@@ -351,6 +357,50 @@ export async function recompileAllOnStart(): Promise<void> {
     logger.error({ err: error }, "OpenAPPA could not recompose the policies");
   }
 }
+
+/**
+ * Open the native runtime at boot, so a database URL, TLS or packaging failure
+ * is logged with its cause before the first governed request. Never rejects.
+ */
+export async function startOpenappaRuntime(): Promise<void> {
+  if (!openappaEnabled()) return;
+  await binding().catch(openappaFailure);
+}
+
+type OpenappaReadiness =
+  | { state: "disabled" | "ready" | "starting" }
+  | { state: "unavailable"; code: RuntimeFailureCode | "unknown" };
+
+/**
+ * Whether the runtime can decide governed requests. Opens it when it is not
+ * open yet, because a pod that is not ready receives no request that would.
+ * Waits at most `waitMs`; a slower opening reports `starting`.
+ */
+export async function openappaReadiness(
+  waitMs = READINESS_WAIT_MS,
+): Promise<OpenappaReadiness> {
+  if (!openappaEnabled()) return { state: "disabled" };
+  let timer: NodeJS.Timeout | undefined;
+  const elapsed = new Promise<"starting">((resolve) => {
+    timer = setTimeout(() => resolve("starting"), waitMs);
+  });
+  try {
+    const state = await Promise.race([
+      binding().then(() => "ready" as const),
+      elapsed,
+    ]);
+    return { state };
+  } catch (error) {
+    return {
+      state: "unavailable",
+      code: runtimeFailureCode(error) ?? "unknown",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const READINESS_WAIT_MS = 3000;
 
 export async function executeYell(params: {
   session: OpenAppaSession;
@@ -1163,7 +1213,15 @@ export async function processProxyResults(params: {
             callerId: params.session.caller_id,
             toolCallId: result.id,
           });
-        } catch {
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              sessionId: params.session.session_id,
+              toolCallId: result.id,
+            },
+            "OpenAPPA could not read the retained peer message receipt",
+          );
           retained = null;
         }
         if (!retained) {
@@ -1379,6 +1437,18 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      const conflict = argumentSpellingConflict(
+        target.toolCallName,
+        JSON.parse(target.toolCallArgs),
+      );
+      // Like an unanswered annotator, a refusal no remedy can lift: the
+      // notice says how to correct the call.
+      if (conflict)
+        return {
+          kind: "deny" as const,
+          feedback: conflict,
+          unanswered: true as const,
+        };
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
@@ -2357,6 +2427,11 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /**
+   * What approving accepts. Unknown for a review stored before the runtime
+   * typed it, or one that joins several authorities: show `text` instead.
+   */
+  scope?: ReviewScopeItem[];
 } | null> {
   try {
     if (
@@ -2377,12 +2452,14 @@ export async function loadOfferReview(params: {
         ),
     );
     if (!result) return null;
+    const scope = parseReviewScope(result.scope);
     return {
       offer_id: result.offerId,
       text: result.text,
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...(scope ? { scope } : {}),
     };
   } catch (error) {
     logger.warn(

@@ -2952,6 +2952,145 @@ describe("APPA request preflight", () => {
     ]);
   });
 
+  test("governs Claude Code 2.1.310's inline remedy declarations, and hides only the notice's from the provider", async () => {
+    // Claude Code loads the gateway tools mid-conversation in a system message
+    // of tool_addition blocks, while `tools` keeps only its deferred set.
+    const definition = (name: string, advertisedName: string) => ({
+      ...attestedTool({ name, advertisedName }),
+      input_schema: { type: "object", properties: {} },
+    });
+    const addition = (tool: Record<string, unknown>) => ({
+      type: "tool_addition",
+      tool: { type: "tool_definition", definition: tool },
+    });
+    const announcement = {
+      type: "text",
+      text: "The following tools just became available",
+    };
+    const body = {
+      tools: [
+        { name: "Bash" },
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+      ],
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "system",
+          content: [
+            announcement,
+            addition(definition(CONTROL, ADVERTISED_CONTROL)),
+          ],
+        },
+        {
+          role: "system",
+          content: [addition(definition(NOTICE, ADVERTISED_NOTICE))],
+        },
+        { role: "user", content: "go on" },
+      ],
+    };
+
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity: await attestedIdentity(body),
+    });
+
+    expect(prepared.tools).toMatchObject({
+      control: { name: CONTROL },
+      notice: { name: NOTICE },
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.heldTools ?? []).toEqual([]);
+    expect(body.messages).toEqual([
+      { role: "user", content: "hi" },
+      {
+        role: "system",
+        content: [
+          announcement,
+          addition({
+            name: CONTROL,
+            input_schema: { type: "object", properties: {} },
+          }),
+        ],
+      },
+      { role: "user", content: "go on" },
+    ]);
+  });
+
+  describe("Anthropic inline tool changes", () => {
+    const addition = (name: string, description?: string) => ({
+      type: "tool_addition",
+      tool: {
+        type: "tool_definition",
+        definition: {
+          name,
+          ...(description ? { description } : {}),
+          input_schema: { type: "object" },
+        },
+      },
+    });
+    const removal = (name: string) => ({
+      type: "tool_removal",
+      tool: { type: "tool_reference", name },
+    });
+    const declared = (changes: unknown[]) =>
+      declaredToolEntries({
+        tools: [{ name: "Bash" }],
+        messages: changes.map((change) => ({
+          role: "system",
+          content: [change],
+        })),
+      }).map((entry) => entry.name);
+
+    test.each([
+      {
+        case: "an addition declares",
+        changes: [addition("probe")],
+        names: ["Bash", "probe"],
+      },
+      {
+        case: "a later removal takes it back",
+        changes: [addition("probe"), removal("probe")],
+        names: ["Bash"],
+      },
+      {
+        case: "a re-addition declares it once",
+        changes: [addition("probe"), removal("probe"), addition("probe")],
+        names: ["Bash", "probe"],
+      },
+      {
+        case: "a removal leaves a tools declaration declared",
+        changes: [removal("Bash")],
+        names: ["Bash"],
+      },
+    ])("$case", ({ changes, names }) => {
+      expect(declared(changes)).toEqual(names);
+    });
+
+    test("a removed attested tool verifies no declaration", async () => {
+      const name = "mcp__archestra__github__apply";
+      const attested = () =>
+        addition(
+          name,
+          attestedTool({ name, advertisedName: "github__apply" }).description,
+        );
+      const verifiedNames = async (changes: unknown[]) =>
+        (
+          await attestedIdentity({
+            tools: [{ name: "Bash" }],
+            messages: changes.map((change) => ({
+              role: "system",
+              content: [change],
+            })),
+          })
+        ).verified.map((declaration) => declaration.name);
+
+      expect(await verifiedNames([attested()])).toEqual([name]);
+      expect(await verifiedNames([attested(), removal(name)])).toEqual([]);
+    });
+  });
+
   test("keeps tool_reference results of a Claude Code ToolSearch in history untouched", () => {
     // Claude Code 2.1.285 after a search: the loaded tool is declared with
     // `defer_loading` and the search result holds a `tool_reference` block.

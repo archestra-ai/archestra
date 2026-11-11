@@ -57,12 +57,13 @@ effects = ["egress"]
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
+| `recorder` | A [recorder](references/contracts/annotators.md#recorders) that receives each released call's records. |
 
 An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
 Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards`. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
 
 Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
 
@@ -278,11 +279,29 @@ timeout_ms = 2000
 max_body_bytes = 65536
 ```
 
+An entry can also name every policy file in one folder, such as `mcp/*.toml`. Then each team can add its own file without a change to the root:
+
+```toml
+include = [
+  "batteries/github/appa.toml",
+  "mcp/*.toml",
+]
+```
+
+In such an entry, `*` matches any run of characters in a file name. Only the file name can hold `*`, and it MUST end in `.toml`. The matching files load at the entry's position, in file-name order, as if `include` listed each one. The following rules apply to such an entry:
+
+- Only a regular file matches. A hidden file, a folder and a symbolic link do not match.
+- The folder MUST be the root file's folder or a folder in it, after OpenAPPA resolves symbolic links. The entry MUST NOT contain `..`.
+- A folder that does not exist matches no file.
+- The root file does not match its own entry.
+- A file that another entry names on its own loads only at that entry. Two such entries cannot match the same file.
+- A hosted policy cannot use such an entry, because no files are beside it.
+
 OpenAPPA checks declarations in the root file first, then declarations from included files in the order listed by `include`. The following rules apply:
 
 - An included file cannot include another file.
 - An included file cannot replace settings that apply to the whole deployment. The one exception is `confined_results` under `[policy.deployment]`: an included file can list tools it declares itself, and the names join the root's list. An included file that sets `[policy.deployment] hint` is refused.
-- A root `[[policy.annotator]]` replaces an included annotator with the same name. Fields omitted from the replacement are not inherited.
+- A root `[[policy.annotator]]` replaces an included annotator with the same name. A root `[[policy.sanitizer]]` replaces an included sanitizer with the same name. Fields omitted from the replacement are not inherited.
 - Two included files cannot declare the same annotator.
 - Two files cannot configure the same external component name within the same kind, such as two `[externals.sanitizers.clean]` sections.
 

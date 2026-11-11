@@ -102,7 +102,7 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
       (status === undefined || status === "429" || status.startsWith("5")));
   const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[reason] ?? "gave no answer"}. The call did not run.`;
   return transient
-    ? `${head} Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.`
+    ? `${head} The failure is temporary, on the Guardrails side. Make the same call again to retry. Do not switch to another tool or call yell to get around the check. If it fails the same way again, stop and tell the user that Guardrails could not check this call; with no user to tell, end the task and report that.`
     : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
 }
 
@@ -178,7 +178,7 @@ const RuntimeFailureCode = z.enum([
   "invalid_input",
   "panicked",
 ]);
-type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
+export type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
 
 type Failure = { statusCode: 409 | 500 | 503; detail: string };
 

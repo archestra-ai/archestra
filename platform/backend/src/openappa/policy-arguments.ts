@@ -1,5 +1,6 @@
 import { TOOL_PREVIEW_APP_TOOL_SHORT_NAME } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import logger from "@/logging";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { normalizeCommandExecutionArguments } from "./command-normalization";
 import { withDerivedArguments } from "./derived-arguments";
@@ -44,10 +45,13 @@ export async function previewAppToolTarget(
   )
     return { refusal: "preview_app_tool needs an appId, a toolName and args." };
   // An app id the database cannot read (not a UUID) resolves no tool.
-  const decision = await gateAppToolCall({ appId, toolName }).catch(() => ({
-    allowed: false as const,
-    reason: `App "${appId}" not found.`,
-  }));
+  const decision = await gateAppToolCall({ appId, toolName }).catch((err) => {
+    logger.warn(
+      { err, appId, toolName },
+      "OpenAPPA could not resolve the app tool a preview call names",
+    );
+    return { allowed: false as const, reason: `App "${appId}" not found.` };
+  });
   if (!decision.allowed) return { refusal: decision.reason };
   const resolved =
     decision.kind === "upstream" ? decision.resolvedToolName : toolName;

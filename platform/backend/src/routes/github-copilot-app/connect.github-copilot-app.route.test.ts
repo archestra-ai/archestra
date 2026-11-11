@@ -718,6 +718,24 @@ describe("GitHub Copilot organization subscription setup", () => {
   test("names a plan after the name GitHub shows for its organization, asked as the App", async () => {
     const { keyId } = await connectedApp();
     const fetchMock = vi.mocked(globalThis.fetch);
+    const lookups = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/orgs/my-org"),
+      );
+
+    // The proxy and key resolution read the same list without asking GitHub.
+    const resolved = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      organizationId,
+      user.id,
+      [],
+      "github-copilot",
+    );
+    expect(resolved.find((key) => key.id === keyId)).toMatchObject({
+      isGithubAppKey: true,
+      githubOrganization: "my-org",
+      githubOrganizationName: null,
+    });
+    expect(lookups()).toHaveLength(0);
 
     const one = await app.inject({
       method: "GET",
@@ -740,11 +758,8 @@ describe("GitHub Copilot organization subscription setup", () => {
     });
 
     // Asked once for both reads, with the plan's installation token.
-    const lookups = fetchMock.mock.calls.filter(([input]) =>
-      String(input).endsWith("/orgs/my-org"),
-    );
-    expect(lookups).toHaveLength(1);
-    expect(new Headers(lookups[0]?.[1]?.headers).get("Authorization")).toBe(
+    expect(lookups()).toHaveLength(1);
+    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
       "Bearer ghs_test",
     );
   });

@@ -509,7 +509,8 @@ export function ConnectCommandPanel({
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
   // A GitHub Copilot account whose plan the admins turned off is never offered,
-  // so a setup can't bind it: each plan's own switch decides.
+  // so a setup can't bind it: each plan's own switch decides. Other providers
+  // keep their own rules here (the provider list already drops hidden ones).
   const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
   const availableKeys = useMemo(

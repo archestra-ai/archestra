@@ -312,12 +312,15 @@ class LlmProviderApiKeyModel {
       ),
       isGithubAppKey: kinds.get(apiKey.id) === "github_app",
       ...githubOrganizationFields(
-        await githubOrganizationOf({
-          ...row,
-          organizationId: apiKey.organizationId,
-          secretId: apiKey.secretId,
-          credentialKind: kinds.get(apiKey.id) ?? null,
-        }),
+        await githubOrganizationOf(
+          {
+            ...row,
+            organizationId: apiKey.organizationId,
+            secretId: apiKey.secretId,
+            credentialKind: kinds.get(apiKey.id) ?? null,
+          },
+          { withName: true },
+        ),
       ),
     };
   }
@@ -493,17 +496,25 @@ class LlmProviderApiKeyModel {
       await Promise.all(
         accessibleKeys.map(async (key) => ({
           ...toApiKeyWithScopeInfo(
-            // `scope` from the owner column and grants, not the retired one.
-            { ...key, scope: displayScopes.get(key.id) ?? key.scope },
+            {
+              ...key,
+              // `scope` from the owner column and grants, not the retired one.
+              scope: displayScopes.get(key.id) ?? key.scope,
+              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
+            },
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
               : null,
           ),
           ...githubOrganizationFields(
-            await githubOrganizationOf({
-              ...key,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            }),
+            await githubOrganizationOf(
+              {
+                ...key,
+                credentialKind:
+                  credentialKinds.get(key.id) ?? key.credentialKind,
+              },
+              { withName: options?.includeSubscriptionInfo === true },
+            ),
           ),
           labels: labelsByKey.get(key.id) ?? [],
         })),
@@ -581,16 +592,25 @@ class LlmProviderApiKeyModel {
       await Promise.all(
         keys.map(async (key) => ({
           ...toApiKeyWithScopeInfo(
-            key,
+            {
+              ...key,
+              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
+            },
             options?.includeSubscriptionInfo === true
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
               : null,
           ),
           ...githubOrganizationFields(
-            await githubOrganizationOf({
-              ...key,
-              credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
-            }),
+            await githubOrganizationOf(
+              {
+                ...key,
+                credentialKind:
+                  credentialKinds.get(key.id) ?? key.credentialKind,
+              },
+              // Only the key lists people read ask GitHub for the name; the
+              // proxy and key resolution use this list too.
+              { withName: options?.includeSubscriptionInfo === true },
+            ),
           ),
           labels: labelsByKey.get(key.id) ?? [],
         })),
@@ -1256,7 +1276,9 @@ class LlmProviderApiKeyModel {
           sources.set(row.id, { kind: "personal" });
           return;
         }
-        const organization = await githubOrganizationOf(row);
+        const organization = await githubOrganizationOf(row, {
+          withName: true,
+        });
         sources.set(row.id, {
           kind: "organization",
           organization: organization.login,
@@ -2058,16 +2080,20 @@ export default LlmProviderApiKeyModel;
 
 /**
  * The GitHub organization a GitHub App key is installed on, read from its
- * stored reference: its login, and the name GitHub shows for it. Nulls for
- * every other key; the credential itself never leaves this function.
+ * stored reference: its login, and, `withName`, the name GitHub shows for it
+ * (asked of GitHub, cached). Nulls for every other key; the credential itself
+ * never leaves this function.
  */
-async function githubOrganizationOf(key: {
-  organizationId: string;
-  secretId: string | null;
-  secret: SecretValue | null;
-  secretIsVault: boolean | null;
-  credentialKind: LlmProviderCredentialKind | null;
-}): Promise<{ login: string | null; name: string | null }> {
+async function githubOrganizationOf(
+  key: {
+    organizationId: string;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null;
+  },
+  options: { withName: boolean },
+): Promise<{ login: string | null; name: string | null }> {
   if (key.credentialKind !== "github_app" || !key.secretId)
     return NO_GITHUB_ORGANIZATION;
   let value: string | null;
@@ -2084,10 +2110,12 @@ async function githubOrganizationOf(key: {
   if (!login) return NO_GITHUB_ORGANIZATION;
   return {
     login,
-    name: await githubOrganizationDisplayName({
-      value,
-      organizationId: key.organizationId,
-    }),
+    name: options.withName
+      ? await githubOrganizationDisplayName({
+          value,
+          organizationId: key.organizationId,
+        })
+      : null,
   };
 }
 

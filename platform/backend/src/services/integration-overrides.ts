@@ -116,9 +116,3 @@ export async function getHiddenMessagingChannels(
   }
   return hidden;
 }
-
-// ===================================================================
-// Internal
-// ===================================================================
-
-/** The plan names the Model Providers page uses for its two sections. */

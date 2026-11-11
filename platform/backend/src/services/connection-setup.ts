@@ -179,7 +179,8 @@ export async function ensureConnectionVirtualKey(params: {
   }
   // Each GitHub Copilot plan has its own switch: an account of a plan the
   // admins turned off is not set up again, though it keeps serving the
-  // setups that already use it.
+  // setups that already use it. (assertCopilotPlanAllowed says the same, but
+  // lives outside this project.)
   if (provider === "github-copilot") {
     const plan = (await LlmProviderApiKeyModel.isGithubAppKey(
       providerApiKey.id,

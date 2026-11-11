@@ -299,6 +299,7 @@ export function copilotPlanTurnedOffMessage(
   return `${label} ${COPILOT_PLAN_NOUNS[plan]} are turned off for this organization. Ask an administrator to turn them on under Settings → LLM → Model providers.`;
 }
 
+/** The plan names the Model Providers page uses for its two sections. */
 const COPILOT_PLAN_NOUNS: Record<CopilotPlan, string> = {
   personal: "personal subscriptions",
   enterprise: "enterprise plans",

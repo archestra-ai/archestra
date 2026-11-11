@@ -44,7 +44,12 @@ for (const width of [320, 375]) {
         {
           method: "get",
           url: "/api/openappa/github-sync",
-          body: { enabled: false, hasPolicy: false, source: null },
+          body: {
+            selfService: { enabled: false, setting: false, directory: "mcp" },
+            enabled: false,
+            hasPolicy: false,
+            source: null,
+          },
         },
         {
           method: "get",

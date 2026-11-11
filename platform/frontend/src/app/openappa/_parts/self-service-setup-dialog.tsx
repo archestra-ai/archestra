@@ -305,6 +305,16 @@ function AppStep({
           }
         />
       </ol>
+      {grants.permissions.some((entry) => entry.granted) ? (
+        <p className="text-xs text-muted-foreground">
+          Granted:{" "}
+          {grants.permissions
+            .filter((entry) => entry.granted)
+            .map((entry) => PERMISSION_LABELS[entry.name])
+            .join(", ")}
+          .
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
         {ready ? (
           <span>
@@ -331,16 +341,6 @@ function AppStep({
           />
         </Button>
       </div>
-      {grants.permissions.some((entry) => entry.granted) ? (
-        <p className="text-xs text-muted-foreground">
-          Granted now:{" "}
-          {grants.permissions
-            .filter((entry) => entry.granted)
-            .map((entry) => PERMISSION_LABELS[entry.name])
-            .join(", ")}
-          .
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -799,6 +799,36 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(filtered.pagination.total).toBe(1);
     });
 
+    test("an external request naming the sanitizer source is logged as api, with its content", async () => {
+      // A guardrail sanitizer's rows keep no content; a client of the proxy
+      // must not be able to claim that source to keep its own out of the logs.
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+          [SOURCE_HEADER]: "guardrail:sanitizer",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "the-forged-sanitizer-prompt" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe("api");
+      expect(JSON.stringify(rows[0].request)).toContain(
+        "the-forged-sanitizer-prompt",
+      );
+    });
+
     test("persists OpenCode main, title, and child-session sources", async () => {
       const run = (params: {
         sessionId: string;

@@ -698,13 +698,20 @@ async function handleObservedLLMProxy<
     : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !internalCall;
+  // A sanitizer's log rows keep no content, so only the platform's own
+  // guardrail call may name that source; from anyone else it would hide the
+  // request from the logs.
+  const untrustedSanitizerSource =
+    parsedSource === "guardrail:sanitizer" && !proof.guardrail;
   // `model_router` is assigned by the route auth override, not accepted from
   // the public source header. APPA-capable Chat sources have the same
   // internal-proof-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
     openCodeSource ??
-    (parsedSource === "model_router" || untrustedAppaChatSource
+    (parsedSource === "model_router" ||
+    untrustedAppaChatSource ||
+    untrustedSanitizerSource
       ? "api"
       : parsedSource) ??
     "api";

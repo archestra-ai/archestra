@@ -193,6 +193,7 @@ class OpenAppaArchestraAnnotator {
       system,
       request,
       maxOutputTokens,
+      maxOutputCeiling: budget,
       abortSignal,
       providerOptions,
     };
@@ -356,6 +357,8 @@ type AnnotationCall = {
   system: SystemModelMessage;
   request: ArchestraAnnotationRequest;
   maxOutputTokens: number | undefined;
+  /** The model's real output cap, which a truncation retry never exceeds. */
+  maxOutputCeiling: number | undefined;
   abortSignal: AbortSignal;
   providerOptions: Parameters<typeof generateText>[0]["providerOptions"];
 };
@@ -426,6 +429,7 @@ async function taggedAnswer(
     system: call.system,
     prompt: call.request.input,
     maxOutputTokens: call.maxOutputTokens,
+    maxOutputCeiling: call.maxOutputCeiling,
     abortSignal: call.abortSignal,
     providerOptions: call.providerOptions,
   });

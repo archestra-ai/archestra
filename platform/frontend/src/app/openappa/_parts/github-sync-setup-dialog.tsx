@@ -45,6 +45,7 @@ import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -83,6 +84,7 @@ import {
   useAppaGithubAppAccounts,
   useAppaGithubAppRepositories,
   useAppaGithubRepositoryStatus,
+  useAppaGithubSync,
   useConfigureAppaGithubSync,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
@@ -93,6 +95,7 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
+import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -194,6 +197,16 @@ export function GithubSyncSetupDialog({
     account: string;
   } | null>(null);
   const [chosenRepo, setRepo] = useState(editing?.repo ?? "");
+  // Self-service for the servers' editors: the App then also gets Checks and
+  // Administration. The environment variable, while set, decides instead.
+  const [chosenSelfService, setSelfService] = useState(
+    editing?.selfService ?? false,
+  );
+  const selfServiceEnvironment =
+    useAppaGithubSync().data?.selfService.environment;
+  const selfService = selfServiceEnvironment
+    ? selfServiceEnvironment.value === "enabled"
+    : chosenSelfService;
   const [advanced, setAdvanced] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [ref, setRef] = useState(editing?.ref ?? "");
@@ -201,9 +214,17 @@ export function GithubSyncSetupDialog({
   const [validations, setValidations] = useState(
     editing?.validationDirectory || DEFAULT_VALIDATIONS,
   );
+  // Where each MCP server's rules file goes, beside the policy file, with
+  // self-service on: the policy then includes `<folder>/*.toml`.
+  const [selfServiceFolder, setSelfServiceFolder] = useState(
+    editing?.selfServiceDirectory || DEFAULT_SELF_SERVICE_FOLDER,
+  );
   const [interval, setSyncInterval] = useState<SyncInterval>(
     editing?.interval ?? DEFAULT_INTERVAL,
   );
+  // With self-service on, the connect step stays open on what the save
+  // brought: the ruleset and the include pull request.
+  const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
     number: number;
@@ -251,10 +272,18 @@ export function GithubSyncSetupDialog({
         ? validations.trim().replace(/\/+$/, "")
         : undefined,
   };
+  const serversFolder = selfServiceFolder.trim().replace(/^\/+|\/+$/g, "");
+  const serversFolderValid =
+    !selfService ||
+    gitlab ||
+    (SELF_SERVICE_FOLDER.test(serversFolder) &&
+      serversFolder !== "batteries" &&
+      !serversFolder.startsWith("batteries/"));
   const locationValid =
     (!location.path || POLICY_PATH.test(location.path)) &&
     (!location.validationDirectory ||
-      DIRECTORY_PATH.test(location.validationDirectory));
+      DIRECTORY_PATH.test(location.validationDirectory)) &&
+    serversFolderValid;
   const validationFolder = location.validationDirectory ?? DEFAULT_VALIDATIONS;
   const lookupKey =
     repo && locationValid ? JSON.stringify([repo, location]) : null;
@@ -345,7 +374,7 @@ export function GithubSyncSetupDialog({
     const tab = openGithubWindow("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
-      { githubUrl: github.web, owner },
+      { githubUrl: github.web, owner, selfService },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest, GITHUB_WINDOW);
@@ -398,47 +427,65 @@ export function GithubSyncSetupDialog({
       ? { gitlabTokenId: appId }
       : { githubAppConfigId: appId };
     setStep("connect");
+    const withSelfService = !gitlab && selfService;
     if (keepsSource) {
-      configure.mutate(
-        {
-          repo,
-          ref: location.ref ?? null,
-          path: location.path ?? "appa.toml",
-          interval,
-          validationDirectory: validationFolder,
-          githubPatId: null,
-          githubAppConfigId: null,
-          gitlabTokenId: null,
-          ...credential,
-        },
-        { onSuccess: () => onOpenChange(false), onError },
-      );
+      const body = {
+        repo,
+        ref: location.ref ?? null,
+        path: location.path ?? "appa.toml",
+        interval,
+        validationDirectory: validationFolder,
+        githubPatId: null,
+        githubAppConfigId: null,
+        gitlabTokenId: null,
+        ...credential,
+        selfService: withSelfService,
+        selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
+      };
+      if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
+      else
+        configure.mutate(body, {
+          onSuccess: () => onOpenChange(false),
+          onError,
+        });
       return;
     }
     // GitLab nests groups: the project is the last segment, its group the rest.
     const slash = repo.lastIndexOf("/");
-    create.mutate(
-      {
-        ...(creatingProject
-          ? { owner: chosenGroup ?? "", name: projectName.trim() }
-          : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
-        ...credential,
-        interval,
-        existing: !creatingProject,
-        // Editing moves the running sync to the new repository, created or not.
-        ...((!creatingProject || editing) && { replace: !!editing }),
-        ...location,
-      },
-      {
+    const body = {
+      ...(creatingProject
+        ? { owner: chosenGroup ?? "", name: projectName.trim() }
+        : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
+      ...credential,
+      interval,
+      selfService: withSelfService,
+      ...(withSelfService && serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
+        ? { selfServiceDirectory: serversFolder }
+        : {}),
+      existing: !creatingProject,
+      // Editing moves the running sync to the new repository, created or not.
+      ...((!creatingProject || editing) && { replace: !!editing }),
+      ...location,
+    };
+    const setupPull = (
+      data: Awaited<ReturnType<typeof create.mutateAsync>>,
+    ) => {
+      const number = data?.source?.setupPullRequestNumber;
+      if (number && data.source?.repo) {
+        setPullRequest({ repo: data.source.repo, number });
+        return true;
+      }
+      return false;
+    };
+    if (withSelfService)
+      setOutcome(() => () => create.mutateAsync(body).then(setupPull));
+    else
+      create.mutate(body, {
         onSuccess: (data) => {
-          const number = data?.source?.setupPullRequestNumber;
-          if (number && data.source?.repo)
-            setPullRequest({ repo: data.source.repo, number });
-          else onOpenChange(false);
+          if (!setupPull(data)) onOpenChange(false);
         },
         onError,
-      },
-    );
+      });
   }
 
   function back() {
@@ -453,11 +500,15 @@ export function GithubSyncSetupDialog({
       if (mode === "pick" && apps.length === 1) setMode("fork");
       return;
     }
+    if (step === "selfService") {
+      setStep("start");
+      // An existing repository has nothing to do on the first step: go back to the choice.
+      if (origin === "existing") setOrigin(null);
+      return;
+    }
     if (mode !== "fork" && apps.length > 0 && !createdApp)
       return setMode("fork");
-    setStep("start");
-    // An existing repository has nothing to do on the first step: go back to the choice.
-    if (origin === "existing") setOrigin(null);
+    setStep("selfService");
   }
 
   if (pullRequest)
@@ -471,7 +522,9 @@ export function GithubSyncSetupDialog({
   const policyDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAiToolGuardrailsGitSync,
   );
+  const wizardSteps = gitlab ? GITLAB_STEPS : GITHUB_STEPS;
   const header = headerFor({
+    githubApp: appLabel ?? null,
     editing: !!editing,
     step,
     origin,
@@ -482,6 +535,53 @@ export function GithubSyncSetupDialog({
   });
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
+
+  // Self-service, on its own step before the GitHub App, with its folder.
+  const selfServiceChoice = (
+    <div className="flex items-start gap-3">
+      <Checkbox
+        id="github-sync-self-service"
+        className="mt-0.5"
+        checked={selfService}
+        disabled={!!selfServiceEnvironment}
+        onCheckedChange={(checked) => setSelfService(checked === true)}
+      />
+      <div className="space-y-1">
+        <Label htmlFor="github-sync-self-service">
+          MCP Guardrails Self-Service
+        </Label>
+        <FieldDescription>
+          MCP owners can manage MCP Guardrails.
+          {editing?.selfService ? (
+            <span> </span>
+          ) : (
+            <span>
+              {" "}
+              Additional GitHub App permissions are added to ensure the related
+              pull requests are checked.{" "}
+            </span>
+          )}
+          <a
+            href={`${policyDocsUrl}#mcp-guardrails-self-service`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80"
+          >
+            Learn more
+          </a>
+        </FieldDescription>
+        {selfServiceEnvironment ? (
+          <FieldDescription>
+            Set with{" "}
+            <code className="font-mono">
+              {selfServiceEnvironment.variable}={selfServiceEnvironment.value}
+            </code>
+            . Unset the environment variable to choose here.
+          </FieldDescription>
+        ) : null}
+      </div>
+    </div>
+  );
 
   return (
     <StandardDialog
@@ -504,16 +604,35 @@ export function GithubSyncSetupDialog({
               <span>Back</span>
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={step === "connect"}
-            onClick={() => onOpenChange(false)}
-          >
-            <span>Cancel</span>
-          </Button>
+          {step === "connect" && outcome ? (
+            <Button
+              type="button"
+              disabled={configure.isPending || create.isPending}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Done</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={step === "connect"}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Cancel</span>
+            </Button>
+          )}
           {step === "start" && origin === "fresh" ? (
-            <Button type="button" onClick={() => setStep("app")}>
+            <Button type="button" onClick={() => setStep("selfService")}>
+              <span>Continue</span>
+            </Button>
+          ) : null}
+          {step === "selfService" ? (
+            <Button
+              type="button"
+              disabled={!serversFolderValid}
+              onClick={() => setStep("app")}
+            >
               <span>Continue</span>
             </Button>
           ) : null}
@@ -553,15 +672,21 @@ export function GithubSyncSetupDialog({
       }
     >
       <SetupStepper
-        steps={(gitlab ? GITLAB_STEPS : GITHUB_STEPS).map(
-          (entry) => entry.label,
-        )}
+        steps={wizardSteps.map((entry) => entry.label)}
         current={
           step === "connect"
-            ? (gitlab ? GITLAB_STEPS : GITHUB_STEPS).length
-            : (gitlab ? GITLAB_STEPS : GITHUB_STEPS).findIndex(
-                (entry) => entry.id === step,
-              )
+            ? wizardSteps.length
+            : wizardSteps.findIndex((entry) => entry.id === step)
+        }
+        // Done steps open again; editing a source unlocks every step.
+        onSelect={(index) => {
+          const target = wizardSteps[index];
+          if (target && step !== "connect") setStep(target.id);
+        }}
+        selectable={(index) =>
+          step !== "connect" &&
+          (index < wizardSteps.findIndex((entry) => entry.id === step) ||
+            (!!editing && index < wizardSteps.length))
         }
       />
 
@@ -631,7 +756,7 @@ export function GithubSyncSetupDialog({
             disabled={!ready}
             onClick={() => {
               setOrigin("existing");
-              setStep("app");
+              setStep("selfService");
             }}
             visual={
               <span className="flex size-9 items-center justify-center rounded-lg border bg-muted/40">
@@ -684,6 +809,48 @@ export function GithubSyncSetupDialog({
               onClick={openTemplate}
             />
           )}
+        </div>
+      ) : null}
+
+      {step === "selfService" ? (
+        <div className="space-y-5">
+          {selfServiceChoice}
+          {selfService ? (
+            // Under the checkbox's text, on its left edge.
+            <div className="space-y-2 pl-7">
+              <Label htmlFor="github-sync-self-service-folder">
+                Self-service folder
+              </Label>
+              <FieldDescription>
+                Each managed MCP server policy file goes here and included into
+                the root policy.
+                {editing?.selfService ? null : (
+                  <span>
+                    {" "}
+                    A pull request includes it to{" "}
+                    {location.path?.split("/").pop() ?? "appa.toml"} if not yet
+                    done.
+                  </span>
+                )}
+              </FieldDescription>
+              <Input
+                id="github-sync-self-service-folder"
+                value={selfServiceFolder}
+                placeholder={DEFAULT_SELF_SERVICE_FOLDER}
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                aria-invalid={!serversFolderValid}
+                onChange={(event) => setSelfServiceFolder(event.target.value)}
+              />
+              {serversFolderValid ? null : (
+                <p className="text-xs text-destructive">
+                  Use a folder path such as <code>rules/servers</code>.
+                  Wildcards and <code>..</code> are not allowed.
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -831,6 +998,7 @@ export function GithubSyncSetupDialog({
               permissions={[
                 "Contents",
                 "Pull requests",
+                ...(selfService ? ["Checks", "Administration"] : []),
                 ...(github?.dotCom ? [] : ["Workflows"]),
               ].map((name) => ({ name, access: "Read & write" }))}
             />
@@ -859,6 +1027,9 @@ export function GithubSyncSetupDialog({
             <SelectedAppBar
               provider="github"
               name={appLabel ?? "GitHub App"}
+              url={
+                accounts.data?.find((entry) => entry.id === appId)?.url ?? null
+              }
               icon={
                 mode === "pick"
                   ? (apps.find((app) => app.id === pickedId)?.icon ?? null)
@@ -971,7 +1142,7 @@ export function GithubSyncSetupDialog({
               <FieldDescription>
                 {gitlab
                   ? "Projects the token can reach."
-                  : "The repositories the selected App can access."}
+                  : `The repositories the ${appLabel ? `${appLabel} App` : "selected App"} can access.`}
                 {repositories.data?.manageUrl ? (
                   <>
                     {" "}
@@ -1096,7 +1267,7 @@ export function GithubSyncSetupDialog({
                       ? repositories.error.message
                       : gitlab
                         ? "The token can't reach any project."
-                        : `${appLabel ?? "The App"} can't access any. Give it access on GitHub.`}
+                        : `${appLabel ? `The ${appLabel} App` : "The App"} can't access any. Give it access on GitHub.`}
                   </InlineNoticeText>
                   <Button
                     type="button"
@@ -1231,7 +1402,25 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "connect" ? (
+      {step === "connect" && outcome ? (
+        <SelfServiceOutcomeStep
+          run={outcome}
+          labels={{
+            pending: editing
+              ? "Save Git sync and pull the policy"
+              : "Connect the repository and pull the policy",
+            done: editing
+              ? "Git sync saved and the policy pulled"
+              : "Repository connected and the policy pulled",
+            failed: editing
+              ? "Could not save Git sync"
+              : "Could not connect the repository",
+          }}
+          directory={serversFolder || DEFAULT_SELF_SERVICE_FOLDER}
+          policyFile={location.path?.split("/").pop() ?? "appa.toml"}
+        />
+      ) : null}
+      {step === "connect" && !outcome ? (
         <ul
           className="space-y-3 rounded-lg border bg-card p-4"
           aria-live="polite"
@@ -1262,7 +1451,7 @@ export function GithubSyncSetupDialog({
 
 // ===================== Internals =====================
 
-type Step = "provider" | "start" | "app" | "repo" | "connect";
+type Step = "provider" | "start" | "selfService" | "app" | "repo" | "connect";
 type AppMode = "fork" | "pick" | "create";
 type Origin = "fresh" | "existing";
 type RepositoryStatus =
@@ -1402,12 +1591,15 @@ function RepositoryNotice({
 function SelectedAppBar({
   provider,
   name,
+  url,
   icon,
   account,
   onChange,
 }: {
   provider: GitProvider;
   name: string;
+  /** The App's or token's page on its host; the name links there. */
+  url?: string | null;
   icon: string | null;
   account: string | null;
   onChange: () => void;
@@ -1419,7 +1611,18 @@ function SelectedAppBar({
         className="size-3.5"
         size={14}
       />
-      <span className="min-w-0 truncate font-medium">{name}</span>
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+        >
+          {name}
+        </a>
+      ) : (
+        <span className="min-w-0 truncate font-medium">{name}</span>
+      )}
       {account ? <AccountChip account={account} provider={provider} /> : null}
       <Button
         type="button"
@@ -1566,6 +1769,8 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
 }
 
 function headerFor(params: {
+  /** The selected App's name, once there is one. */
+  githubApp: string | null;
   editing: boolean;
   step: Step;
   origin: Origin | null;
@@ -1613,6 +1818,12 @@ function headerFor(params: {
           title: "Set up Git sync",
           description: `Where should your policy live? ${params.appName} only ever gets access to that one repository.`,
         };
+  if (params.step === "selfService")
+    return {
+      title: "MCP Guardrails Self-Service",
+      description:
+        "Optional: let MCP owners manage their MCP servers' Guardrails.",
+    };
   if (params.step === "app") {
     if (params.mode === "fork")
       return {
@@ -1637,7 +1848,7 @@ function headerFor(params: {
   if (params.step === "repo")
     return {
       title: "Choose the policy repository",
-      description: "From the repositories the GitHub App can see.",
+      description: `From the repositories the ${params.githubApp ? `${params.githubApp} App` : "GitHub App"} can see.`,
     };
   return {
     title: "Connecting the repository",
@@ -1648,6 +1859,7 @@ function headerFor(params: {
 const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "start", label: "Start" },
+  { id: "selfService", label: "Self-service" },
   { id: "app", label: "GitHub App" },
   { id: "repo", label: "Repository" },
 ];
@@ -1663,7 +1875,7 @@ const PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/;
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 const DOT_COM_API = "https://api.github.com";
 /** The tab Guardrails works with GitHub in. */
-const GITHUB_WINDOW = "openappa-github-app";
+export const GITHUB_WINDOW = "openappa-github-app";
 const FRESH_NAME = "openappa-policy";
 const USABLE = new Set<RepositoryStatus>([
   "template",
@@ -1693,9 +1905,17 @@ type EditedSource = {
   validationDirectory: string;
   /** The host's web address, e.g. https://github.com. */
   webUrl: string;
+  /** Whether the servers' editors change their own rules through this source. */
+  selfService: boolean;
+  /** The folder beside the policy file that holds each server's rules file. */
+  selfServiceDirectory: string;
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
+const DEFAULT_SELF_SERVICE_FOLDER = "mcp";
+/** A folder beside the policy file: no `.` or `..` segment, no slash at either end. */
+const SELF_SERVICE_FOLDER =
+  /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$/;
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";

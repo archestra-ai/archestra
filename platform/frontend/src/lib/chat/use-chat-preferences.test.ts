@@ -367,6 +367,22 @@ describe("agentRequiresPerUserConnect", () => {
     ).toBe(true);
   });
 
+  test("a pool defers credential choice to the server, but leaving it restores the direct connect gate", () => {
+    const selection = {
+      agent: perUserAgent,
+      selectedModelId: "uuid-copilot",
+      selectedModel: undefined,
+      requiresPerUserCredential: true,
+      isCredentialConnected: false,
+    };
+    expect(
+      agentRequiresPerUserConnect({ ...selection, modelPoolSelected: true }),
+    ).toBe(false);
+    expect(
+      agentRequiresPerUserConnect({ ...selection, modelPoolSelected: false }),
+    ).toBe(true);
+  });
+
   test("false when the viewer can use the model (connected)", () => {
     expect(
       agentRequiresPerUserConnect({

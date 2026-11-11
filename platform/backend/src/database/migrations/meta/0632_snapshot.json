@@ -1,5 +1,5 @@
 {
-  "id": "2040a5e0-f0d5-487d-b377-b39ef0ec12f3",
+  "id": "90fb8616-5615-4251-8db4-75934ab46791",
   "prevId": "6108b291-b0fb-4eaf-9108-7ab549e45f3b",
   "version": "7",
   "dialect": "postgresql",
@@ -7567,119 +7567,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.blob_providers": {
-      "name": "blob_providers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "config": {
-          "name": "config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "blob_providers_organization_id_name_idx": {
-          "name": "blob_providers_organization_id_name_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "blob_providers_organization_id_organization_id_fk": {
-          "name": "blob_providers_organization_id_organization_id_fk",
-          "tableFrom": "blob_providers",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "blob_providers_secret_id_secret_id_fk": {
-          "name": "blob_providers_secret_id_secret_id_fk",
-          "tableFrom": "blob_providers",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.browser_storage_states": {
       "name": "browser_storage_states",
       "schema": "",
@@ -10281,184 +10168,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.cost_exports": {
-      "name": "cost_exports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "blob_provider_id": {
-          "name": "blob_provider_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "format": {
-          "name": "format",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "schedule": {
-          "name": "schedule",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "path_prefix": {
-          "name": "path_prefix",
-          "type": "varchar(512)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "exported_through": {
-          "name": "exported_through",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "running_until": {
-          "name": "running_until",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_run_at": {
-          "name": "last_run_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_run_status": {
-          "name": "last_run_status",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_run_error": {
-          "name": "last_run_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consecutive_failures": {
-          "name": "consecutive_failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_object_key": {
-          "name": "last_object_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "cost_exports_organization_id_idx": {
-          "name": "cost_exports_organization_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cost_exports_blob_provider_id_idx": {
-          "name": "cost_exports_blob_provider_id_idx",
-          "columns": [
-            {
-              "expression": "blob_provider_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "cost_exports_organization_id_organization_id_fk": {
-          "name": "cost_exports_organization_id_organization_id_fk",
-          "tableFrom": "cost_exports",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "cost_exports_blob_provider_id_blob_providers_id_fk": {
-          "name": "cost_exports_blob_provider_id_blob_providers_id_fk",
-          "tableFrom": "cost_exports",
-          "tableTo": "blob_providers",
-          "columnsFrom": [
-            "blob_provider_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -35404,6 +35113,20 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "self_service": {
+          "name": "self_service",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "self_service_directory": {
+          "name": "self_service_directory",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'mcp'"
         },
         "last_synced_at": {
           "name": "last_synced_at",

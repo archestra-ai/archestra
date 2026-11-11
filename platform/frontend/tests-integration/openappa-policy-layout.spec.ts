@@ -56,7 +56,12 @@ for (const viewport of [
       await mswControl.use({
         method: "get",
         url: "/api/openappa/github-sync",
-        body: { enabled: true, hasPolicy: false, source: null },
+        body: {
+          selfService: { enabled: false, setting: false, directory: "mcp" },
+          enabled: true,
+          hasPolicy: false,
+          source: null,
+        },
       });
       await mswControl.use({
         method: "get",

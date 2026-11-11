@@ -1225,7 +1225,13 @@ async function handleObservedLLMProxy<
   // first-party clients a machine-readable signal (mirrors
   // ChatErrorCode.ProviderAuthRequired); the connect URL is in the message so
   // generic OpenAI/Anthropic clients surface something actionable too.
-  if (providerRequiresPerUserCredential(providerName) && !apiKey) {
+  // Pool-only credentials resolve their member's key after planning. The pool
+  // grant does not bypass the planner's or dispatcher's ownership checks.
+  if (
+    providerRequiresPerUserCredential(providerName) &&
+    !apiKey &&
+    !(authOverride?.modelPoolId ?? grantedPoolId)
+  ) {
     const providerLabel = providerDisplayNames[providerName];
     const connectUrl = `${config.frontendBaseUrl}/settings`;
     logger.info(
@@ -1383,6 +1389,7 @@ async function handleObservedLLMProxy<
           poolId: chatModelPoolId,
           inbound: poolWire,
           caller: {
+            userId: authenticatedUserId,
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
             // An app OAuth client's own pools were checked at sign-in and come
@@ -2212,6 +2219,16 @@ async function handleObservedLLMProxy<
       );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
+      }
+      if (
+        modelPoolPlan &&
+        (row.organizationId !== resolvedAgent.organizationId ||
+          (row.userId !== null && row.userId !== authenticatedUserId))
+      ) {
+        throw new ApiError(
+          403,
+          "This model pool member belongs to another user.",
+        );
       }
       const apiKey = row.secretId
         ? await getSecretValueForLlmProviderApiKey(row.secretId)

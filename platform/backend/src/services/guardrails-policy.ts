@@ -22,6 +22,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { withoutRepositoryIncludes } from "@/openappa/policy-text";
 import {
   classifyRuleTarget,
   type RuleTarget,
@@ -29,6 +30,7 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { openappaRepositoryIncludes } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -177,7 +179,7 @@ export const guardrailsPolicyService = {
    * validation reports its warnings too.
    */
   async validate(
-    content: string,
+    text: string,
     params: {
       organizationId: string;
       previous?: string;
@@ -185,12 +187,32 @@ export const guardrailsPolicyService = {
       userId?: string;
       /** Both documents already resolved, when the caller resolved them itself. */
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
+      /** Repository files the text includes, read from elsewhere than the accepted commit. */
+      files?: ReadonlyMap<string, string>;
     },
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    // Repository files the texts include are folded in before anything reads
+    // them, as a recompose folds them; a file that cannot be read refuses the
+    // submitted text, and leaves the previous one compared without its files.
+    const submitted = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: text,
+      files: params.files,
+    });
+    if (submitted.errors.length > 0)
+      return { valid: false, errors: submitted.errors, warnings: [] };
+    const content = submitted.content;
+    const written = params.previous ?? (await this.get(organizationId)).content;
+    const folded = await openappaRepositoryIncludes.expand({
+      organizationId,
+      content: written,
+    });
     const previous =
-      params.previous ?? (await this.get(organizationId)).content;
+      folded.errors.length > 0
+        ? withoutRepositoryIncludes(written)
+        : folded.content;
     const resolved =
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));

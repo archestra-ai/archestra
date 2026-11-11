@@ -38,7 +38,6 @@ import {
   parseCurrentTrajectory,
 } from "@/openappa/current-trajectory";
 import {
-  acceptedCoverage,
   type ClosedHitlReviewOutcome,
   clearHitlReview,
   closureFromReviewOutcome,
@@ -63,6 +62,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import {
+  acceptedScope,
   displayedReview,
   reviewedCallArguments,
   reviewedToolLabel,
@@ -1410,7 +1410,7 @@ const registry = defineArchestraTools([
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);
-                const accepted = acceptedCoverage(shown.text);
+                const accepted = acceptedScope(shown.scope);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1424,7 +1424,9 @@ const registry = defineArchestraTools([
                           : shown.arguments,
                       }
                     : {}),
-                  ...(accepted?.length ? { reviewedCoverage: accepted } : {}),
+                  ...(accepted
+                    ? { reviewedCoverage: accepted }
+                    : { reviewedText: shown.text }),
                 });
                 if (outcome.status === "answered") {
                   const parsed = parseHitlRuling(outcome.result);

@@ -3223,6 +3223,75 @@ describe("setup choices on the approval page", () => {
     }
   });
 
+  it("offers each GitHub Copilot account only while its own plan is on", async () => {
+    const own = {
+      id: "copilot-own",
+      provider: "github-copilot",
+      name: "GitHub Copilot",
+      isPrimary: true,
+      isGithubAppKey: false,
+      githubOrganization: null,
+    };
+    const plan = {
+      id: "copilot-plan",
+      provider: "github-copilot",
+      name: "GitHub Copilot (acme)",
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: "acme",
+      githubOrganizationName: "Acme Inc",
+    };
+    const user = userEvent.setup();
+    for (const [turnedOff, bound, shown, hidden] of [
+      [
+        "enterprise",
+        undefined,
+        "GitHub Copilot · Personal subscription",
+        /Acme Inc/,
+      ],
+      [
+        "personal",
+        "copilot-plan",
+        "GitHub Copilot Acme Inc",
+        /Personal subscription/,
+      ],
+    ] as const) {
+      vi.mocked(useOrganization).mockReturnValue({
+        data: {
+          modelProviderOverrides: {
+            "github-copilot": { plans: { [turnedOff]: { hidden: true } } },
+          },
+        },
+      } as unknown as ReturnType<typeof useOrganization>);
+      availableKeysMock.mockReturnValue({ data: [own, plan] });
+      const { finish } = renderApproval({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+      try {
+        await waitFor(() =>
+          expect(createSetupMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+              provider: "github-copilot",
+              providerApiKeyId: bound,
+            }),
+          ),
+        );
+        await user.click(screen.getByRole("button", { name: /Setup options/ }));
+        expect(screen.getByText(shown)).toBeInTheDocument();
+        expect(screen.queryByText(hidden)).toBeNull();
+        // The one account left is no choice.
+        expect(
+          screen.queryByRole("combobox", { name: "GitHub Copilot account" }),
+        ).toBeNull();
+      } finally {
+        finish();
+        cleanup();
+        createSetupMock.mockClear();
+      }
+    }
+  });
+
   it("binds an enterprise plan when the user has no Copilot sign-in of their own", async () => {
     availableKeysMock.mockReturnValue({
       data: [

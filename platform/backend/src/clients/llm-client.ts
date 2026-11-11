@@ -18,6 +18,7 @@ import {
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  getBedrockReasoningFamily,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
   MODEL_POOL_ID_HEADER,
@@ -1488,6 +1489,21 @@ function withCatalogOutputBudget(
       transformParams: async ({ params }) => {
         if (!viaCompletionTokens) {
           if (params.maxOutputTokens !== undefined) return params;
+          // Chat deliberately omits the automatic cap for Nova High, whose
+          // provider contract forbids maxTokens. Do not reinsert it here.
+          // Explicit caller caps are preserved by the guard above.
+          const reasoning = params.providerOptions?.bedrock?.reasoningConfig;
+          if (
+            target.provider === "bedrock" &&
+            getBedrockReasoningFamily(target.modelName) === "nova" &&
+            reasoning !== null &&
+            typeof reasoning === "object" &&
+            !Array.isArray(reasoning) &&
+            reasoning.type === "enabled" &&
+            reasoning.maxReasoningEffort === "high"
+          ) {
+            return params;
+          }
           const maxOutputTokens = await resolveDefault();
           return maxOutputTokens === undefined
             ? params

@@ -44451,6 +44451,7 @@ export type GetNewChatBootstrapResponses = {
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
             githubOrganization?: string | null;
+            githubOrganizationName?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -44492,6 +44493,7 @@ export type GetNewChatBootstrapResponses = {
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
             githubOrganization?: string | null;
+            githubOrganizationName?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -45048,6 +45050,7 @@ export type GetConversationBootstrapResponses = {
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
                 githubOrganization?: string | null;
+                githubOrganizationName?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -45089,6 +45092,7 @@ export type GetConversationBootstrapResponses = {
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
                 githubOrganization?: string | null;
+                githubOrganizationName?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -65598,6 +65602,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65861,6 +65866,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -65999,6 +66005,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66135,6 +66142,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66271,6 +66279,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66407,6 +66416,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66524,6 +66534,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -66639,6 +66650,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -67209,6 +67221,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -67864,6 +67877,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -67979,6 +67993,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68094,6 +68109,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68209,6 +68225,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68324,6 +68341,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68439,6 +68457,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68554,6 +68573,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68669,6 +68689,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68784,6 +68805,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -68899,6 +68921,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -69014,6 +69037,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -69129,6 +69153,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -69244,6 +69269,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -70357,6 +70383,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -71470,6 +71497,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -72583,6 +72611,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -73696,6 +73725,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -73811,6 +73841,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -73994,6 +74025,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -75107,6 +75139,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -75269,6 +75302,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -75431,6 +75465,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -75591,6 +75626,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -75813,6 +75849,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76035,6 +76072,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76257,6 +76295,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76372,6 +76411,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76518,6 +76558,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76656,6 +76697,7 @@ export type GetLlmProxyLogsResponses = {
             copilotCredentialSource?: {
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             } | null;
@@ -76995,6 +77037,7 @@ export type GetLlmProxyLogSessionsResponses = {
             copilotCredentialSources?: Array<{
                 kind: 'organization';
                 organization: string | null;
+                organizationName?: string | null;
             } | {
                 kind: 'personal';
             }>;
@@ -77768,6 +77811,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78031,6 +78075,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78169,6 +78214,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78305,6 +78351,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78441,6 +78488,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78577,6 +78625,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78694,6 +78743,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -78809,6 +78859,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -79379,6 +79430,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80034,6 +80086,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80149,6 +80202,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80264,6 +80318,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80379,6 +80434,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80494,6 +80550,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80609,6 +80666,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80724,6 +80782,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80839,6 +80898,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -80954,6 +81014,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81069,6 +81130,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81184,6 +81246,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81299,6 +81362,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -81414,6 +81478,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -82527,6 +82592,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -83640,6 +83706,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -84753,6 +84820,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -85866,6 +85934,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -85981,6 +86050,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -86164,6 +86234,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -87277,6 +87348,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -87439,6 +87511,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -87601,6 +87674,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -87761,6 +87835,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -87983,6 +88058,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -88205,6 +88281,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -88427,6 +88504,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -88542,6 +88620,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -88688,6 +88767,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -88826,6 +88906,7 @@ export type GetLlmProxyLogResponses = {
         copilotCredentialSource?: {
             kind: 'organization';
             organization: string | null;
+            organizationName?: string | null;
         } | {
             kind: 'personal';
         } | null;
@@ -106359,6 +106440,7 @@ export type GetLlmProviderApiKeysResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -106531,6 +106613,7 @@ export type CreateLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -106658,6 +106741,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -106872,6 +106956,7 @@ export type GetLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -107019,6 +107104,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -107147,6 +107233,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
         githubOrganization?: string | null;
+        githubOrganizationName?: string | null;
         labels?: Array<{
             key: string;
             value: string;

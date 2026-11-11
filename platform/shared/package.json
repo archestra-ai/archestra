@@ -14,6 +14,7 @@
     "./api-error": "./api-error.ts",
     "./api-sdk": "./hey-api/clients/api/sdk.gen.ts",
     "./azure-models": "./azure-models.ts",
+    "./bedrock-models": "./bedrock-models.ts",
     "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",
     "./chat": "./chat.ts",

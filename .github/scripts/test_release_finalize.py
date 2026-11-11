@@ -24,7 +24,8 @@ def source_run(run_id=90, **overrides):
 
 def publisher_run(version, request_id, created, conclusion="success", status="completed", actor=BOT):
     return {"display_title": f"Publish archestra {version} [{request_id}]", "created_at": created,
-            "status": status, "conclusion": conclusion, "triggering_actor": {"login": actor}}
+            "status": status, "conclusion": conclusion, "triggering_actor": {"login": actor},
+            "html_url": f"https://github.com/{PUBLISHER}/actions/runs/{request_id}"}
 
 
 class Api:
@@ -143,6 +144,36 @@ class SweepTests(unittest.TestCase):
         api = Api(releases=[{"tag_name": "platform-v1.5.0-rc.27", "draft": False}])
         self.assertEqual(self.sweep(api), [])
         self.assertFalse([path for path, _ in api.tokens if PUBLISHER in path])
+
+
+
+class OpenRequestTests(unittest.TestCase):
+    def open_request(self, *runs, version="1.5.0-rc.29"):
+        api = Api(publisher_runs=runs)
+        found = FINALIZE.open_request(PUBLISHER, version, "publisher-token", request=api)
+        self.assertEqual(api.tokens, [(f"repos/{PUBLISHER}/actions/workflows/publish.yml/runs"
+                                       "?event=repository_dispatch&branch=main&per_page=100", "publisher-token")])
+        return found
+
+    def test_a_request_still_waiting_or_queued_behind_it_is_open(self):
+        for status in ("waiting", "pending", "queued", "in_progress"):
+            with self.subTest(status=status):
+                found = self.open_request(
+                    publisher_run("1.5.0-rc.29", "92-1", "2026-11-10T20:00:00Z", conclusion="cancelled"),
+                    publisher_run("1.5.0-rc.29", "90-1", "2026-11-10T18:00:00Z", conclusion=None, status=status))
+                self.assertEqual(found, f"https://github.com/{PUBLISHER}/actions/runs/90-1")
+
+    def test_finished_requests_leave_the_draft_to_recover(self):
+        # Cancelled (an expired approval included), failed or rejected: recovery requests it again.
+        self.assertIsNone(self.open_request(
+            publisher_run("1.5.0-rc.29", "90-1", "2026-11-10T18:00:00Z", conclusion="cancelled"),
+            publisher_run("1.5.0-rc.29", "91-1", "2026-11-10T19:00:00Z", conclusion="failure")))
+
+    def test_only_this_versions_requests_from_the_release_app_count(self):
+        self.assertIsNone(self.open_request(
+            publisher_run("1.4.27", "95-1", "2026-11-10T18:00:00Z", conclusion=None, status="waiting"),
+            publisher_run("1.5.0-rc.29", "90-1", "2026-11-10T18:00:00Z", conclusion=None, status="waiting",
+                          actor="someone")))
 
 
 if __name__ == "__main__":

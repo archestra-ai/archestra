@@ -250,7 +250,8 @@ export function useChatSetupOptions(params: {
       allKeys.filter(
         (k) =>
           providerSupportsChat(k.provider) &&
-          !catalog.isHidden(k.provider) &&
+          // A GitHub Copilot key follows its own plan's switch.
+          !catalog.isKeyHidden(k) &&
           (!isPersonalSubscription(k) || k.userId === userId),
       ),
     [allKeys, catalog, userId],

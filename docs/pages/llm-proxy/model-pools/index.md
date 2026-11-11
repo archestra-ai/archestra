@@ -37,7 +37,7 @@ The dialog then shows that the pool is ready, with a request you can copy. Send 
 
 ## Order and Weight
 
-Order sets which members a request tries first, and weight splits traffic between members that share an order. Order and weight work as in LiteLLM.
+Order is a member's priority, and weight splits traffic between members of the same priority. A pool picks a member by these two settings alone, not by load, latency, cost, or how much of a key's rate or token limit is left.
 
 - **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
 - **Weight:** members of one order share its traffic by weight.
@@ -79,7 +79,7 @@ Under **Member overrides**, set a member's retries, delays or retries by error t
 
 ## Timeouts and Cooldown
 
-Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
+Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default.
 
 | Setting | Default | What it sets |
 | --- | --- | --- |
@@ -146,4 +146,4 @@ Each attempt is priced as the member that made it, with that member's provider a
 - Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI or Azure AI Foundry; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
 - Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
 - Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
-- Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.
+- Timeouts and cooldown are set for the whole pool, not for one member.

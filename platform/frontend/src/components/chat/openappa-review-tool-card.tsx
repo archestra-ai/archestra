@@ -24,6 +24,7 @@ export function OpenappaReviewToolCard({
   reviewedTool,
   reviewedArguments,
   reviewedCoverage,
+  reviewedText,
   disabled,
   secondaryText,
   onDecide,
@@ -33,6 +34,7 @@ export function OpenappaReviewToolCard({
   reviewedTool?: string;
   reviewedArguments?: string;
   reviewedCoverage?: string[];
+  reviewedText?: string;
   disabled?: boolean;
   secondaryText?: ReactNode;
   onDecide: (decision: ReviewDecision) => void;
@@ -42,6 +44,7 @@ export function OpenappaReviewToolCard({
     ...(reviewedTool ? { reviewedTool } : {}),
     ...(reviewedArguments ? { reviewedArguments } : {}),
     ...(reviewedCoverage ? { reviewedCoverage } : {}),
+    ...(reviewedText ? { reviewedText } : {}),
   });
   const hasInput = view.toolCard?.input !== undefined;
 

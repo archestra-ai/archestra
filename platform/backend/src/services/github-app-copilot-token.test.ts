@@ -1,10 +1,16 @@
-import { createHash, createPublicKey, generateKeyPairSync } from "node:crypto";
+import {
+  createHash,
+  createPublicKey,
+  generateKeyPairSync,
+  randomUUID,
+} from "node:crypto";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   classifyCopilotAppRejection,
   encodeGithubAppReference,
   type GithubAppCredential,
   githubAppKeyFingerprint,
+  githubOrganizationDisplayName,
   validateGithubAppPrivateKey,
 } from "@/services/github-app-copilot-token";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
@@ -304,5 +310,104 @@ describe("classifyCopilotAppRejection", () => {
       expect(
         classifyCopilotAppRejection({ status: 403, githubMessage }),
       ).toBeNull();
+  });
+});
+
+describe("githubOrganizationDisplayName", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** A plan whose App credential is gone: GitHub is asked anonymously. */
+  function plan() {
+    const organizationId = randomUUID();
+    return {
+      organizationId,
+      value: encodeGithubAppReference({
+        ref: { organizationId, credentialId: randomUUID() },
+        installationId: "7",
+        organization: "acme",
+        githubUrl: "https://github.com",
+      }),
+    };
+  }
+  const lookups = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.filter(
+      ([input]) => String(input) === "https://api.github.com/orgs/acme",
+    );
+
+  test("asks GitHub once per installation and reads the trimmed name", async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) =>
+      Response.json({ login: "acme", name: "  Acme Inc " }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const acme = plan();
+
+    const names = await Promise.all([
+      githubOrganizationDisplayName(acme),
+      githubOrganizationDisplayName(acme),
+    ]);
+    names.push(await githubOrganizationDisplayName(acme));
+
+    expect(names).toEqual(["Acme Inc", "Acme Inc", "Acme Inc"]);
+    expect(lookups(fetchMock)).toHaveLength(1);
+  });
+
+  test("is null when GitHub has no name or refuses, and waits before asking again", async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) =>
+      Response.json({ login: "acme", name: null }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await githubOrganizationDisplayName(plan())).toBeNull();
+
+    fetchMock.mockImplementation(
+      async () => new Response(null, { status: 404 }),
+    );
+    const refused = plan();
+    expect(await githubOrganizationDisplayName(refused)).toBeNull();
+    expect(await githubOrganizationDisplayName(refused)).toBeNull();
+    expect(lookups(fetchMock)).toHaveLength(2);
+  });
+
+  test("never reads a reference into another organization", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const acme = plan();
+
+    expect(
+      await githubOrganizationDisplayName({
+        value: acme.value,
+        organizationId: randomUUID(),
+      }),
+    ).toBeNull();
+    expect(
+      await githubOrganizationDisplayName({
+        value: "ghp_not_a_reference",
+        organizationId: acme.organizationId,
+      }),
+    ).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("gives up waiting after a few seconds and fills the cache once GitHub answers", async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const fetchMock = vi.fn(
+      (_input: unknown, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const acme = plan();
+
+    const started = Date.now();
+    expect(await githubOrganizationDisplayName(acme)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5_000);
+
+    answer(Response.json({ login: "acme", name: "Acme Inc" }));
+    await vi.waitFor(async () =>
+      expect(await githubOrganizationDisplayName(acme)).toBe("Acme Inc"),
+    );
+    expect(lookups(fetchMock)).toHaveLength(1);
   });
 });

@@ -28,7 +28,6 @@ import {
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
-  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -50,6 +49,7 @@ import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-ba
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
+import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -768,14 +768,9 @@ export const parseLogFormat = (
 export const parseLogContentMode = (
   envValue?: string | undefined,
 ): LogContentMode => {
-  const value = envValue?.toLowerCase().trim();
-  if (!value) return "full";
-  const parsed = LogContentModeSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
-  logger.warn(
-    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
-  );
-  return "metadata_only";
+  return parseApplicationLogContentMode(envValue, () => {
+    logger.warn("Invalid ARCHESTRA_LOGS_CONTENT_MODE, storing metadata only");
+  });
 };
 
 /** @public — exported for testability */
@@ -808,6 +803,17 @@ function parsePoolSize(params: {
 
   return parsed;
 }
+
+/** @public — exported for testability */
+export const isChatMaxOutputTokensConfigured = (envValue?: string): boolean => {
+  if (!envValue?.trim()) return false;
+  const parsed = Number(envValue.trim());
+  return (
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_CHAT_MAX_OUTPUT_TOKENS
+  );
+};
 
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
@@ -843,11 +849,7 @@ const parseOutputTokenCeiling = (params: {
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
   // ("1.5") are rejected rather than silently truncated to a tiny cap.
   const parsed = Number(value);
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 1 ||
-    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
-  ) {
+  if (!isChatMaxOutputTokensConfigured(value)) {
     logger.warn(
       `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
@@ -3337,6 +3339,11 @@ const config = {
     ),
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    // Nova high cannot send maxTokens. Distinguish the automatic default from
+    // an operator's explicit cap without adding another configuration option.
+    maxOutputTokensExplicitlyConfigured: isChatMaxOutputTokensConfigured(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),

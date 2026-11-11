@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -711,6 +711,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: `32768`
   - Values: `1` to `1000000`
   - A turn uses the lower of this value and the model's own output limit. Models without a known limit use `8192`.
+  - In Chat, Nova 2 Lite High reasoning omits the automatic output cap. Setting this variable explicitly, even to `32768`, or setting a custom model output limit blocks High; use Low or Medium instead.
 
 - **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output token limit for Groq, which charges the requested output budget against a per-minute token allowance.
   - Default: `4096`
@@ -1498,7 +1499,7 @@ Choose whether stored LLM proxy logs, MCP gateway logs, and Guardrails consult r
   - Applies to records written after a restart. Stored records keep their content.
   - Metadata-only mode also omits captured prompt/response and tool argument/result fields from LLM proxy and MCP tool-call trace spans.
 
-Application error logs omit attached SDK request bodies, including those in retry histories. Error messages and provider responses can still contain sensitive content in either mode.
+Application error logs omit attached SDK request bodies, including those in retry histories. In `metadata_only` mode, logged errors keep type, status and retry metadata; free-text messages, stacks, attached payloads and raw provider error diagnostics are withheld from stdout and OTLP logs. In `full` mode, error messages and provider responses can still contain sensitive content.
 
 To disable captured prompt/response and tool argument/result fields on trace spans independently, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`. MCP trace error messages can still contain sensitive content.
 

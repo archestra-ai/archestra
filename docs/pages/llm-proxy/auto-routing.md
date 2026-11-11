@@ -19,7 +19,7 @@ An auto router is a model name, `auto` or `auto:<name>`, that sends each session
 5. Pick a daily budget and the decision model.
 6. Turn auto routing on under **Settings → LLM**. This switch covers every router of the organization.
 
-Open a router from the list to see its current plan: expected spend against the budget, quality compared with sending everything to the smart model, and how sessions should split across the fast, normal and smart models. Switch to **7 days** or **14 days** to see what the router actually routed in that window: billed spend, sessions and requests, how sessions split, and how much less that cost than sending every request to the smart model at list price. Requests covered by a subscription count as sessions and requests but add no spend and no savings. To see which model a single request used and why, open it in **LLM Logs**.
+Open a router from the list to see its current plan: expected spend against the budget, quality compared with sending everything to the smart model, and how sessions should split across the fast, normal and smart models. Switch to **7 days** or **14 days** to see what the router actually routed in that window: billed spend, sessions and requests, how sessions split, and how that cost compares with sending every request to the smart model at list price. Requests covered by a subscription count as sessions and requests but add no spend and no savings. To see which model a single request used and why, open it in **LLM Logs**.
 
 ### Daily Budget
 

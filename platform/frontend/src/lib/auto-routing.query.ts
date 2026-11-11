@@ -168,7 +168,6 @@ export function useAutoRouter() {
   };
 }
 
-/** What the router routed over the last week: spend and sessions per tier, and the all-smart counterfactual. */
 /** The usage windows the router page offers. */
 export type AutoRoutingUsageDays = 7 | 14;
 

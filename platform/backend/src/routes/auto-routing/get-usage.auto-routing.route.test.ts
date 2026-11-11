@@ -77,6 +77,45 @@ describe("GET /api/auto-routing/routers/:id/usage", () => {
     });
   });
 
+  test("prices mixed 5-minute and 1-hour cache writes like billed smart traffic", async ({
+    makeAgent,
+  }) => {
+    const { router, trio } = await configureAutoRouter(ctx.organizationId);
+    await db
+      .update(schema.modelsTable)
+      .set({ provider: "anthropic" })
+      .where(eq(schema.modelsTable.id, trio[2].id));
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    const scorer = await makeScorerVersion();
+    const { decision } = await RoutingDecisionModel.insertOrGet(
+      plannedDecision({
+        organizationId: ctx.organizationId,
+        routerId: router.id,
+        sessionKey: RoutingSessionKeySchema.parse("mixed-cache-session"),
+        modelId: trio[2].id,
+        scorerVersionId: scorer.id,
+        tierIndex: 2,
+      }),
+    );
+    // Smart input/output cost $22.50; 0.5M writes at $18.75 and 0.5M at $30 add $24.375.
+    await record({
+      profileId: agent.id,
+      decisionId: decision.id,
+      cost: "46.875",
+      cacheWriteTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+    });
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/auto-routing/routers/${router.id}/usage`,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      costUsd: 46.875,
+      allSmartCostUsd: 46.875,
+    });
+  });
+
   test("counts subscription-covered requests without billing them or pricing them at the smart model", async ({
     makeAgent,
   }) => {
@@ -209,6 +248,8 @@ async function record(params: {
   decisionId: string;
   cost: string;
   ago?: number;
+  cacheWriteTokens?: number;
+  cacheWrite1hTokens?: number;
   billingMode?: InsertInteraction["billingMode"];
 }) {
   const id = randomUUID();
@@ -233,6 +274,8 @@ async function record(params: {
         },
       ],
     },
+    cacheWriteTokens: params.cacheWriteTokens,
+    cacheWrite1hTokens: params.cacheWrite1hTokens,
     inputTokens: 1_000_000,
     outputTokens: 100_000,
     cost: params.cost,

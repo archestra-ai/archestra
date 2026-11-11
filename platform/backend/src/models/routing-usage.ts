@@ -112,6 +112,7 @@ class RoutingUsageModel {
         input: total(usage.input, filter),
         cacheRead: total(usage.cacheRead, filter),
         cacheWrite: total(usage.cacheWrite, filter),
+        cacheWrite1h: total(usage.cacheWrite1h, filter),
         output: total(usage.output, filter),
       };
     };

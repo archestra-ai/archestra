@@ -67,7 +67,7 @@ const LIST_SETTINGS = [
     label: "File Types (optional)",
     placeholder: ".md, .yaml, Dockerfile",
     description:
-      "Comma-separated extensions or file names to index when repository files are enabled, such as .md or Dockerfile. Use * for every text file. Defaults to Markdown and YAML.",
+      "Use extensions (.md), exact file names (Dockerfile), or * for all text files. Separate entries with commas. Defaults to Markdown and YAML.",
   },
   {
     name: "includePaths",
@@ -266,7 +266,11 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
             const name = entry.repository.trim() || "New repository";
             const path = `${entryPath}.${index}.repository`;
             const invalid = Boolean(
-              form.getFieldState(path, form.formState).error,
+              form.getFieldState(path, form.formState).error ||
+                form.getFieldState(
+                  `${entryPath}.${index}.settings.fileTypes`,
+                  form.formState,
+                ).error,
             );
             return (
               <fieldset key={field.id} aria-label={`Repository ${name}`}>
@@ -385,14 +389,49 @@ function RepositoryControls({
       ))}
       {LIST_SETTINGS.filter(
         (setting) =>
-          setting.name === "labelsToSkip" || values.includeRepositoryFiles,
+          setting.name === "labelsToSkip" ||
+          setting.name === "fileTypes" ||
+          values.includeRepositoryFiles,
       ).map((setting) => (
         <FormField
           key={setting.name}
           control={form.control}
           name={`${prefix}.${setting.name}`}
-          render={({ field }) => (
-            <FormItem>
+          rules={
+            setting.name === "fileTypes"
+              ? {
+                  validate: (value: unknown) => {
+                    const entries = joinIfArray(value)
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter(Boolean);
+                    return (
+                      entries.every((entry) => {
+                        if (entry === "*" || entry === "*.*") return true;
+                        const literal = entry.startsWith("*.")
+                          ? entry.slice(2)
+                          : entry;
+                        return (
+                          literal !== "." &&
+                          Boolean(literal) &&
+                          !/[*?[\]{}/\\]/.test(literal)
+                        );
+                      }) ||
+                      "Use a file extension (.md) or name (Dockerfile). For a folder such as docs/, use the Folders setting."
+                    );
+                  },
+                }
+              : undefined
+          }
+          render={({ field, fieldState }) => (
+            <FormItem
+              hidden={
+                setting.name === "fileTypes" &&
+                !values.includeRepositoryFiles &&
+                !fieldState.error &&
+                !form.formState.isSubmitted
+              }
+            >
               <FormLabel>{setting.label}</FormLabel>
               <FormDescription>{setting.description}</FormDescription>
               <FormControl>

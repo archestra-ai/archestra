@@ -1207,11 +1207,16 @@ async function handleCreateKnowledgeConnector(params: {
       nextConfig: { type: args.connector_type, ...args.config },
     });
     if (salesforceViolation) return errorResult(salesforceViolation);
-    if (args.connector_type === "salesforce") {
-      const validation = await getConnector("salesforce").validateConfig({
-        type: args.connector_type,
-        ...args.config,
-      });
+    if (
+      args.connector_type === "salesforce" ||
+      args.connector_type === "github"
+    ) {
+      const validation = await getConnector(args.connector_type).validateConfig(
+        {
+          type: args.connector_type,
+          ...args.config,
+        },
+      );
       if (!validation.valid)
         return errorResult(
           `Invalid connector configuration: ${validation.error}`,
@@ -1469,10 +1474,14 @@ async function handleUpdateKnowledgeConnector(params: {
       existingConfig: existingConnector.config,
     });
     if (salesforceViolation) return errorResult(salesforceViolation);
-    if (existingConnector.connectorType === "salesforce" && updates.config) {
-      const validation = await getConnector("salesforce").validateConfig(
-        updates.config,
-      );
+    if (
+      (existingConnector.connectorType === "salesforce" ||
+        existingConnector.connectorType === "github") &&
+      updates.config
+    ) {
+      const validation = await getConnector(
+        existingConnector.connectorType,
+      ).validateConfig(updates.config);
       if (!validation.valid)
         return errorResult(
           `Invalid connector configuration: ${validation.error}`,

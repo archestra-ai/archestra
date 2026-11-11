@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import pino from "pino";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
 import { GithubConnector } from "./github-connector";
@@ -106,6 +107,53 @@ describe("GithubConnector", () => {
         repositoryOverrides: filters,
       });
       expect(result.valid).toBe(false);
+    });
+
+    test.each([
+      ".*",
+      "**/*.md",
+      "docs/*.md",
+      "Dockerfile*",
+      "",
+      "?md",
+      "[ab].md",
+    ])("rejects unsupported File Types %s at default and override levels", async (entry) => {
+      for (const settings of [
+        { fileTypes: [entry] },
+        {
+          repositoryOverrides: [
+            { repository: "test-org/my-repo", fileTypes: [entry] },
+          ],
+        },
+      ]) {
+        const result = await connector.validateConfig({
+          ...validConfig,
+          ...settings,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain(
+          "Paths and glob patterns are not supported",
+        );
+      }
+    });
+
+    test("accepts the existing extension and exact-name forms", async () => {
+      expect(
+        await connector.validateConfig({
+          ...validConfig,
+          fileTypes: [
+            "md",
+            ".md",
+            "*.md",
+            ".tm.hcl",
+            "Dockerfile",
+            "config.json",
+            "*",
+            "*.*",
+            " .env ",
+          ],
+        }),
+      ).toEqual({ valid: true });
     });
 
     test("returns valid for correct config", async () => {
@@ -2033,6 +2081,31 @@ describe("GithubConnector", () => {
         .filter((d) => d.metadata.kind === "repository_file")
         .map((d) => d.metadata.filePath);
     }
+
+    test("stored unsupported filters still sync but warn only when repository files exist", async () => {
+      const messages: string[] = [];
+      connector.setLogger(
+        pino(
+          { level: "warn" },
+          {
+            write: (line) => {
+              messages.push(JSON.parse(line).msg);
+            },
+          },
+        ),
+      );
+      const batches = await syncWithFileTypes({
+        fileTypes: ["docs/*.md"],
+        files: { "README.md": "# Readme" },
+      });
+      expect(indexedPaths(batches)).toEqual([]);
+      expect(messages).toEqual([
+        expect.stringContaining("none match File Types"),
+      ]);
+      messages.length = 0;
+      await syncWithFileTypes({ fileTypes: [".md"], files: {} });
+      expect(messages).toEqual([]);
+    });
 
     test("matches exact file names at the root and in nested folders", async () => {
       const batches = await syncWithFileTypes({

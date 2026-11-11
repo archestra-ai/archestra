@@ -505,9 +505,7 @@ describe("CreateConnectorDialog", () => {
       expect(
         screen.getByLabelText("Labels to Skip (optional)"),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByLabelText("File Types (optional)"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("File Types (optional)")).not.toBeVisible();
 
       await user.click(
         screen.getByRole("switch", { name: /Include Repository Files/ }),

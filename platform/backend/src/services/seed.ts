@@ -441,6 +441,11 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "request_runtime_credential_setup",
     "request_battery_credentials",
     "sync_guardrails_repository",
+    // A server's editors change its own rules through pull requests.
+    "get_guardrails_server_rules",
+    "preview_guardrails_server_rules_change",
+    "propose_guardrails_server_rules_change",
+    "get_guardrails_server_rules_change_status",
     "list_mcp_server_deployments",
     "inspect_guardrails_server",
     "load_skill",

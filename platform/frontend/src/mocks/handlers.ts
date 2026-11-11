@@ -223,6 +223,11 @@ export const handlers: HttpHandler[] = [
   // Read-back routes for API clients such as Terraform; no install or binding
   // is seeded, so single reads answer as the backend does for an unknown id.
   ...getJson("/api/openappa/credential-bindings", []),
+  // Git sync's self-service reads: off, with no protection or App to show,
+  // as a deployment that never set it up answers.
+  ...getJson("/api/openappa/github-sync/self-service", { enabled: false }),
+  ...getJson("/api/openappa/github-sync/protection", null),
+  ...getJson("/api/openappa/github-sync/app-grants", null),
   ...notFound("/api/openappa/credential-bindings/:variable"),
   ...notFound("/api/openappa/battery-installs/:id"),
   ...getJson("/api/openappa/trust-audience", {

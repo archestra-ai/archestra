@@ -40,6 +40,12 @@ const BINDINGS: PortBindings = {
     import("@/skills/assert-mounted-skills-readable"),
   embeddingFinalization: () =>
     import("@/task-queue/handlers/batch-embedding-finalizer"),
+  scopedPermissions: async () => {
+    const { ResourcePermissions } = await import(
+      "@/services/resource-permissions"
+    );
+    return { allows: (params) => ResourcePermissions.allows(params) };
+  },
 };
 
 bindPorts(BINDINGS);

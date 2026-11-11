@@ -161,7 +161,8 @@ export function GitSourceBranch({ branch }: { branch: string | null }) {
 
 /** A notice inside the card, between the summary and the footer. */
 export function GitSourceNotice({ children }: { children: ReactNode }) {
-  return <div className="px-4 pb-4">{children}</div>;
+  // Lines up with the header's text, past its icon, where the icon shows.
+  return <div className="px-4 pb-4 sm:pl-[4.25rem]">{children}</div>;
 }
 
 export function GitSourceError({

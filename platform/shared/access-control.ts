@@ -1808,6 +1808,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetGuardrailsDeployment]: {},
   [RouteId.UpdateGuardrailsDeployment]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
+  [RouteId.GetAppaRepositoryProtection]: { organizationSettings: ["read"] },
+  [RouteId.GetAppaGithubAppGrants]: { organizationSettings: ["read"] },
+  // Whoever may open the MCP registry learns whether its servers' editors
+  // change their own rules: the registry shows the action only then.
+  [RouteId.GetAppaSelfService]: { mcpRegistry: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },

@@ -122467,9 +122467,20 @@ export type GetAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -122487,6 +122498,12 @@ export type UpdateAppaGithubSyncData = {
     } | {
         action: 'schedule';
         interval: '15m' | '1h' | '1d';
+    } | {
+        action: 'self_service';
+        enabled: boolean;
+        directory?: string;
+    } | {
+        action: 'include_servers';
     };
     path?: never;
     query?: never;
@@ -122579,9 +122596,20 @@ export type UpdateAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -122601,6 +122629,8 @@ export type ConfigureAppaGithubSyncData = {
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
         gitlabTokenId?: string | null;
+        selfService?: boolean;
+        selfServiceDirectory?: string;
     };
     path?: never;
     query?: never;
@@ -122693,9 +122723,20 @@ export type ConfigureAppaGithubSyncResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -122704,6 +122745,296 @@ export type ConfigureAppaGithubSyncResponses = {
 };
 
 export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[keyof ConfigureAppaGithubSyncResponses];
+
+export type GetAppaRepositoryProtectionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/protection';
+};
+
+export type GetAppaRepositoryProtectionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaRepositoryProtectionError = GetAppaRepositoryProtectionErrors[keyof GetAppaRepositoryProtectionErrors];
+
+export type GetAppaRepositoryProtectionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        checkName: string;
+        app?: {
+            name: string;
+            url: string | null;
+            settingsUrl: string;
+            installationUrl: string | null;
+            permissions: Array<{
+                name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+                granted: boolean;
+            }>;
+        };
+        branchRules: {
+            state: 'active' | 'incomplete' | 'missing' | 'needs_permission' | 'unavailable' | 'error';
+            url?: string;
+            detail?: string;
+            bypassActors?: number;
+            checkRule?: 'unposted';
+        };
+        include: {
+            folder: string;
+            state: 'included' | 'pull_open' | 'missing' | 'unknown';
+            pull?: {
+                number: number;
+                url: string;
+            };
+        };
+    } | null;
+};
+
+export type GetAppaRepositoryProtectionResponse = GetAppaRepositoryProtectionResponses[keyof GetAppaRepositoryProtectionResponses];
+
+export type GetAppaGithubAppGrantsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/app-grants';
+};
+
+export type GetAppaGithubAppGrantsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppGrantsError = GetAppaGithubAppGrantsErrors[keyof GetAppaGithubAppGrantsErrors];
+
+export type GetAppaGithubAppGrantsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        url: string | null;
+        settingsUrl: string;
+        installationUrl: string | null;
+        permissions: Array<{
+            name: 'contents' | 'pull_requests' | 'checks' | 'administration';
+            granted: boolean;
+        }>;
+    } | null;
+};
+
+export type GetAppaGithubAppGrantsResponse = GetAppaGithubAppGrantsResponses[keyof GetAppaGithubAppGrantsResponses];
+
+export type GetAppaSelfServiceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/self-service';
+};
+
+export type GetAppaSelfServiceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaSelfServiceError = GetAppaSelfServiceErrors[keyof GetAppaSelfServiceErrors];
+
+export type GetAppaSelfServiceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+    };
+};
+
+export type GetAppaSelfServiceResponse = GetAppaSelfServiceResponses[keyof GetAppaSelfServiceResponses];
 
 export type CreateAppaGithubRepositoryData = {
     body: {
@@ -122717,6 +123048,8 @@ export type CreateAppaGithubRepositoryData = {
         path?: string;
         validationDirectory?: string;
         replace?: boolean;
+        selfService?: boolean;
+        selfServiceDirectory?: string;
     };
     path?: never;
     query?: never;
@@ -122809,9 +123142,20 @@ export type CreateAppaGithubRepositoryResponses = {
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
+            selfService: boolean;
+            selfServiceDirectory: string;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
+        selfService: {
+            enabled: boolean;
+            setting: boolean;
+            directory: string;
+            environment?: {
+                variable: string;
+                value: 'enabled' | 'disabled';
+            };
+        };
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
@@ -122825,6 +123169,7 @@ export type StartAppaGithubAppData = {
     body: {
         githubUrl: string;
         owner: string;
+        selfService?: boolean;
     };
     path?: never;
     query?: never;
@@ -123452,6 +123797,7 @@ export type GetAppaGithubAppAccountsResponses = {
     200: Array<{
         id: string;
         account: string | null;
+        url: string | null;
     }>;
 };
 

@@ -51,6 +51,7 @@ describe("chat active-run routes", () => {
   );
 
   afterEach(async () => {
+    vi.useRealTimers();
     await app.close();
   });
 
@@ -424,6 +425,54 @@ describe("chat active-run routes", () => {
     });
 
     expect(response.statusCode).toBe(204);
+  });
+
+  test("active-run emits transport heartbeats while a quiet run waits, without persisting them", async () => {
+    const run = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    const runId = run?.id ?? "";
+    await app.ready();
+    // Only the heartbeat clock is virtual; database polling remains real.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const responsePromise = app
+      .inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversationId}/active-run`,
+      })
+      .then((response) => response);
+
+    try {
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
+      await vi.advanceTimersByTimeAsync(45000);
+      await ActiveChatRunModel.appendEvents({
+        runId,
+        seq: 1,
+        payloads: [{ type: "start" }, { type: "finish", finishReason: "stop" }],
+      });
+    } finally {
+      await activeChatRunService.markTerminal({ runId, status: "completed" });
+    }
+    const response = await responsePromise;
+    const payloads = readSsePayloads(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(
+      payloads.filter(
+        (payload) => (payload as { type: string }).type === "data-heartbeat",
+      ),
+    ).toHaveLength(9);
+    expect(payloads.slice(-2)).toEqual([
+      { type: "start" },
+      { type: "finish", finishReason: "stop" },
+    ]);
+    expect(
+      (
+        await ActiveChatRunModel.readStatusAndEventsAfter({ runId, seq: 0 })
+      )?.events.flatMap((event) => event.payloads),
+    ).toEqual([{ type: "start" }, { type: "finish", finishReason: "stop" }]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   test("active-run streams later database events before closing", async () => {

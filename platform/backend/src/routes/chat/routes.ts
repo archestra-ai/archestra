@@ -217,6 +217,7 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { buildGeminiProviderOptions } from "./gemini-provider-options";
+import { withChatHeartbeats } from "./heartbeat-stream";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import {
   injectExternalMcpSkillActivation,
@@ -2554,9 +2555,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: {
           "Content-Encoding": "none",
         },
-        stream: activeChatRunService.createReplayStream(
-          activeRun.id,
-          replayEncryptedChatAudit,
+        // Replayed runs (including scheduled runs) may not persist heartbeats.
+        // Keep this connection alive without adding transport events to storage.
+        stream: withChatHeartbeats(
+          activeChatRunService.createReplayStream(
+            activeRun.id,
+            replayEncryptedChatAudit,
+          ),
         ),
       });
 

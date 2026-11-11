@@ -1266,7 +1266,8 @@ describe("OpenAPPA tool execution", () => {
             content: [
               {
                 type: "text",
-                text: "[appa] this offer no longer stands; re-propose the call",
+                // RemedyRefusal::Superseded at the pinned OpenAPPA revision.
+                text: "[appa] This session or its policy changed after this offer was made, so the offer no longer applies. Call the blocked tool again with the same arguments; it will be checked again.",
               },
             ],
           },

@@ -303,7 +303,7 @@ export function RoutingStrategyField({
       />
       <FieldDescription>
         {form.watch("routingStrategy") === "least-tokens"
-          ? "Chooses the member with the fewest completed tokens in this pool during the current minute. Ties are random. Each request chooses again, without session affinity."
+          ? "Chooses the member with the fewest completed tokens in this pool during the current minute. Requests in progress are not counted. Ties are random. Each request chooses again, without session affinity."
           : "Splits traffic by weight and keeps a session on the same healthy member."}
       </FieldDescription>
     </div>

@@ -44,6 +44,19 @@ describe("MCP gateway task reaper", () => {
     return row ?? null;
   }
 
+  test("malformed pool hints do not prevent later cache cleanup", async () => {
+    const expired = JSON.stringify({ value: "old", expires: 1 });
+    const laterKey = `keyv:${CacheKey.SubagentLoadBalancer}-expired-proof`;
+    await db.execute(
+      sql`INSERT INTO keyv_cache (key, value) VALUES ('model-pool-usage:malformed', 'not-json'), (${laterKey}, ${expired})`,
+    );
+    await mcpGatewayTaskReaper.sweep();
+    const rows = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key = ${laterKey}`,
+    );
+    expect(rows.rows).toHaveLength(0);
+  });
+
   test("marks expired working rows failed and leaves everything else alone", async ({
     makeAgent,
   }) => {

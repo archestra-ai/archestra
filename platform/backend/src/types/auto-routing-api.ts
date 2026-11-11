@@ -231,7 +231,6 @@ export const AutoRoutingPlanDetailSchema = AutoRoutingPlanSummarySchema.extend({
 });
 export type AutoRoutingPlanDetail = z.infer<typeof AutoRoutingPlanDetailSchema>;
 
-/** What an auto router routed over a recent window, per tier, with the all-smart counterfactual. */
 /** Usage windows the router page offers. */
 export const AutoRoutingUsageQuerySchema = z.object({
   days: z.coerce
@@ -241,6 +240,7 @@ export const AutoRoutingUsageQuerySchema = z.object({
     .default(7),
 });
 
+/** What an auto router routed over a recent window, per tier, with the all-smart counterfactual. */
 export const AutoRoutingUsageResponseSchema = z.object({
   windowDays: z.number().int().positive(),
   /** Sessions with at least one request in the window. */

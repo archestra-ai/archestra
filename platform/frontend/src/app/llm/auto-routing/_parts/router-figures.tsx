@@ -196,15 +196,19 @@ function RoutedUsage({
             {formatCurrency(usage.costUsd / usage.windowDays)}/day on average
           </span>
         </SummaryTile>
-        <SummaryTile label="Saved vs all-smart">
+        <SummaryTile
+          label={
+            saved !== null && saved < 0
+              ? "Extra vs all-smart"
+              : "Saved vs all-smart"
+          }
+        >
           <span className="text-2xl font-semibold tabular-nums">
-            {saved === null ? "–" : formatCurrency(saved)}
+            {saved === null ? "–" : formatCurrency(Math.abs(saved))}
           </span>
           {saved !== null && usage.allSmartCostUsd !== null && (
             <span className="text-xs text-muted-foreground">
-              {usage.allSmartCostUsd > 0
-                ? `${Math.round((100 * saved) / usage.allSmartCostUsd)}% less than sending everything to ${smartModel}`
-                : `compared with sending everything to ${smartModel}`}
+              {allSmartNote(saved, usage.allSmartCostUsd, smartModel)}
             </span>
           )}
         </SummaryTile>
@@ -230,6 +234,19 @@ function RoutedUsage({
       />
     </div>
   );
+}
+
+/** How routed spend compares with sending everything to the smart model; spend can exceed it when a cheaper tier is priced above the smart one. */
+function allSmartNote(
+  saved: number,
+  allSmartCostUsd: number,
+  smartModel: string,
+): string {
+  if (allSmartCostUsd <= 0) {
+    return `compared with sending everything to ${smartModel}`;
+  }
+  const percent = Math.round((100 * Math.abs(saved)) / allSmartCostUsd);
+  return `${percent}% ${saved < 0 ? "more" : "less"} than sending everything to ${smartModel}`;
 }
 
 function currentTierModels(settings: AutoRouter) {

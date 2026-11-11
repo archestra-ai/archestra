@@ -652,6 +652,40 @@ describe("AutoRoutingOverviewPage", () => {
     expect(asked).toEqual(["7", "14"]);
   });
 
+  it("shows extra spend, not a negative saving, when routing cost more than all-smart", async () => {
+    server.use(
+      http.get(`${ROUTER_URL}/usage`, () =>
+        HttpResponse.json({
+          windowDays: 7,
+          sessions: 4,
+          requests: 10,
+          costUsd: 15,
+          allSmartCostUsd: 12,
+          tiers: [
+            { tier: "fast", sessions: 4, requests: 10, costUsd: 15 },
+            { tier: "normal", sessions: 0, requests: 0, costUsd: 0 },
+            { tier: "smart", sessions: 0, requests: 0, costUsd: 0 },
+          ],
+        } satisfies AutoRoutingUsage),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "What it routed in the last 7 days",
+      }),
+    );
+
+    const usage = await screen.findByTestId("auto-routing-usage");
+    expect(await within(usage).findByText("$3.00")).toBeInTheDocument();
+    expect(usage).toHaveTextContent("Extra vs all-smart");
+    expect(usage).toHaveTextContent(
+      "25% more than sending everything to claude-opus",
+    );
+    expect(usage).not.toHaveTextContent("-$");
+  });
+
   it("says when nothing went through the router in the window", async () => {
     const user = userEvent.setup();
     renderPage();

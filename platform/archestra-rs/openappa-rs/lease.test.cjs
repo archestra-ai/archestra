@@ -703,6 +703,39 @@ url = "http://127.0.0.1:${redirect.server.address().port}/"
     await expectRedirected(session, retried);
   });
 
+  await t.test('an untracked remedy whose receipt another pod took over reports the lost lease, not the notice', async () => {
+    const session = scope();
+    const offer = await redirectOffer(session);
+    const operationsBefore = await receipts(session);
+    const added = async () => (await receipts(session)).filter((receipt) => !operationsBefore.includes(receipt));
+    const event = { execution_mode: 'untracked', arguments: { offer_id: offer } };
+    const stale = await waitingOnConsult(classifier.gate, { operation: 'by_offer', input: offerInput(session, event) });
+    await lapse(session);
+    // The takeover finds the offer still executing under the stale pod and leaves the
+    // receipt pending under its own, ended lease.
+    classifier.gate.hold = false;
+    const taken = await remedy(session, event);
+    assert.ok(taken.error, JSON.stringify(taken));
+    const pending = await added();
+    assert.equal(pending.length, 1, JSON.stringify(pending));
+    assert.match(pending[0], /^remedy:untracked:[0-9a-f]{64}=pending$/);
+
+    classifier.gate.fail = true;
+    try {
+      answerConsults(classifier.gate);
+      const late = await stale.done;
+      assert.match(late.error ?? JSON.stringify(late), /lost its lease on this operation; retry the request/);
+    } finally {
+      classifier.gate.fail = false;
+    }
+    assert.deepEqual(await added(), pending, 'the stale pod leaves the receipt it no longer owns');
+    assert.deepEqual(await liveLeases(session), []);
+
+    const retried = await remedy(session, event);
+    assert.deepEqual(await added(), [pending[0].replace(/=pending$/, '=complete')]);
+    await expectRedirected(session, retried);
+  });
+
   await t.test('a spawn call and its result recover across a stopped pod', async () => {
     const session = scope();
     const child = { ...session, session_id: `${session.session_id}:agent:s1`, parent_id: session.session_id };

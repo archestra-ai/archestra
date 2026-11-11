@@ -163,6 +163,77 @@ impl Receipts {
         }
     }
 
+    /// Ends a finished dispatch whose work committed nothing: the receipts it created are
+    /// removed and the others released. `Lost` when one of them was no longer pending under
+    /// this dispatch, because another dispatch took it over.
+    pub(crate) fn discard(&self) -> Result<Guarded<()>, crate::SqlError> {
+        let (operations, results) = {
+            let claimed = self.claimed();
+            (claimed.operations.clone(), claimed.results.clone())
+        };
+        let held = (operations.len() + results.len()) as u64;
+        if held == 0 {
+            return Ok(Guarded::Finished(()));
+        }
+        let owner = self.owner().as_str().to_owned();
+        let settled = Sql(&self.store).with_client(move |client| {
+            let mut transaction = client.transaction()?;
+            let mut settled = 0;
+            for (key, holding) in &operations {
+                let statement = match holding {
+                    Holding::Created => {
+                        "DELETE FROM openappa_operations \
+                         WHERE organization_id = $1 AND session_id = $2 AND operation_id = $3 \
+                           AND status = 'pending' AND lease_owner = $4"
+                    }
+                    Holding::Recovered => {
+                        "UPDATE openappa_operations SET lease_expires_at = now() \
+                         WHERE organization_id = $1 AND session_id = $2 AND operation_id = $3 \
+                           AND status = 'pending' AND lease_owner = $4"
+                    }
+                };
+                settled += transaction.execute(
+                    statement,
+                    &[
+                        &key.session.organization_id,
+                        &key.session.session_id,
+                        &key.operation_id,
+                        &owner,
+                    ],
+                )?;
+            }
+            for (key, holding) in &results {
+                let statement = match holding {
+                    Holding::Created => {
+                        "DELETE FROM openappa_processed_results \
+                         WHERE organization_id = $1 AND session_id = $2 AND tool_call_id = $3 \
+                           AND status = 'pending' AND lease_owner = $4"
+                    }
+                    Holding::Recovered => {
+                        "UPDATE openappa_processed_results SET lease_expires_at = now() \
+                         WHERE organization_id = $1 AND session_id = $2 AND tool_call_id = $3 \
+                           AND status = 'pending' AND lease_owner = $4"
+                    }
+                };
+                settled += transaction.execute(
+                    statement,
+                    &[
+                        &key.session.organization_id,
+                        &key.session.session_id,
+                        &key.tool_call_id,
+                        &owner,
+                    ],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(settled)
+        })?;
+        Ok(match settled == held {
+            true => Guarded::Finished(()),
+            false => Guarded::Lost,
+        })
+    }
+
     /// Whether a renewal found a held receipt taken over. A renewal that cannot
     /// reach the database loses nothing yet: the lease stands until it expires,
     /// and the next renewal tries again.

@@ -430,6 +430,8 @@ pub(crate) struct RemedyAct<'a> {
     pub(crate) owner: &'a OfferOwner,
     pub(crate) offer_id: &'a str,
     pub(crate) ruling: Option<RulingInput>,
+    /// The control tool as the client was presented it.
+    pub(crate) control_tool: &'a str,
 }
 
 pub(crate) fn render_remedy_outcome(
@@ -470,7 +472,7 @@ pub(crate) fn render_remedy_outcome(
             OutputSource::Runtime,
             None,
             true,
-            render_unanswered(&annotator, class),
+            render_unanswered(&annotator, class, act.control_tool),
         ),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
@@ -554,9 +556,9 @@ fn denied_block(feedback: &str) -> &str {
 }
 
 /// Built from the typed class: the runtime's own text may change wording or grow detail.
-fn render_unanswered(annotator: &str, class: NoAnswerClass) -> String {
+fn render_unanswered(annotator: &str, class: NoAnswerClass, control_tool: &str) -> String {
     let next = match class.is_transient() {
-        true => "Call execute_remedy_plan again with the same offer id.".to_owned(),
+        true => format!("Call the {control_tool} tool again with the same offer id."),
         false => format!(
             "A retry will not help until an administrator checks the configuration of `{annotator}`."
         ),
@@ -1149,6 +1151,7 @@ mod typed_tests {
                 owner: &owner,
                 offer_id: "offer-1",
                 ruling: None,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap();
@@ -1255,6 +1258,7 @@ mod remedy_tests {
                 owner,
                 offer_id: QUOTED,
                 ruling,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap()

@@ -818,14 +818,11 @@ impl State {
                 .tool_call_id
                 .as_ref()
                 .map(|tool_call_id| RemedyAttempt(format!("remedy:{tool_call_id}")));
+            let presented = presentation_options(&input);
+            let control_tool = presented.control_tool.clone();
             let outcome = self
                 .runtime
-                .execute_embedded_remedy_with_options(
-                    &actor,
-                    args,
-                    presentation_options(&input),
-                    attempt,
-                )
+                .execute_embedded_remedy_with_options(&actor, args, presented, attempt)
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
@@ -848,14 +845,17 @@ impl State {
                     owner: &owner,
                     offer_id: offer_id.as_deref().unwrap_or_default(),
                     ruling: input.ruling,
+                    control_tool: &control_tool,
                 },
             )?;
             if unanswered && result_key.is_none() {
                 // An untracked remedy is keyed by its arguments, so a completed receipt would
                 // answer an identical retry with this notice instead of running it. The attempt
                 // committed nothing the receipt guards: the retry vouches afresh.
-                receipts.release(true);
-                return Ok(response);
+                return match receipts.discard().map_err(sql_failure)? {
+                    lease::Guarded::Finished(()) => Ok(response),
+                    lease::Guarded::Lost => Err(lease_lost()),
+                };
             }
             return finish_remedy(
                 &self.store,

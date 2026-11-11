@@ -62,9 +62,7 @@ Enable it in the Guardrails setting when setting up git sync or afterwards. Can 
 
 ### The Check and the Ruleset
 
-While self-service is on, Archestra keeps two things on the synced branch at each sync, and never merges anything itself:
-
-- **The check**, `Check OpenAPPA Guardrails [<App name> App]`, posted within a minute on each pull request that changes a file Git sync reads, and skipped on any other. It fails when Git sync would refuse the result, and, for a pull request Archestra opened, when the person who asked may no longer edit the server or someone else pushed to its branch. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) renames it.
+- **The check**, `Check OpenAPPA Guardrails` pull request check. It fails when the policy update author lacks required permissions or if the update would make the effective policy invalid. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) env var allows to set custom name for this check.
 - **The ruleset**, named like the check, with one rule: that check must pass before a merge. Pull requests, reviews, pushes and history stay the repository's to rule, so it fits a folder in a repository that holds other work too. Rules an administrator adds stay; the check rule comes back at the next sync if removed.
 
 ## Validations in Git

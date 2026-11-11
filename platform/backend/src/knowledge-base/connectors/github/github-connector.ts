@@ -478,6 +478,16 @@ export class GithubConnector extends BaseConnector {
           size: item.size,
         }));
 
+      if (
+        treeItems.length === 0 &&
+        allItems.some((item) => item.type === "blob")
+      ) {
+        this.log.warn(
+          { repo: repoFullName, branch, fileCount: 0 },
+          "Repository contains files, but none match File Types and folder filters. Use extensions such as .md or *.md, exact names such as Dockerfile, or * for text files; glob paths are not supported.",
+        );
+      }
+
       // GitHub caps a recursive tree listing; past the cap it returns a partial
       // tree with `truncated: true`. Silently indexing a subset looks identical
       // to "that folder has no matching files", so say it out loud.
@@ -1100,6 +1110,17 @@ function validateGithubConfig(config: GithubConfig): string | null {
 
   if (config.authMethod === "github_app" && !config.githubAppConfigId) {
     return "GitHub App authentication requires githubAppConfigId";
+  }
+
+  for (const settings of [config, ...(config.repositoryOverrides ?? [])]) {
+    for (const raw of settings.fileTypes ?? []) {
+      const entry = raw.trim();
+      if (entry === "*" || entry === "*.*") continue;
+      const literal = entry.startsWith("*.") ? entry.slice(2) : entry;
+      if (!literal || literal === "." || /[*?[\]{}/\\]/.test(literal)) {
+        return "File Types accepts extensions such as .md or *.md, exact names such as Dockerfile, or * for all text files. Paths and glob patterns are not supported; use Folders to select directories.";
+      }
+    }
   }
 
   return null;

@@ -67,7 +67,7 @@ const LIST_SETTINGS = [
     label: "File Types (optional)",
     placeholder: ".md, .yaml, Dockerfile",
     description:
-      "Comma-separated extensions or file names to index when repository files are enabled, such as .md or Dockerfile. Use * for every text file. Defaults to Markdown and YAML.",
+      "Comma-separated extensions or file names to index when repository files are enabled, such as .md or Dockerfile. Use * for every text file. Paths and general glob patterns are not supported; use Folders for directories. Defaults to Markdown and YAML.",
   },
   {
     name: "includePaths",

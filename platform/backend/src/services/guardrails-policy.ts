@@ -29,6 +29,10 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import {
+  SKILL_SANDBOX_ROOT,
+  SKILL_SANDBOX_TOOL_RESULTS_DIR,
+} from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -488,7 +492,7 @@ trust = { from = "suspicious", to = "trusted" }
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
-hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets. Files under ${SKILL_SANDBOX_TOOL_RESULTS_DIR} are results of this conversation's earlier tool calls, labelled when those calls ran, and files under ${SKILL_SANDBOX_ROOT} belong to the platform's skills: reading either is reading ordinary files."
 ranks = ["suspicious", "trusted"]
 marks = []
 effects = []

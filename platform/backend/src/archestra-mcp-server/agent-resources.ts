@@ -391,7 +391,8 @@ export async function handleCreateResource<
   logger.info(
     {
       agentId: context.agent.id,
-      createArgs: args,
+      argumentKeys: Object.keys(args),
+      argumentsSize: JSON.stringify(args).length,
       agentType: targetAgentType,
     },
     `create_${targetAgentType} tool called`,
@@ -776,7 +777,13 @@ export async function handleEditResource<
   const toolLabel = expectedType.replace("_", " ");
 
   logger.info(
-    { agentId: context.agent.id, editArgs: args, agentType: expectedType },
+    {
+      agentId: context.agent.id,
+      requestedId: args.id,
+      argumentKeys: Object.keys(args),
+      argumentsSize: JSON.stringify(args).length,
+      agentType: expectedType,
+    },
     `edit_${expectedType} tool called`,
   );
 

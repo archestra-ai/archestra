@@ -605,7 +605,15 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
         "\n\n",
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
-    callPreview: previewText({ preview, accepted, summary: review.summary }),
+    callPreview: previewText({
+      preview,
+      accepted,
+      summary: review.summary,
+      // A review staged before scope was stored keeps the preview it had.
+      ...(review.scope === null
+        ? { reviewText: formatReviewQuestion(review.text) }
+        : {}),
+    }),
     // Grok's preview is plain text and wraps to the actual terminal width.
     // Generate it from the reviewed data; stripping Markdown from the other
     // preview would also strip literal payload characters and retain its wraps.
@@ -1233,6 +1241,8 @@ function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
   summary?: string;
+  /** The whole review, for a review whose coverage is unknown. */
+  reviewText?: string;
 }): string {
   const { subject, summary, body } = params.preview;
   const accepted = params.accepted ?? [];
@@ -1246,6 +1256,9 @@ function previewText(params: {
     heading.join("\n"),
     ...summaryBlock(params.summary).map(escapeMarkdown),
     ...body,
+    ...(params.reviewText === undefined
+      ? []
+      : [`Policy review:\n${codeBlock(wrapCode(params.reviewText))}`]),
     ...(accepted.length > 0
       ? [
           [

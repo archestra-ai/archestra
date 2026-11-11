@@ -1019,6 +1019,10 @@ test("asks with the whole text when a review joins several authorities", async (
     scope: null,
   });
   expect(card?.question).toBe(text);
+  // The pane wraps long lines; the second authority's condition is still there.
+  expect(card?.callPreview?.replace(/\n\s+/g, " ")).toContain(
+    "- the readers must be the public audience",
+  );
   expect(form?.question.split("  •  ")).toContain(
     `Policy review: ${JSON.stringify(text)}`,
   );

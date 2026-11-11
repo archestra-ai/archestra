@@ -1082,8 +1082,8 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
   // What the source reads decides which files a pull request governs, so a
-  // policy file, validations folder or servers' folder moved makes every
-  // stored result stale, the unrelated ones included.
+  // policy file or servers' folder moved makes every stored result stale,
+  // the unrelated ones included.
   const keys = checking.map((pull) =>
     checkKey(
       "checked",
@@ -1092,7 +1092,6 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       source.repo,
       source.ref ?? "",
       source.path,
-      source.validationDirectory ?? "",
       serverRulesFolderOf(source),
       String(source.githubAppConfigId ?? ""),
       checkName,

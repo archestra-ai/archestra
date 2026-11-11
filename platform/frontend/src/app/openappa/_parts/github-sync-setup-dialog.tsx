@@ -517,6 +517,46 @@ export function GithubSyncSetupDialog({
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
 
+  // Self-service, on the App step for a new App (its permissions follow),
+  // and on the Repository step while editing, where the folder is.
+  const selfServiceChoice = (
+    <div className="flex items-start gap-3 rounded-lg border p-3">
+      <Checkbox
+        id="github-sync-self-service"
+        className="mt-0.5"
+        checked={selfService}
+        disabled={!!selfServiceEnvironment}
+        onCheckedChange={(checked) => setSelfService(checked === true)}
+      />
+      <div className="space-y-1">
+        <Label htmlFor="github-sync-self-service">
+          Enable MCP servers Guardrails self-service
+        </Label>
+        <FieldDescription>
+          MCP owners can manage MCP Guardrails. Additional GitHub App
+          permissions are added to ensure the related pull requests are checked.{" "}
+          <a
+            href={`${policyDocsUrl}#let-each-servers-team-own-its-rules`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80"
+          >
+            Learn more
+          </a>
+        </FieldDescription>
+        {selfServiceEnvironment ? (
+          <FieldDescription>
+            Set with{" "}
+            <code className="font-mono">
+              {selfServiceEnvironment.variable}={selfServiceEnvironment.value}
+            </code>
+            . Unset the environment variable to choose here.
+          </FieldDescription>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <StandardDialog
       open
@@ -728,45 +768,7 @@ export function GithubSyncSetupDialog({
         </p>
       ) : null}
 
-      {step === "app" && !gitlab && !loadingApps ? (
-        <div className="flex items-start gap-3 rounded-lg border p-3">
-          <Checkbox
-            id="github-sync-self-service"
-            className="mt-0.5"
-            checked={selfService}
-            disabled={!!selfServiceEnvironment}
-            onCheckedChange={(checked) => setSelfService(checked === true)}
-          />
-          <div className="space-y-1">
-            <Label htmlFor="github-sync-self-service">
-              Enable MCP servers Guardrails self-service
-            </Label>
-            <FieldDescription>
-              MCP owners can manage MCP Guardrails. Additional GitHub App
-              permissions are added to ensure the related pull requests are
-              checked.{" "}
-              <a
-                href={`${policyDocsUrl}#let-each-servers-team-own-its-rules`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary underline underline-offset-2 hover:text-primary/80"
-              >
-                Learn more
-              </a>
-            </FieldDescription>
-            {selfServiceEnvironment ? (
-              <FieldDescription>
-                Set with{" "}
-                <code className="font-mono">
-                  {selfServiceEnvironment.variable}=
-                  {selfServiceEnvironment.value}
-                </code>
-                . Unset the environment variable to choose here.
-              </FieldDescription>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {step === "app" && !gitlab && !loadingApps ? selfServiceChoice : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "fork" ? (
         <GithubAppChoice
@@ -1203,14 +1205,17 @@ export function GithubSyncSetupDialog({
               gitlab={gitlab}
             />
           ) : null}
+          {editing && !gitlab ? selfServiceChoice : null}
           {selfService && !gitlab ? (
             <div className="space-y-2">
               <Label htmlFor="github-sync-self-service-folder">
                 Self-service folder
               </Label>
               <FieldDescription>
-                Each managed MCP server gets its own rules file here, beside the
-                policy file, and the policy includes the folder.
+                Each managed MCP server policy file goes here and included into
+                the root policy. A pull request includes it to{" "}
+                {location.path?.split("/").pop() ?? "appa.toml"} if not yet
+                done.
               </FieldDescription>
               <Input
                 id="github-sync-self-service-folder"

@@ -754,7 +754,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
   ).toBeVisible();
   // The repository already syncing is kept, not announced as a new find.
   expect(
-    within(screen.getByRole("dialog")).queryByText(/appa\.toml/),
+    within(screen.getByRole("dialog")).queryByText(/becomes your policy/),
   ).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Branch")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));

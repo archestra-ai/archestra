@@ -1544,7 +1544,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Set it to rotate this key separately from the session secret. See [Guardrails Signing Key](/docs/admin/deployment/secret-rotation#guardrails-signing-key).
 
 - **`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`** - Name of the check Archestra posts on the policy repository's pull requests with [Git sync](/docs/agents/guardrails/git-sync#protect-each-servers-file), and of the branch ruleset that requires it.
-  - Default: `:githubAppName check OpenAPPA guardrails`, where `:githubAppName` stands for the GitHub App's name, so an App named `Acme Sync` posts `Acme Sync check OpenAPPA guardrails`.
+  - Default: `Check OpenAPPA Guardrails [:githubAppName App]`, where `:githubAppName` stands for the GitHub App's name, so an App named `Acme Sync` posts `Check OpenAPPA Guardrails [Acme Sync App]`.
   - Values: up to 100 characters, with or without `:githubAppName`. A rename moves the ruleset and its required check over at the next sync.
 
 - **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Sets **Self-service** under **Settings → Guardrails**, on the Git sync card, for the whole deployment: whether the people who can edit an MCP server [change its Guardrails rules themselves](/docs/agents/guardrails/git-sync#let-each-servers-team-own-its-rules) through pull requests. While it is set, it overrides the setting saved with the Git sync source, and the setting cannot be edited there. Unset it to edit the setting again.

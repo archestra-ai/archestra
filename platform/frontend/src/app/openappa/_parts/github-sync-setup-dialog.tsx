@@ -719,10 +719,11 @@ export function GithubSyncSetupDialog({
           />
           <div className="space-y-1">
             <Label htmlFor="github-sync-self-service">
-              Let server editors change their own rules
+              Enable MCP servers Guardrails self-service
             </Label>
             <FieldDescription>
-              Let MCP server editors manage its Guardrails rules themselves.{" "}
+              Let MCP server owners manage its guardrails rules. This requests
+              additional permissions to check corresponding pull requests.{" "}
               <a
                 href={`${policyDocsUrl}#let-each-servers-team-own-its-rules`}
                 target="_blank"

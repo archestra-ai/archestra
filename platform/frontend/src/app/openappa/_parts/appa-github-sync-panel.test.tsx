@@ -585,6 +585,8 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Use an existing repository"));
+  // The Self-service step comes first; nothing to change here.
+  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   // With a single App there is nothing to pick: it goes straight to its repositories.
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
@@ -665,6 +667,8 @@ test("starts fresh from the template, connects it through a chosen App and finis
     visibility: "private",
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The Self-service step comes first; nothing to change here.
+  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("radio", { name: /Policy App/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));

@@ -500,11 +500,15 @@ export function GithubSyncSetupDialog({
       if (mode === "pick" && apps.length === 1) setMode("fork");
       return;
     }
+    if (step === "selfService") {
+      setStep("start");
+      // An existing repository has nothing to do on the first step: go back to the choice.
+      if (origin === "existing") setOrigin(null);
+      return;
+    }
     if (mode !== "fork" && apps.length > 0 && !createdApp)
       return setMode("fork");
-    setStep("start");
-    // An existing repository has nothing to do on the first step: go back to the choice.
-    if (origin === "existing") setOrigin(null);
+    setStep("selfService");
   }
 
   if (pullRequest)
@@ -531,8 +535,7 @@ export function GithubSyncSetupDialog({
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
 
-  // Self-service, on the App step for a new App (its permissions follow),
-  // and on the Repository step while editing, where the folder is.
+  // Self-service, on the Repository step beside its folder.
   const selfServiceChoice = (
     <div className="flex items-start gap-3">
       <Checkbox
@@ -619,7 +622,16 @@ export function GithubSyncSetupDialog({
             </Button>
           )}
           {step === "start" && origin === "fresh" ? (
-            <Button type="button" onClick={() => setStep("app")}>
+            <Button type="button" onClick={() => setStep("selfService")}>
+              <span>Continue</span>
+            </Button>
+          ) : null}
+          {step === "selfService" ? (
+            <Button
+              type="button"
+              disabled={!serversFolderValid}
+              onClick={() => setStep("app")}
+            >
               <span>Continue</span>
             </Button>
           ) : null}
@@ -737,7 +749,7 @@ export function GithubSyncSetupDialog({
             disabled={!ready}
             onClick={() => {
               setOrigin("existing");
-              setStep("app");
+              setStep("selfService");
             }}
             visual={
               <span className="flex size-9 items-center justify-center rounded-lg border bg-muted/40">
@@ -793,14 +805,53 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
+      {step === "selfService" ? (
+        <div className="space-y-5">
+          {selfServiceChoice}
+          {selfService ? (
+            <div className="space-y-2">
+              <Label htmlFor="github-sync-self-service-folder">
+                Self-service folder
+              </Label>
+              <FieldDescription>
+                Each managed MCP server policy file goes here and included into
+                the root policy.
+                {editing?.selfService ? null : (
+                  <span>
+                    {" "}
+                    A pull request includes it to{" "}
+                    {location.path?.split("/").pop() ?? "appa.toml"} if not yet
+                    done.
+                  </span>
+                )}
+              </FieldDescription>
+              <Input
+                id="github-sync-self-service-folder"
+                value={selfServiceFolder}
+                placeholder={DEFAULT_SELF_SERVICE_FOLDER}
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                aria-invalid={!serversFolderValid}
+                onChange={(event) => setSelfServiceFolder(event.target.value)}
+              />
+              {serversFolderValid ? null : (
+                <p className="text-xs text-destructive">
+                  Use a folder path such as <code>rules/servers</code>.
+                  Wildcards and <code>..</code> are not allowed.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {step === "app" && !gitlab && loadingApps ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <LoaderCircle className="size-3 animate-spin" />
           <span>Loading GitHub Apps…</span>
         </p>
       ) : null}
-
-      {step === "app" && !gitlab && !loadingApps ? selfServiceChoice : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "fork" ? (
         <GithubAppChoice
@@ -1237,42 +1288,6 @@ export function GithubSyncSetupDialog({
               gitlab={gitlab}
             />
           ) : null}
-          {editing && !gitlab ? selfServiceChoice : null}
-          {selfService && !gitlab ? (
-            <div className="space-y-2">
-              <Label htmlFor="github-sync-self-service-folder">
-                Self-service folder
-              </Label>
-              <FieldDescription>
-                Each managed MCP server policy file goes here and included into
-                the root policy.
-                {editing?.selfService ? null : (
-                  <span>
-                    {" "}
-                    A pull request includes it to{" "}
-                    {location.path?.split("/").pop() ?? "appa.toml"} if not yet
-                    done.
-                  </span>
-                )}
-              </FieldDescription>
-              <Input
-                id="github-sync-self-service-folder"
-                value={selfServiceFolder}
-                placeholder={DEFAULT_SELF_SERVICE_FOLDER}
-                autoComplete="off"
-                data-1p-ignore
-                spellCheck={false}
-                aria-invalid={!serversFolderValid}
-                onChange={(event) => setSelfServiceFolder(event.target.value)}
-              />
-              {serversFolderValid ? null : (
-                <p className="text-xs text-destructive">
-                  Use a folder path such as <code>rules/servers</code>.
-                  Wildcards and <code>..</code> are not allowed.
-                </p>
-              )}
-            </div>
-          ) : null}
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
@@ -1428,7 +1443,7 @@ export function GithubSyncSetupDialog({
 
 // ===================== Internals =====================
 
-type Step = "provider" | "start" | "app" | "repo" | "connect";
+type Step = "provider" | "start" | "selfService" | "app" | "repo" | "connect";
 type AppMode = "fork" | "pick" | "create";
 type Origin = "fresh" | "existing";
 type RepositoryStatus =
@@ -1795,6 +1810,12 @@ function headerFor(params: {
           title: "Set up Git sync",
           description: `Where should your policy live? ${params.appName} only ever gets access to that one repository.`,
         };
+  if (params.step === "selfService")
+    return {
+      title: "Self-service MCP Guardrails",
+      description:
+        "Optional: let MCP owners manage their MCP servers' Guardrails.",
+    };
   if (params.step === "app") {
     if (params.mode === "fork")
       return {
@@ -1830,6 +1851,7 @@ function headerFor(params: {
 const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "start", label: "Start" },
+  { id: "selfService", label: "Self-service" },
   { id: "app", label: "GitHub App" },
   { id: "repo", label: "Repository" },
 ];

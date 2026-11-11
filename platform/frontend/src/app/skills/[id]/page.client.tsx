@@ -44,6 +44,7 @@ import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
+import { BuiltInUpdateNotice } from "../_parts/built-in-update-notice";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
 import {
@@ -445,6 +446,15 @@ function SkillDetailView({
               provider={skill.sourceProvider}
             />
           ) : null}
+          {skill.builtInUpdateAvailable && (
+            <BuiltInUpdateNotice
+              skillId={skill.id}
+              skillName={skill.name}
+              disabledReason={
+                isDirty ? "Save or discard your changes first" : undefined
+              }
+            />
+          )}
           {isGone ? (
             <Alert variant="destructive">
               <AlertDescription>

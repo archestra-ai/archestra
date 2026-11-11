@@ -2,7 +2,7 @@
 title: Skills
 description: Reusable SKILL.md instruction sets that agents load on demand
 order: 3
-lastUpdated: 2026-10-19
+lastUpdated: 2026-11-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -69,6 +69,8 @@ Archestra ships these skills:
 - **Build App:** build an interactive [app](/docs/chat/apps) from chat.
 - **Remote Agents Handoff:** move work between your machine and a [Remote Agent](/docs/agents/runtime/handoff) in Archestra.
 - **appa-guide:** configure [Guardrails](/docs/agents/guardrails). It appears only when guardrails are on.
+
+Built-in skills update with Archestra until you edit one: an edited copy keeps your changes and stops updating. When a newer version ships, the skill shows **Update available**. Open it and click **Reset to default** to take the new version; your edits stay in its version history.
 
 ## Skills vs Agents
 

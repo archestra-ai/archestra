@@ -545953,6 +545953,10 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "builtInUpdateAvailable": {
+                            "type": "boolean",
+                            "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                           }
                         },
                         "required": [
@@ -545997,7 +546001,8 @@
                           "environments",
                           "authorName",
                           "usageUserCount",
-                          "labels"
+                          "labels",
+                          "builtInUpdateAvailable"
                         ],
                         "additionalProperties": false
                       }
@@ -546923,6 +546928,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -546965,7 +546974,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }
@@ -547603,6 +547613,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -547645,7 +547659,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }
@@ -548390,6 +548405,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -548432,7 +548451,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }
@@ -551353,6 +551373,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -551395,7 +551419,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }
@@ -552311,6 +552336,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -552353,7 +552382,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }
@@ -553073,6 +553103,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "builtInUpdateAvailable": {
+                      "type": "boolean",
+                      "description": "True for a built-in skill whose copy was edited, so it no longer receives updates, while this deployment ships a newer default. Resetting the skill applies that default."
                     }
                   },
                   "required": [
@@ -553115,7 +553149,8 @@
                     "teams",
                     "users",
                     "environments",
-                    "labels"
+                    "labels",
+                    "builtInUpdateAvailable"
                   ],
                   "additionalProperties": false
                 }

@@ -1869,6 +1869,243 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("delivers xAI request and turn guidance without developer-role messages on xai:chatCompletions", async () => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const sessionId = "user:user|opencode-xai-session";
+    const context = requestContext({ sessionId });
+    context.provider = "xai";
+    context.interactionType = "xai:chatCompletions";
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-xai-session",
+    };
+    const trusted = trustedOf(context);
+    trusted.request = {
+      session: {
+        sessionId: "opencode-xai-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [
+        { name: "question" },
+        { name: "bash" },
+        { name: "archestra__execute_remedy_plan" },
+        { name: "archestra__get_remedy_plans" },
+        { name: "archestra__ask_user" },
+      ],
+    };
+    const greeting = {
+      messages: [
+        { role: "system", content: "You are an assistant." },
+        { role: "user", content: "Hi" },
+      ] as Array<Record<string, unknown>>,
+    };
+    context.requestBody = greeting;
+
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request: greeting });
+      }
+      expect(greeting.messages).toHaveLength(2);
+      expect(greeting.messages.map((message) => message.role)).toEqual([
+        "system",
+        "user",
+      ]);
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "You are an assistant.",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "The organization's guardrails policy can block a tool call",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "ask with question",
+      );
+      expect(greeting.messages[1]).toEqual({ role: "user", content: "Hi" });
+
+      const cachedSystemPrefix = greeting.messages[0]?.content;
+      const offerId = "offer-xai-remedy";
+      await stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId,
+          text: "Review bash call.",
+          tool: "bash",
+          arguments: '{"command":"whoami"}',
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "call_remedy",
+            name: "archestra__execute_remedy_plan",
+            content: JSON.stringify({
+              outcome: "review_required",
+              offer_id: offerId,
+            }),
+            isError: false,
+          },
+        ],
+      });
+      const continuation = {
+        messages: [
+          { role: "system", content: "You are an assistant." },
+          { role: "user", content: "Run whoami" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [{ id: "call_remedy", type: "function" }],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call_remedy",
+            content:
+              '{"outcome":"review_required","offer_id":"offer-xai-remedy"}',
+          },
+        ] as Array<Record<string, unknown>>,
+      };
+      await plugin.onBeforeModel({ ...context, request: continuation });
+      expect(
+        continuation.messages.some((message) => message.role === "developer"),
+      ).toBe(false);
+      expect(continuation.messages[0]?.content).toBe(cachedSystemPrefix);
+      expect(continuation.messages.at(-1)).toEqual({
+        role: "user",
+        content: expect.stringContaining(offerId),
+      });
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "kimi:chatCompletions",
+    "deepseek:chatCompletions",
+    "mistral:chatCompletions",
+    "vllm:chatCompletions",
+    "ollama:chatCompletions",
+    "openrouter:chatCompletions",
+    "azure:chatCompletions",
+    "perplexity:responses",
+  ] as const)("preserves OpenAPPA guidance delivery on governed appaWireFamily providers (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request =
+      interactionType === "perplexity:responses"
+        ? {
+            input: [
+              {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: "Hi" }],
+              },
+            ] as Array<Record<string, unknown>>,
+          }
+        : {
+            messages: [
+              { role: "system", content: "Base system." },
+              { role: "user", content: "Hi" },
+            ] as Array<Record<string, unknown>>,
+          };
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const items = "input" in request ? request.input : request.messages;
+      expect(
+        Array.isArray(items) &&
+          items.some(
+            (item) =>
+              item.role === "developer" &&
+              JSON.stringify(item.content).includes(
+                "The organization's guardrails policy can block a tool call",
+              ),
+          ),
+      ).toBe(true);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "gemini:generateContent",
+    "cohere:chat",
+  ] as const)("leaves non-APPA interaction types untouched (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request = {
+      messages: [
+        { role: "system", content: "Base system." },
+        { role: "user", content: "Hi" },
+      ],
+    };
+    const original = structuredClone(request);
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request).toEqual(original);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("does not add native-delegation guidance without a collaboration spawn declaration", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-no-native-spawn" });

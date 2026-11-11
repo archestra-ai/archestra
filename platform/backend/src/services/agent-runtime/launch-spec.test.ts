@@ -1415,48 +1415,53 @@ describe("buildAgentRunLaunchSpec", () => {
     });
   }
 
-  test("never falls back to an OpenAI API key for Codex", async ({
-    makeOrganization,
-    makeAdmin,
-    makeMember,
-    makeSecret,
-    makeLlmProviderApiKey,
-    makeAgent,
-  }) => {
-    const setup = await makeConfiguredAgent({
-      provider: "openai",
+  for (const codexCommand of [
+    "archestra-codex",
+    "archestra-codex-runtime",
+  ] as const) {
+    test(`never falls back to an OpenAI API key for Codex (${codexCommand})`, async ({
       makeOrganization,
       makeAdmin,
       makeMember,
       makeSecret,
       makeLlmProviderApiKey,
       makeAgent,
-    });
-    const configuredRuntime = runtime(setup.agent, "openai_responses");
-    configuredRuntime.command = ["archestra-codex"];
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "openai",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const configuredRuntime = runtime(setup.agent, "openai_responses");
+      configuredRuntime.command = [codexCommand];
 
-    await expect(
-      buildAgentRunLaunchSpec({
-        runtime: configuredRuntime,
-        taskId: crypto.randomUUID(),
-        runId: crypto.randomUUID(),
-        agentId: setup.agent.id,
-        actor: {
-          id: setup.user.id,
-          kind: "user",
+      await expect(
+        buildAgentRunLaunchSpec({
+          runtime: configuredRuntime,
+          taskId: crypto.randomUUID(),
+          runId: crypto.randomUUID(),
+          agentId: setup.agent.id,
+          actor: {
+            id: setup.user.id,
+            kind: "user",
+            organizationId: setup.agent.organizationId,
+          },
           organizationId: setup.agent.organizationId,
-        },
-        organizationId: setup.agent.organizationId,
-        runtimeScope: "agent-tests",
-        effectiveNetworkPolicy: { source: "built_in", policy: null },
-        appName: "Archestra",
-        runMode: "interactive",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining("never falls back"),
+          runtimeScope: "agent-tests",
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+          appName: "Archestra",
+          runMode: "interactive",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining("never falls back"),
+      });
     });
-  });
+  }
 
   test("does not inject a Claude subscription token into a custom runtime", async ({
     makeOrganization,

@@ -545392,6 +545392,16 @@
           },
           {
             "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "visibleTo",
+            "required": false,
+            "description": "Admin-only: list skills visible to this user in the current organization, using the target user's permissions."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",

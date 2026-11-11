@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,9 +23,11 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 
 ## Call as the App
 
-Each application owns its A2A tasks and retained runtime workspaces. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
+Each application owns its in-process A2A tasks. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
 
-Select **Service account (optional)** under **Advanced** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks and runtime workspaces belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them. Use the account's API key on the platform API to manage its runs and delete its own retained workspaces.
+Select **Service account (optional)** under **Advanced** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them.
+
+Client-credentials OAuth tokens cannot start or continue dedicated Agent Runtime runs or use Agent Runtime tools, including when the client is bound to a service account. Use an in-process agent, or authenticate with the service account's API key for runtime access, subject to its permissions. This restriction does not apply to authorization-code tokens acting for a signed-in person.
 
 The client's allowed agents and gateways still limit OAuth access, and the service account must also have permission to use each resource. Disabling the account stops its OAuth requests; changing the binding revokes issued OAuth tokens. In the edit dialog, the selector is under **Access**.
 

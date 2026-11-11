@@ -1366,6 +1366,35 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateGithubPat]: {},
   [RouteId.DeleteGithubPat]: {},
+  // Blob providers hold organization-wide storage credentials, so they sit
+  // with the other organization settings.
+  [RouteId.ListBlobProviders]: { organizationSettings: ["read"] },
+  [RouteId.CreateBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.UpdateBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.DeleteBlobProvider]: { organizationSettings: ["update"] },
+  [RouteId.TestBlobProvider]: { organizationSettings: ["update"] },
+  // A cost export ships organization-wide spend out of Archestra: configuring
+  // it needs both cost visibility and organization settings.
+  [RouteId.ListCostExports]: {
+    llmCost: ["read"],
+    organizationSettings: ["read"],
+  },
+  [RouteId.CreateCostExport]: {
+    llmCost: ["read"],
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateCostExport]: {
+    llmCost: ["read"],
+    organizationSettings: ["update"],
+  },
+  [RouteId.DeleteCostExport]: {
+    llmCost: ["read"],
+    organizationSettings: ["update"],
+  },
+  [RouteId.RunCostExport]: {
+    llmCost: ["read"],
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     organizationSettings: ["update"],
   },
@@ -2185,6 +2214,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
+  "/llm/cost-exports": { llmCost: ["read"], organizationSettings: ["read"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
   "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },
@@ -2243,6 +2273,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
+  "/settings/blob-providers": { organizationSettings: ["read"] },
   "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/appearance/[section]": { organizationSettings: ["read"] },

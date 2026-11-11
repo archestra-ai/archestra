@@ -25,6 +25,7 @@ import { handleConnectorSync } from "./connector-sync-handler";
 import { handleContentEncryptionBackfill } from "./content-encryption-backfill-handler.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
+import { handleCostExport } from "./cost-export-handler";
 import { handleHeadlessSandboxCleanup } from "./headless-sandbox-cleanup-handler";
 import { handleInteractionSessionPreviewBackfill } from "./interaction-session-preview-backfill-handler";
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
@@ -56,6 +57,7 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     handleInteractionUserActivityRebuild,
   );
   taskQueueService.registerHandler("llm_usage_rollup", handleLlmUsageRollup);
+  taskQueueService.registerHandler("cost_export", handleCostExport);
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);

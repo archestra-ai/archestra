@@ -7,6 +7,7 @@ import {
   Brain,
   Cable,
   Fingerprint,
+  HardDrive,
   KeyRound,
   Library,
   Lock,
@@ -115,6 +116,15 @@ export function useSettingsTabs({
             label: "Credentials",
             href: "/settings/credentials",
             Icon: KeyRound,
+          },
+        ]
+      : []),
+    ...(permissionMap?.["/settings/blob-providers"]
+      ? [
+          {
+            label: "Blob Providers",
+            href: "/settings/blob-providers",
+            Icon: HardDrive,
           },
         ]
       : []),

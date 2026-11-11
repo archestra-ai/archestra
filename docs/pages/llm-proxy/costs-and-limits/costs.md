@@ -1,8 +1,8 @@
 ---
 title: Costs
-description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label
+description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label, and export them to your own bucket
 order: 1
-lastUpdated: 2026-11-05
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -80,6 +80,65 @@ What to know:
 - A request counts for a team the way its [team limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) count it: billed to the team or one of its child teams, or made by a member through an agent shared with the team.
 - Totals count each request once, even when it counts for both a team and its parent. A parent's row includes its child teams' usage, so rows can add up to more than the total.
 - Agent sharing, team membership, and which team is a child of which are read as they are now. Changing any of them, including moving a team under another parent, changes past figures here. A limit keeps the usage it already counted.
+
+## Export Costs to Object Storage
+
+Schedule a file of every hour's or day's model spend into your own bucket, so your FinOps tools show Archestra's LLM costs next to your cloud bill. Each file is a CSV in [FOCUS 1.2](https://focus.finops.org/), the FinOps Foundation's open format for cost and usage data, which tools such as Athena, BigQuery, and DuckDB read as a table.
+
+Before you start, add a [blob provider](/docs/admin/blob-providers) for the bucket. Viewing exports requires [`llmCost:read`](/docs/reference/permissions#llmCost:read) and [`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read). Adding, changing, or running one also requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Open **Costs & Limits → Exports** and add an export.
+2. Name it and pick the blob provider.
+3. Choose the schedule: **Hourly** writes one file per hour, **Daily** one file per UTC day.
+4. Optionally change the path prefix, `cost-exports` by default.
+5. Save, then click **Run now** to write a file right away and check the pipeline.
+
+The export's row shows the last run's status and the key of the last file written. A failed run shows the storage error. See [Fix a Failed Test](/docs/admin/blob-providers#fix-a-failed-test) for what each error means.
+
+### Where Files Land
+
+Each period is one file, under the blob provider's key prefix, then the export's path prefix:
+
+```text
+<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv
+<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10T14.csv
+```
+
+The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC. The `year=`, `month=`, and `day=` folders are Hive-style partitions, so a query that filters by date reads only the matching files.
+
+### When Files Are Written
+
+Archestra writes a period once it has been over for 15 minutes, so requests still running at its end are counted. Expect each file about 15 to 20 minutes after its hour or day ends.
+
+- Scheduled runs start with the period in progress when you create the export.
+- **Run now** writes every period that is due. When none is due, it rewrites the latest completed period.
+- A period always goes to the same key. A rerun or retry overwrites its file, so a period is never in two files.
+- When runs are missed or a write fails, the next run writes every period since the last file, up to 48 periods at a time.
+
+### What Each Row Holds
+
+Each row is one hour of usage for one combination of provider, model, billing mode, team, agent, app or Knowledge connector, and person. Archestra does not bill model usage: the provider does, so the provider is the row's vendor and your organization is the billing account.
+
+| FOCUS column | Holds |
+| --- | --- |
+| `BilledCost`, `EffectiveCost` | Billed spend in USD. `0` for [subscription traffic](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost), which the provider does not bill per token. |
+| `ListCost` | Archestra's list-price estimate for every request, including subscription traffic. |
+| `ProviderName`, `PublisherName`, `InvoiceIssuerName` | The model provider, such as Anthropic or OpenAI. |
+| `BillingAccountId`, `BillingAccountName` | Your Archestra organization. |
+| `SubAccountId`, `SubAccountName` | The billing team. Empty when the request has none. |
+| `ResourceId`, `ResourceName`, `ResourceType` | The agent, LLM proxy, MCP gateway, app, or Knowledge connector that made the request. |
+| `SkuId` | The model. |
+| `ConsumedQuantity` | Input plus output tokens. |
+| `ChargePeriodStart`, `ChargePeriodEnd` | The hour, in UTC. The billing period is the calendar month. |
+| `Tags` | JSON with `archestra:billing-mode`, `archestra:provider-api`, and, when known, `archestra:team`, `archestra:user`, and `archestra:resource`. |
+
+Archestra-specific columns start with `x_`, as FOCUS reserves for custom columns: `x_BillingMode`, `x_InputTokens`, `x_OutputTokens`, `x_CacheReadTokens`, `x_CacheWriteTokens`, `x_Requests`, `x_ProviderApi`, `x_UserId`, and `x_UserEmail`.
+
+What to know:
+
+- Files name each person by email. Limit who can read the bucket accordingly.
+- To sum spend, add `BilledCost`. Adding `ListCost` counts subscription traffic at list price.
+- Changing the schedule never writes an hour twice. After a switch from hourly to daily, the rest of the current day is written as hourly files, and daily files start at the next midnight UTC.
 
 ## What to Know
 

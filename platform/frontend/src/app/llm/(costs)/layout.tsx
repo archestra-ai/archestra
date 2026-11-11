@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +14,7 @@ import { useTeamLimitAccess } from "@/lib/limits-access";
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
   { label: "Limits", href: "/llm/limits" },
+  { label: "Exports", href: "/llm/cost-exports" },
 ];
 
 const PAGE_CONFIG: Record<
@@ -32,6 +34,10 @@ const PAGE_CONFIG: Record<
     title: "Limits",
     description: "Set spend and rate limits for LLM traffic.",
   },
+  "/llm/cost-exports": {
+    title: "Exports",
+    description: <CostExportsDescription />,
+  },
 };
 
 /**
@@ -49,6 +55,31 @@ function TeamCostsDescription({ canReadModels }: { canReadModels: boolean }) {
           <ModelSettingsNote />
         </>
       )}
+    </>
+  );
+}
+
+function CostExportsDescription() {
+  return (
+    <>
+      Send cost and usage to your own object storage on a schedule, in the
+      FinOps FOCUS format. Exports write to a{" "}
+      <Link
+        href="/settings/blob-providers"
+        className="text-primary hover:underline"
+      >
+        blob provider
+      </Link>
+      .{" "}
+      <ExternalDocsLink
+        href={getDocsUrl(
+          DocsPage.PlatformCostExports,
+          "export-costs-to-object-storage",
+        )}
+        className="hover:underline"
+      >
+        Learn more
+      </ExternalDocsLink>
     </>
   );
 }

@@ -1364,6 +1364,9 @@ export function GithubSyncSetupDialog({
             gitlab ? "Check the project" : "Check the repository",
             "Sync the policy",
             `Open a setup ${gitChangeRequestNoun(gitlab ? "gitlab" : "github")} if rules require one`,
+            ...(selfService && !gitlab
+              ? ["Open the pull request that includes the self-service folder"]
+              : []),
           ].map((label, index) => (
             <li key={label} className="flex items-center gap-3 text-sm">
               {index === 0 ? (

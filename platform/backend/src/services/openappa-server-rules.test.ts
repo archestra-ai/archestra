@@ -2496,4 +2496,38 @@ test("the self-service folder is chosen when turning on: the servers' files live
     enabled: false,
   });
   expect((await turnOn("mcp")).selfService.directory).toBe("mcp");
+
+  // A source saved again has no accepted commit until the next pull: the
+  // include pull request pulls first rather than wait for the schedule.
+  await OpenAppaGithubSyncModel.save(org.id, {
+    repo: "example/policies",
+    ref: "main",
+    path: "appa.toml",
+    interval: "1h",
+    githubAppConfigId: (await OpenAppaGithubSyncModel.find(org.id))
+      ?.githubAppConfigId,
+    githubPatId: null,
+    validationDirectory: "",
+    selfService: true,
+    selfServiceDirectory: "mcp",
+  });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBeNull();
+  server.use(
+    http.get(`${REPO}/git/commits/${SECOND}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+  );
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toEqual({ number: 9, url: "https://github.com/example/policies/pull/9" });
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.sourceCommit).toBe(
+    SECOND,
+  );
+  expect(trees.at(-1)?.tree.map((file) => file.path)).toEqual([
+    "appa.toml",
+    "mcp/README.md",
+  ]);
 });

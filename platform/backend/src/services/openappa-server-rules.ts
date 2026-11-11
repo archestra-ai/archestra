@@ -36,6 +36,7 @@ import {
   hasOwnFile,
   policyCheckNameFor,
   selfServiceActive,
+  syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -580,6 +581,11 @@ async function rootAt(params: {
  * one of ours left from an earlier folder is closed first.
  */
 export async function ensureSelfServiceInclude(params: Caller) {
+  // A source just saved has no accepted commit yet: pull it now rather than
+  // wait for the schedule, so the pull request opens at once.
+  const saved = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (saved?.interval && saved.repo && saved.path && !saved.sourceCommit)
+    await syncAppaGithubPolicy(params.organizationId);
   const source = await requireSource(params.organizationId);
   const folder = serverRulesFolderOf(source);
   const entry = serverRulesInclude(folder);

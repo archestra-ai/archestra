@@ -206,6 +206,11 @@ export const handlers: HttpHandler[] = [
       },
     ),
   ),
+  // Git sync's self-service reads: off, with no protection or App to show,
+  // as a deployment that never set it up answers.
+  ...getJson("/api/openappa/github-sync/self-service", { enabled: false }),
+  ...getJson("/api/openappa/github-sync/protection", null),
+  ...getJson("/api/openappa/github-sync/app-grants", null),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [

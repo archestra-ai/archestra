@@ -34,6 +34,18 @@ beforeEach(() => {
     validationDirectory: "",
     githubWebUrl: "https://github.com",
     provider: "github",
+    selfService: {
+      enabled: false,
+      directory: "mcp",
+      environment: {
+        variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
+        value: "disabled",
+      },
+      directoryEnvironment: {
+        variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY",
+        value: "mcp",
+      },
+    },
     source: null,
   };
   server.use(

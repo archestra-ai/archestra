@@ -22,7 +22,10 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { createAgentServer } from "./utils";
 
 type ListHandler = (request: unknown) => Promise<ListToolsResult>;
-type SearchResult = { tools: Array<{ toolName: string }> };
+type SearchResult = {
+  tools: Array<{ toolName: string }>;
+  nextOffset: number | null;
+};
 
 const READ = IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES.map((shortName) =>
   archestraMcpBranding.getToolName(shortName),
@@ -77,16 +80,22 @@ async function listed(params: {
   return response.tools.map((tool) => tool.name);
 }
 
+/** Every tool the search offers for the Guardrails query, page by page. */
 async function searched(context: ArchestraContext): Promise<string[]> {
-  const result = await executeArchestraTool(
-    archestraMcpBranding.getToolName("search_tools"),
-    { query: "guardrails|openappa", mode: "regex", limit: 20 },
-    context,
-  );
-  expect(result.isError).toBeFalsy();
-  return (result.structuredContent as SearchResult).tools.map(
-    (tool) => tool.toolName,
-  );
+  const names: string[] = [];
+  let offset: number | null = 0;
+  while (offset !== null) {
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName("search_tools"),
+      { query: "guardrails|openappa", mode: "regex", limit: 20, offset },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const page = result.structuredContent as SearchResult;
+    names.push(...page.tools.map((tool) => tool.toolName));
+    offset = page.nextOffset;
+  }
+  return names;
 }
 
 type Admission = "admitted" | "not_assigned" | "denied";

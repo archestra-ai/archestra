@@ -7,7 +7,7 @@ type GithubRequest = {
   url: string;
   /** Sent as a bearer token whenever defined, even when empty. */
   token?: string;
-  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH";
+  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: object;
   accept?: "application/vnd.github+json" | "application/vnd.github.raw+json";
   apiVersion?: boolean;
@@ -15,7 +15,7 @@ type GithubRequest = {
 };
 
 /** Turns a failed GitHub response into the error the operation reports. */
-export type GithubErrorPolicy = (response: Response) => Promise<ApiError>;
+type GithubErrorPolicy = (response: Response) => Promise<ApiError>;
 
 export function githubFetch(request: GithubRequest): Promise<Response> {
   return fetch(request.url, {

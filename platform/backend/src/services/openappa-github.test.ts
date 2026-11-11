@@ -3,7 +3,6 @@ import { describe, expect, test } from "vitest";
 import { useMswServer } from "@/test/msw";
 import { ApiError } from "@/types";
 import {
-  type GithubErrorPolicy,
   githubFetch,
   githubJson,
   githubPolicyChangeErrors,
@@ -30,6 +29,9 @@ async function failure(promise: Promise<unknown>) {
   const { statusCode, message } = error as ApiError;
   return { statusCode, message };
 }
+
+/** The error policy `githubJson` takes; 1.4 exports no type for it. */
+type GithubErrorPolicy = Parameters<typeof githubJson>[0]["errors"];
 
 const json = (errors: GithubErrorPolicy, signal?: AbortSignal) =>
   githubJson({ url: REPO, token: "t", errors, signal });

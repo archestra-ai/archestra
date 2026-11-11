@@ -17,6 +17,8 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  */
 export const CacheKey = {
   OpenAppaHitlSummary: "openappa-hitl-summary",
+  /** Policy repository pull request results checked, and repositories that refused a check. */
+  OpenAppaPolicyCheck: "openappa-policy-check",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */

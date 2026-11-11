@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import UserModel from "@/models/user";
 import { declaredCredentials } from "@/openappa/battery-target";
 import {
   addedGrants,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { withRequester } from "@/openappa/policy-text";
 import {
   guardrailsPolicyService,
   requireGrantPermission,
@@ -170,6 +172,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       "GitHub has changed since the last policy sync. Sync the policy, then review the new revision.",
     );
 
+  // The commit names the person who asked, in a trailer GitHub's signature
+  // for the App covers; an author of its own would leave the commit unsigned.
+  const requester = await UserModel.getById(params.userId);
+  const message = requester
+    ? withRequester(params.title, requester.email)
+    : params.title;
   let head: string;
   if (params.validationChanges) {
     await assertValidationSource(params);
@@ -227,7 +235,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       token,
       errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         tree: checkedSha(tree.sha),
         parents: [baseSha],
       },
@@ -270,7 +278,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       token,
       errors: githubPolicyChangeErrors,
       body: {
-        message: params.title,
+        message,
         content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
@@ -540,10 +548,14 @@ async function resolveWriteToken(source: {
   organizationId: string;
   githubPatId: string | null;
   githubAppConfigId: string | null;
+  repo: string | null;
 }) {
   if (!source.githubPatId && !source.githubAppConfigId)
     throw new ApiError(409, "A GitHub write credential is required");
-  const access = await resolveOpenAppaGithubAccess(source);
+  const access = await resolveOpenAppaGithubAccess(source, {
+    contents: "write",
+    pull_requests: "write",
+  });
   return { ...access, token: access.token as string };
 }
 

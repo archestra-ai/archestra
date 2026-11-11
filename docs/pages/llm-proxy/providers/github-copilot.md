@@ -54,15 +54,16 @@ curl "https://<archestra-host>/v1/github-copilot/chat/completions" \
 
 ### Connect Several GitHub Organizations
 
-Connect one plan for each GitHub organization that pays for Copilot, such as each organization of an Enterprise Managed Users enterprise. Each plan bills its own organization and lists the models that the organization's Copilot policy allows.
+Connect one plan for each GitHub organization that pays for Copilot, such as each organization of an Enterprise Managed Users enterprise. Each plan bills its own organization and serves the models that the organization's Copilot policy allows.
 
 1. Connect the first organization's plan as described above.
 2. Under **Enterprise plans**, click **Connect** on the **Connect other GitHub Copilot organization** card and enter the next organization.
 3. Pick an App already installed on that organization under **Use an App I already have**, or create a new App for it. An App created here is private, so GitHub installs it only on the organization that owns it.
 
-Archestra keeps one plan per organization. To change an organization's App, open **Manage** on its plan.
+The new plan appears under **Enterprise plans**, named after the organization.
 
-A request uses the plan that its chat, agent, or virtual key names, and the model pickers show the models of that plan. A virtual key holds one plan, so create one virtual key for each organization that your pipelines bill.
+- Archestra keeps one plan per organization. To change an organization's App, open **Manage** on its plan.
+- A chat, agent, or virtual key uses the plan it names, and its model picker shows the models of that plan. A virtual key holds one plan, so create one virtual key for each organization that your pipelines bill.
 
 <span id="manage-or-reconnect-a-plan"></span><span id="proxy-endpoint"></span><span id="limits"></span>
 

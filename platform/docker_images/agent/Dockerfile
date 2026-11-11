@@ -265,8 +265,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.6 \
- && hermes_commit=f0d94882e89ab8d4098b5bb2f166adfb9ee0a0ab \
+    hermes_version=0.22.7 \
+ && hermes_commit=b200f5bc60e31588ba2cb60e288029c4a54ba5fa \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -355,14 +355,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=5b364e4caaab71073f1c244b8e086c679ccfa8168cf2cc985693e8b0cf1edac2 ;; \
-      arm64) grok_arch=arm64; checksum=96e571275fdf77dcc16c542f76fa2ddd455afb505f592657295861b7ca13d010 ;; \
+      amd64) grok_arch=x64; checksum=0d0d4b65d97a882275f30de724f3f360b0c6a0e352ec7d816028105880149f4c ;; \
+      arm64) grok_arch=arm64; checksum=dc757c4ec56413259f0848424b52f1c907d385924202fec95d692a982c3b033a ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.73" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.73.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.74" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.74.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \

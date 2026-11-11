@@ -75,6 +75,7 @@ export function SelfServiceSetupDialog({
   alreadyOn: boolean;
 }) {
   const appName = useAppName();
+  const update = useUpdateAppaGithubSync();
   const [step, setStep] = useState<Step>("app");
   const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
   const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
@@ -184,7 +185,19 @@ export function SelfServiceSetupDialog({
         </div>
       ) : null}
       {step === "enable" ? (
-        <EnableStep
+        <SelfServiceOutcomeStep
+          run={() =>
+            update.mutateAsync({
+              action: "self_service",
+              enabled: true,
+              directory: alreadyOn ? directory : chosen,
+            })
+          }
+          labels={{
+            pending: "Turn Self-service MCP Guardrails on",
+            done: "Self-service MCP Guardrails is on",
+            failed: "Could not turn Self-service MCP Guardrails on",
+          }}
           directory={alreadyOn ? directory : chosen}
           policyFile={policyFile}
         />
@@ -367,14 +380,21 @@ function joined(names: string[], separator: string): ReactNode {
 type Progress = "waiting" | "running" | "done" | "failed";
 
 /**
- * The switch and what it brings, each with its own progress: the setting,
- * the branch ruleset, and the pull request that starts the folder and
- * includes it. Runs once when shown; a failed part offers a retry.
+ * A step that brings self-service about and what it brings, each with its
+ * own progress: `run` (the switch, or a Git sync save that turns it on), the
+ * branch ruleset, and the pull request that starts the folder and includes
+ * it. Runs once when shown; a failed part offers a retry. The Git sync
+ * wizard shows it too, so the dialog stays open on the pull request.
  */
-function EnableStep({
+export function SelfServiceOutcomeStep({
+  run: first,
+  labels,
   directory,
   policyFile,
 }: {
+  /** The first row's work; the rest reads the protection once it settles. */
+  run: () => Promise<unknown>;
+  labels: { pending: string; done: string; failed: string };
   directory: string;
   policyFile: string;
 }) {
@@ -398,9 +418,8 @@ function EnableStep({
 
   async function run() {
     try {
-      // Already on, the same call brings a ruleset that went missing back.
       setSwitched("running");
-      await mutate({ action: "self_service", enabled: true, directory });
+      await first();
       setSwitched("done");
       setRules({ state: "running" });
       setInclude({ state: "running" });
@@ -499,8 +518,7 @@ function EnableStep({
             #{detail.pull.number}
           </a>{" "}
           starts <code>{directory}/</code> and adds{" "}
-          <code>{directory}/*.toml</code> to {policyFile}. Merge it so the
-          servers&apos; files apply.
+          <code>{directory}/*.toml</code> to {policyFile}. Merge it and re-sync.
         </span>
       );
     if (include.state === "failed")
@@ -526,10 +544,10 @@ function EnableStep({
         <ProgressRow state={switched}>
           <span>
             {switched === "done"
-              ? "Self-service MCP Guardrails is on"
+              ? labels.done
               : switched === "failed"
-                ? `Could not turn Self-service MCP Guardrails on${include.error ? `: ${include.error}` : "."}`
-                : "Turn Self-service MCP Guardrails on"}
+                ? `${labels.failed}${include.error ? `: ${include.error}` : "."}`
+                : labels.pending}
           </span>
         </ProgressRow>
         <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>

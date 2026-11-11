@@ -95,6 +95,7 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import { onGithubAppSetup } from "./github-app-channel";
+import { SelfServiceOutcomeStep } from "./self-service-setup-dialog";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -221,6 +222,9 @@ export function GithubSyncSetupDialog({
   const [interval, setSyncInterval] = useState<SyncInterval>(
     editing?.interval ?? DEFAULT_INTERVAL,
   );
+  // With self-service on, the connect step stays open on what the save
+  // brought: the ruleset and the include pull request.
+  const [outcome, setOutcome] = useState<(() => Promise<unknown>) | null>(null);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
     number: number;
@@ -423,55 +427,65 @@ export function GithubSyncSetupDialog({
       ? { gitlabTokenId: appId }
       : { githubAppConfigId: appId };
     setStep("connect");
+    const withSelfService = !gitlab && selfService;
     if (keepsSource) {
-      configure.mutate(
-        {
-          repo,
-          ref: location.ref ?? null,
-          path: location.path ?? "appa.toml",
-          interval,
-          validationDirectory: validationFolder,
-          githubPatId: null,
-          githubAppConfigId: null,
-          gitlabTokenId: null,
-          ...credential,
-          selfService: !gitlab && selfService,
-          selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
-        },
-        { onSuccess: () => onOpenChange(false), onError },
-      );
+      const body = {
+        repo,
+        ref: location.ref ?? null,
+        path: location.path ?? "appa.toml",
+        interval,
+        validationDirectory: validationFolder,
+        githubPatId: null,
+        githubAppConfigId: null,
+        gitlabTokenId: null,
+        ...credential,
+        selfService: withSelfService,
+        selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
+      };
+      if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
+      else
+        configure.mutate(body, {
+          onSuccess: () => onOpenChange(false),
+          onError,
+        });
       return;
     }
     // GitLab nests groups: the project is the last segment, its group the rest.
     const slash = repo.lastIndexOf("/");
-    create.mutate(
-      {
-        ...(creatingProject
-          ? { owner: chosenGroup ?? "", name: projectName.trim() }
-          : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
-        ...credential,
-        interval,
-        selfService: !gitlab && selfService,
-        ...(!gitlab &&
-        selfService &&
-        serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
-          ? { selfServiceDirectory: serversFolder }
-          : {}),
-        existing: !creatingProject,
-        // Editing moves the running sync to the new repository, created or not.
-        ...((!creatingProject || editing) && { replace: !!editing }),
-        ...location,
-      },
-      {
+    const body = {
+      ...(creatingProject
+        ? { owner: chosenGroup ?? "", name: projectName.trim() }
+        : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
+      ...credential,
+      interval,
+      selfService: withSelfService,
+      ...(withSelfService && serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
+        ? { selfServiceDirectory: serversFolder }
+        : {}),
+      existing: !creatingProject,
+      // Editing moves the running sync to the new repository, created or not.
+      ...((!creatingProject || editing) && { replace: !!editing }),
+      ...location,
+    };
+    const setupPull = (
+      data: Awaited<ReturnType<typeof create.mutateAsync>>,
+    ) => {
+      const number = data?.source?.setupPullRequestNumber;
+      if (number && data.source?.repo) {
+        setPullRequest({ repo: data.source.repo, number });
+        return true;
+      }
+      return false;
+    };
+    if (withSelfService)
+      setOutcome(() => () => create.mutateAsync(body).then(setupPull));
+    else
+      create.mutate(body, {
         onSuccess: (data) => {
-          const number = data?.source?.setupPullRequestNumber;
-          if (number && data.source?.repo)
-            setPullRequest({ repo: data.source.repo, number });
-          else onOpenChange(false);
+          if (!setupPull(data)) onOpenChange(false);
         },
         onError,
-      },
-    );
+      });
   }
 
   function back() {
@@ -586,14 +600,24 @@ export function GithubSyncSetupDialog({
               <span>Back</span>
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={step === "connect"}
-            onClick={() => onOpenChange(false)}
-          >
-            <span>Cancel</span>
-          </Button>
+          {step === "connect" && outcome ? (
+            <Button
+              type="button"
+              disabled={configure.isPending || create.isPending}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Done</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={step === "connect"}
+              onClick={() => onOpenChange(false)}
+            >
+              <span>Cancel</span>
+            </Button>
+          )}
           {step === "start" && origin === "fresh" ? (
             <Button type="button" onClick={() => setStep("app")}>
               <span>Continue</span>
@@ -1355,7 +1379,25 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "connect" ? (
+      {step === "connect" && outcome ? (
+        <SelfServiceOutcomeStep
+          run={outcome}
+          labels={{
+            pending: editing
+              ? "Save Git sync and pull the policy"
+              : "Connect the repository and pull the policy",
+            done: editing
+              ? "Git sync saved and the policy pulled"
+              : "Repository connected and the policy pulled",
+            failed: editing
+              ? "Could not save Git sync"
+              : "Could not connect the repository",
+          }}
+          directory={serversFolder || DEFAULT_SELF_SERVICE_FOLDER}
+          policyFile={location.path?.split("/").pop() ?? "appa.toml"}
+        />
+      ) : null}
+      {step === "connect" && !outcome ? (
         <ul
           className="space-y-3 rounded-lg border bg-card p-4"
           aria-live="polite"
@@ -1364,9 +1406,6 @@ export function GithubSyncSetupDialog({
             gitlab ? "Check the project" : "Check the repository",
             "Sync the policy",
             `Open a setup ${gitChangeRequestNoun(gitlab ? "gitlab" : "github")} if rules require one`,
-            ...(selfService && !gitlab
-              ? ["Open the pull request that includes the self-service folder"]
-              : []),
           ].map((label, index) => (
             <li key={label} className="flex items-center gap-3 text-sm">
               {index === 0 ? (

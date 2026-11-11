@@ -524,8 +524,7 @@ function includeSentence(
           >
             Pull request #{include.pull?.number}
           </a>{" "}
-          adds {entry} to {policyFile}. Merge it so the servers&apos; files
-          apply.
+          adds {entry} to {policyFile}. Merge it and re-sync.
         </span>
       );
     default:

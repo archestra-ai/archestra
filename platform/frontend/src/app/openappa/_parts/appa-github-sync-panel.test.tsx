@@ -326,7 +326,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   expect(
     await within(dialog).findByText(/Pull request opened/),
   ).toHaveTextContent(
-    "Pull request opened: #12 starts rules/servers/ and adds rules/servers/*.toml to appa.toml. Merge it so the servers' files apply.",
+    "Pull request opened: #12 starts rules/servers/ and adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
   );
   expect(actions).toEqual([
     { action: "self_service", enabled: true, directory: "rules/servers" },
@@ -351,7 +351,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   );
   const link = await screen.findByRole("link", { name: "Pull request #12" });
   expect(link.closest("p")).toHaveTextContent(
-    "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it so the servers' files apply.",
+    "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
   );
   expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
   // Once on, the row offers no switch of its own: Edit changes or turns it off.
@@ -743,6 +743,16 @@ test("editing an App-backed source keeps its repository and only warns about mis
       saved = await request.json();
       return HttpResponse.json(state);
     }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: {
+          state: "active",
+          url: "https://github.com/example/policies/rules/5",
+        },
+      }),
+    ),
   );
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -756,6 +766,18 @@ test("editing an App-backed source keeps its repository and only warns about mis
   ).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Branch")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  // With self-service on, the dialog stays open on what the save brought.
+  const dialog = screen.getByRole("dialog");
+  expect(
+    await within(dialog).findByText("Git sync saved and the policy pulled"),
+  ).toBeVisible();
+  expect(
+    await within(dialog).findByText(/Branch ruleset created/),
+  ).toBeVisible();
+  expect(await within(dialog).findByText(/already includes/)).toHaveTextContent(
+    "appa.toml already includes mcp/*.toml.",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
@@ -1174,7 +1196,7 @@ test("links the pull request that includes the servers' folder while it waits, a
     "https://github.com/example/policies/pull/12",
   );
   expect(link.closest("p")).toHaveTextContent(
-    "Pull request #12 adds mcp/*.toml to appa.toml. Merge it so the servers' files apply.",
+    "Pull request #12 adds mcp/*.toml to appa.toml. Merge it and re-sync.",
   );
   expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
 

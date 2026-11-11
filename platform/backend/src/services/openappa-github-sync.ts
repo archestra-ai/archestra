@@ -980,36 +980,10 @@ export async function checkDueAppaGithubSyncs() {
 
 /**
  * The check every policy pull request carries, and the name of the branch
- * ruleset that requires it: ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME, a
- * product-free name by default. A renamed deployment moves the ruleset and
- * its required check over at the next sync.
+ * ruleset that requires it: ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME. A renamed
+ * deployment moves the ruleset and its required check over at the next sync.
  */
-const POLICY_CHECK_NAME_TEMPLATE = config.openappa.policyCheckName;
-/** The placeholder the template may carry for the GitHub App's name. */
-const APP_NAME_PLACEHOLDER = ":githubAppName";
-
-/** The check's name for one App, from ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME. */
-function renderPolicyCheckName(appName: string): string {
-  return POLICY_CHECK_NAME_TEMPLATE.split(APP_NAME_PLACEHOLDER)
-    .join(appName)
-    .trim();
-}
-
-/**
- * The name of the check this source's GitHub App posts, and of the ruleset
- * that requires it: the template with the App's own name in it, read from
- * GitHub once per App. A template without the placeholder names every App's
- * check the same.
- */
-export async function policyCheckNameFor(source: {
-  organizationId: string;
-  githubAppConfigId: string | null;
-}): Promise<string> {
-  if (!POLICY_CHECK_NAME_TEMPLATE.includes(APP_NAME_PLACEHOLDER))
-    return POLICY_CHECK_NAME_TEMPLATE;
-  const profile = await githubAppProfile(source);
-  return renderPolicyCheckName(profile?.name ?? "OpenAPPA");
-}
+export const POLICY_CHECK_NAME = config.openappa.policyCheckName;
 
 /** The most open pull requests checked in one repository each minute. */
 const MAX_CHECKED_PULLS = 50;
@@ -1091,7 +1065,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const source = { ...row, repo: row.repo, path: row.path };
   const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
-  const checkName = await policyCheckNameFor(source);
+  const checkName = POLICY_CHECK_NAME;
   let pulls: CheckedPull[];
   try {
     pulls = await githubPullRequests(source);
@@ -1400,7 +1374,7 @@ async function githubPullRequests(
   });
   if (!token) return [];
   const base = `${api}/repos/${source.repo}`;
-  const checkName = await policyCheckNameFor(source);
+  const checkName = POLICY_CHECK_NAME;
   const appId = await checkIntegrationId(source);
   const branch =
     source.ref ??
@@ -2450,7 +2424,7 @@ async function repositoryProtection(params: {
     path: row.path,
     sourceCommit: row.sourceCommit,
   };
-  const checkName = await policyCheckNameFor(source);
+  const checkName = POLICY_CHECK_NAME;
   const [branchRules, app] = await Promise.all([
     githubBranchRules(source, params.apply, checkName).catch((error) => ({
       state: "error" as const,
@@ -2757,7 +2731,7 @@ async function removeGithubBranchRules(source: {
   githubAppConfigId: string | null;
   githubPatId: string | null;
 }) {
-  const checkName = await policyCheckNameFor(source);
+  const checkName = POLICY_CHECK_NAME;
   let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
   try {
     access = await resolveOpenAppaGithubAccess(source, {

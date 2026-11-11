@@ -34,7 +34,7 @@ import {
 } from "@/services/openappa-github-access";
 import {
   hasOwnFile,
-  policyCheckNameFor,
+  POLICY_CHECK_NAME,
   selfServiceActive,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
@@ -235,7 +235,7 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    instruction: `Give the user the link. Once its ${await policyCheckNameFor(change.source)} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+    instruction: `Give the user the link. Once its ${POLICY_CHECK_NAME} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
 

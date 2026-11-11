@@ -176,6 +176,67 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
     return mockMutateAsync.mock.calls[0][0].body.config;
   }
+  it.each([
+    "all",
+    "selected",
+  ])("shows file filter errors inline in %s mode and saves after correction", async (mode) => {
+    const user = userEvent.setup();
+    const connector = legacyConnector();
+    if (mode === "all") {
+      connector.config = {
+        ...connector.config,
+        repos: [],
+      } as ConnectorFixture["config"];
+    }
+    renderDialog(connector);
+    await advanced(user);
+    const scope = mode === "selected" ? await openRow(user) : screen;
+    const input = scope.getByLabelText("File Types (optional)");
+    fireEvent.change(input, { target: { value: "docs/*.md" } });
+    if (mode === "selected") {
+      await user.click(
+        scope.getByRole("button", {
+          name: "Repository settings for example-org/repo-a",
+        }),
+      );
+    }
+    await user.click(screen.getByRole("button", { name: /General/ }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(input).toBeVisible());
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(scope.getByText(/Use a file extension/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    fireEvent.change(input, {
+      target: { value: ".md, *.yaml, Dockerfile, *" },
+    });
+    await waitFor(() =>
+      expect(scope.queryByText(/Use a file extension/)).not.toBeInTheDocument(),
+    );
+    const config = await save(user);
+    const settings = mode === "all" ? config : config.repositoryOverrides[0];
+    expect(settings.fileTypes).toEqual([".md", "*.yaml", "Dockerfile", "*"]);
+  });
+  it("keeps invalid saved filters actionable when repository files are disabled", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    const input = row.getByLabelText("File Types (optional)");
+    fireEvent.change(input, { target: { value: "docs/*.md" } });
+    await user.click(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(input).toBeVisible());
+    expect(row.getByText(/Use a file extension/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: ".md" } });
+    const config = await save(user);
+    expect(config.repositoryOverrides[0]).toMatchObject({
+      includeRepositoryFiles: false,
+      fileTypes: [".md"],
+    });
+  });
   it("shows qualified legacy cards and preserves the actual flat config on unchanged save", async () => {
     const user = userEvent.setup();
     const connector = legacyConnector();

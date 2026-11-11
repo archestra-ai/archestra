@@ -1837,8 +1837,12 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     message: expect.stringContaining("validations folder"),
   });
   // An omitted validations folder keeps the saved one, which the check
-  // reads too.
-  config.openappa.selfServiceDirectory = "traces";
+  // reads too: a suite saved in the servers' folder refuses the save.
+  const suites = schema.openappaPolicyTestSuitesTable;
+  await db
+    .update(suites)
+    .set({ directory: "mcp" })
+    .where(eq(suites.organizationId, org.id));
   const { validationDirectory: _kept, ...inherits } = moved;
   await expect(
     configureAppaGithubSync({
@@ -1850,7 +1854,10 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     statusCode: 400,
     message: expect.stringContaining("validations folder"),
   });
-  config.openappa.selfServiceDirectory = "mcp";
+  await db
+    .update(suites)
+    .set({ directory: "" })
+    .where(eq(suites.organizationId, org.id));
   // A move that does not save withdraws nothing: the branch keeps its
   // ruleset until the new source is really in place.
   server.use(

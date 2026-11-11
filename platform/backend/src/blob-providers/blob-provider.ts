@@ -31,7 +31,7 @@ export abstract class BlobProvider {
     const key = this.fullKey(`.archestra-connection-test/${randomUUID()}.txt`);
     await this.putObject({
       key,
-      body: "Archestra blob provider connection test. Safe to delete.\n",
+      body: "Blob provider connection test. Safe to delete.\n",
       contentType: "text/plain",
     });
     await this.deleteObject(key);

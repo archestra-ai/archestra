@@ -51,7 +51,7 @@ export class AzureBlobProvider extends BlobProvider {
         return `Could not resolve ${serviceUrl(this.config)}. Check the storage account name${this.config.endpoint ? " and endpoint" : ""}.`;
     }
     if (e.name === "CredentialUnavailableError") {
-      return "No Azure credential found on the Archestra server. Use AKS Workload Identity or a managed identity, set AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET, or pick another auth method.";
+      return "No Azure credential found on the server. Use AKS Workload Identity or a managed identity, set AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET, or pick another auth method.";
     }
     if (
       e.name === "AuthenticationError" ||

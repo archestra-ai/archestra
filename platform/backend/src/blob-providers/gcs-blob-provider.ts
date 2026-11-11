@@ -64,7 +64,7 @@ export class GcsBlobProvider extends BlobProvider {
       error instanceof Error &&
       error.message.includes("Could not load the default credentials")
     ) {
-      return "No Application Default Credentials found on the Archestra server. Use Workload Identity, attach a service account, set GOOGLE_APPLICATION_CREDENTIALS, or switch to a service account key.";
+      return "No Application Default Credentials found on the server. Use Workload Identity, attach a service account, set GOOGLE_APPLICATION_CREDENTIALS, or switch to a service account key.";
     }
     return describeBlobProviderError(error);
   }

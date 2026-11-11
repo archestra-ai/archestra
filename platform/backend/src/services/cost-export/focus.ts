@@ -122,7 +122,7 @@ function focusRecord(
     BilledCost: billed,
     BillingAccountId: organization.id,
     BillingAccountName: organization.name,
-    BillingAccountType: "Archestra Organization",
+    BillingAccountType: "Organization",
     BillingCurrency: CURRENCY,
     BillingPeriodEnd: isoTimestamp(billingEnd),
     BillingPeriodStart: isoTimestamp(billingStart),

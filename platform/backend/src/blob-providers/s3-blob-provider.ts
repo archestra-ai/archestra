@@ -66,7 +66,7 @@ export class S3BlobProvider extends BlobProvider {
       case "TokenRefreshRequired":
         return `${code}: the session token has expired. Store fresh credentials, or use a role instead of temporary keys.`;
       case "CredentialsProviderError":
-        return "No AWS credentials found in the Archestra server's default chain (env vars, IRSA, EKS Pod Identity, instance role). Configure one, or use an access key.";
+        return "No AWS credentials found in the server's default chain (env vars, IRSA, EKS Pod Identity, instance role). Configure one, or use an access key.";
     }
     return describeBlobProviderError(error);
   }

@@ -582,22 +582,82 @@ describe("protected runtime protocol", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const { plugin, context } = await releasedLaunch(org.id);
+    const { plugin, context, processed } = await releasedLaunch(org.id);
+    const reported = {
+      id: "runtime-call",
+      name: "archestra__run_tool",
+      content: JSON.stringify({ session_id: randomUUID() }),
+      isError: false,
+    };
 
     const outcome = await plugin.onToolResults({
       ...context,
-      toolResults: [
-        {
-          id: "runtime-call",
-          name: "archestra__run_tool",
-          content: JSON.stringify({ session_id: randomUUID() }),
-          isError: false,
-        },
-      ],
+      toolResults: [reported],
     });
 
     expect(outcome?.toolResultUpdates["runtime-call"]).toBe(
       "The runtime launch returned no verifiable handle.",
+    );
+    // The run may have started even though its record was not written.
+    expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
+      "pending",
+    );
+  });
+
+  test.for([
+    false,
+    true,
+  ])("closes an in-process delegation whose child failed before it returned (isError=%s)", async (isError, {
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const { plugin, context, processed } = await releasedLaunch(
+      org.id,
+      undefined,
+      "Agent",
+    );
+    const reported = {
+      id: "runtime-call",
+      name: "agent__research",
+      content: "The subagent's model request failed",
+      isError,
+    };
+
+    await plugin.onToolResults({ ...context, toolResults: [reported] });
+
+    expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
+      "failed",
+    );
+  });
+
+  test("delivers the return an in-process delegation's child crossed", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const { plugin, context, processed } = await releasedLaunch(
+      org.id,
+      undefined,
+      "Agent",
+    );
+    vi.spyOn(service, "loadChildReturns").mockResolvedValue([
+      { childSessionId: "child", value: "Crossed report" },
+    ]);
+    vi.spyOn(service, "approveSpawnReturn").mockResolvedValue();
+    const reported = {
+      id: "runtime-call",
+      name: "agent__research",
+      content: "Crossed report",
+      isError: false,
+    };
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [reported],
+    });
+
+    expect(outcome?.toolResultUpdates["runtime-call"]).toBe("Crossed report");
+    expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
+      "pending",
     );
   });
 

@@ -737,14 +737,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     const subagentReturns = await admitSubagentReturns({
       session: governed,
-      spawnIds: runtimeSpawns,
+      spawnIds: runtimeSpawns.keys(),
     });
     const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
       {
         organizationId: governed.organization_id,
         callerId: governed.caller_id,
         sessionId: governed.session_id,
-        toolCallIds: [...runtimeSpawns],
+        toolCallIds: [...runtimeSpawns.keys()],
       },
     );
     // An undeclared call or one whose annotator gave no answer never ran, and
@@ -802,10 +802,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         if (subagentReturns.has(withoutTrajectoryStamp(answer.id))) {
           return "pending";
         }
-        if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+        const spawn = runtimeSpawns.get(withoutTrajectoryStamp(answer.id));
+        if (spawn) {
           const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
           if (launch) return launch.kind === "launched" ? "pending" : "failed";
-          return answer.isError ? "failed" : "pending";
+          // With no launch recorded, a delegation ran its child in this
+          // process, and the child crossed no return: it failed before it
+          // returned. The runtime closes the spawn and withholds the text.
+          return answer.isError || spawn === "delegation"
+            ? "failed"
+            : "pending";
         }
         if (
           !binding.adapter?.isSpawnTool(
@@ -3694,7 +3700,7 @@ async function resolveRuntimeCalls(params: {
  */
 async function admitSubagentReturns(params: {
   session: OpenAppaSession;
-  spawnIds: ReadonlySet<string>;
+  spawnIds: Iterable<string>;
 }): Promise<Map<string, string>> {
   const returns = await withCapturedGuardrailsActivation("active", () =>
     Promise.all(
@@ -3743,7 +3749,7 @@ async function releasedRuntimeSpawns(params: {
   binding: AppaPluginBinding;
   session: OpenAppaSession;
   toolResults: LlmProxyToolResultsContext["toolResults"];
-}): Promise<Set<string>> {
+}): Promise<Map<string, "launch" | "delegation">> {
   const possible = params.toolResults.filter((answer) => {
     const name = params.binding.identity.canonicalize(
       answer.name,
@@ -3762,20 +3768,16 @@ async function releasedRuntimeSpawns(params: {
     sessionId: params.session.session_id,
     toolCallIds: possible.map((answer) => withoutTrajectoryStamp(answer.id)),
   });
-  return new Set(
-    [...calls]
-      .filter(([, call]) => {
-        const action =
-          archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
-        return (
-          call.spawn &&
-          (action === TOOL_START_AGENT_RUN_SHORT_NAME ||
-            action === SUBAGENT_TOOL ||
-            isAgentTool(action))
-        );
-      })
-      .map(([id]) => id),
-  );
+  const spawns = new Map<string, "launch" | "delegation">();
+  for (const [id, call] of calls) {
+    if (!call.spawn) continue;
+    const action =
+      archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
+    if (action === TOOL_START_AGENT_RUN_SHORT_NAME) spawns.set(id, "launch");
+    else if (action === SUBAGENT_TOOL || isAgentTool(action))
+      spawns.set(id, "delegation");
+  }
+  return spawns;
 }
 
 /**

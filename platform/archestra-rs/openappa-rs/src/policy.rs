@@ -134,6 +134,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::AbsoluteInclude { .. }
         | ConfigError::TraversingInclude { .. }
         | ConfigError::DuplicateInclude { .. }
+        | ConfigError::GlobInclude { .. }
         | ConfigError::TargetPolicyIncluded { .. }
         | ConfigError::UnsupportedBatteryTarget { .. }
         | ConfigError::UnresolvedInclude { .. }

@@ -246,6 +246,7 @@ describe("openappaCoverageService.rulesForTools", () => {
         'name = "mcp/microsoft-learn/microsoft_docs_search"',
         'delta = { trust = "suspicious" }',
         'requires = { audience = { contains = ["public"] } }',
+        'tags = ["microsoft-learn"]',
       ].join("\n"),
     });
     expect(rules.get("acme__nothing_names_this")).toMatchObject({

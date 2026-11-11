@@ -2495,7 +2495,7 @@ impl State {
         let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
-            runtime: Arc::new(self.runtime.recording(consults.clone())),
+            runtime: Arc::new(self.runtime.transcribing(consults.clone())),
             ..self.clone()
         };
         let attribution = consults::Attribution {
@@ -2901,7 +2901,14 @@ impl State {
             };
             let outcome = self
                 .runtime
-                .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
+                .execute_embedded_remedy_with_options(
+                    &actor,
+                    args,
+                    presentation_options(&input),
+                    // The operation's own id: a host retry of this remedy names the same
+                    // attempt, so a declaration ahead of the spawn answers from its record.
+                    Some(appa_runtime::api::RemedyAttempt(operation.clone())),
+                )
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
@@ -3598,6 +3605,16 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
         // an answer for it, not a runtime failure that ends the turn. It is an
         // error result because nothing was released.
         RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, true, feedback),
+        // An annotator that gave no answer fails the request as a runtime failure did
+        // before the runtime told the two apart.
+        RemedyOutcome::Refused {
+            reason: reason @ appa_runtime::api::RemedyRefusal::Unanswered { .. },
+        } => {
+            return Err(remedy_refused(format!(
+                "OpenAPPA remedy interrupted: {}",
+                reason.detail()
+            )));
+        }
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
         } => {
@@ -3617,7 +3634,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             OutputSource::Runtime,
             unknown_control_reason(&reason),
             true,
-            reason.detail().to_owned(),
+            reason.detail().into_owned(),
         ),
     };
     serde_json::to_value(HostMcpResult {
@@ -3688,12 +3705,20 @@ fn denied_block(feedback: &str) -> &str {
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
-        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
+        // A superseded call offer was an unknown offer before the runtime named it; its
+        // text tells the model to call the blocked tool again.
+        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer | RemedyRefusal::Superseded => {
+            Some("unknown_control_call")
+        }
         // Its text says how to declare at the spawn's block instead.
         RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::AttemptReused
+        | RemedyRefusal::UnidentifiedDeclaration
+        | RemedyRefusal::AmbiguousReplay
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
+        | RemedyRefusal::Unanswered { .. }
         | RemedyRefusal::Runtime { .. } => None,
     }
 }

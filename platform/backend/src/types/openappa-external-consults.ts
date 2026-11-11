@@ -21,6 +21,7 @@ export const ExternalConsultBackendSchema = z.enum([
   "jev",
   "claude_code",
   "hitl",
+  "stock",
   "archestra",
 ]);
 export type ExternalConsultBackend = z.infer<

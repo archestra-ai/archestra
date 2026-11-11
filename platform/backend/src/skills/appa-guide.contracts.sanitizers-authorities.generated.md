@@ -66,7 +66,7 @@ When a tool result would restrict the agent, OpenAPPA can offer a sanitizer whos
 
 If the cleaned result still adds restrictions, the agent can accept them or select another compatible sanitizer. Cleaning a new result does not remove restrictions from data the agent has already read.
 
-Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` and the file content the call sends still enter the check.
+Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` still enters the check.
 
 OpenAPPA selects the contract that matches the new arguments and checks the call again, including its requirements, effects, and argument schema. If that contract uses an annotator, OpenAPPA requests a new annotation. Membership checks use the responses already recorded for this decision.
 
@@ -158,6 +158,25 @@ attention = ["finance-signoff"]
 
 An authority's [tags](references/contracts/tools.md#tags) select the tools it can review for unmet audience, trust, or effects requirements. Attention approvals are selected by `permits.attention` instead.
 
+`except_tags` removes tools from that selection. The authority cannot approve an unmet audience, trust, or effects requirement of a tool that has one of these tags. Attention approvals are not affected. In this example, `rollout` approves an unmet trust requirement of every tool except `send_payment`:
+
+```toml
+[[policy.tool]]
+name = "send_payment"
+tags = ["enforced"]
+requires = { trust = "trusted" }
+delta = {}
+
+[[policy.authority]]
+name = "rollout"
+except_tags = ["enforced"]
+
+[policy.authority.permits]
+trust_below = "trusted"
+```
+
+No other authority permits `trust_below`, so `send_payment` stays blocked while the trajectory is below `trusted`. Each tag in `except_tags` MUST be on at least one tool and MUST NOT be in the authority's own `tags`. OpenAPPA refuses to load a policy that breaks either rule.
+
 The optional `hint` explains what the authority reviews. It does not expand `permits`.
 
 ### Implementing an authority
@@ -167,7 +186,7 @@ An authority can use a built-in reviewer, an HTTP service, or a local program. C
 | Implementation | Behavior |
 |---|---|
 | `builtin = "hitl"` | Asks a person to review the exact call and the requirements to be approved. |
-| `builtin = "approve"` | Automatically approves every matching request within `permits`. |
+| `builtin = "approve"` | Automatically approves every matching request within `permits`. When a blocked call has a plan that needs only `approve` authorities, OpenAPPA applies that plan itself and releases the call. The agent does not see the block. A plan that also accepts a narrowing stays with the agent. |
 | `builtin = "claude-code"` or `builtin = "llm"` | A model approves or denies using the declaration, call, and unmet requirements. |
 | `builtin = "<module name>"` | Runs a module loaded from `--modules-dir` with the same system permissions as OpenAPPA. |
 | `url` or `command` | Asks an external service or local program to approve or deny the call. |

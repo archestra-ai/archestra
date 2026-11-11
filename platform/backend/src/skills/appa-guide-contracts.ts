@@ -36,8 +36,8 @@ export const APPA_CONTRACTS_PARTS = [
   {
     slug: "annotators",
     summary:
-      "annotators: inputs, context providers, permits, and hints. Read before adding or changing an annotator.",
-    headings: ["## Annotators"],
+      "annotators: inputs, context providers, permits, and hints, and the recorders that store what a released call publishes for a later annotation. Read before adding or changing an annotator or a recorder.",
+    headings: ["## Annotators", "## Recorders"],
   },
   {
     slug: "sanitizers-authorities",
@@ -60,10 +60,11 @@ export const APPA_CONTRACTS_PARTS = [
   {
     slug: "protocols",
     summary:
-      "wire protocols for helper implementers: membership requests, the annotator, sanitizer, and authority protocols, and the consult request. Only for writing or debugging a helper service, not for writing policy.",
+      "wire protocols for helper implementers: membership requests, the annotator, recorder, sanitizer, and authority protocols, and the consult request. Only for writing or debugging a helper service, not for writing policy.",
     headings: [
       "##### Membership request protocol",
       "### Annotator protocol",
+      "### Recorder protocol",
       "### Sanitizer protocol",
       "### Authority protocol",
       "### The consult request",

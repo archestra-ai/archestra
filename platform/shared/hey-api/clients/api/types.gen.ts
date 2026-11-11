@@ -120984,7 +120984,7 @@ export type GetOpenappaExternalConsultsResponses = {
             durationMs: number;
             role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'stock' | 'archestra';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;
@@ -121100,7 +121100,7 @@ export type GetOpenappaExternalConsultResponses = {
             durationMs: number;
             role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'stock' | 'archestra';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;

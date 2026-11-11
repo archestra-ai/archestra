@@ -24,6 +24,7 @@ The available settings depend on the component's role:
 | `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required, except for `attest-schema`. |
 | `annotators` | Exactly one of `url` or `command`. | Required unless the declaration specifies a builtin. |
 | `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
+| `recorders` | Exactly one of `url` or `command`. | Required for each recorder a tool names. |
 | `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
 
 OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. A sanitizer binding is the exception: one with no declaration stays idle, so a root can bind the sanitizers of a battery it may include. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
@@ -38,7 +39,7 @@ If the service requires authentication, set `token_env` to an environment variab
 
 ### Local programs
 
-Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
+Set `command` to a list containing the executable and its arguments, such as `command = ["python3", "./sanitize.py"]`. OpenAPPA runs the program on the same machine, without a shell, and ends every process it started when the request completes. An executable named `appa` is the runtime's own executable, which serves the plugins OpenAPPA ships, such as `appa file-tracker`. The shipped batteries run `python3`, which Windows does not always provide. It starts the program in the directory containing the configuration file.
 
 The program reads one JSON consult request from standard input and writes one JSON response to standard output. It must respond within `timeout_ms`, and its response must fit within `max_body_bytes`. `APPA_CONSULT_TIMEOUT_MS` gives the program the milliseconds it has left: `timeout_ms` less the wait for a free slot. Each OpenAPPA instance runs at most eight such programs at once.
 
@@ -85,6 +86,8 @@ Supported providers are `anthropic`, `openai`, `gemini`, and `ollama`. `token_en
 A deployment in which any component uses `builtin = "llm"` opens only when the section's key is available: `token_env` names a variable that is set, or the provider is `ollama` and the section names no `token_env`. A section that no component uses loads without its key.
 
 An `llm` request that fails with a connection error, status 429, or a 5xx status is retried 500 ms later, at most three attempts in total. A retry starts only when `timeout_ms` leaves time for it. Other failures are not retried. Each attempt takes a free slot, and the wait before a retry holds none.
+
+An `llm` request sets no `temperature` or other sampling parameter. The model uses its default values, as it does for `claude-code`.
 
 `openai` uses the Chat Completions API, including when `url` points to a compatible service. `ollama` uses `http://localhost:11434` unless `url` specifies another endpoint, and requires no token.
 

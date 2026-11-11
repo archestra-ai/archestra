@@ -131,7 +131,8 @@ describe("Archestra tools under the composed default policy", () => {
       "refused",
       "-/-",
       "-/trusted+internal",
-      "-/-",
+      // A credential link declaration reaches only internal readers.
+      "-/internal",
       "-/trusted+internal",
       "-/trusted+internal",
     ]);

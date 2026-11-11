@@ -10,7 +10,12 @@ import type { NetworkPolicy, NetworkPolicyDomainPreset } from "@/types";
  * the application-level remote-server URL check share one source of truth.
  */
 export function networkPolicyDomains(policy: NetworkPolicy): string[] {
-  return [...presetDomains(policy.domainPreset), ...policy.allowedDomains];
+  return [
+    ...new Set([
+      ...presetDomains(policy.domainPreset),
+      ...policy.allowedDomains,
+    ]),
+  ];
 }
 
 // === Internal helpers ===

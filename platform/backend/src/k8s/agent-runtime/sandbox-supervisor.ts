@@ -95,7 +95,7 @@ while :; do
       transport=$!
       printf '%s\n' "$transport" > "$turn.recording-client-pid"
       wait "$transport"
-    ) | /bin/sh "$root/record-terminal" "$turn" >> /proc/1/fd/1 &
+    ) | /bin/sh "$root/record-terminal" "$turn" &
     recorder=$!
     exec 3> "$turn.recording-input"
     recording_failed=0
@@ -181,7 +181,7 @@ while :; do
         printf '\033]777;archestra-readable-transcript=base64\007'
         base64 < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} | tr -d '\n'
         printf '\033]777;archestra-readable-transcript=end\007'
-      } | tee -a "$turn.log"
+      } >> "$turn.log"
     fi
     mv "$turn.result" "$turn.exit"
     # The request can contain turn-scoped credentials; keep only its outcome.

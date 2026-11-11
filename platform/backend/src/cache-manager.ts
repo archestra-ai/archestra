@@ -81,6 +81,8 @@ export const CacheKey = {
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** How many results followed a ruling when its remedy continuation was last delivered. */
+  OpenAppaRemedyContinuationDelivered: "openappa-remedy-continuation-delivered",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */

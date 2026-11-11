@@ -1765,12 +1765,18 @@ async function saveSource(params: {
     throw new ApiError(403, "You do not have access to GitHub credentials");
   }
   // Release 1.4: the servers' folder is the deployment's, so a GitHub App
-  // source keeps its validations apart from it, as a created repository must.
+  // source keeps its validations apart from it, as a created repository
+  // must. An omitted folder keeps the saved one, as the save does.
   if (
     config.openappa.selfService === "enabled" &&
     params.source.githubAppConfigId
   )
-    checkSelfServiceDirectory(configuredServerRulesFolder(), params.source);
+    checkSelfServiceDirectory(configuredServerRulesFolder(), {
+      path: params.source.path,
+      validationDirectory:
+        params.source.validationDirectory ??
+        (await OpenAppaPolicyTestsModel.find(params.organizationId))?.directory,
+    });
   if (params.source.gitlabTokenId) {
     // Resolve now to reject a missing, foreign or non-GitLab credential.
     const access = await resolveOpenAppaGitlabAccess({

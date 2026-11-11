@@ -520,7 +520,7 @@ export function GithubSyncSetupDialog({
   // Self-service, on the App step for a new App (its permissions follow),
   // and on the Repository step while editing, where the folder is.
   const selfServiceChoice = (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
+    <div className="flex items-start gap-3">
       <Checkbox
         id="github-sync-self-service"
         className="mt-0.5"
@@ -533,8 +533,16 @@ export function GithubSyncSetupDialog({
           Self-service MCP Guardrails
         </Label>
         <FieldDescription>
-          MCP owners can manage MCP Guardrails. Additional GitHub App
-          permissions are added to ensure the related pull requests are checked.{" "}
+          MCP owners can manage MCP Guardrails.
+          {editing?.selfService ? (
+            <span> </span>
+          ) : (
+            <span>
+              {" "}
+              Additional GitHub App permissions are added to ensure the related
+              pull requests are checked.{" "}
+            </span>
+          )}
           <a
             href={`${policyDocsUrl}#self-service-mcp-guardrails`}
             target="_blank"
@@ -1213,9 +1221,15 @@ export function GithubSyncSetupDialog({
               </Label>
               <FieldDescription>
                 Each managed MCP server policy file goes here and included into
-                the root policy. A pull request includes it to{" "}
-                {location.path?.split("/").pop() ?? "appa.toml"} if not yet
-                done.
+                the root policy.
+                {editing?.selfService ? null : (
+                  <span>
+                    {" "}
+                    A pull request includes it to{" "}
+                    {location.path?.split("/").pop() ?? "appa.toml"} if not yet
+                    done.
+                  </span>
+                )}
               </FieldDescription>
               <Input
                 id="github-sync-self-service-folder"

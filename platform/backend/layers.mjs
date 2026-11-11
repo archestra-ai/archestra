@@ -322,6 +322,7 @@ const layerTable = [
       "src/openappa/wire.ts",
       "src/routes/chat/anthropic-provider-options.ts",
       "src/routes/chat/attachment-content-type.ts",
+      "src/routes/chat/bedrock-provider-options.ts",
       "src/routes/chat/augment-last-user-message.ts",
       "src/routes/chat/error-message.ts",
       "src/routes/chat/gemini-provider-options.ts",

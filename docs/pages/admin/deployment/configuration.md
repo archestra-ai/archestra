@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 8
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -711,6 +711,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: `32768`
   - Values: `1` to `1000000`
   - A turn uses the lower of this value and the model's own output limit. Models without a known limit use `8192`.
+  - In Chat, Nova 2 Lite High reasoning omits the automatic output cap. Setting this variable explicitly, even to `32768`, or setting a custom model output limit blocks High; use Low or Medium instead.
 
 - **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output token limit for Groq, which charges the requested output budget against a per-minute token allowance.
   - Default: `4096`

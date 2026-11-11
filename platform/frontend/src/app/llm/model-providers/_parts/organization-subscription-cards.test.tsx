@@ -135,7 +135,9 @@ describe("OrganizationSubscriptionCards", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Connected")).toHaveLength(2);
     const another = screen.getByTestId("copilot-plan-connect-another");
-    expect(another).toHaveTextContent("Another GitHub organization");
+    expect(another).toHaveTextContent(
+      "Connect other GitHub Copilot organization",
+    );
     expect(another).toHaveTextContent("Not connected");
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(handlers.onConnect).toHaveBeenCalledOnce();

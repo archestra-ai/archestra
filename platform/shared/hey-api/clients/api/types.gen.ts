@@ -59818,6 +59818,7 @@ export type CheckCopilotGithubOrganizationResponses = {
      */
     200: {
         organization: string;
+        organizationName: string | null;
     };
 };
 

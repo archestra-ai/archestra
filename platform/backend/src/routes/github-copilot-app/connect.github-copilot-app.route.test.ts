@@ -50,6 +50,7 @@ function githubFake(options: {
       return Response.json({
         login: "my-org",
         type: options.accountType ?? "Organization",
+        name: "My Org",
       });
     if (url.endsWith("/orgs/my-org"))
       return Response.json({ login: "my-org", name: "My Org" });
@@ -383,7 +384,11 @@ describe("GitHub Copilot organization subscription setup", () => {
     const ok = await post("/api/github-copilot-app/organization/check", {
       organization: "https://github.com/my-org/",
     });
-    expect(ok.json()).toEqual({ organization: "my-org" });
+    // With the name GitHub shows, which a new plan is named after.
+    expect(ok.json()).toEqual({
+      organization: "my-org",
+      organizationName: "My Org",
+    });
 
     const empty = await post("/api/github-copilot-app/organization/check", {
       organization: "",
@@ -436,7 +441,11 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "My-Org",
     });
     expect(checked.statusCode, checked.body).toBe(200);
-    expect(checked.json()).toEqual({ organization: "My-Org" });
+    // Its name is told only to the App, once one is connected.
+    expect(checked.json()).toEqual({
+      organization: "My-Org",
+      organizationName: null,
+    });
 
     const started = await post("/api/github-copilot-app/manifest", {
       organization: "https://github.com/My-Org",
@@ -791,6 +800,16 @@ describe("GitHub Copilot organization subscription setup", () => {
         String(input).endsWith("/orgs/my-org"),
       );
 
+    // Connected with no name: named as every surface names it, after the
+    // name GitHub tells the App's installation.
+    expect((await LlmProviderApiKeyModel.findById(keyId))?.name).toBe(
+      "GitHub Copilot My Org",
+    );
+    expect(lookups()).toHaveLength(1);
+    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
+      "Bearer ghs_test",
+    );
+
     // The proxy and key resolution read the same list without asking GitHub.
     const resolved = await LlmProviderApiKeyModel.getAvailableKeysForUser(
       organizationId,
@@ -803,7 +822,7 @@ describe("GitHub Copilot organization subscription setup", () => {
       githubOrganization: "my-org",
       githubOrganizationName: null,
     });
-    expect(lookups()).toHaveLength(0);
+    expect(lookups()).toHaveLength(1);
 
     const one = await app.inject({
       method: "GET",
@@ -825,11 +844,8 @@ describe("GitHub Copilot organization subscription setup", () => {
       githubOrganizationName: "My Org",
     });
 
-    // Asked once for both reads, with the plan's installation token.
+    // Both reads use the name read while connecting.
     expect(lookups()).toHaveLength(1);
-    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
-      "Bearer ghs_test",
-    );
   });
 
   test("blocks deleting a GitHub App credential a Copilot plan uses", async () => {
@@ -1261,7 +1277,10 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "my-org",
     });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toEqual({ organization: "my-org" });
+    expect(allowed.json()).toEqual({
+      organization: "my-org",
+      organizationName: "My Org",
+    });
 
     const readOnly = await makeCustomRole(organizationId, {
       permission: { llmProviderApiKey: ["read"] },

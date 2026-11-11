@@ -165,7 +165,11 @@ class CopilotGithubAppSetup {
       organization: account.login,
       githubUrl: web,
     });
-    return { organization: account.login };
+    return {
+      organization: account.login,
+      organizationName:
+        ("name" in account ? account.name?.trim() : null) || null,
+    };
   }
 
   /**
@@ -517,7 +521,16 @@ class CopilotGithubAppSetup {
       keyId = existing.id;
     } else {
       const grants = params.grants ?? EVERYONE_IN_ORGANIZATION;
-      const name = params.name?.trim() || `GitHub Copilot (${organization})`;
+      // Named as every surface names a plan: after its GitHub organization's
+      // name, read as the App, so organizations of managed users answer too.
+      const name =
+        params.name?.trim() ||
+        copilotPlanName(
+          (await githubOrganizationDisplayName({
+            value: apiKey,
+            organizationId,
+          })) ?? organization,
+        );
       if (grants.length)
         await ResourcePermissions.validateInitialGrants({
           organizationId,
@@ -729,8 +742,7 @@ class CopilotGithubAppSetup {
         grants,
         target: {
           id: randomUUID(),
-          name:
-            params.name?.trim() || `GitHub Copilot (${params.organization})`,
+          name: params.name?.trim() || copilotPlanName(params.organization),
           authorId: null,
         },
       });
@@ -866,7 +878,7 @@ export async function copilotKeysUsingCredential(params: {
           value: key.value,
           organizationId: params.organizationId,
         })) ?? reference.organization;
-      return [{ id: key.id, name: `GitHub Copilot ${organization}` }];
+      return [{ id: key.id, name: copilotPlanName(organization) }];
     }),
   );
   return using.flat();
@@ -974,6 +986,15 @@ async function findInstallation(params: {
   if (installation.account.type === "User")
     throw new ApiError(400, NOT_AN_ORGANIZATION);
   return installation;
+}
+
+/**
+ * A plan's name, after its GitHub organization: "GitHub Copilot Acme Inc"
+ * with the name GitHub shows, else the login. The frontend names plans the
+ * same way (`organizationSubscriptionName`).
+ */
+function copilotPlanName(organization: string): string {
+  return `GitHub Copilot ${organization}`;
 }
 
 /** A GitHub web address in one spelling, to compare two. */

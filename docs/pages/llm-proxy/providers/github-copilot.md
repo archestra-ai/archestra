@@ -57,7 +57,7 @@ curl "https://<archestra-host>/v1/github-copilot/chat/completions" \
 Connect one plan for each GitHub organization that pays for Copilot, such as each organization of an Enterprise Managed Users enterprise. Each plan bills its own organization and lists the models that the organization's Copilot policy allows.
 
 1. Connect the first organization's plan as described above.
-2. Under **Enterprise plans**, click **Connect** on **Another GitHub organization** and enter the next organization.
+2. Under **Enterprise plans**, click **Connect** on the **Connect other GitHub Copilot organization** card and enter the next organization.
 3. Pick an App already installed on that organization under **Use an App I already have**, or create a new App for it. An App created here is private, so GitHub installs it only on the organization that owns it.
 
 Archestra keeps one plan per organization. To change an organization's App, open **Manage** on its plan.

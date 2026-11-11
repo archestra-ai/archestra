@@ -41,6 +41,7 @@ import {
   useConnectCopilotGithubAppCredential,
   useConnectExistingCopilotGithubApp,
   useCopilotGithubAppKeySummary,
+  useCopilotGithubOrganizationName,
   useDiscardCopilotGithubApp,
   useInstallCopilotGithubApp,
   usePendingCopilotGithubApp,
@@ -48,10 +49,12 @@ import {
   useValidateExistingCopilotGithubApp,
 } from "@/lib/github-copilot-app.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   useLlmProviderApiKey,
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+import { organizationSubscriptionName } from "@/lib/organization-subscription";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
   COPILOT_GITHUB_TAB,
@@ -90,6 +93,8 @@ export function CopilotOrganizationConnectDialog({
     id: string;
     name: string;
     organization: string | null;
+    /** The name GitHub shows for the organization, when known. */
+    organizationName?: string | null;
     reconnect?: boolean;
   } | null;
 }) {
@@ -115,8 +120,12 @@ export function CopilotOrganizationConnectDialog({
   // The key this session connected; going back from Access reconnects it.
   const [connectedKeyId, setConnectedKeyId] = useState<string | null>(null);
   const [keyFields, setKeyFields] = useState<AppKeyFields | null>(null);
-  // Optional, as on any provider key: empty means the default name.
-  const [nameDraft, setNameDraft] = useState(manage?.name ?? "");
+  // Optional, as on any provider key: empty means the default name. A plan
+  // still named as an earlier release named it by default shows empty too,
+  // so it is offered today's default.
+  const [nameDraft, setNameDraft] = useState(() =>
+    manage && !isDefaultPlanName(manage) ? manage.name : "",
+  );
 
   const check = useCheckCopilotGithubOrganization();
   const pending = usePendingCopilotGithubApp(open && !!canCreateCredentials);
@@ -151,11 +160,32 @@ export function CopilotOrganizationConnectDialog({
   const defaultLogin = replaceKeyId
     ? organization
     : account.account?.login || organizationInput.trim();
-  const defaultName = defaultLogin
-    ? `GitHub Copilot (${defaultLogin})`
-    : "GitHub Copilot";
-  // Empty falls back to the default.
-  const name = nameDraft.trim() || defaultName;
+  // A new plan is named after the name GitHub shows for its organization.
+  // While it is typed, ask GitHub once the typing stops; GitHub may tell it
+  // only once an App is connected, and then the login stands in here while
+  // the saved plan still gets the name.
+  const lookupInput = useDebouncedValue(
+    open && !replaceKeyId && account.account ? account.input : null,
+    500,
+  );
+  const lookedUpName = useCopilotGithubOrganizationName(
+    lookupInput === account.input ? lookupInput : null,
+  );
+  const organizationName = replaceKeyId
+    ? (keyDetail.data?.githubOrganizationName ??
+      manage?.organizationName ??
+      null)
+    : lookedUpName;
+  const defaultName = organizationSubscriptionName(
+    {
+      githubOrganization: defaultLogin || null,
+      githubOrganizationName: organizationName,
+    },
+    "GitHub Copilot",
+  );
+  // Empty falls back to the default. A new plan leaves it to the server,
+  // which reads the organization's name as the App.
+  const typedName = nameDraft.trim() || undefined;
   const apps =
     credentials.data?.filter(
       (credential) =>
@@ -264,7 +294,7 @@ export function CopilotOrganizationConnectDialog({
   function checkInstall() {
     // The return tab can report the install twice; one check is enough.
     if (install.isPending) return;
-    install.mutate(replaceKeyId ? { replaceKeyId } : { name }, {
+    install.mutate(replaceKeyId ? { replaceKeyId } : { name: typedName }, {
       onSuccess: (installed) => {
         if (installed?.status === "installed") connected(installed);
       },
@@ -277,7 +307,11 @@ export function CopilotOrganizationConnectDialog({
     fromCredential.mutate(
       replaceKeyId
         ? { credentialId: pickedId, replaceKeyId }
-        : { credentialId: pickedId, organization: account.input, name },
+        : {
+            credentialId: pickedId,
+            organization: account.input,
+            name: typedName,
+          },
       {
         onSuccess: (answer) => {
           if (answer?.status === "installed") connected(answer);
@@ -304,9 +338,13 @@ export function CopilotOrganizationConnectDialog({
   }
 
   function done() {
-    if (!replaceKeyId || name === keyName) return onOpenChange(false);
+    // Nothing typed: a plan connected here already has its default name, and
+    // a managed one takes today's default once its organization's name is read.
+    const next = typedName ?? (manage && keyDetail.data ? defaultName : null);
+    if (!replaceKeyId || next === null || next === keyName)
+      return onOpenChange(false);
     update.mutate(
-      { id: replaceKeyId, data: { name } },
+      { id: replaceKeyId, data: { name: next } },
       { onSuccess: () => onOpenChange(false) },
     );
   }
@@ -326,8 +364,10 @@ export function CopilotOrganizationConnectDialog({
   const keyTarget = replaceKeyId
     ? { replaceKeyId }
     : { organization: account.input };
-  // A new key is created with the name from the Organization step.
-  const connectTarget = replaceKeyId ? keyTarget : { ...keyTarget, name };
+  // A new key is created with the name typed on the Organization step.
+  const connectTarget = replaceKeyId
+    ? keyTarget
+    : { ...keyTarget, name: typedName };
   // Messages for the whole step, not one field: they sit at the bottom of
   // the step and grow up into free space, so nothing above them moves.
   const stepMessage =
@@ -420,7 +460,11 @@ export function CopilotOrganizationConnectDialog({
             </Button>
           ) : null}
           {step === "access" ? (
-            <Button type="button" disabled={update.isPending} onClick={done}>
+            <Button
+              type="button"
+              disabled={update.isPending || keyDetail.isLoading}
+              onClick={done}
+            >
               <span>{update.isPending ? "Saving..." : "Done"}</span>
             </Button>
           ) : (
@@ -705,6 +749,29 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "app", label: "GitHub App" },
   { id: "access", label: "Access" },
 ];
+
+/**
+ * Whether a plan still has a name it got by default: today's, after its
+ * organization's name or login, or an earlier release's
+ * "GitHub Copilot (<login>)".
+ */
+function isDefaultPlanName(plan: {
+  name: string;
+  organization: string | null;
+  organizationName?: string | null;
+}): boolean {
+  const name = plan.name.trim().toLowerCase();
+  const login = plan.organization?.toLowerCase();
+  const defaults = [
+    ...(login
+      ? [`github copilot (${login})`, `github copilot ${login}`]
+      : []),
+    ...(plan.organizationName
+      ? [`github copilot ${plan.organizationName.trim().toLowerCase()}`]
+      : []),
+  ];
+  return defaults.includes(name);
+}
 
 function ErrorNotice({ message }: { message: string }) {
   return (

@@ -99,7 +99,7 @@ export function OrganizationSubscriptionCards({
           testId="copilot-plan-connect-another"
           kind="github-copilot"
           provider="github-copilot"
-          name="Another GitHub organization"
+          name="Connect other GitHub Copilot organization"
           description="Connect the Copilot plan of another GitHub organization. Each organization has its own plan and models."
           isLoading={isLoading}
           status="not-connected"

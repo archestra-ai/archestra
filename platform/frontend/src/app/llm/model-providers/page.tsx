@@ -528,6 +528,7 @@ export default function ApiKeysPage() {
       id: string;
       name: string;
       organization: string | null;
+      organizationName: string | null;
       reconnect: boolean;
     } | null;
   } | null>(null);
@@ -823,6 +824,7 @@ export default function ApiKeysPage() {
                   id: credential.id,
                   name: credential.name,
                   organization: credential.githubOrganization ?? null,
+                  organizationName: credential.githubOrganizationName ?? null,
                   reconnect: true,
                 },
               })
@@ -998,6 +1000,7 @@ export default function ApiKeysPage() {
               id: editingApiKey.id,
               name: editingApiKey.name,
               organization: editingApiKey.githubOrganization ?? null,
+              organizationName: editingApiKey.githubOrganizationName ?? null,
             }}
           />
         ) : null}

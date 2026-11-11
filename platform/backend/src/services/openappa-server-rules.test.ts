@@ -1734,7 +1734,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     }),
   ).rejects.toMatchObject({
     statusCode: 409,
-    message: expect.stringContaining("Self-service Guardrails is off"),
+    message: expect.stringContaining("Self-service MCP Guardrails is off"),
   });
 
   // On: the ruleset comes at once, and the checks with it.

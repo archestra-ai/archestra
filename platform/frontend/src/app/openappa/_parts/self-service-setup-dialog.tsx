@@ -205,7 +205,7 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
       description: "Where each MCP server's own rules file lives.",
     };
   return {
-    title: "Turning self-service on",
+    title: "Turning Self-service MCP Guardrails on",
     description: "This takes a few seconds.",
   };
 }
@@ -526,10 +526,10 @@ function EnableStep({
         <ProgressRow state={switched}>
           <span>
             {switched === "done"
-              ? "Self-service is on"
+              ? "Self-service MCP Guardrails is on"
               : switched === "failed"
-                ? `Could not turn self-service on${include.error ? `: ${include.error}` : "."}`
-                : "Turn self-service on"}
+                ? `Could not turn Self-service MCP Guardrails on${include.error ? `: ${include.error}` : "."}`
+                : "Turn Self-service MCP Guardrails on"}
           </span>
         </ProgressRow>
         <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>

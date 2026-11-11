@@ -317,7 +317,9 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   fireEvent.click(within(dialog).getByRole("button", { name: "Turn on" }));
 
   // The switch, the ruleset, then the pull request, each reported.
-  expect(await within(dialog).findByText("Self-service is on")).toBeVisible();
+  expect(
+    await within(dialog).findByText("Self-service MCP Guardrails is on"),
+  ).toBeVisible();
   expect(
     await within(dialog).findByText(/Branch ruleset created/),
   ).toBeVisible();

@@ -156,8 +156,8 @@ export function useUpdateAppaGithubSync() {
       if (body.action === "self_service") {
         toast.success(
           body.enabled
-            ? "Self-service turned on. Server editors can change their servers' rules."
-            : "Self-service turned off. The branch ruleset was removed.",
+            ? "Self-service MCP Guardrails turned on."
+            : "Self-service MCP Guardrails turned off. The branch ruleset was removed.",
         );
         return;
       }

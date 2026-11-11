@@ -530,7 +530,7 @@ export function GithubSyncSetupDialog({
       />
       <div className="space-y-1">
         <Label htmlFor="github-sync-self-service">
-          Enable MCP servers Guardrails self-service
+          Self-service MCP Guardrails
         </Label>
         <FieldDescription>
           MCP owners can manage MCP Guardrails. Additional GitHub App

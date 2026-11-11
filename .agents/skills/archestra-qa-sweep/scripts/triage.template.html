@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA Triage</title>
+<style>
+:root { --bg:#f6f6f4; --surface:#fff; --surface-2:#f0efec; --text:#1c1c1a; --muted:#6b6a65; --border:#e2e0db; --accent:#3b5bdb; --code-bg:#efeeea;
+  --blocker:#b42318; --major:#c4560c; --minor:#a37b00; --polish:#4b6b88; --other:#6b6a65;
+  --s-fix:#1f7a46; --s-later:#3b5bdb; --s-wont:#6b6a65; --s-nab:#8a3ffc; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141413; --surface:#1d1d1b; --surface-2:#262624; --text:#ecebe6; --muted:#9b9a94; --border:#33322f; --accent:#8ea6ff; --code-bg:#2a2a27;
+  --blocker:#ff7b6e; --major:#ffa25c; --minor:#e6c34d; --polish:#8fb4d6; --other:#9b9a94; --s-fix:#5fd08f; --s-later:#8ea6ff; --s-wont:#9b9a94; --s-nab:#c3a0ff; } }
+:root[data-theme="dark"] { --bg:#141413; --surface:#1d1d1b; --surface-2:#262624; --text:#ecebe6; --muted:#9b9a94; --border:#33322f; --accent:#8ea6ff; --code-bg:#2a2a27;
+  --blocker:#ff7b6e; --major:#ffa25c; --minor:#e6c34d; --polish:#8fb4d6; --other:#9b9a94; --s-fix:#5fd08f; --s-later:#8ea6ff; --s-wont:#9b9a94; --s-nab:#c3a0ff; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; }
+code { background:var(--code-bg); padding:1px 4px; border-radius:4px; font-size:12.5px; word-break:break-word; }
+a { color:var(--accent); }
+header { position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--border); padding:12px 16px; }
+.bar { max-width:1200px; margin:0 auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+h1 { font-size:17px; margin:0 12px 0 0; }
+.chip { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:999px; padding:3px 10px; cursor:pointer; font-size:12.5px; }
+.chip[aria-pressed="true"] { border-color:var(--text); font-weight:600; }
+.chip .n { color:var(--muted); margin-left:4px; }
+select, input[type=search] { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font:inherit; font-size:13px; }
+input[type=search] { flex:1 1 180px; min-width:0; }
+.meta { color:var(--muted); font-size:12px; }
+.progress { color:var(--muted); font-size:12.5px; margin-left:auto; }
+.hint { color:var(--muted); font-size:12px; max-width:1200px; margin:6px auto 0; }
+main { max-width:1200px; margin:0 auto; padding:16px; }
+.card { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--sev); border-radius:8px; padding:14px 16px; margin-bottom:14px; scroll-margin-top:90px; }
+.card.focused { outline:2px solid var(--accent); outline-offset:2px; }
+.card[data-status]:not([data-status=""]) { opacity:.72; }
+.head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.sev { color:var(--sev); font-weight:700; text-transform:uppercase; font-size:11.5px; letter-spacing:.04em; }
+.tag { font:11.5px ui-monospace,Menlo,monospace; background:var(--surface-2); border-radius:4px; padding:0 5px; color:var(--muted); }
+.title { font-size:15px; font-weight:600; margin:4px 0 8px; }
+.links { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; }
+.links a { font:12px ui-monospace,Menlo,monospace; text-decoration:none; border:1px solid var(--border); border-radius:5px; padding:1px 7px; background:var(--surface-2); }
+.shots { display:flex; gap:8px; overflow-x:auto; padding:4px 0 8px; }
+.shots img { height:150px; max-width:280px; object-fit:cover; object-position:top left; border:1px solid var(--border); border-radius:6px; cursor:zoom-in; background:var(--surface-2); }
+.noshot { color:var(--muted); font-size:12px; font-style:italic; }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:6px 0; font-size:13px; }
+dt { color:var(--muted); } dd { margin:0; white-space:pre-wrap; word-break:break-word; }
+@media (max-width:640px) { dl { grid-template-columns:1fr; } dt { margin-top:6px; } .shots img { height:110px; max-width:200px; } h1 { width:100%; } }
+.triage { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+.triage button { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:6px; padding:3px 10px; cursor:pointer; font-size:12.5px; }
+.triage button[aria-pressed="true"] { color:#fff; border-color:transparent; }
+.triage button[data-s=fix][aria-pressed="true"] { background:var(--s-fix); }
+.triage button[data-s=later][aria-pressed="true"] { background:var(--s-later); }
+.triage button[data-s=wont][aria-pressed="true"] { background:var(--s-wont); }
+.triage button[data-s=nab][aria-pressed="true"] { background:var(--s-nab); }
+.triage input { flex:1 1 200px; min-width:0; background:var(--surface-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:3px 8px; font:inherit; font-size:12.5px; }
+.empty { color:var(--muted); text-align:center; padding:40px; }
+#lb { position:fixed; inset:0; background:rgba(0,0,0,.88); display:none; z-index:20; flex-direction:column; }
+#lb.open { display:flex; }
+#lb .top { display:flex; justify-content:space-between; align-items:center; color:#eee; padding:8px 14px; font-size:13px; gap:8px; }
+#lb .top a { color:#b8c6ff; }
+#lb .img { flex:1; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:0 12px 12px; }
+#lb img { max-width:100%; height:auto; background:#fff; }
+#lb button { background:#333; color:#eee; border:0; border-radius:6px; padding:4px 10px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>QA Triage <span class="meta">__RUN__</span></h1>
+    <span id="chips"></span>
+    <select id="bucket" aria-label="Bucket"></select>
+    <select id="status" aria-label="Triage status">
+      <option value="all">All statuses</option><option value="">Untriaged</option>
+      <option value="fix">Fix</option><option value="later">Later</option><option value="wont">Won't fix</option><option value="nab">Not a bug</option>
+    </select>
+    <input type="search" id="q" placeholder="Search title, ID, file…">
+    <button class="chip" id="export">Export decisions</button>
+    <button class="chip" id="theme" aria-label="Toggle theme">◐</button>
+    <span class="progress" id="progress"></span>
+  </div>
+  <div class="hint">Keys: <code>j</code>/<code>k</code> next/prev · <code>1</code> fix · <code>2</code> later · <code>3</code> won't fix · <code>4</code> not a bug · <code>0</code> clear · <code>o</code> open page · <code>v</code> screenshots. Export writes the JSON that <code>known.mjs import</code> reads.</div>
+</header>
+<main id="list"></main>
+<div id="lb" role="dialog" aria-modal="true">
+  <div class="top"><span id="cap"></span><span><button id="prev">←</button> <button id="next">→</button> <button id="close">Esc</button></span></div>
+  <div class="img"><img id="lbimg" alt=""></div>
+</div>
+<script>
+const DATA = __DATA__;
+const BASE = "__BASE__";
+const STORE = "__STORE__";
+const SEVS = ["blocker", "major", "minor", "polish"];
+let state = (() => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } })();
+const persist = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const sevColor = (e) => (e.bucket === "confirmed" || e.bucket === "security") && SEVS.includes(e.severity) ? `var(--${e.severity})` : "var(--other)";
+const label = (e) => e.bucket === "confirmed" ? e.severity : e.bucket === "security" ? `security · ${e.severity}` : e.bucket;
+const activeSev = new Set();
+
+const chips = document.getElementById("chips");
+const sevCounts = {};
+DATA.forEach((e) => { sevCounts[e.severity] = (sevCounts[e.severity] || 0) + 1; });
+Object.keys(sevCounts).sort((a, b) => (SEVS.indexOf(a) + 1 || 99) - (SEVS.indexOf(b) + 1 || 99)).forEach((s) => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.setAttribute("aria-pressed", "false");
+  b.innerHTML = `${esc(s)}<span class="n">${sevCounts[s]}</span>`;
+  b.onclick = () => { activeSev.has(s) ? activeSev.delete(s) : activeSev.add(s); b.setAttribute("aria-pressed", activeSev.has(s)); render(); };
+  chips.appendChild(b);
+});
+const bucketSel = document.getElementById("bucket");
+bucketSel.innerHTML = `<option value="all">All buckets</option>` + [...new Set(DATA.map((e) => e.bucket))].map((b) => `<option>${b}</option>`).join("");
+
+function card(e, i) {
+  const st = state[e.fingerprint] || {};
+  const links = e.links.map((l) => `<a href="${BASE}${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>`).join("");
+  const shots = e.shots.length ? e.shots.map((s, j) => `<img loading="lazy" src="${esc(s)}" alt="${esc(s)}" data-i="${i}" data-j="${j}">`).join("") : `<span class="noshot">No screenshot</span>`;
+  const btn = (s, t) => `<button data-s="${s}" aria-pressed="${st.status === s}">${t}</button>`;
+  const prior = e.prior ? `<span class="tag">known: ${esc(e.prior.status)}</span>` : "";
+  return `<article class="card" id="c${i}" data-i="${i}" data-status="${st.status || ""}" style="--sev:${sevColor(e)}">
+    <div class="head"><span class="sev">${esc(label(e))}</span>${e.ids.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}
+      <span class="tag">${esc(e.area)}</span><span class="tag">role: ${esc(e.role)}</span><span class="tag">gate: ${esc(e.gate)}</span>${e.verdict ? `<span class="tag">${esc(e.verdict)}</span>` : ""}${prior}</div>
+    <div class="title">${inline(e.title)}</div>
+    ${links ? `<div class="links">${links}</div>` : ""}
+    <div class="shots">${shots}</div>
+    <dl>${e.fields.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${inline(v)}</dd>`).join("")}</dl>
+    <div class="triage">${btn("fix", "Fix")}${btn("later", "Later")}${btn("wont", "Won't fix")}${btn("nab", "Not a bug")}
+      <input placeholder="Note…" value="${esc(st.note || "")}" aria-label="Triage note"></div>
+  </article>`;
+}
+
+let visible = [], focus = -1;
+function render() {
+  const q = document.getElementById("q").value.toLowerCase(), b = bucketSel.value, sf = document.getElementById("status").value;
+  visible = DATA.map((_, i) => i).filter((i) => {
+    const e = DATA[i], st = (state[e.fingerprint] || {}).status || "";
+    if (activeSev.size && !activeSev.has(e.severity)) return false;
+    if (b !== "all" && e.bucket !== b) return false;
+    if (sf !== "all" && st !== sf) return false;
+    return !q || JSON.stringify(e).toLowerCase().includes(q);
+  });
+  document.getElementById("list").innerHTML = visible.length ? visible.map((i) => card(DATA[i], i)).join("") : `<div class="empty">Nothing matches these filters.</div>`;
+  focus = -1; progress();
+}
+function progress() {
+  const done = DATA.filter((e) => (state[e.fingerprint] || {}).status).length;
+  document.getElementById("progress").textContent = `${visible.length} shown · ${done}/${DATA.length} triaged`;
+}
+function setStatus(i, s) {
+  const k = DATA[i].fingerprint, cur = state[k] || {};
+  state[k] = { ...cur, status: cur.status === s ? "" : s }; persist();
+  const c = document.getElementById("c" + i);
+  c.dataset.status = state[k].status;
+  c.querySelectorAll(".triage button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === state[k].status));
+  progress();
+}
+const list = document.getElementById("list");
+list.addEventListener("click", (ev) => {
+  const b = ev.target.closest(".triage button");
+  if (b) return setStatus(+b.closest(".card").dataset.i, b.dataset.s);
+  const img = ev.target.closest(".shots img");
+  if (img) openLb(+img.dataset.i, +img.dataset.j);
+});
+list.addEventListener("input", (ev) => {
+  if (!ev.target.matches(".triage input")) return;
+  const k = DATA[+ev.target.closest(".card").dataset.i].fingerprint;
+  state[k] = { ...(state[k] || {}), note: ev.target.value }; persist();
+});
+["q", "bucket", "status"].forEach((id) => document.getElementById(id).addEventListener("input", render));
+
+let lb = { i: -1, j: 0 };
+function openLb(i, j) {
+  lb = { i, j }; const e = DATA[i];
+  document.getElementById("lbimg").src = e.shots[j];
+  const link = e.links[0] ? ` · <a href="${BASE}${esc(e.links[0])}" target="_blank" rel="noopener">open ${esc(e.links[0])}</a>` : "";
+  document.getElementById("cap").innerHTML = `${esc(e.id)} — ${esc(e.shots[j])} (${j + 1}/${e.shots.length})${link}`;
+  document.getElementById("lb").classList.add("open");
+}
+const closeLb = () => { document.getElementById("lb").classList.remove("open"); lb.i = -1; };
+const step = (d) => { if (lb.i < 0) return; const n = DATA[lb.i].shots.length; openLb(lb.i, (lb.j + d + n) % n); };
+document.getElementById("close").onclick = closeLb;
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+document.getElementById("lb").addEventListener("click", (ev) => { if (ev.target.id === "lb" || ev.target.classList.contains("img")) closeLb(); });
+
+function focusCard(n) {
+  if (!visible.length) return;
+  focus = Math.max(0, Math.min(visible.length - 1, n));
+  document.querySelectorAll(".card.focused").forEach((c) => c.classList.remove("focused"));
+  const c = document.getElementById("c" + visible[focus]); c.classList.add("focused");
+  c.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+document.addEventListener("keydown", (ev) => {
+  if (lb.i >= 0) { if (ev.key === "Escape") closeLb(); if (ev.key === "ArrowRight") step(1); if (ev.key === "ArrowLeft") step(-1); return; }
+  if (ev.target.matches("input, select, textarea") || ev.metaKey || ev.ctrlKey) return;
+  const cur = focus >= 0 ? visible[focus] : null, map = { 1: "fix", 2: "later", 3: "wont", 4: "nab" };
+  if (ev.key === "j") focusCard(focus + 1);
+  else if (ev.key === "k") focusCard(focus - 1);
+  else if (cur === null) return;
+  else if (map[ev.key]) setStatus(cur, map[ev.key]);
+  else if (ev.key === "0" && state[DATA[cur].fingerprint]?.status) setStatus(cur, state[DATA[cur].fingerprint].status);
+  else if (ev.key === "o" && DATA[cur].links[0]) window.open(BASE + DATA[cur].links[0], "_blank", "noopener");
+  else if (ev.key === "v" && DATA[cur].shots.length) openLb(cur, 0);
+});
+document.getElementById("export").onclick = () => {
+  const out = DATA.map((e) => ({ id: e.id, fingerprint: e.fingerprint, title: e.title, severity: e.severity, ...(state[e.fingerprint] || {}) })).filter((d) => d.status);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+  a.download = "triage-decisions.json"; a.click();
+};
+document.getElementById("theme").onclick = () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+};
+render();
+</script>
+</body>
+</html>

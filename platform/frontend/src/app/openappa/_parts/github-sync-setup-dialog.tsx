@@ -522,6 +522,7 @@ export function GithubSyncSetupDialog({
   const policyDocsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAiToolGuardrailsGitSync,
   );
+  const wizardSteps = gitlab ? GITLAB_STEPS : GITHUB_STEPS;
   const header = headerFor({
     githubApp: appLabel ?? null,
     editing: !!editing,
@@ -671,15 +672,21 @@ export function GithubSyncSetupDialog({
       }
     >
       <SetupStepper
-        steps={(gitlab ? GITLAB_STEPS : GITHUB_STEPS).map(
-          (entry) => entry.label,
-        )}
+        steps={wizardSteps.map((entry) => entry.label)}
         current={
           step === "connect"
-            ? (gitlab ? GITLAB_STEPS : GITHUB_STEPS).length
-            : (gitlab ? GITLAB_STEPS : GITHUB_STEPS).findIndex(
-                (entry) => entry.id === step,
-              )
+            ? wizardSteps.length
+            : wizardSteps.findIndex((entry) => entry.id === step)
+        }
+        // Done steps open again; editing a source unlocks every step.
+        onSelect={(index) => {
+          const target = wizardSteps[index];
+          if (target && step !== "connect") setStep(target.id);
+        }}
+        selectable={(index) =>
+          step !== "connect" &&
+          (index < wizardSteps.findIndex((entry) => entry.id === step) ||
+            (!!editing && index < wizardSteps.length))
         }
       />
 

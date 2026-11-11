@@ -147,6 +147,10 @@ export function SelfServiceSetupDialog({
       <SetupStepper
         steps={STEPS.map((entry) => entry.label)}
         current={STEPS.findIndex((entry) => entry.id === step)}
+        onSelect={(index) => {
+          const target = STEPS[index];
+          if (target && step !== "enable") setStep(target.id);
+        }}
       />
       {step === "app" ? (
         <AppStep

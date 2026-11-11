@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   ArrowLeft,
   Check,
-  ExternalLink,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";

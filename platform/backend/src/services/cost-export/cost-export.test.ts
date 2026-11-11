@@ -2,6 +2,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { vi } from "vitest";
 import BlobProviderModel from "@/models/blob-provider";
 import CostExportModel from "@/models/cost-export";
+import TaskModel from "@/models/task";
 import { beforeEach, describe, expect, test } from "@/test";
 import { FakeS3Client } from "@/test/fake-s3-client";
 import { costExportService } from ".";
@@ -56,6 +57,7 @@ describe("cost exports", () => {
     });
 
     await costExportService.runDue();
+    await runQueued();
 
     const keys = s3.keys().filter((key) => key.includes(isoHour(hour)));
     expect(keys).toEqual([
@@ -105,6 +107,7 @@ describe("cost exports", () => {
     expect(after?.exportedThrough.getTime()).toBeGreaterThan(hour.getTime());
     const written = s3.keys().length;
     await costExportService.runDue();
+    await runQueued();
     expect(s3.keys()).toHaveLength(written);
   });
 
@@ -124,6 +127,7 @@ describe("cost exports", () => {
     });
 
     await costExportService.runDue();
+    await runQueued();
 
     const files = s3.keys().map((key) => key.split("/").at(-1));
     expect(files).toContain(`archestra-focus-${isoHour(hour)}.csv`);
@@ -150,6 +154,7 @@ describe("cost exports", () => {
     });
 
     await costExportService.runDue();
+    await runQueued();
 
     const file = s3.keys().find((key) => key.includes(isoHour(hour)));
     expect(parseCsv(s3.read(file ?? "") ?? "")).toEqual([]);
@@ -172,6 +177,7 @@ describe("cost exports", () => {
     };
 
     await costExportService.runDue();
+    await runQueued();
 
     const after = await CostExportModel.findById({
       id: costExport.id,
@@ -179,9 +185,98 @@ describe("cost exports", () => {
     });
     expect(after).toMatchObject({
       lastRunStatus: "failed",
-      lastRunError: "NoSuchBucket, HTTP 404: No such bucket",
+      // The provider's explanation, as its connection test shows it.
+      lastRunError: 'Bucket "finops" does not exist in us-east-1.',
       exportedThrough: hour,
     });
+  });
+
+  test("a failing export backs off before the scheduler retries it", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const costExport = await makeExport({
+      organizationId: organization.id,
+      exportedThrough: startOfHour(Date.now() - 2 * HOUR),
+    });
+    s3.send = async () => {
+      throw Object.assign(new Error("No such bucket"), {
+        name: "NoSuchBucket",
+        $metadata: { httpStatusCode: 404 },
+      });
+    };
+    await costExportService.runDue();
+    await runQueued();
+    const failed = await costExportService.get({
+      id: costExport.id,
+      organizationId: organization.id,
+    });
+
+    // A tick inside the backoff queues nothing; one after it retries.
+    await costExportService.runDue(new Date(Date.now() + 4 * MINUTE));
+    const during = await pendingRuns();
+    await costExportService.runDue(new Date(Date.now() + 6 * MINUTE));
+    const after = await pendingRuns();
+
+    expect(failed.nextRetryAt?.getTime()).toBe(
+      (failed.lastRunAt?.getTime() ?? 0) + 5 * MINUTE,
+    );
+    expect(during).toHaveLength(0);
+    expect(after).toHaveLength(1);
+  });
+
+  test("a start date in the past backfills every period since, in chained runs", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const costExport = await costExportService.create({
+      organizationId: organization.id,
+      data: {
+        name: "backfill",
+        blobProviderId: (await makeProvider(organization.id)).id,
+        format: "focus_csv",
+        schedule: "hourly",
+        pathPrefix: "costs",
+        enabled: true,
+        // More hours than one run writes, so the catch-up chains.
+        startFrom: new Date(Date.now() - 60 * HOUR).toISOString(),
+      },
+    });
+
+    await costExportService.runDue();
+    await runQueued();
+    await runQueued();
+
+    const after = await costExportService.get({
+      id: costExport.id,
+      organizationId: organization.id,
+    });
+    expect(s3.keys().length).toBeGreaterThanOrEqual(59);
+    expect(after.running).toBe(false);
+    expect(after.exportedThrough.getTime()).toBeGreaterThan(
+      Date.now() - 2 * HOUR,
+    );
+  });
+
+  test("a start date in the future is refused", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await expect(
+      costExportService.create({
+        organizationId: organization.id,
+        data: {
+          name: "later",
+          blobProviderId: (await makeProvider(organization.id)).id,
+          format: "focus_csv",
+          schedule: "daily",
+          pathPrefix: "costs",
+          enabled: true,
+          startFrom: new Date(Date.now() + DAY).toISOString(),
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 
   test("run now rewrites the latest completed period when nothing is due", async ({
@@ -199,33 +294,112 @@ describe("cost exports", () => {
         enabled: true,
       },
     });
+    const params = { id: costExport.id, organizationId: organization.id };
 
-    const first = await costExportService.runNow({
-      id: costExport.id,
+    const queued = await costExportService.runNow(params);
+    expect(queued.running).toBe(true);
+    await runQueued();
+    const first = await costExportService.get(params);
+    await costExportService.runNow(params);
+    await runQueued();
+    const second = await costExportService.get(params);
+
+    expect(first).toMatchObject({ running: false, lastRunStatus: "success" });
+    expect(second.lastObjectKey).toBe(first.lastObjectKey);
+    expect(s3.keys()).toEqual([first.lastObjectKey]);
+  });
+
+  test("run now refuses while a run is queued", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const costExport = await makeExport({
       organizationId: organization.id,
+      exportedThrough: startOfHour(Date.now() - 2 * HOUR),
     });
-    const second = await costExportService.runNow({
-      id: costExport.id,
+    const params = { id: costExport.id, organizationId: organization.id };
+
+    await costExportService.runNow(params);
+
+    await expect(costExportService.runNow(params)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+  });
+
+  test("a tick queues one run per due export, never a second while one is pending", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const hour = startOfHour(Date.now() - 2 * HOUR);
+    await makeExport({
       organizationId: organization.id,
+      exportedThrough: hour,
+    });
+    await makeExport({
+      organizationId: organization.id,
+      exportedThrough: hour,
     });
 
-    expect(first.files).toHaveLength(1);
-    expect(second.files.map((file) => file.key)).toEqual(
-      first.files.map((file) => file.key),
-    );
-    expect(first.files[0].location).toBe(`s3://finops/${first.files[0].key}`);
+    await costExportService.runDue();
+    await costExportService.runDue();
+
+    expect(await pendingRuns()).toHaveLength(2);
+  });
+
+  test("a run whose claim expired and was taken over writes nothing", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const costExport = await makeExport({
+      organizationId: organization.id,
+      exportedThrough: startOfHour(Date.now() - 2 * HOUR),
+    });
+    const stale = await CostExportModel.claimRun({
+      id: costExport.id,
+      leaseSeconds: -1,
+    });
+    // The stale claim has expired; another run takes the lease.
+    await CostExportModel.claimRun({ id: costExport.id, leaseSeconds: 900 });
+
+    await costExportService.runQueued({
+      costExportId: costExport.id,
+      claimedUntil: stale?.runningUntil.toISOString(),
+      rewriteLatest: false,
+    });
+
+    expect(s3.keys()).toEqual([]);
   });
 });
 
 // ===== Helpers =====
 
+/** Run every queued `cost_export_run` task, as a worker would. */
+async function runQueued() {
+  for (const task of await pendingRuns()) {
+    await costExportService.runQueued(task.payload);
+    await TaskModel.complete(task.id);
+  }
+}
+
+async function pendingRuns() {
+  const tasks = [];
+  for (;;) {
+    const task = await TaskModel.dequeue(["cost_export_run"]);
+    if (!task) break;
+    tasks.push(task);
+  }
+  // Dequeue marked them processing; the caller completes them.
+  return tasks;
+}
+
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 async function makeProvider(organizationId: string) {
   return BlobProviderModel.create({
     organizationId,
-    name: `bucket-${organizationId}`,
+    name: `bucket-${crypto.randomUUID()}`,
     config: {
       type: "s3",
       bucket: "finops",

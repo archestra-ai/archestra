@@ -47,6 +47,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
+  costExport: ["read", "create", "update", "delete"],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -101,6 +102,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
+  // Cost exports send organization-wide spend out of the platform.
+  costExport: [],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -161,6 +164,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   llmModel: ["read"],
   llmLimit: [],
   llmCost: [],
+  costExport: [],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
@@ -387,6 +391,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmLimit:delete": "Remove usage limits",
   "llmCost:read":
     "View organization-wide LLM usage cost statistics and analytics",
+  "costExport:read": "View scheduled cost exports and their run status",
+  "costExport:create": "Schedule cost exports to a blob provider",
+  "costExport:update": "Change, pause, resume, and run cost exports",
+  "costExport:delete": "Delete cost exports",
 
   // Other
   "chat:read": "View and access chat conversations",
@@ -1368,32 +1376,29 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteGithubPat]: {},
   // Blob providers hold organization-wide storage credentials, so they sit
   // with the other organization settings.
-  [RouteId.ListBlobProviders]: { organizationSettings: ["read"] },
+  // organizationSettings:read, or costExport:create/update to pick a
+  // destination: checked in the handler.
+  [RouteId.ListBlobProviders]: {},
   [RouteId.CreateBlobProvider]: { organizationSettings: ["update"] },
   [RouteId.UpdateBlobProvider]: { organizationSettings: ["update"] },
   [RouteId.DeleteBlobProvider]: { organizationSettings: ["update"] },
   [RouteId.TestBlobProvider]: { organizationSettings: ["update"] },
-  // A cost export ships organization-wide spend out of Archestra: configuring
-  // it needs both cost visibility and organization settings.
-  [RouteId.ListCostExports]: {
-    llmCost: ["read"],
-    organizationSettings: ["read"],
-  },
+  // A cost export ships organization-wide spend out of the platform: changing
+  // one also needs cost visibility, so the permission cannot be used to read
+  // spend its holder could not see.
+  [RouteId.ListCostExports]: { costExport: ["read"] },
   [RouteId.CreateCostExport]: {
+    costExport: ["create"],
     llmCost: ["read"],
-    organizationSettings: ["update"],
   },
   [RouteId.UpdateCostExport]: {
+    costExport: ["update"],
     llmCost: ["read"],
-    organizationSettings: ["update"],
   },
-  [RouteId.DeleteCostExport]: {
-    llmCost: ["read"],
-    organizationSettings: ["update"],
-  },
+  [RouteId.DeleteCostExport]: { costExport: ["delete"] },
   [RouteId.RunCostExport]: {
+    costExport: ["update"],
     llmCost: ["read"],
-    organizationSettings: ["update"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     organizationSettings: ["update"],
@@ -2214,7 +2219,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
-  "/llm/cost-exports": { llmCost: ["read"], organizationSettings: ["read"] },
+  "/llm/cost-exports": { costExport: ["read"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
   "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },

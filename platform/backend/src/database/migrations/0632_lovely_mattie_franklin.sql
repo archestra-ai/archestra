@@ -25,6 +25,7 @@ CREATE TABLE "cost_exports" (
 	"last_run_at" timestamp,
 	"last_run_status" varchar,
 	"last_run_error" text,
+	"consecutive_failures" integer DEFAULT 0 NOT NULL,
 	"last_object_key" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL

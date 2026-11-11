@@ -1,5 +1,5 @@
 {
-  "id": "de902b53-391f-4450-9d80-6f1b319257fc",
+  "id": "2040a5e0-f0d5-487d-b377-b39ef0ec12f3",
   "prevId": "6108b291-b0fb-4eaf-9108-7ab549e45f3b",
   "version": "7",
   "dialect": "postgresql",
@@ -10373,6 +10373,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "last_object_key": {
           "name": "last_object_key",

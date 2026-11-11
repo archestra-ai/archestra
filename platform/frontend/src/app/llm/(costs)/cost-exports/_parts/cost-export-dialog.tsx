@@ -4,199 +4,246 @@ import {
   COST_EXPORT_FORMAT_LABELS,
   type CostExportSchedule,
 } from "@archestra/shared";
-import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { AlertTriangle, Plus } from "lucide-react";
+import { useEffect, useRef } from "react";
+import {
+  BlobProviderLogo,
+  blobProviderLocation,
+} from "@/components/blob-provider-logo";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
-import { useBlobProviders } from "@/lib/blob-provider.query";
-import {
-  type CostExport,
-  useCreateCostExport,
-  useUpdateCostExport,
-} from "@/lib/cost-export.query";
+import type { CostExport } from "@/lib/cost-export.query";
+import { CostExportStartFrom } from "./cost-export-start-from";
+import { exampleObjectKey, useCostExportForm } from "./use-cost-export-form";
 
-/** Schedule a cost export, or edit one. */
+/**
+ * Schedule a cost export, or edit one: name, destination, how often (with
+ * each option's file name), where a new export starts (now, or a backfill),
+ * and the folder. Edit mode keeps the Enabled switch in the footer.
+ */
 export function CostExportDialog({
   open,
   onOpenChange,
   costExport,
+  initialBlobProviderId,
+  onAddProvider,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The export being edited; null creates one. */
   costExport: CostExport | null;
+  /** Preselected destination for a new export. */
+  initialBlobProviderId?: string | null;
+  /**
+   * Closes this dialog and opens the add-blob-provider dialog; once the
+   * provider saves, this dialog reopens with it preselected.
+   */
+  onAddProvider: () => void;
 }) {
-  const id = useId();
-  const { data: providers = [] } = useBlobProviders();
-  const create = useCreateCostExport();
-  const update = useUpdateCostExport();
-  const [values, setValues] = useState<FormValues>(() => toForm(costExport));
-  const [submitted, setSubmitted] = useState(false);
+  const form = useCostExportForm({
+    open,
+    costExport,
+    initialBlobProviderId,
+    onSaved: () => onOpenChange(false),
+  });
+  const { id, isEdit, values, set, providers, saving, failure } = form;
 
-  // A fresh form each time the dialog opens.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: costExport is read when the dialog opens.
+  const noticeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open) return;
-    setValues(toForm(costExport));
-    setSubmitted(false);
-  }, [open]);
+    if (failure) noticeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [failure]);
 
-  // Preselect the only provider there is.
-  useEffect(() => {
-    if (open && !values.blobProviderId && providers.length === 1) {
-      setValues((current) => ({ ...current, blobProviderId: providers[0].id }));
-    }
-  }, [open, providers, values.blobProviderId]);
-
-  const set = (patch: Partial<FormValues>) =>
-    setValues((current) => ({ ...current, ...patch }));
-  const errors: Partial<Record<keyof FormValues, string>> = {};
-  if (!values.name.trim()) errors.name = "Name is required";
-  if (!values.blobProviderId) errors.blobProviderId = "Pick a blob provider";
-  const shown = (field: keyof FormValues) =>
-    submitted ? errors[field] : undefined;
-  const saving = create.isPending || update.isPending;
-
-  const submit = async () => {
-    setSubmitted(true);
-    if (Object.keys(errors).length > 0) return;
-    const body = {
-      name: values.name,
-      blobProviderId: values.blobProviderId,
-      schedule: values.schedule,
-      pathPrefix: values.pathPrefix,
-      enabled: values.enabled,
-      format: "focus_csv" as const,
-    };
-    try {
-      if (costExport) {
-        await update.mutateAsync({ id: costExport.id, body });
-      } else {
-        await create.mutateAsync(body);
-      }
-      onOpenChange(false);
-    } catch {
-      // The query layer has shown the error; the dialog stays open.
-    }
-  };
+  const noProviders = !form.providersLoading && providers.length === 0;
+  const fileName = (schedule: CostExportSchedule) =>
+    exampleObjectKey({ ...values, schedule })
+      .split("/")
+      .pop();
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={costExport ? "Edit cost export" : "Schedule cost export"}
-      description={`${COST_EXPORT_FORMAT_LABELS.focus_csv}: one file per completed period, written to a blob provider.`}
+      title={isEdit ? "Edit cost export" : "Schedule cost export"}
+      description={`Writes ${COST_EXPORT_FORMAT_LABELS.focus_csv} files of LLM cost and usage to a blob provider.`}
       size="small"
     >
       <form
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          void form.submit();
         }}
       >
-        <DialogBody className="space-y-4">
-          <Field id={`${id}-name`} label="Name" error={shown("name")}>
+        <DialogBody className="space-y-5">
+          <Field id={`${id}-name`} label="Name" error={form.errorFor("name")}>
             <Input
               id={`${id}-name`}
               value={values.name}
               onChange={(event) => set({ name: event.target.value })}
               placeholder="FinOps daily export"
               autoComplete="off"
+              aria-invalid={!!form.errorFor("name")}
               autoFocus
             />
           </Field>
+
           <Field
             id={`${id}-provider`}
             label="Destination"
-            error={shown("blobProviderId")}
+            error={form.errorFor("blobProviderId")}
           >
-            {providers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No blob providers yet.{" "}
-                <Link
-                  href="/settings/blob-providers"
-                  className="text-primary hover:underline"
+            {noProviders ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  No blob providers yet.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onAddProvider}
                 >
-                  Add one in Settings
-                </Link>{" "}
-                first.
-              </p>
+                  <Plus />
+                  Add blob provider
+                </Button>
+              </div>
             ) : (
-              <Select
+              <SearchableSelect
+                id={`${id}-provider`}
+                ariaLabel="Destination"
+                className="w-full"
+                showSearch={providers.length > 6}
+                disabled={form.providersLoading}
+                placeholder={
+                  form.providersLoading ? "Loading…" : "Pick a blob provider"
+                }
                 value={values.blobProviderId}
                 onValueChange={(value) => set({ blobProviderId: value })}
-              >
-                <SelectTrigger id={`${id}-provider`} className="w-full">
-                  <SelectValue placeholder="Pick a blob provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name} (s3://{provider.config.bucket})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                items={providers.map((p) => {
+                  const location = blobProviderLocation(p).uri;
+                  return {
+                    value: p.id,
+                    label: p.name,
+                    content: (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <BlobProviderLogo type={p.type} />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{p.name}</span>
+                          <span className="truncate font-mono text-xs text-muted-foreground">
+                            {location}
+                          </span>
+                        </span>
+                      </span>
+                    ),
+                    selectedContent: (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <BlobProviderLogo type={p.type} />
+                        <span className="truncate">{p.name}</span>
+                      </span>
+                    ),
+                  };
+                })}
+              />
             )}
           </Field>
-          <Field
-            id={`${id}-schedule`}
-            label="Schedule"
-            hint="Times are UTC. A period is written 15 minutes after it ends."
-          >
-            <Select
+
+          <div className="space-y-2">
+            <Label id={`${id}-schedule`}>How often</Label>
+            <RadioGroup
+              aria-labelledby={`${id}-schedule`}
               value={values.schedule}
               onValueChange={(value) =>
                 set({ schedule: value as CostExportSchedule })
               }
+              className="gap-2.5"
             >
-              <SelectTrigger id={`${id}-schedule`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="daily">Daily (one file per day)</SelectItem>
-                <SelectItem value="hourly">
-                  Hourly (one file per hour)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+              {SCHEDULES.map((option) => (
+                <Label
+                  key={option.value}
+                  htmlFor={`${id}-schedule-${option.value}`}
+                  className="flex cursor-pointer items-start gap-2.5 font-normal"
+                >
+                  <RadioGroupItem
+                    id={`${id}-schedule-${option.value}`}
+                    value={option.value}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0 space-y-0.5">
+                    <span className="block text-sm">
+                      <span className="font-medium">{option.label}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {option.hint}
+                      </span>
+                    </span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {fileName(option.value)}
+                    </span>
+                  </span>
+                </Label>
+              ))}
+            </RadioGroup>
+          </div>
+
+          {!isEdit && (
+            <CostExportStartFrom
+              key={form.session}
+              id={id}
+              schedule={values.schedule}
+              onChange={(startFrom) => set({ startFrom })}
+            />
+          )}
+
           <Field
             id={`${id}-prefix`}
-            label="Path prefix"
-            hint="Under the provider's own prefix. Files land in year=/month=/day= folders."
+            label="Folder"
+            hint="Files are grouped by date inside it, e.g. year=2026/month=11/day=10/."
           >
             <Input
               id={`${id}-prefix`}
               value={values.pathPrefix}
               onChange={(event) => set({ pathPrefix: event.target.value })}
+              placeholder="cost-exports"
               autoComplete="off"
             />
           </Field>
-          <div className="flex items-center gap-2">
-            <Switch
-              id={`${id}-enabled`}
-              checked={values.enabled}
-              onCheckedChange={(checked) => set({ enabled: checked })}
-            />
-            <Label htmlFor={`${id}-enabled`} className="font-normal">
-              Enabled
-            </Label>
-          </div>
+
+          {failure && (
+            <InlineNotice variant="error" ref={noticeRef}>
+              <AlertTriangle />
+              <InlineNoticeBody>
+                <span className="font-medium">Couldn't save</span>
+                <InlineNoticeText className="break-words">
+                  {failure}
+                </InlineNoticeText>
+              </InlineNoticeBody>
+            </InlineNotice>
+          )}
         </DialogBody>
         <DialogStickyFooter>
+          {isEdit && (
+            <div className="flex items-center gap-2 sm:mr-auto">
+              <Switch
+                id={`${id}-enabled`}
+                checked={values.enabled}
+                onCheckedChange={(checked) => set({ enabled: checked })}
+              />
+              <Label htmlFor={`${id}-enabled`} className="font-normal">
+                {values.enabled ? "Enabled" : "Paused"}
+              </Label>
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -204,8 +251,8 @@ export function CostExportDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={saving || providers.length === 0}>
-            {saving ? "Saving…" : costExport ? "Save changes" : "Schedule"}
+          <Button type="submit" disabled={saving || noProviders}>
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Schedule"}
           </Button>
         </DialogStickyFooter>
       </form>
@@ -215,23 +262,22 @@ export function CostExportDialog({
 
 // === internal ===
 
-type FormValues = {
-  name: string;
-  blobProviderId: string;
-  schedule: CostExportSchedule;
-  pathPrefix: string;
-  enabled: boolean;
-};
-
-function toForm(costExport: CostExport | null): FormValues {
-  return {
-    name: costExport?.name ?? "",
-    blobProviderId: costExport?.blobProviderId ?? "",
-    schedule: costExport?.schedule ?? "daily",
-    pathPrefix: costExport?.pathPrefix ?? "cost-exports",
-    enabled: costExport?.enabled ?? true,
-  };
-}
+const SCHEDULES: {
+  value: CostExportSchedule;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "daily",
+    label: "Daily",
+    hint: "one file per UTC day, ready by about 00:20 UTC",
+  },
+  {
+    value: "hourly",
+    label: "Hourly",
+    hint: "one file per hour, ready about 20 minutes later",
+  },
+];
 
 function Field({
   id,

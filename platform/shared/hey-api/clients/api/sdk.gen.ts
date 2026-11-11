@@ -3175,7 +3175,7 @@ export const bedrockInvokeStreamWithAgentAndModel = <ThrowOnError extends boolea
  *
  * Authorization:
  *
- * [`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels
+ * None (no additional RBAC permission required)
  */
 export const listBlobProviders = <ThrowOnError extends boolean = false>(options?: Options<ListBlobProvidersData, ThrowOnError>) => (options?.client ?? client).get<ListBlobProvidersResponses, ListBlobProvidersErrors, ThrowOnError>({ url: '/api/blob-providers', ...options });
 
@@ -4828,8 +4828,7 @@ export const getConnectionSetupScript = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * [`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics
- * [`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels
+ * [`costExport:read`](/docs/reference/permissions#costExport:read): View scheduled cost exports and their run status
  */
 export const listCostExports = <ThrowOnError extends boolean = false>(options?: Options<ListCostExportsData, ThrowOnError>) => (options?.client ?? client).get<ListCostExportsResponses, ListCostExportsErrors, ThrowOnError>({ url: '/api/cost-exports', ...options });
 
@@ -4842,8 +4841,8 @@ export const listCostExports = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
+ * [`costExport:create`](/docs/reference/permissions#costExport:create): Schedule cost exports to a blob provider
  * [`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics
- * [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications
  */
 export const createCostExport = <ThrowOnError extends boolean = false>(options: Options<CreateCostExportData, ThrowOnError>) => (options.client ?? client).post<CreateCostExportResponses, CreateCostExportErrors, ThrowOnError>({
     url: '/api/cost-exports',
@@ -4863,8 +4862,7 @@ export const createCostExport = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * [`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics
- * [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications
+ * [`costExport:delete`](/docs/reference/permissions#costExport:delete): Delete cost exports
  */
 export const deleteCostExport = <ThrowOnError extends boolean = false>(options: Options<DeleteCostExportData, ThrowOnError>) => (options.client ?? client).delete<DeleteCostExportResponses, DeleteCostExportErrors, ThrowOnError>({ url: '/api/cost-exports/{id}', ...options });
 
@@ -4877,8 +4875,8 @@ export const deleteCostExport = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
+ * [`costExport:update`](/docs/reference/permissions#costExport:update): Change, pause, resume, and run cost exports
  * [`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics
- * [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications
  */
 export const updateCostExport = <ThrowOnError extends boolean = false>(options: Options<UpdateCostExportData, ThrowOnError>) => (options.client ?? client).put<UpdateCostExportResponses, UpdateCostExportErrors, ThrowOnError>({
     url: '/api/cost-exports/{id}',
@@ -4890,7 +4888,7 @@ export const updateCostExport = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
- * Run a cost export now: write every completed period not exported yet, or rewrite the most recent completed period when none is due.
+ * Queue a run of a cost export now: it writes every completed period not exported yet, or rewrites the most recent completed period when none is due. Returns 202 with the export (`running: true`); the outcome lands in its `lastRun*` fields. 409 when a run is already queued or in progress.
  *
  * Authentication:
  *
@@ -4898,8 +4896,8 @@ export const updateCostExport = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
+ * [`costExport:update`](/docs/reference/permissions#costExport:update): Change, pause, resume, and run cost exports
  * [`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics
- * [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications
  */
 export const runCostExport = <ThrowOnError extends boolean = false>(options: Options<RunCostExportData, ThrowOnError>) => (options.client ?? client).post<RunCostExportResponses, RunCostExportErrors, ThrowOnError>({ url: '/api/cost-exports/{id}/run', ...options });
 

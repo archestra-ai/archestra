@@ -2,7 +2,7 @@
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label, and export them to your own bucket
 order: 1
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -85,15 +85,16 @@ What to know:
 
 Schedule a file of every hour's or day's model spend into your own bucket, so your FinOps tools show Archestra's LLM costs next to your cloud bill. Each file is a CSV in [FOCUS 1.2](https://focus.finops.org/), the FinOps Foundation's open format for cost and usage data, which tools such as Athena, BigQuery, and DuckDB read as a table.
 
-Before you start, add a [blob provider](/docs/admin/blob-providers) for the bucket. Viewing exports requires [`llmCost:read`](/docs/reference/permissions#llmCost:read) and [`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read). Adding, changing, or running one also requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+Before you start, add a [blob provider](/docs/admin/blob-providers) for an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
 
-1. Open **Costs & Limits → Exports** and add an export.
-2. Name it and pick the blob provider.
-3. Choose the schedule: **Hourly** writes one file per hour, **Daily** one file per UTC day.
-4. Optionally change the path prefix, `cost-exports` by default.
-5. Save, then click **Run now** to write a file right away and check the pipeline.
+1. Open **Costs & Limits → Exports** and click **Schedule export**.
+2. Name it and pick the blob provider under **Destination**.
+3. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
+4. Under **Start from**, keep **Now**, or pick **A date** or **All recorded usage** to also write past usage.
+5. Optionally change the **Folder**, `cost-exports` by default.
+6. Click **Schedule**, then **Run now** to write a file right away. The row shows **Writing now…**, then **Healthy** once the file is in the bucket.
 
-The export's row shows the last run's status and the key of the last file written. A failed run shows the storage error. See [Fix a Failed Test](/docs/admin/blob-providers#fix-a-failed-test) for what each error means.
+Each row shows whether the export is **Healthy**, **Waiting for first file**, **Failing**, or **Paused**. A failing row shows why the bucket refused the file: click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
 
 ### Where Files Land
 
@@ -110,10 +111,11 @@ The first line is a daily file and the second an hourly file for 14:00 to 15:00 
 
 Archestra writes a period once it has been over for 15 minutes, so requests still running at its end are counted. Expect each file about 15 to 20 minutes after its hour or day ends.
 
-- Scheduled runs start with the period in progress when you create the export.
+- With **Start from** set to **Now**, the first file is the period in progress when you create the export. A past start is a backfill: every period since then is written, oldest first.
 - **Run now** writes every period that is due. When none is due, it rewrites the latest completed period.
 - A period always goes to the same key. A rerun or retry overwrites its file, so a period is never in two files.
-- When runs are missed or a write fails, the next run writes every period since the last file, up to 48 periods at a time.
+- After an outage or a failed write, the export writes every period since its last file.
+- A failing export retries on its own, less often the longer it fails: 5 minutes after the first failure, up to once an hour.
 
 ### What Each Row Holds
 
@@ -136,7 +138,7 @@ Archestra-specific columns start with `x_`, as FOCUS reserves for custom columns
 
 What to know:
 
-- Files name each person by email. Limit who can read the bucket accordingly.
+- Files name each person by email. Limit who can read the bucket or container accordingly.
 - To sum spend, add `BilledCost`. Adding `ListCost` counts subscription traffic at list price.
 - Changing the schedule never writes an hour twice. After a switch from hourly to daily, the rest of the current day is written as hourly files, and daily files start at the next midnight UTC.
 

@@ -18,8 +18,7 @@ export const costExportKeys = {
 
 export function useCostExports() {
   const { data: canRead } = useHasPermissions({
-    llmCost: ["read"],
-    organizationSettings: ["read"],
+    costExport: ["read"],
   });
   return useQuery({
     queryKey: costExportKeys.list(),
@@ -29,6 +28,12 @@ export function useCostExports() {
       return data ?? [];
     },
     enabled: !!canRead,
+    // Runs happen on the task queue: poll while one is queued or running so
+    // the row shows its outcome.
+    refetchInterval: (query) =>
+      query.state.data?.some((costExport) => costExport.running)
+        ? RUNNING_POLL_MS
+        : false,
   });
 }
 
@@ -37,10 +42,8 @@ export function useCreateCostExport() {
   return useMutation({
     mutationFn: async (body: CreateCostExportBody) => {
       const { data, error } = await archestraApiSdk.createCostExport({ body });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      // The dialog shows the failure inline.
+      if (error) throw toApiError(error);
       return data;
     },
     onSuccess: (costExport) => {
@@ -58,10 +61,8 @@ export function useUpdateCostExport() {
         path: { id: params.id },
         body: params.body,
       });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      // The dialog shows the failure inline.
+      if (error) throw toApiError(error);
       return data;
     },
     onSuccess: (costExport) => {
@@ -90,6 +91,24 @@ export function useDeleteCostExport() {
   });
 }
 
+/** Pause or resume one export, for bulk actions (no toast). */
+export async function setCostExportEnabled(params: {
+  id: string;
+  enabled: boolean;
+}) {
+  const { error } = await archestraApiSdk.updateCostExport({
+    path: { id: params.id },
+    body: { enabled: params.enabled },
+  });
+  throwOnApiError(error, { toastOnError: false });
+}
+
+/** Delete one export, for bulk actions (no toast). */
+export async function deleteCostExport(id: string) {
+  const { error } = await archestraApiSdk.deleteCostExport({ path: { id } });
+  throwOnApiError(error, { toastOnError: false });
+}
+
 export function useRunCostExport() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -97,22 +116,16 @@ export function useRunCostExport() {
       const { data, error } = await archestraApiSdk.runCostExport({
         path: { id },
       });
-      // Failed runs are recorded on the export, so refresh either way.
-      queryClient.invalidateQueries({ queryKey: costExportKeys.all });
       if (error) {
         handleApiError(error);
         throw toApiError(error);
       }
       return data;
     },
-    onSuccess: (result) => {
-      const rows = result.files.reduce((sum, file) => sum + file.rows, 0);
-      toast.success(
-        `Wrote ${result.files.length} file${result.files.length === 1 ? "" : "s"}`,
-        {
-          description: `${rows} row${rows === 1 ? "" : "s"} · ${result.files.at(-1)?.location ?? ""}`,
-        },
-      );
-    },
+    // Queued (202): the row shows "Running…" and then the outcome.
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: costExportKeys.all }),
   });
 }
+
+const RUNNING_POLL_MS = 3000;

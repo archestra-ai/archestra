@@ -1,7 +1,4 @@
-import {
-  type BlobProvider,
-  describeBlobProviderError,
-} from "@/blob-providers/blob-provider";
+import type { BlobProvider } from "@/blob-providers/blob-provider";
 import { blobProviderDefinition } from "@/blob-providers/registry";
 import logger from "@/logging";
 import BlobProviderModel from "@/models/blob-provider";
@@ -11,7 +8,6 @@ import {
   ApiError,
   type BlobProviderConfig,
   type BlobProviderCredentials,
-  BlobProviderCredentialsSchema,
   type BlobProviderRow,
   type CreateBlobProviderRequest,
   type PublicBlobProvider,
@@ -25,15 +21,18 @@ import {
  */
 class BlobProviderService {
   async list(organizationId: string): Promise<PublicBlobProvider[]> {
-    const rows = await BlobProviderModel.findByOrganization(organizationId);
-    return rows.map(toPublic);
+    const [rows, exportNames] = await Promise.all([
+      BlobProviderModel.findByOrganization(organizationId),
+      CostExportModel.namesByBlobProvider(organizationId),
+    ]);
+    return rows.map((row) => toPublic(row, exportNames.get(row.id) ?? []));
   }
 
   async get(params: {
     id: string;
     organizationId: string;
   }): Promise<PublicBlobProvider> {
-    return toPublic(await this.require(params));
+    return this.withUsage(await this.require(params));
   }
 
   async create(params: {
@@ -43,6 +42,9 @@ class BlobProviderService {
     const { organizationId, data } = params;
     await this.requireUniqueName({ organizationId, name: data.name });
     const credentials = this.credentialsFor(data.config, data.credentials);
+    if (!data.skipConnectionTest) {
+      await this.requireWorking(data.config, credentials);
+    }
     const secretId = credentials
       ? (await secretManager().createSecret(credentials, secretName(data.name)))
           .id
@@ -53,7 +55,7 @@ class BlobProviderService {
       config: data.config,
       secretId,
     });
-    return toPublic(row);
+    return toPublic(row, []);
   }
 
   async update(params: {
@@ -70,12 +72,35 @@ class BlobProviderService {
     if (config.type !== existing.type) {
       throw new ApiError(400, "A blob provider's type cannot be changed");
     }
-    const usage = blobProviderDefinition(config).credentials(config);
-    const keep = !data.clearCredentials && usage !== "unused";
+    const definition = blobProviderDefinition(config);
+    const usage = definition.credentials(config);
+    const authChanged =
+      data.config !== undefined &&
+      authKey(data.config) !== authKey(existing.config);
 
-    let secretId: string | null = keep ? existing.secretId : null;
-    if (data.credentials && usage !== "unused") {
-      const credentials = BlobProviderCredentialsSchema.parse(data.credentials);
+    // The credentials the saved configuration will use: new ones when sent,
+    // else the stored ones, unless they were cleared, are not used, or belong
+    // to a different auth method.
+    let credentials: BlobProviderCredentials | null = null;
+    if (usage !== "unused" && data.credentials) {
+      credentials = definition.parseCredentials(config, data.credentials);
+    } else if (
+      usage !== "unused" &&
+      !data.clearCredentials &&
+      !authChanged &&
+      existing.secretId
+    ) {
+      credentials = await readCredentials(existing.secretId);
+    }
+    if (usage === "required" && !credentials) {
+      throw new ApiError(400, "This auth method needs credentials");
+    }
+    if (!data.skipConnectionTest && (data.config || data.credentials)) {
+      await this.requireWorking(config, credentials);
+    }
+
+    let secretId: string | null = null;
+    if (credentials && data.credentials) {
       if (existing.secretId) {
         await secretManager().updateSecret(existing.secretId, credentials);
         secretId = existing.secretId;
@@ -87,9 +112,8 @@ class BlobProviderService {
           )
         ).id;
       }
-    }
-    if (usage === "required" && !secretId) {
-      throw new ApiError(400, "This auth method needs credentials");
+    } else if (credentials) {
+      secretId = existing.secretId;
     }
 
     const updated = await BlobProviderModel.update(
@@ -100,7 +124,7 @@ class BlobProviderService {
     if (existing.secretId && existing.secretId !== secretId) {
       await removeSecret(existing.secretId);
     }
-    return toPublic(updated);
+    return this.withUsage(updated);
   }
 
   async delete(params: { id: string; organizationId: string }): Promise<void> {
@@ -109,7 +133,7 @@ class BlobProviderService {
     if (exports > 0) {
       throw new ApiError(
         409,
-        `This blob provider is used by ${exports} cost export(s). Delete or move those exports first.`,
+        `This blob provider is used by ${exports} cost export(s). Delete those exports or move them to another provider first.`,
       );
     }
     await BlobProviderModel.delete(params);
@@ -122,14 +146,14 @@ class BlobProviderService {
     organizationId: string;
   }): Promise<{ success: boolean; message: string }> {
     // An unknown provider is a 404, not a failed test.
-    await this.require(params);
-    try {
-      const provider = await this.resolve(params);
-      await provider.testConnection();
-      return { success: true, message: "Wrote and deleted a test object." };
-    } catch (error) {
-      return { success: false, message: describeBlobProviderError(error) };
-    }
+    const row = await this.require(params);
+    const credentials = row.secretId
+      ? await readCredentials(row.secretId)
+      : null;
+    const failure = await connectionFailure(row.config, credentials);
+    return failure
+      ? { success: false, message: failure }
+      : { success: true, message: "Wrote and deleted a test object." };
   }
 
   /** A ready-to-use provider for a feature that writes files. */
@@ -148,6 +172,11 @@ class BlobProviderService {
   }
 
   // === internal ===
+
+  private async withUsage(row: BlobProviderRow): Promise<PublicBlobProvider> {
+    const names = await CostExportModel.namesByBlobProvider(row.organizationId);
+    return toPublic(row, names.get(row.id) ?? []);
+  }
 
   private async require(params: {
     id: string;
@@ -173,13 +202,26 @@ class BlobProviderService {
   /** The credentials to store for a new configuration, validated. */
   private credentialsFor(
     config: BlobProviderConfig,
-    credentials: BlobProviderCredentials | undefined,
+    raw: Record<string, string> | undefined,
   ): BlobProviderCredentials | null {
-    const usage = blobProviderDefinition(config).credentials(config);
-    if (usage === "required" && !credentials) {
+    const definition = blobProviderDefinition(config);
+    const usage = definition.credentials(config);
+    if (usage === "required" && !raw) {
       throw new ApiError(400, "This auth method needs credentials");
     }
-    return usage === "unused" ? null : (credentials ?? null);
+    if (usage === "unused" || !raw) return null;
+    return definition.parseCredentials(config, raw);
+  }
+
+  /** Reject a configuration that can't write and delete a test object. */
+  private async requireWorking(
+    config: BlobProviderConfig,
+    credentials: BlobProviderCredentials | null,
+  ): Promise<void> {
+    const failure = await connectionFailure(config, credentials);
+    if (failure) {
+      throw new ApiError(400, failure, BLOB_PROVIDER_CONNECTION_FAILED_CODE);
+    }
   }
 }
 
@@ -187,9 +229,16 @@ export const blobProviderService = new BlobProviderService();
 
 // === internal ===
 
-function toPublic(row: BlobProviderRow): PublicBlobProvider {
+function toPublic(
+  row: BlobProviderRow,
+  costExports: string[],
+): PublicBlobProvider {
   const { secretId, ...rest } = row;
-  return { ...rest, hasCredentials: secretId !== null };
+  return {
+    ...rest,
+    hasCredentials: secretId !== null,
+    usedBy: { costExports },
+  };
 }
 
 function secretName(providerName: string): string {
@@ -200,9 +249,42 @@ async function readCredentials(
   secretId: string,
 ): Promise<BlobProviderCredentials | null> {
   const secret = await secretManager().getSecret(secretId);
-  const parsed = BlobProviderCredentialsSchema.safeParse(secret?.secret);
-  return parsed.success ? parsed.data : null;
+  const value = secret?.secret;
+  return value && typeof value === "object"
+    ? (value as BlobProviderCredentials)
+    : null;
 }
+
+/** Why a configuration can't write and delete a test object, or null. */
+async function connectionFailure(
+  config: BlobProviderConfig,
+  credentials: BlobProviderCredentials | null,
+): Promise<string | null> {
+  let provider: BlobProvider;
+  try {
+    provider = blobProviderDefinition(config).create({ config, credentials });
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  try {
+    await provider.testConnection();
+    return null;
+  } catch (error) {
+    logger.info(
+      { err: error, type: config.type },
+      "Blob provider connection test failed",
+    );
+    return provider.describeError(error);
+  }
+}
+
+/** The fields that decide which identity a configuration authenticates as. */
+function authKey(config: BlobProviderConfig): string {
+  return JSON.stringify([config.type, config.authMethod]);
+}
+
+/** `internal_code` of a create or update rejected by its connection test. */
+const BLOB_PROVIDER_CONNECTION_FAILED_CODE = "blob_provider_connection_failed";
 
 async function removeSecret(secretId: string): Promise<void> {
   try {

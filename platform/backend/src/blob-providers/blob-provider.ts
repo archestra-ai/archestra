@@ -37,6 +37,14 @@ export abstract class BlobProvider {
     await this.deleteObject(key);
   }
 
+  /**
+   * A failure from this provider as one line an admin can act on: what went
+   * wrong and, where the provider's code makes it clear, what to change.
+   */
+  describeError(error: unknown): string {
+    return describeBlobProviderError(error);
+  }
+
   /** Write one object at a full key (prefix already applied). */
   protected abstract putObject(params: {
     key: string;
@@ -50,16 +58,18 @@ export abstract class BlobProvider {
   /** A human-readable URI of an object, e.g. `s3://bucket/key`. */
   protected abstract locationOf(key: string): string;
 
-  // === internal ===
-
   private fullKey(key: string): string {
     const relative = key.replace(/^\/+/, "");
     return this.keyPrefix ? `${this.keyPrefix}/${relative}` : relative;
   }
 }
 
-/** A provider SDK error as one line an admin can act on. */
+/** A provider SDK error as one line, without provider-specific hints. */
 export function describeBlobProviderError(error: unknown): string {
+  const network = networkErrorCode(error);
+  if (network) {
+    return `${network}: could not reach the storage endpoint (${(error as Error).message}). Check the endpoint, DNS and egress rules.`;
+  }
   if (error instanceof Error) {
     const e = error as Error & {
       Code?: string;
@@ -75,4 +85,25 @@ export function describeBlobProviderError(error: unknown): string {
       : e.message;
   }
   return String(error);
+}
+
+// === internal ===
+
+const NETWORK_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+function networkErrorCode(error: unknown): string | null {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 4; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && NETWORK_CODES.has(code)) return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
 }

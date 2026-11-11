@@ -62,11 +62,44 @@ class CostExportModel {
   }
 
   /** Enabled exports across organizations, for the periodic task. */
+  static async findEnabledById(id: string): Promise<CostExport | null> {
+    const [row] = await db
+      .select()
+      .from(schema.costExportsTable)
+      .where(
+        and(
+          eq(schema.costExportsTable.id, id),
+          eq(schema.costExportsTable.enabled, true),
+        ),
+      );
+    return row ?? null;
+  }
+
   static async findEnabled(): Promise<CostExport[]> {
     return db
       .select()
       .from(schema.costExportsTable)
       .where(eq(schema.costExportsTable.enabled, true));
+  }
+
+  /** Names of the exports that write to each of the organization's providers. */
+  static async namesByBlobProvider(
+    organizationId: string,
+  ): Promise<Map<string, string[]>> {
+    const t = schema.costExportsTable;
+    const rows = await db
+      .select({ blobProviderId: t.blobProviderId, name: t.name })
+      .from(t)
+      .where(eq(t.organizationId, organizationId))
+      .orderBy(asc(t.name));
+    const names = new Map<string, string[]>();
+    for (const row of rows) {
+      names.set(row.blobProviderId, [
+        ...(names.get(row.blobProviderId) ?? []),
+        row.name,
+      ]);
+    }
+    return names;
   }
 
   static async countByBlobProvider(blobProviderId: string): Promise<number> {
@@ -143,18 +176,19 @@ class CostExportModel {
 
   /**
    * Take the run lease, unless another run holds it. Returns the export as it
-   * is now (so the caller works from the current watermark), or null.
+   * is now, or null. Its `runningUntil` identifies this claim: the queued run
+   * hands it to {@link resumeRun}.
    */
   static async claimRun(params: {
     id: string;
     leaseSeconds: number;
-  }): Promise<CostExport | null> {
+  }): Promise<(CostExport & { runningUntil: Date }) | null> {
     const t = schema.costExportsTable;
+    // Millisecond precision, so the value round-trips through a task payload.
+    const runningUntil = new Date(Date.now() + params.leaseSeconds * 1000);
     const [row] = await db
       .update(t)
-      .set({
-        runningUntil: sql`NOW() + make_interval(secs => ${params.leaseSeconds})`,
-      })
+      .set({ runningUntil })
       .where(
         and(
           eq(t.id, params.id),
@@ -162,7 +196,40 @@ class CostExportModel {
         ),
       )
       .returning();
+    return row ? { ...row, runningUntil } : null;
+  }
+
+  /**
+   * Renew a claim from {@link claimRun} for the run that holds it. Null when
+   * the claim is gone: it expired and another run took the lease, or the
+   * export was deleted.
+   */
+  static async resumeRun(params: {
+    id: string;
+    claimedUntil: Date;
+    leaseSeconds: number;
+  }): Promise<CostExport | null> {
+    const t = schema.costExportsTable;
+    const [row] = await db
+      .update(t)
+      .set({
+        runningUntil: new Date(Date.now() + params.leaseSeconds * 1000),
+      })
+      .where(and(eq(t.id, params.id), eq(t.runningUntil, params.claimedUntil)))
+      .returning();
     return row ?? null;
+  }
+
+  /** Give a claim back unused (its run could not be queued). */
+  static async releaseRun(params: {
+    id: string;
+    claimedUntil: Date;
+  }): Promise<void> {
+    const t = schema.costExportsTable;
+    await db
+      .update(t)
+      .set({ runningUntil: null })
+      .where(and(eq(t.id, params.id), eq(t.runningUntil, params.claimedUntil)));
   }
 
   /** Record a run's outcome and release the lease. */
@@ -180,6 +247,10 @@ class CostExportModel {
         lastRunAt: new Date(),
         lastRunStatus: params.status,
         lastRunError: params.error,
+        consecutiveFailures:
+          params.status === "failed"
+            ? sql`${schema.costExportsTable.consecutiveFailures} + 1`
+            : 0,
         ...(params.exportedThrough
           ? { exportedThrough: params.exportedThrough }
           : {}),

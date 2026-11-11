@@ -1,159 +1,143 @@
 "use client";
 
-import { S3_AUTH_METHOD_LABELS } from "@archestra/shared";
-import { HardDrive, Pencil, Plug, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   type BlobProvider,
+  deleteBlobProvider,
+  testBlobProvider,
   useBlobProviders,
   useDeleteBlobProvider,
-  useTestBlobProvider,
 } from "@/lib/blob-provider.query";
+import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
+import { getApiErrorMessage } from "@/lib/utils/api";
 import { useSetSettingsAction } from "../layout";
 import { BlobProviderDialog } from "./_parts/blob-provider-dialog";
+import {
+  BlobProvidersTable,
+  type BlobProviderTestResult,
+} from "./_parts/blob-providers-table";
 
 export default function BlobProvidersPageClient() {
   const setActionButton = useSetSettingsAction();
+  const queryClient = useQueryClient();
   const { data: providers = [], isLoading } = useBlobProviders();
   const [editing, setEditing] = useState<BlobProvider | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState<BlobProvider | null>(null);
   const remove = useDeleteBlobProvider();
-  const test = useTestBlobProvider();
+  const [testingIds, setTestingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [testResults, setTestResults] = useState<
+    Record<string, BlobProviderTestResult>
+  >({});
+
+  const openDialog = useCallback((provider: BlobProvider | null) => {
+    setEditing(provider);
+    setDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     setActionButton(
       <PermissionButton
         permissions={{ organizationSettings: ["update"] }}
         size="sm"
-        onClick={() => {
-          setEditing(null);
-          setDialogOpen(true);
-        }}
+        onClick={() => openDialog(null)}
       >
         <Plus className="h-4 w-4" />
         Add blob provider
       </PermissionButton>,
     );
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, openDialog]);
+
+  const runTests = useCallback(async (targets: readonly BlobProvider[]) => {
+    const ids = targets.map((provider) => provider.id);
+    setTestingIds((current) => new Set([...current, ...ids]));
+    const record = (id: string, result: Omit<BlobProviderTestResult, "at">) =>
+      setTestResults((current) => ({
+        ...current,
+        [id]: { ...result, at: new Date() },
+      }));
+    const outcome = await runBulkAction({
+      items: targets,
+      describe: (provider) => provider.name,
+      run: async (provider) => {
+        try {
+          const result = await testBlobProvider(provider.id);
+          record(provider.id, result);
+          if (!result.success) throw new Error(result.message);
+        } catch (error) {
+          record(provider.id, {
+            success: false,
+            message: getApiErrorMessage(error),
+          });
+          throw error;
+        } finally {
+          setTestingIds((current) => {
+            const next = new Set(current);
+            next.delete(provider.id);
+            return next;
+          });
+        }
+      },
+    });
+    if (targets.length === 1) {
+      const failure = outcome.failed[0];
+      if (failure) {
+        toast.error(`${targets[0].name}: connection failed`, {
+          description: failure.error,
+        });
+      } else {
+        toast.success(`${targets[0].name}: connection works`);
+      }
+      return;
+    }
+    reportBulkOutcome({
+      outcome,
+      verb: "Connected to",
+      failureVerb: "connect to",
+      failureParticiple: "reached",
+      noun: "blob provider",
+    });
+  }, []);
+
+  const bulkDelete = useCallback(
+    async (targets: readonly BlobProvider[]) => {
+      const outcome = await runBulkAction({
+        items: targets,
+        describe: (provider) => provider.name,
+        run: (provider) => deleteBlobProvider(provider.id),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["blob-providers"] });
+      reportBulkOutcome({
+        outcome,
+        verb: "Deleted",
+        failureVerb: "delete",
+        noun: "blob provider",
+      });
+      return outcome;
+    },
+    [queryClient],
+  );
 
   return (
     <div className="space-y-4">
-      {!isLoading && providers.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <HardDrive />
-            </EmptyMedia>
-            <EmptyTitle>No blob providers yet</EmptyTitle>
-            <EmptyDescription>
-              Add an S3 (or S3-compatible) bucket to export data to.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <PermissionButton
-              permissions={{ organizationSettings: ["update"] }}
-              size="sm"
-              onClick={() => {
-                setEditing(null);
-                setDialogOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              Add blob provider
-            </PermissionButton>
-          </EmptyContent>
-        </Empty>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Authentication</TableHead>
-                <TableHead className="w-36" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {providers.map((provider) => (
-                <TableRow key={provider.id}>
-                  <TableCell className="font-medium">{provider.name}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {location(provider)}
-                    {provider.config.endpoint && (
-                      <span className="block text-muted-foreground">
-                        {provider.config.endpoint}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {S3_AUTH_METHOD_LABELS[provider.config.authMethod]}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <PermissionButton
-                        permissions={{ organizationSettings: ["update"] }}
-                        variant="outline"
-                        size="xs"
-                        disabled={test.isPending}
-                        onClick={() => test.mutate(provider.id)}
-                      >
-                        <Plug className="h-3.5 w-3.5" />
-                        <span>
-                          {test.isPending && test.variables === provider.id
-                            ? "Testing…"
-                            : "Test"}
-                        </span>
-                      </PermissionButton>
-                      <PermissionButton
-                        permissions={{ organizationSettings: ["update"] }}
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Edit ${provider.name}`}
-                        onClick={() => {
-                          setEditing(provider);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </PermissionButton>
-                      <PermissionButton
-                        permissions={{ organizationSettings: ["update"] }}
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Delete ${provider.name}`}
-                        onClick={() => setDeleting(provider)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </PermissionButton>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <BlobProvidersTable
+        providers={providers}
+        isLoading={isLoading}
+        onEdit={openDialog}
+        onDelete={setDeleting}
+        onTest={runTests}
+        onBulkDelete={bulkDelete}
+        testingIds={testingIds}
+        testResults={testResults}
+      />
       <BlobProviderDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -163,7 +147,7 @@ export default function BlobProvidersPageClient() {
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete blob provider"
-        description={`Delete ${deleting?.name ?? "this provider"} and its stored credentials? Files already written stay in the bucket.`}
+        description={`Delete ${deleting?.name ?? "this provider"} and its stored credentials? Files already written stay in place.`}
         isPending={remove.isPending}
         onConfirm={() => {
           if (!deleting) return;
@@ -172,9 +156,4 @@ export default function BlobProvidersPageClient() {
       />
     </div>
   );
-}
-
-function location(provider: BlobProvider): string {
-  const { bucket, keyPrefix } = provider.config;
-  return `s3://${bucket}${keyPrefix ? `/${keyPrefix}` : ""}/`;
 }

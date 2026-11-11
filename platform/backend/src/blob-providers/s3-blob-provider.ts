@@ -9,7 +9,7 @@ import type {
   S3BlobProviderConfig,
   S3BlobProviderCredentials,
 } from "@/types/blob-provider";
-import { BlobProvider } from "./blob-provider";
+import { BlobProvider, describeBlobProviderError } from "./blob-provider";
 
 /**
  * An Amazon S3 bucket, or any S3-compatible store (MinIO, Cloudflare R2, Ceph,
@@ -18,6 +18,7 @@ import { BlobProvider } from "./blob-provider";
 export class S3BlobProvider extends BlobProvider {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly config: S3BlobProviderConfig;
 
   constructor(params: {
     config: S3BlobProviderConfig;
@@ -25,12 +26,49 @@ export class S3BlobProvider extends BlobProvider {
   }) {
     super(params.config.keyPrefix);
     this.bucket = params.config.bucket;
+    this.config = params.config;
     this.client = new S3Client({
       region: params.config.region,
       endpoint: params.config.endpoint ?? undefined,
       forcePathStyle: params.config.forcePathStyle,
+      // Fail fast on a hung endpoint instead of waiting out the SDK default.
+      requestHandler: { connectionTimeout: 10_000, requestTimeout: 30_000 },
       credentials: s3Credentials(params.config, params.credentials),
     });
+  }
+
+  describeError(error: unknown): string {
+    const e = error as Error & {
+      Code?: string;
+      Region?: string;
+      Endpoint?: string;
+      $metadata?: { httpStatusCode?: number };
+    };
+    const code = e.Code ?? e.name;
+    if (/sts:AssumeRole|AssumeRole/.test(e.message ?? "")) {
+      return `Could not assume ${this.config.roleArn}: ${e.message}`;
+    }
+    const where = `s3://${this.bucket}${this.config.keyPrefix ? `/${this.config.keyPrefix}` : ""}`;
+    switch (code) {
+      case "NoSuchBucket":
+        return `Bucket "${this.bucket}" does not exist${this.config.endpoint ? ` at ${this.config.endpoint}` : ` in ${this.config.region}`}.`;
+      case "PermanentRedirect":
+      case "AuthorizationHeaderMalformed":
+      case "IllegalLocationConstraintException":
+        return `Bucket "${this.bucket}" is not in ${this.config.region}${e.Region ? `; it is in ${e.Region}` : ""}. Set the region to the bucket's region.`;
+      case "AccessDenied":
+        return `AccessDenied: the identity can't write to ${where}/. It needs s3:PutObject and s3:DeleteObject on arn:aws:s3:::${this.bucket}/${this.config.keyPrefix ? `${this.config.keyPrefix}/` : ""}*${e.message && e.message !== "Access Denied" ? ` (${e.message})` : ""}.`;
+      case "InvalidAccessKeyId":
+        return "InvalidAccessKeyId: AWS doesn't know this access key ID. Check it, or whether the key was deactivated.";
+      case "SignatureDoesNotMatch":
+        return "SignatureDoesNotMatch: the secret access key doesn't match the access key ID.";
+      case "ExpiredToken":
+      case "TokenRefreshRequired":
+        return `${code}: the session token has expired. Store fresh credentials, or use a role instead of temporary keys.`;
+      case "CredentialsProviderError":
+        return "No AWS credentials found in the Archestra server's default chain (env vars, IRSA, EKS Pod Identity, instance role). Configure one, or use an access key.";
+    }
+    return describeBlobProviderError(error);
   }
 
   protected async putObject(params: {

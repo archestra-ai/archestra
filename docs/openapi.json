@@ -161887,7 +161887,7 @@
         "tags": [
           "Blob Providers"
         ],
-        "description": "List the organization's blob providers. Credentials are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels",
+        "description": "List the organization's blob providers. Credentials are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -161913,7 +161913,9 @@
                       "type": {
                         "type": "string",
                         "enum": [
-                          "s3"
+                          "s3",
+                          "gcs",
+                          "azure_blob"
                         ]
                       },
                       "config": {
@@ -161972,6 +161974,89 @@
                               "externalId"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "gcs"
+                                ]
+                              },
+                              "bucket": {
+                                "type": "string"
+                              },
+                              "keyPrefix": {
+                                "type": "string"
+                              },
+                              "authMethod": {
+                                "type": "string",
+                                "enum": [
+                                  "application_default",
+                                  "service_account_key"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "bucket",
+                              "keyPrefix",
+                              "authMethod"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "azure_blob"
+                                ]
+                              },
+                              "accountName": {
+                                "type": "string"
+                              },
+                              "container": {
+                                "type": "string"
+                              },
+                              "keyPrefix": {
+                                "type": "string"
+                              },
+                              "endpoint": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authMethod": {
+                                "type": "string",
+                                "enum": [
+                                  "default_credential",
+                                  "service_principal",
+                                  "account_key",
+                                  "sas_token"
+                                ]
+                              },
+                              "tenantId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "clientId": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "accountName",
+                              "container",
+                              "keyPrefix",
+                              "endpoint",
+                              "authMethod",
+                              "tenantId",
+                              "clientId"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -161986,6 +162071,23 @@
                       "hasCredentials": {
                         "type": "boolean",
                         "description": "Whether static credentials are stored for this provider."
+                      },
+                      "usedBy": {
+                        "type": "object",
+                        "properties": {
+                          "costExports": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Names of the cost exports that write to this provider."
+                          }
+                        },
+                        "required": [
+                          "costExports"
+                        ],
+                        "additionalProperties": false,
+                        "description": "What writes to this provider. A provider in use cannot be deleted."
                       }
                     },
                     "required": [
@@ -161996,7 +162098,8 @@
                       "config",
                       "createdAt",
                       "updatedAt",
-                      "hasCredentials"
+                      "hasCredentials",
+                      "usedBy"
                     ],
                     "additionalProperties": false
                   }
@@ -162238,10 +162341,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "organizationSettings:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -162263,84 +162365,164 @@
                     "maxLength": 256
                   },
                   "config": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "s3"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "s3"
+                            ]
+                          },
+                          "bucket": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          },
+                          "region": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "endpoint": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "forcePathStyle": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "default_chain",
+                              "access_key",
+                              "assume_role"
+                            ]
+                          },
+                          "roleArn": {
+                            "nullable": true,
+                            "type": "string",
+                            "pattern": "^arn:[\\w-]+:iam::\\d{12}:role\\/.+$"
+                          },
+                          "externalId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 1224
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "bucket",
+                          "region",
+                          "authMethod"
                         ]
                       },
-                      "bucket": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 255
-                      },
-                      "region": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 64
-                      },
-                      "keyPrefix": {
-                        "default": "",
-                        "type": "string",
-                        "maxLength": 512
-                      },
-                      "endpoint": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uri"
-                      },
-                      "forcePathStyle": {
-                        "default": false,
-                        "type": "boolean"
-                      },
-                      "authMethod": {
-                        "type": "string",
-                        "enum": [
-                          "default_chain",
-                          "access_key",
-                          "assume_role"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gcs"
+                            ]
+                          },
+                          "bucket": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$"
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "application_default",
+                              "service_account_key"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "bucket",
+                          "authMethod"
                         ]
                       },
-                      "roleArn": {
-                        "nullable": true,
-                        "type": "string",
-                        "pattern": "^arn:[\\w-]+:iam::\\d{12}:role\\/.+$"
-                      },
-                      "externalId": {
-                        "nullable": true,
-                        "type": "string",
-                        "maxLength": 1224
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "azure_blob"
+                            ]
+                          },
+                          "accountName": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]{3,24}$"
+                          },
+                          "container": {
+                            "type": "string",
+                            "pattern": "^(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "endpoint": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "default_credential",
+                              "service_principal",
+                              "account_key",
+                              "sas_token"
+                            ]
+                          },
+                          "tenantId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 64
+                          },
+                          "clientId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 64
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "accountName",
+                          "container",
+                          "authMethod"
+                        ]
                       }
-                    },
-                    "required": [
-                      "type",
-                      "bucket",
-                      "region",
-                      "authMethod"
                     ]
                   },
                   "credentials": {
-                    "description": "Write-only. Required for the `access_key` auth method; optional source identity for `assume_role`.",
                     "type": "object",
-                    "properties": {
-                      "accessKeyId": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "secretAccessKey": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "sessionToken": {
-                        "type": "string"
-                      }
+                    "additionalProperties": {
+                      "type": "string"
                     },
-                    "required": [
-                      "accessKeyId",
-                      "secretAccessKey"
-                    ]
+                    "description": "Write-only secrets for the auth method: `accessKeyId`, `secretAccessKey`, `sessionToken` (S3); `serviceAccountKey` (GCS); `clientSecret`, `accountKey` or `sasToken` (Azure)."
+                  },
+                  "skipConnectionTest": {
+                    "description": "Save without first writing and deleting a test object. By default a failed test rejects the request.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -162374,7 +162556,9 @@
                     "type": {
                       "type": "string",
                       "enum": [
-                        "s3"
+                        "s3",
+                        "gcs",
+                        "azure_blob"
                       ]
                     },
                     "config": {
@@ -162433,6 +162617,89 @@
                             "externalId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gcs"
+                              ]
+                            },
+                            "bucket": {
+                              "type": "string"
+                            },
+                            "keyPrefix": {
+                              "type": "string"
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "application_default",
+                                "service_account_key"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "bucket",
+                            "keyPrefix",
+                            "authMethod"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "azure_blob"
+                              ]
+                            },
+                            "accountName": {
+                              "type": "string"
+                            },
+                            "container": {
+                              "type": "string"
+                            },
+                            "keyPrefix": {
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "default_credential",
+                                "service_principal",
+                                "account_key",
+                                "sas_token"
+                              ]
+                            },
+                            "tenantId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "clientId": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "accountName",
+                            "container",
+                            "keyPrefix",
+                            "endpoint",
+                            "authMethod",
+                            "tenantId",
+                            "clientId"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -162447,6 +162714,23 @@
                     "hasCredentials": {
                       "type": "boolean",
                       "description": "Whether static credentials are stored for this provider."
+                    },
+                    "usedBy": {
+                      "type": "object",
+                      "properties": {
+                        "costExports": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Names of the cost exports that write to this provider."
+                        }
+                      },
+                      "required": [
+                        "costExports"
+                      ],
+                      "additionalProperties": false,
+                      "description": "What writes to this provider. A provider in use cannot be deleted."
                     }
                   },
                   "required": [
@@ -162457,7 +162741,8 @@
                     "config",
                     "createdAt",
                     "updatedAt",
-                    "hasCredentials"
+                    "hasCredentials",
+                    "usedBy"
                   ],
                   "additionalProperties": false
                 }
@@ -162725,87 +163010,167 @@
                     "maxLength": 256
                   },
                   "config": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "s3"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "s3"
+                            ]
+                          },
+                          "bucket": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          },
+                          "region": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "endpoint": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "forcePathStyle": {
+                            "default": false,
+                            "type": "boolean"
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "default_chain",
+                              "access_key",
+                              "assume_role"
+                            ]
+                          },
+                          "roleArn": {
+                            "nullable": true,
+                            "type": "string",
+                            "pattern": "^arn:[\\w-]+:iam::\\d{12}:role\\/.+$"
+                          },
+                          "externalId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 1224
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "bucket",
+                          "region",
+                          "authMethod"
                         ]
                       },
-                      "bucket": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 255
-                      },
-                      "region": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 64
-                      },
-                      "keyPrefix": {
-                        "default": "",
-                        "type": "string",
-                        "maxLength": 512
-                      },
-                      "endpoint": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uri"
-                      },
-                      "forcePathStyle": {
-                        "default": false,
-                        "type": "boolean"
-                      },
-                      "authMethod": {
-                        "type": "string",
-                        "enum": [
-                          "default_chain",
-                          "access_key",
-                          "assume_role"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "gcs"
+                            ]
+                          },
+                          "bucket": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$"
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "application_default",
+                              "service_account_key"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "bucket",
+                          "authMethod"
                         ]
                       },
-                      "roleArn": {
-                        "nullable": true,
-                        "type": "string",
-                        "pattern": "^arn:[\\w-]+:iam::\\d{12}:role\\/.+$"
-                      },
-                      "externalId": {
-                        "nullable": true,
-                        "type": "string",
-                        "maxLength": 1224
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "azure_blob"
+                            ]
+                          },
+                          "accountName": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]{3,24}$"
+                          },
+                          "container": {
+                            "type": "string",
+                            "pattern": "^(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+                          },
+                          "keyPrefix": {
+                            "default": "",
+                            "type": "string",
+                            "maxLength": 512
+                          },
+                          "endpoint": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "authMethod": {
+                            "type": "string",
+                            "enum": [
+                              "default_credential",
+                              "service_principal",
+                              "account_key",
+                              "sas_token"
+                            ]
+                          },
+                          "tenantId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 64
+                          },
+                          "clientId": {
+                            "nullable": true,
+                            "type": "string",
+                            "maxLength": 64
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "accountName",
+                          "container",
+                          "authMethod"
+                        ]
                       }
-                    },
-                    "required": [
-                      "type",
-                      "bucket",
-                      "region",
-                      "authMethod"
                     ]
                   },
                   "credentials": {
                     "description": "Write-only. Send only to replace the stored credentials.",
                     "type": "object",
-                    "properties": {
-                      "accessKeyId": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "secretAccessKey": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "sessionToken": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "accessKeyId",
-                      "secretAccessKey"
-                    ]
+                    "additionalProperties": {
+                      "type": "string"
+                    }
                   },
                   "clearCredentials": {
                     "description": "Remove the stored credentials.",
+                    "type": "boolean"
+                  },
+                  "skipConnectionTest": {
+                    "description": "Save without first writing and deleting a test object. By default a failed test rejects the request.",
                     "type": "boolean"
                   }
                 }
@@ -162848,7 +163213,9 @@
                     "type": {
                       "type": "string",
                       "enum": [
-                        "s3"
+                        "s3",
+                        "gcs",
+                        "azure_blob"
                       ]
                     },
                     "config": {
@@ -162907,6 +163274,89 @@
                             "externalId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "gcs"
+                              ]
+                            },
+                            "bucket": {
+                              "type": "string"
+                            },
+                            "keyPrefix": {
+                              "type": "string"
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "application_default",
+                                "service_account_key"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "bucket",
+                            "keyPrefix",
+                            "authMethod"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "azure_blob"
+                              ]
+                            },
+                            "accountName": {
+                              "type": "string"
+                            },
+                            "container": {
+                              "type": "string"
+                            },
+                            "keyPrefix": {
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "authMethod": {
+                              "type": "string",
+                              "enum": [
+                                "default_credential",
+                                "service_principal",
+                                "account_key",
+                                "sas_token"
+                              ]
+                            },
+                            "tenantId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "clientId": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "accountName",
+                            "container",
+                            "keyPrefix",
+                            "endpoint",
+                            "authMethod",
+                            "tenantId",
+                            "clientId"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -162921,6 +163371,23 @@
                     "hasCredentials": {
                       "type": "boolean",
                       "description": "Whether static credentials are stored for this provider."
+                    },
+                    "usedBy": {
+                      "type": "object",
+                      "properties": {
+                        "costExports": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Names of the cost exports that write to this provider."
+                        }
+                      },
+                      "required": [
+                        "costExports"
+                      ],
+                      "additionalProperties": false,
+                      "description": "What writes to this provider. A provider in use cannot be deleted."
                     }
                   },
                   "required": [
@@ -162931,7 +163398,8 @@
                     "config",
                     "createdAt",
                     "updatedAt",
-                    "hasCredentials"
+                    "hasCredentials",
+                    "usedBy"
                   ],
                   "additionalProperties": false
                 }
@@ -207361,7 +207829,7 @@
         "tags": [
           "Cost Exports"
         ],
-        "description": "List the organization's scheduled cost exports.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n[`organizationSettings:read`](/docs/reference/permissions#organizationSettings:read): View every organization settings page, including messaging channels",
+        "description": "List the organization's scheduled cost exports.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`costExport:read`](/docs/reference/permissions#costExport:read): View scheduled cost exports and their run status",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -207444,6 +207912,16 @@
                       },
                       "blobProviderName": {
                         "type": "string"
+                      },
+                      "running": {
+                        "type": "boolean",
+                        "description": "Whether a run is queued or in progress right now."
+                      },
+                      "nextRetryAt": {
+                        "nullable": true,
+                        "description": "When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.",
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -207462,7 +207940,9 @@
                       "lastObjectKey",
                       "createdAt",
                       "updatedAt",
-                      "blobProviderName"
+                      "blobProviderName",
+                      "running",
+                      "nextRetryAt"
                     ],
                     "additionalProperties": false
                   }
@@ -207706,8 +208186,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "llmCost:read",
-            "organizationSettings:read"
+            "costExport:read"
           ]
         }
       },
@@ -207716,7 +208195,7 @@
         "tags": [
           "Cost Exports"
         ],
-        "description": "Schedule an export of LLM cost and usage to a blob provider. The first file covers the period in progress, once it completes.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Schedule an export of LLM cost and usage to a blob provider. The first file covers the period in progress, once it completes.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`costExport:create`](/docs/reference/permissions#costExport:create): Schedule cost exports to a blob provider\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
         "requestBody": {
           "required": true,
           "content": {
@@ -207757,6 +208236,12 @@
                   "enabled": {
                     "default": true,
                     "type": "boolean"
+                  },
+                  "startFrom": {
+                    "description": "Export usage from this time on, including the past (a backfill). Defaults to now: the first file is the period in progress.",
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 },
                 "required": [
@@ -207847,6 +208332,16 @@
                     },
                     "blobProviderName": {
                       "type": "string"
+                    },
+                    "running": {
+                      "type": "boolean",
+                      "description": "Whether a run is queued or in progress right now."
+                    },
+                    "nextRetryAt": {
+                      "nullable": true,
+                      "description": "When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.",
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -207865,7 +208360,9 @@
                     "lastObjectKey",
                     "createdAt",
                     "updatedAt",
-                    "blobProviderName"
+                    "blobProviderName",
+                    "running",
+                    "nextRetryAt"
                   ],
                   "additionalProperties": false
                 }
@@ -208108,8 +208605,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "llmCost:read",
-            "organizationSettings:update"
+            "costExport:create",
+            "llmCost:read"
           ]
         }
       }
@@ -208120,7 +208617,7 @@
         "tags": [
           "Cost Exports"
         ],
-        "description": "Update a scheduled cost export.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Update a scheduled cost export.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`costExport:update`](/docs/reference/permissions#costExport:update): Change, pause, resume, and run cost exports\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
         "requestBody": {
           "required": true,
           "content": {
@@ -208256,6 +208753,16 @@
                     },
                     "blobProviderName": {
                       "type": "string"
+                    },
+                    "running": {
+                      "type": "boolean",
+                      "description": "Whether a run is queued or in progress right now."
+                    },
+                    "nextRetryAt": {
+                      "nullable": true,
+                      "description": "When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.",
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -208274,7 +208781,9 @@
                     "lastObjectKey",
                     "createdAt",
                     "updatedAt",
-                    "blobProviderName"
+                    "blobProviderName",
+                    "running",
+                    "nextRetryAt"
                   ],
                   "additionalProperties": false
                 }
@@ -208517,8 +209026,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "llmCost:read",
-            "organizationSettings:update"
+            "costExport:update",
+            "llmCost:read"
           ]
         }
       },
@@ -208527,7 +209036,7 @@
         "tags": [
           "Cost Exports"
         ],
-        "description": "Delete a scheduled cost export. Files already written stay in the bucket.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Delete a scheduled cost export. Files already written stay in the bucket.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`costExport:delete`](/docs/reference/permissions#costExport:delete): Delete cost exports",
         "parameters": [
           {
             "schema": {
@@ -208796,8 +209305,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "llmCost:read",
-            "organizationSettings:update"
+            "costExport:delete"
           ]
         }
       }
@@ -208808,7 +209316,7 @@
         "tags": [
           "Cost Exports"
         ],
-        "description": "Run a cost export now: write every completed period not exported yet, or rewrite the most recent completed period when none is due.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics\n[`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update): Change organization settings, messaging channels, and site notifications",
+        "description": "Queue a run of a cost export now: it writes every completed period not exported yet, or rewrites the most recent completed period when none is due. Returns 202 with the export (`running: true`); the outcome lands in its `lastRun*` fields. 409 when a run is already queued or in progress.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n[`costExport:update`](/docs/reference/permissions#costExport:update): Change, pause, resume, and run cost exports\n[`llmCost:read`](/docs/reference/permissions#llmCost:read): View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -208822,49 +209330,116 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "files": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string"
-                          },
-                          "location": {
-                            "type": "string"
-                          },
-                          "rows": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "periodStart": {
-                            "type": "string"
-                          },
-                          "periodEnd": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "location",
-                          "rows",
-                          "periodStart",
-                          "periodEnd"
-                        ],
-                        "additionalProperties": false
-                      }
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "blobProviderId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "focus_csv"
+                      ]
+                    },
+                    "schedule": {
+                      "type": "string",
+                      "enum": [
+                        "hourly",
+                        "daily"
+                      ]
+                    },
+                    "pathPrefix": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "exportedThrough": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastRunAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastRunStatus": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "success",
+                        "failed"
+                      ]
+                    },
+                    "lastRunError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastObjectKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "blobProviderName": {
+                      "type": "string"
+                    },
+                    "running": {
+                      "type": "boolean",
+                      "description": "Whether a run is queued or in progress right now."
+                    },
+                    "nextRetryAt": {
+                      "nullable": true,
+                      "description": "When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.",
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
-                    "files"
+                    "id",
+                    "organizationId",
+                    "blobProviderId",
+                    "name",
+                    "enabled",
+                    "format",
+                    "schedule",
+                    "pathPrefix",
+                    "exportedThrough",
+                    "lastRunAt",
+                    "lastRunStatus",
+                    "lastRunError",
+                    "lastObjectKey",
+                    "createdAt",
+                    "updatedAt",
+                    "blobProviderName",
+                    "running",
+                    "nextRetryAt"
                   ],
                   "additionalProperties": false
                 }
@@ -209107,8 +209682,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "llmCost:read",
-            "organizationSettings:update"
+            "costExport:update",
+            "llmCost:read"
           ]
         }
       }

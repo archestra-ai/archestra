@@ -1,8 +1,10 @@
-import { RouteId } from "@archestra/shared";
+import { type Action, type Resource, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth/utils";
 import { blobProviderService } from "@/services/blob-provider";
 import {
+  ApiError,
   BlobProviderTestResultSchema,
   CreateBlobProviderRequestSchema,
   constructResponseSchema,
@@ -28,7 +30,19 @@ const blobProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(PublicBlobProviderSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ organizationId, user }, reply) => {
+      // Whoever schedules cost exports picks their destination here, without
+      // needing the rest of the organization settings.
+      const allowed = await anyPermission({
+        userId: user.id,
+        organizationId,
+        anyOf: [
+          ["organizationSettings", "read"],
+          ["costExport", "create"],
+          ["costExport", "update"],
+        ],
+      });
+      if (!allowed) throw new ApiError(403, "Forbidden");
       return reply.send(await blobProviderService.list(organizationId));
     },
   );
@@ -115,3 +129,25 @@ const blobProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default blobProviderRoutes;
+
+// === internal ===
+
+async function anyPermission(params: {
+  userId: string;
+  organizationId: string;
+  anyOf: [Resource, Action][];
+}): Promise<boolean> {
+  for (const [resource, action] of params.anyOf) {
+    if (
+      await userHasPermission(
+        params.userId,
+        params.organizationId,
+        resource,
+        action,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

@@ -17,9 +17,18 @@ export const blobProviderKeys = {
 };
 
 export function useBlobProviders() {
-  const { data: canRead } = useHasPermissions({
+  // Settings readers, and whoever schedules cost exports to pick a
+  // destination (the API allows both).
+  const { data: canReadSettings } = useHasPermissions({
     organizationSettings: ["read"],
   });
+  const { data: canCreateExports } = useHasPermissions({
+    costExport: ["create"],
+  });
+  const { data: canUpdateExports } = useHasPermissions({
+    costExport: ["update"],
+  });
+  const canRead = canReadSettings || canCreateExports || canUpdateExports;
   return useQuery({
     queryKey: blobProviderKeys.list(),
     queryFn: async () => {
@@ -38,10 +47,8 @@ export function useCreateBlobProvider() {
       const { data, error } = await archestraApiSdk.createBlobProvider({
         body,
       });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      // The dialog shows the failure (often a connection test's) inline.
+      if (error) throw toApiError(error);
       return data;
     },
     onSuccess: (provider) => {
@@ -62,10 +69,8 @@ export function useUpdateBlobProvider() {
         path: { id: params.id },
         body: params.body,
       });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      // The dialog shows the failure (often a connection test's) inline.
+      if (error) throw toApiError(error);
       return data;
     },
     onSuccess: (provider) => {
@@ -96,16 +101,7 @@ export function useDeleteBlobProvider() {
 
 export function useTestBlobProvider() {
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await archestraApiSdk.testBlobProvider({
-        path: { id },
-      });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
-      return data;
-    },
+    mutationFn: testBlobProvider,
     onSuccess: (result) => {
       if (result.success) {
         toast.success("Connection works", { description: result.message });
@@ -114,4 +110,20 @@ export function useTestBlobProvider() {
       }
     },
   });
+}
+
+/** Write and delete a test object with a saved provider's settings. */
+export async function testBlobProvider(id: string) {
+  const { data, error } = await archestraApiSdk.testBlobProvider({
+    path: { id },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  if (!data) throw new Error("No test result");
+  return data;
+}
+
+/** Delete a provider, for bulk deletes that report one outcome. */
+export async function deleteBlobProvider(id: string) {
+  const { error } = await archestraApiSdk.deleteBlobProvider({ path: { id } });
+  throwOnApiError(error, { toastOnError: false });
 }

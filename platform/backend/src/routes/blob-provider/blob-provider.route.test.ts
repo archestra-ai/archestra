@@ -168,11 +168,122 @@ describe("blob provider routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       success: false,
-      message: "AccessDenied, HTTP 403: Access Denied",
+      message:
+        "AccessDenied: the identity can't write to s3://finops/archestra/. It needs s3:PutObject and s3:DeleteObject on arn:aws:s3:::finops/archestra/*.",
     });
   });
 
-  test("a provider a cost export writes to cannot be deleted", async () => {
+  test("a create whose connection test fails is rejected with the provider's error and saves nothing", async () => {
+    s3.send = async () => {
+      throw Object.assign(new Error("The specified bucket does not exist"), {
+        name: "NoSuchBucket",
+        $metadata: { httpStatusCode: 404 },
+      });
+    };
+
+    const response = await create({
+      name: "missing-bucket",
+      config: s3Config({ authMethod: "default_chain" }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatchObject({
+      message: 'Bucket "finops" does not exist in us-east-1.',
+      internal_code: "blob_provider_connection_failed",
+    });
+    expect(
+      await BlobProviderModel.findByName({
+        organizationId,
+        name: "missing-bucket",
+      }),
+    ).toBeNull();
+  });
+
+  test("skipConnectionTest saves a configuration that can't connect yet", async () => {
+    s3.send = async () => {
+      throw Object.assign(new Error("Access Denied"), {
+        name: "AccessDenied",
+        $metadata: { httpStatusCode: 403 },
+      });
+    };
+
+    const response = await create({
+      name: "later",
+      config: s3Config({ authMethod: "default_chain" }),
+      skipConnectionTest: true,
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("an edit is tested with the stored credentials when none are sent", async () => {
+    const { id } = (
+      await create({
+        name: "rename-me",
+        config: s3Config({ authMethod: "access_key" }),
+        credentials: { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shh" },
+      })
+    ).json();
+    let usedKey: string | undefined;
+    const send = s3.send.bind(s3);
+    vi.mocked(S3Client.prototype.send).mockImplementation(async function (
+      this: S3Client,
+      command: unknown,
+    ) {
+      usedKey = (await this.config.credentials()).accessKeyId;
+      return send(command);
+    } as never);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/blob-providers/${id}`,
+      payload: {
+        config: {
+          ...s3Config({ authMethod: "access_key" }),
+          region: "eu-west-1",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(usedKey).toBe("AKIAEXAMPLE");
+    expect(response.json().hasCredentials).toBe(true);
+  });
+
+  test("Azure credentials must match the auth method", async () => {
+    const response = await create({
+      name: "azure",
+      config: {
+        type: "azure_blob",
+        accountName: "finopsexports",
+        container: "cost-exports",
+        authMethod: "sas_token",
+      },
+      credentials: { accountKey: "not-a-sas-token" },
+      skipConnectionTest: true,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe("SAS token is required");
+  });
+
+  test("a GCS service account key must be a service account JSON key", async () => {
+    const response = await create({
+      name: "gcs",
+      config: {
+        type: "gcs",
+        bucket: "finops-exports",
+        authMethod: "service_account_key",
+      },
+      credentials: { serviceAccountKey: '{"type":"authorized_user"}' },
+      skipConnectionTest: true,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/service account JSON key/);
+  });
+
+  test("a provider a cost export writes to lists that export and cannot be deleted", async () => {
     const { id } = (
       await create({
         name: "in-use",
@@ -191,11 +302,16 @@ describe("blob provider routes", () => {
       },
     });
 
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/blob-providers",
+    });
     const response = await app.inject({
       method: "DELETE",
       url: `/api/blob-providers/${id}`,
     });
 
+    expect(listed.json()[0].usedBy).toEqual({ costExports: ["daily"] });
     expect(response.statusCode).toBe(409);
     expect(
       await BlobProviderModel.findById({ id, organizationId }),
@@ -245,6 +361,52 @@ describe("blob provider routes", () => {
     });
 
     expect(response.statusCode).toBe(403);
+  });
+
+  test("whoever schedules cost exports can list destinations, but not change them", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await create({
+      name: "finops",
+      config: s3Config({ authMethod: "default_chain" }),
+    });
+    const role = await makeCustomRole(organizationId, {
+      permission: { costExport: ["read", "create"], llmCost: ["read"] },
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/blob-providers",
+    });
+    const created = await create({
+      name: "nope",
+      config: s3Config({ authMethod: "default_chain" }),
+    });
+
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().map((p: { name: string }) => p.name)).toEqual([
+      "finops",
+    ]);
+    expect(created.statusCode).toBe(403);
+  });
+
+  test("members without either permission cannot list destinations", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/blob-providers",
+    });
+
+    expect(listed.statusCode).toBe(403);
   });
 
   // ===== Helpers =====

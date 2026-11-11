@@ -43358,7 +43358,7 @@ export type ListBlobProvidersResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 's3';
+        type: 's3' | 'gcs' | 'azure_blob';
         config: {
             type: 's3';
             bucket: string;
@@ -43369,6 +43369,20 @@ export type ListBlobProvidersResponses = {
             authMethod: 'default_chain' | 'access_key' | 'assume_role';
             roleArn: string | null;
             externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
         };
         createdAt: string;
         updatedAt: string;
@@ -43376,6 +43390,15 @@ export type ListBlobProvidersResponses = {
          * Whether static credentials are stored for this provider.
          */
         hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
     }>;
 };
 
@@ -43394,15 +43417,31 @@ export type CreateBlobProviderData = {
             authMethod: 'default_chain' | 'access_key' | 'assume_role';
             roleArn?: string | null;
             externalId?: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix?: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId?: string | null;
+            clientId?: string | null;
         };
         /**
-         * Write-only. Required for the `access_key` auth method; optional source identity for `assume_role`.
+         * Write-only secrets for the auth method: `accessKeyId`, `secretAccessKey`, `sessionToken` (S3); `serviceAccountKey` (GCS); `clientSecret`, `accountKey` or `sasToken` (Azure).
          */
         credentials?: {
-            accessKeyId: string;
-            secretAccessKey: string;
-            sessionToken?: string;
+            [key: string]: string;
         };
+        /**
+         * Save without first writing and deleting a test object. By default a failed test rejects the request.
+         */
+        skipConnectionTest?: boolean;
     };
     path?: never;
     query?: never;
@@ -43485,7 +43524,7 @@ export type CreateBlobProviderResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 's3';
+        type: 's3' | 'gcs' | 'azure_blob';
         config: {
             type: 's3';
             bucket: string;
@@ -43496,6 +43535,20 @@ export type CreateBlobProviderResponses = {
             authMethod: 'default_chain' | 'access_key' | 'assume_role';
             roleArn: string | null;
             externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
         };
         createdAt: string;
         updatedAt: string;
@@ -43503,6 +43556,15 @@ export type CreateBlobProviderResponses = {
          * Whether static credentials are stored for this provider.
          */
         hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
     };
 };
 
@@ -43609,19 +43671,35 @@ export type UpdateBlobProviderData = {
             authMethod: 'default_chain' | 'access_key' | 'assume_role';
             roleArn?: string | null;
             externalId?: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix?: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix?: string;
+            endpoint?: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId?: string | null;
+            clientId?: string | null;
         };
         /**
          * Write-only. Send only to replace the stored credentials.
          */
         credentials?: {
-            accessKeyId: string;
-            secretAccessKey: string;
-            sessionToken?: string;
+            [key: string]: string;
         };
         /**
          * Remove the stored credentials.
          */
         clearCredentials?: boolean;
+        /**
+         * Save without first writing and deleting a test object. By default a failed test rejects the request.
+         */
+        skipConnectionTest?: boolean;
     };
     path: {
         id: string;
@@ -43706,7 +43784,7 @@ export type UpdateBlobProviderResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 's3';
+        type: 's3' | 'gcs' | 'azure_blob';
         config: {
             type: 's3';
             bucket: string;
@@ -43717,6 +43795,20 @@ export type UpdateBlobProviderResponses = {
             authMethod: 'default_chain' | 'access_key' | 'assume_role';
             roleArn: string | null;
             externalId: string | null;
+        } | {
+            type: 'gcs';
+            bucket: string;
+            keyPrefix: string;
+            authMethod: 'application_default' | 'service_account_key';
+        } | {
+            type: 'azure_blob';
+            accountName: string;
+            container: string;
+            keyPrefix: string;
+            endpoint: string | null;
+            authMethod: 'default_credential' | 'service_principal' | 'account_key' | 'sas_token';
+            tenantId: string | null;
+            clientId: string | null;
         };
         createdAt: string;
         updatedAt: string;
@@ -43724,6 +43816,15 @@ export type UpdateBlobProviderResponses = {
          * Whether static credentials are stored for this provider.
          */
         hasCredentials: boolean;
+        /**
+         * What writes to this provider. A provider in use cannot be deleted.
+         */
+        usedBy: {
+            /**
+             * Names of the cost exports that write to this provider.
+             */
+            costExports: Array<string>;
+        };
     };
 };
 
@@ -55278,6 +55379,14 @@ export type ListCostExportsResponses = {
         createdAt: string;
         updatedAt: string;
         blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
     }>;
 };
 
@@ -55294,6 +55403,10 @@ export type CreateCostExportData = {
          */
         pathPrefix?: string;
         enabled?: boolean;
+        /**
+         * Export usage from this time on, including the past (a backfill). Defaults to now: the first file is the period in progress.
+         */
+        startFrom?: string;
     };
     path?: never;
     query?: never;
@@ -55389,6 +55502,14 @@ export type CreateCostExportResponses = {
         createdAt: string;
         updatedAt: string;
         blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
     };
 };
 
@@ -55590,6 +55711,14 @@ export type UpdateCostExportResponses = {
         createdAt: string;
         updatedAt: string;
         blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
     };
 };
 
@@ -55676,14 +55805,31 @@ export type RunCostExportResponses = {
     /**
      * Default Response
      */
-    200: {
-        files: Array<{
-            key: string;
-            location: string;
-            rows: number;
-            periodStart: string;
-            periodEnd: string;
-        }>;
+    202: {
+        id: string;
+        organizationId: string;
+        blobProviderId: string;
+        name: string;
+        enabled: boolean;
+        format: 'focus_csv';
+        schedule: 'hourly' | 'daily';
+        pathPrefix: string;
+        exportedThrough: string;
+        lastRunAt: string | null;
+        lastRunStatus: 'success' | 'failed';
+        lastRunError: string | null;
+        lastObjectKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        blobProviderName: string;
+        /**
+         * Whether a run is queued or in progress right now.
+         */
+        running: boolean;
+        /**
+         * When a failing export is next retried; retries back off from 5 minutes to an hour. Null unless the last run failed.
+         */
+        nextRetryAt: string | null;
     };
 };
 

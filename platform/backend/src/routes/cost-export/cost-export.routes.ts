@@ -3,10 +3,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { costExportService } from "@/services/cost-export";
 import {
-  CostExportRunResultSchema,
   CreateCostExportRequestSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ErrorResponsesSchema,
   PublicCostExportSchema,
   UpdateCostExportRequestSchema,
   UuidIdSchema,
@@ -95,16 +95,21 @@ const costExportRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RunCostExport,
         description:
-          "Run a cost export now: write every completed period not exported yet, or rewrite the most recent completed period when none is due.",
+          "Queue a run of a cost export now: it writes every completed period not exported yet, or rewrites the most recent completed period when none is due. Returns 202 with the export (`running: true`); the outcome lands in its `lastRun*` fields. 409 when a run is already queued or in progress.",
         tags: ["Cost Exports"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(CostExportRunResultSchema),
+        response: {
+          202: PublicCostExportSchema,
+          ...ErrorResponsesSchema,
+        },
       },
     },
     async ({ organizationId, params }, reply) => {
-      return reply.send(
-        await costExportService.runNow({ id: params.id, organizationId }),
-      );
+      return reply
+        .status(202)
+        .send(
+          await costExportService.runNow({ id: params.id, organizationId }),
+        );
     },
   );
 };

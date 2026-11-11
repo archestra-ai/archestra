@@ -2,6 +2,7 @@ import type { CostExportFormat, CostExportSchedule } from "@archestra/shared";
 import {
   boolean,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -46,6 +47,8 @@ const costExportsTable = pgTable(
     lastRunAt: timestamp("last_run_at", { mode: "date" }),
     lastRunStatus: varchar("last_run_status").$type<CostExportRunStatus>(),
     lastRunError: text("last_run_error"),
+    /** Failed runs in a row; scheduled retries back off as it grows. */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     /** Full object key of the most recent file written. */
     lastObjectKey: text("last_object_key"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

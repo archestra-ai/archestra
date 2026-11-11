@@ -55,15 +55,14 @@ crate-type = ["cdylib"]
 # (#888), and a return declared ahead kept in the family log (#887);
 # then an authority's `except_tags`, and plans that need only stock `approve`
 # authorities applied at the block and recorded (#889); then a remedy whose
-# annotator gave no answer refused as unanswered (#890); then unsafe integers
-# refused in canonical numbers (#891), small runtime and coding battery fixes
-# (#893, #895), battery sanitizers the deployment binds, and model and
-# archestra builtins named on a sanitizer's declaration, with each archestra
-# consult naming its kind (#791).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ab8c93dd547395c793985e31bb365950a15add20", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ab8c93dd547395c793985e31bb365950a15add20" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ab8c93dd547395c793985e31bb365950a15add20", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ab8c93dd547395c793985e31bb365950a15add20" }
+# annotator gave no answer refused as unanswered (#890), and a refusal of numbers
+# whose canonical form is an unsafe integer (#891); then battery sanitizers,
+# which stay off until a root binds them (#791), and logs written before #790
+# replaying (#897).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1a0b18ac8a7e337dbb66c7c4b4b7c0af00024481" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

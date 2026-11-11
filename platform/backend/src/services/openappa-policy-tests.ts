@@ -43,6 +43,11 @@ export type PolicyTestProgressEvent =
       file: Omit<PolicyTestRunResult["files"][number], "contentHash">;
     };
 
+// The native replay's own limits: a 1 MiB root composes with its batteries, and
+// the request also carries the scenario files.
+const REPLAY_POLICY_MAX_BYTES = 2 * 1024 * 1024;
+const REPLAY_REQUEST_MAX_BYTES = 4 * 1024 * 1024;
+
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 function enabled() {
@@ -401,11 +406,11 @@ async function evaluateWithDraftHelpers(
       annotatorContext,
     });
   const capacityError =
-    Buffer.byteLength(content) > 262144
-      ? "The effective policy exceeds the replay limit of 256 KiB; configuration validation succeeded but this validation run cannot execute"
+    Buffer.byteLength(content) > REPLAY_POLICY_MAX_BYTES
+      ? "The effective policy exceeds the replay limit of 2 MiB; configuration validation succeeded but this validation run cannot execute"
       : // A capability adds a fixed-size UUID.
-        Buffer.byteLength(replayInput(randomUUID())) > 2097152
-        ? "The encoded replay request exceeds the 2 MiB limit"
+        Buffer.byteLength(replayInput(randomUUID())) > REPLAY_REQUEST_MAX_BYTES
+        ? "The encoded replay request exceeds the 4 MiB limit"
         : null;
   if (!validation.valid) {
     files = cannotRun("Policy configuration validation failed");

@@ -50,6 +50,8 @@ function githubFake(options: {
         login: "my-org",
         type: options.accountType ?? "Organization",
       });
+    if (url.endsWith("/orgs/my-org"))
+      return Response.json({ login: "my-org", name: "My Org" });
     if (url.includes("/app-manifests/"))
       return Response.json({
         id: Number(options.appId),
@@ -713,6 +715,40 @@ describe("GitHub Copilot organization subscription setup", () => {
     ).not.toBeNull();
   });
 
+  test("names a plan after the name GitHub shows for its organization, asked as the App", async () => {
+    const { keyId } = await connectedApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    const one = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(one.statusCode, one.body).toBe(200);
+    expect(one.json()).toMatchObject({
+      githubOrganization: "my-org",
+      githubOrganizationName: "My Org",
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+    expect(
+      (list.json() as Array<{ id: string }>).find((key) => key.id === keyId),
+    ).toMatchObject({
+      githubOrganization: "my-org",
+      githubOrganizationName: "My Org",
+    });
+
+    // Asked once for both reads, with the plan's installation token.
+    const lookups = fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/orgs/my-org"),
+    );
+    expect(lookups).toHaveLength(1);
+    expect(new Headers(lookups[0]?.[1]?.headers).get("Authorization")).toBe(
+      "Bearer ghs_test",
+    );
+  });
+
   test("blocks deleting a GitHub App credential a Copilot plan uses", async () => {
     const { reference } = await connectedApp();
     const definition = await RuntimeCredentialDefinitionModel.findById({
@@ -726,7 +762,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     });
     expect(usage.resources).toContainEqual({
       id: expect.any(String),
-      name: "GitHub Copilot for my-org",
+      name: "GitHub Copilot My Org",
       kind: "copilot",
     });
     const { deleteRuntimeCredentialDefinition } = await import(

@@ -385,7 +385,10 @@ const INTERNAL_ENCRYPTION_COLUMNS = {
 export const CopilotCredentialSourceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("organization"),
+    /** The GitHub organization's login. */
     organization: z.string().nullable(),
+    /** The name GitHub shows for it, when known. */
+    organizationName: z.string().nullable().optional(),
   }),
   z.object({ kind: z.literal("personal") }),
 ]);

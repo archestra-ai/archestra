@@ -1,7 +1,10 @@
 "use client";
 
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { organizationSubscriptionName } from "@/lib/organization-subscription";
+import {
+  githubOrganizationLabel,
+  organizationSubscriptionName,
+} from "@/lib/organization-subscription";
 import {
   SubscriptionCard,
   SubscriptionCardsSection,
@@ -64,7 +67,7 @@ export function OrganizationSubscriptionCards({
             description={
               credential.requiresReauthentication
                 ? "GitHub refused the App. Its installation or private key changed. Reconnect it to use this plan."
-                : `Your organization's Copilot plan is linked through a GitHub App. Usage is billed to ${credential.githubOrganization ?? "the organization"}.`
+                : `Your organization's Copilot plan is linked through a GitHub App. Usage is billed to ${githubOrganizationLabel(credential) ?? "the organization"}.`
             }
             isLoading={isLoading}
             status={

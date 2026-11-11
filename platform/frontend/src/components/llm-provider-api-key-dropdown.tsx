@@ -61,6 +61,7 @@ type DropdownLlmProviderApiKey = Pick<
       | "requiresReauthentication"
       | "isGithubAppKey"
       | "githubOrganization"
+      | "githubOrganizationName"
     >
   > & {
     connectRequired?: boolean;
@@ -474,6 +475,7 @@ export function LlmProviderApiKeyDropdown({
                       key.provider,
                       key.name,
                       key.githubOrganization ?? "",
+                      key.githubOrganizationName ?? "",
                       "enterprise plan",
                     ]}
                     disabled={providerFilter?.(key.provider) === false}

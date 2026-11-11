@@ -193,7 +193,12 @@ RUN apk add --no-cache \
    apk add --no-cache --upgrade "zlib>=1.4-r0" && \
    # Require the Alpine 3.23 musl fix for both installed packages and invalidate
    # cached layers with 1.2.5-r23.
-   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24"
+   apk add --no-cache --upgrade "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
+   # CVE-2026-119079, CVE-2026-112323, CVE-2026-112322, CVE-2026-112321, CVE-2026-112320,
+   # CVE-2026-112314, CVE-2026-107778: krb5 vulnerabilities (HIGH) fixed in 1.22.3-r0.
+   # krb5-libs comes in transitively through bind-libs, bind-tools and libtirpc, so no
+   # earlier line upgrades it; it is the only installed krb5-origin package.
+   apk add --no-cache --upgrade "krb5-libs>=1.22.3-r0"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

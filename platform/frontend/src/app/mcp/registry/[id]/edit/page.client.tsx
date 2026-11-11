@@ -19,8 +19,10 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
+import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import {
   SETUP_STEPS,
   type SetupStepId,
@@ -36,6 +38,7 @@ import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
 import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
 // SPDX-SnippetEnd
 import type { CatalogItem } from "../../_parts/mcp-server-card";
+import { ServerRulesButton } from "../../_parts/server-rules-launch";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
   // The one item this page shows, by id, with its list figures (tool count,
@@ -127,6 +130,13 @@ function SetupWizard({
 
   const detailHref = `/mcp/registry/${item.id}`;
   const openappaEnabled = useFeature("openappaEnabled") === true;
+  // An editor of this server who holds no Guardrails permission configures
+  // its Guardrails through the server's own rules file in the policy
+  // repository; everyone else reviews the whole policy's coverage of it.
+  const { canModify } = useCanModifyCatalogItem(item);
+  const guardrailsRead = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const serverRulesOnly =
+    canModify && !guardrailsRead.isPending && !guardrailsRead.data;
   // Which of the configuration step's two submit buttons asked for the save
   // in flight: "Save" finishes on the server's page (one field changed is one
   // save, not a walk through the remaining steps), "Save & Continue" moves on
@@ -273,7 +283,13 @@ function SetupWizard({
             )
           ) : (
             <div className="flex items-center gap-2">
-              {openappaEnabled && (
+              {openappaEnabled && serverRulesOnly && (
+                <ServerRulesButton variant="outline" size="sm" catalog={item}>
+                  <AppaKeeperIcon />
+                  <span>Configure Guardrails with agent</span>
+                </ServerRulesButton>
+              )}
+              {openappaEnabled && !serverRulesOnly && (
                 <OpenAppaChatButton
                   variant="outline"
                   size="sm"

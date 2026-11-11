@@ -34,6 +34,7 @@ beforeEach(() => {
     validationDirectory: "",
     githubWebUrl: "https://github.com",
     provider: "github",
+    selfService: { enabled: false, setting: false, directory: "mcp" },
     source: null,
   };
   server.use(
@@ -254,6 +255,8 @@ test.each([
           setupPullRequestNumber: null,
           lastSyncedAt: null,
           lastSyncError: null,
+          selfService: false,
+          selfServiceDirectory: "mcp",
         },
       };
     },

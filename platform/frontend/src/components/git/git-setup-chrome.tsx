@@ -116,14 +116,23 @@ export function GitProviderLogo({
   );
 }
 
-/** Progress through the setup, one bar per step. */
+/**
+ * Progress through the setup, one bar per step. A step `onSelect` accepts
+ * is a button: a done step, or one the setup has already unlocked.
+ */
 export function SetupStepper({
   steps,
   current,
+  onSelect,
+  selectable = (index) => index < current,
 }: {
   steps: string[];
   /** Index of the active step; `steps.length` once all are done. */
   current: number;
+  /** Go to a step by clicking it; without this nothing is clickable. */
+  onSelect?: (index: number) => void;
+  /** Which steps may be clicked; the done ones unless told otherwise. */
+  selectable?: (index: number) => boolean;
 }) {
   return (
     <ol
@@ -134,12 +143,9 @@ export function SetupStepper({
       {steps.map((label, index) => {
         const complete = index < current;
         const active = index === current;
-        return (
-          <li
-            key={label}
-            aria-current={active ? "step" : undefined}
-            className="min-w-0 space-y-1.5"
-          >
+        const clickable = !!onSelect && !active && selectable(index);
+        const content = (
+          <>
             <span
               className={cn(
                 "block h-0.5 rounded-full transition-colors duration-300",
@@ -152,6 +158,7 @@ export function SetupStepper({
                 active
                   ? "font-medium text-foreground"
                   : "text-muted-foreground",
+                clickable && "group-hover:text-foreground",
               )}
             >
               {complete ? (
@@ -161,6 +168,24 @@ export function SetupStepper({
               )}
               <span className="truncate">{label}</span>
             </span>
+          </>
+        );
+        return (
+          <li
+            key={label}
+            aria-current={active ? "step" : undefined}
+            className="min-w-0"
+          >
+            {clickable ? (
+              <UnstyledButton
+                className="group block w-full min-w-0 space-y-1.5 text-left"
+                onClick={() => onSelect(index)}
+              >
+                {content}
+              </UnstyledButton>
+            ) : (
+              <div className="min-w-0 space-y-1.5">{content}</div>
+            )}
           </li>
         );
       })}

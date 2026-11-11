@@ -1,13 +1,14 @@
 "use client";
 
 import { MODEL_POOL_RETRY_DEFAULTS } from "@archestra/shared/model-pool-retries";
-import { Layers, Loader2 } from "lucide-react";
+import { Info, Layers, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -103,6 +104,20 @@ export function PoolDialog({
         disabled={disabled}
         savedMembers={live?.members ?? []}
       />
+      {form
+        .watch("members")
+        .some(
+          (member) => options.keysById.get(member.providerApiKeyId)?.userId,
+        ) ? (
+        <InlineNotice variant="info">
+          <Info />
+          <span className="font-medium">Personal connections stay private</span>
+          <InlineNoticeText>
+            Only requests authenticated as their owner use these members. Other
+            callers use the pool's shared connections.
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
     </>
   );
   const saveButton = (
@@ -188,9 +203,9 @@ export function PoolDialog({
       <form onSubmit={onSubmit} className="flex min-h-0 flex-col">
         <DialogBody className="space-y-6">{fields}</DialogBody>
         <DialogStickyFooter className="mt-0">
-          {options.sharedKeys.length === 0 ? (
+          {options.availableKeys.length === 0 ? (
             <p className="mr-auto text-xs text-muted-foreground">
-              <span>Add a shared provider key first.</span>
+              <span>Add a provider connection first.</span>
             </p>
           ) : null}
           <DialogCancelButton>Cancel</DialogCancelButton>

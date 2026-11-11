@@ -1,12 +1,25 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   useHasPermissions,
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -36,15 +49,24 @@ vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
 }));
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: vi.fn(),
   useMyTeams: vi.fn(),
 }));
 vi.mock("@/lib/hooks/use-app-name");
 const mutateAsync = vi.fn();
+const server = setupServer();
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "bypass" });
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useFeature).mockReturnValue(undefined);
   vi.mocked(useScopedCapabilities).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useScopedCapabilities>);
@@ -116,6 +138,98 @@ beforeEach(() => {
 });
 
 describe("CreateVirtualKeyDialog", () => {
+  it("creates with only a model pool, blocks empty access, and shows its connection guide", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "llmModelPoolsEnabled",
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    server.use(
+      http.get("http://localhost:9000/api/model-pools", () =>
+        HttpResponse.json([
+          {
+            id: "pool-1",
+            name: "subscription-pool",
+            virtualApiKeyIds: [],
+            members: [
+              {
+                id: "member-1",
+                provider: "github-copilot",
+                modelId: "gpt-4.1",
+                priority: 1,
+                enabled: true,
+              },
+            ],
+          },
+        ]),
+      ),
+    );
+    renderDialog("standard", {
+      parentableKeys: [],
+      initialProviderApiKeys: [],
+    });
+    const create = screen.getByRole("button", { name: "Create key" });
+    expect(create).toBeDisabled();
+    await user.click(
+      screen.getByRole("combobox", { name: "Add a model pool" }),
+    );
+    await user.click(
+      await screen.findByRole("option", { name: /subscription-pool/ }),
+    );
+    expect(create).toBeEnabled();
+    expect(
+      screen.queryByText("Add a provider key first."),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Remove subscription-pool" }),
+    );
+    expect(create).toBeDisabled();
+    await user.click(
+      screen.getByRole("combobox", { name: "Add a model pool" }),
+    );
+    await user.click(
+      await screen.findByRole("option", { name: /subscription-pool/ }),
+    );
+    mutateAsync.mockResolvedValueOnce({
+      ...createdKey("standard", []),
+      id: "vk-pool-only",
+    });
+    await user.click(create);
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        keyType: "standard",
+        providerApiKeys: [],
+        modelPoolIds: ["pool-1"],
+      }),
+    });
+    expect(screen.getByRole("button", { name: "Copy key" })).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: /Unified Model API/ }),
+    ).toBeChecked();
+    const native = screen.getByRole("radio", { name: /Native provider API/ });
+    expect(native).toBeDisabled();
+    await user.click(native);
+    expect(
+      screen.getByText("https://proxy.example.com/unified-model"),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Model pools" })).toHaveAttribute(
+      "href",
+      "/llm/model-pools",
+    );
+    expect(
+      screen.getByText(
+        /assigned pool's exact name as the model. Do not add a provider prefix/,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/open its Connect section/)).toBeVisible();
+    expect(screen.queryByText(/\/undefined/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/No runnable model example/),
+    ).not.toBeInTheDocument();
+  });
+
   it("finishes management-only creation without displaying a member's bearer value", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();

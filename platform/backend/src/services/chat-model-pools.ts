@@ -1,4 +1,9 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  getProvidersWithOptionalApiKey,
+  type SupportedProvider,
+} from "@archestra/shared";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import { LlmProviderApiKeyModel, ModelModel, ModelPoolModel } from "@/models";
 import { ApiError, type ModelPool } from "@/types";
@@ -48,14 +53,39 @@ export async function resolveChatModelPool(params: {
   userId: string;
   modelPoolId: string;
 }): Promise<{ modelPoolId: string; chatApiKeyId: string; modelId: string }> {
+  return resolveModelPoolSelection(params, false);
+}
+
+/**
+ * An agent grants use of its pool's shared keys, even without a direct key
+ * grant. Personal members still belong only to their owner. Re-anchor for the
+ * acting caller before the LLM client checks the selected provider's credential.
+ * Callers must already have authorized use of the agent configured to this pool.
+ */
+export async function resolveAgentModelPool(params: {
+  organizationId: string;
+  userId: string;
+  modelPoolId: string;
+}): Promise<{ modelPoolId: string; chatApiKeyId: string; modelId: string }> {
+  return resolveModelPoolSelection(params, true);
+}
+
+async function resolveModelPoolSelection(
+  params: { organizationId: string; userId: string; modelPoolId: string },
+  throughAgent: boolean,
+): Promise<{ modelPoolId: string; chatApiKeyId: string; modelId: string }> {
   const pool = config.llmProxy.modelPoolsEnabled
     ? await ModelPoolModel.findById({
         organizationId: params.organizationId,
         id: params.modelPoolId,
       })
     : null;
-  const member = pool && anchorMember(pool, await usableKeyIds(params));
-  if (!pool || !member) throw new ApiError(404, "Model pool not found");
+  if (!pool) throw new ApiError(404, "Model pool not found");
+  const keyIds = throughAgent
+    ? await agentKeyIds(pool, params)
+    : await usableKeyIds(params);
+  const member = anchorMember(pool, keyIds);
+  if (!member) throw new ApiError(404, "Model pool not found");
   await ModelModel.ensureModelExists(member.modelId, member.provider);
   const model = await ModelModel.findByProviderAndModelId(
     member.provider,
@@ -95,6 +125,37 @@ export async function applyAgentModelPool(
   ) {
     body.modelPoolId = null;
   }
+}
+
+/** Current metadata is sufficient to skip disconnected keys without reading secrets. */
+async function agentKeyIds(
+  pool: ModelPool,
+  params: { organizationId: string; userId: string },
+): Promise<Set<string>> {
+  const keys = await LlmProviderApiKeyModel.findByIds(
+    pool.members
+      .filter((member) => member.enabled)
+      .map((member) => member.providerApiKeyId),
+  );
+  const keylessProviders = new Set<SupportedProvider>(
+    getProvidersWithOptionalApiKey({
+      azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+      anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
+    }),
+  );
+  if (config.llm.gemini.vertexAi.enabled) keylessProviders.add("gemini");
+  if (config.llm.bedrock.iamAuthEnabled) keylessProviders.add("bedrock");
+  return new Set(
+    keys
+      .filter(
+        (key) =>
+          key.organizationId === params.organizationId &&
+          (key.userId === null || key.userId === params.userId) &&
+          !key.requiresReauthentication &&
+          (key.secretId !== null || keylessProviders.has(key.provider)),
+      )
+      .map((key) => key.id),
+  );
 }
 
 async function usableKeyIds(params: {

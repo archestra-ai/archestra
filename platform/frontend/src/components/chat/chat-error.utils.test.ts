@@ -216,6 +216,21 @@ describe("chat-error.utils", () => {
       });
     });
 
+    it("classifies Safari fetch failures without treating arbitrary TypeErrors as network failures", () => {
+      expect(mapClientError(new TypeError("Load failed"))).toEqual({
+        code: ChatErrorCode.NetworkError,
+        message: ChatErrorMessages[ChatErrorCode.NetworkError],
+        isRetryable: true,
+      });
+      expect(
+        mapClientError(new TypeError("Cannot read properties of undefined"))
+          .code,
+      ).toBe(ChatErrorCode.Unknown);
+      expect(
+        mapClientError(new Error("Load failed for unsupported document")).code,
+      ).toBe(ChatErrorCode.Unknown);
+    });
+
     it("extracts backend error.message from JSON envelopes", () => {
       expect(
         mapClientError(

@@ -62,7 +62,7 @@ Tick it when you set up Git sync, or click **Enable** on the Git sync card in **
 
 ### Edit a Server's Rules
 
-1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row, or under **⋯** on its page. The APPA Keeper opens on that server; a server without a file starts from one that names each tool with no rule.
+1. Click **Edit Guardrails rules** for an owned server in the **MCP Registry**. The APPA Keeper opens on that server; a server without a file starts from one that names each tool with no rule.
 2. Ask for the change, for example "refunds need a trusted session". The Keeper shows the diff.
 3. Click **Approve**. The Keeper opens a pull request that changes only that file.
 4. When the check passes, merge it. Git sync applies it at the next sync.

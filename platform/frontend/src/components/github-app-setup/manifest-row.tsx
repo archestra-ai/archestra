@@ -24,7 +24,7 @@ export function ManifestRow({
   error,
 }: {
   index: number;
-  title: string;
+  title: React.ReactNode;
   hint: string;
   /**
    * Takes the hint's place while this step's last attempt failed, in the

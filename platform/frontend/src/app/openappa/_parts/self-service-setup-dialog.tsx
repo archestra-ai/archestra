@@ -249,7 +249,19 @@ function AppStep({
       <ol className="overflow-hidden rounded-lg border bg-card">
         <ManifestRow
           index={1}
-          title="Grant Administration and Checks on the App"
+          title={
+            <>
+              Grant Administration and Checks on the{" "}
+              <a
+                href={grants.settingsUrl.replace(/\/permissions$/, "")}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-4 hover:text-foreground/80"
+              >
+                App
+              </a>
+            </>
+          }
           hint="Both as read and write, on the App's permissions page. Contents and Pull requests stay as they are."
           inlineAction
           waiting={checking}

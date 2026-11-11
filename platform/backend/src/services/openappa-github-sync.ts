@@ -155,6 +155,11 @@ export function selfServiceActive(row: SyncRow | null): row is SyncRow & {
   );
 }
 
+/** Whether self-service is in force on the organization's saved source. */
+export async function selfServiceInForce(organizationId: string) {
+  return selfServiceActive(await OpenAppaGithubSyncModel.find(organizationId));
+}
+
 /** What the MCP registry asks: whether its servers' editors may change their rules now. */
 export async function getAppaSelfService(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
@@ -1759,6 +1764,13 @@ async function saveSource(params: {
   ) {
     throw new ApiError(403, "You do not have access to GitHub credentials");
   }
+  // Release 1.4: the servers' folder is the deployment's, so a GitHub App
+  // source keeps its validations apart from it, as a created repository must.
+  if (
+    config.openappa.selfService === "enabled" &&
+    params.source.githubAppConfigId
+  )
+    checkSelfServiceDirectory(configuredServerRulesFolder(), params.source);
   if (params.source.gitlabTokenId) {
     // Resolve now to reject a missing, foreign or non-GitLab credential.
     const access = await resolveOpenAppaGitlabAccess({

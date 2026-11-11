@@ -605,9 +605,10 @@ async function rootAt(params: {
  */
 export async function ensureSelfServiceInclude(params: Caller) {
   // A source just saved has no accepted commit yet: pull it now rather than
-  // wait for the schedule, so the pull request opens at once.
+  // wait for the schedule, so the pull request opens at once. A source the
+  // feature is not in force on (no GitHub App) is left to its schedule.
   const saved = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (saved?.interval && saved.repo && saved.path && !saved.sourceCommit)
+  if (selfServiceActive(saved) && !saved.sourceCommit)
     await syncAppaGithubPolicy(params.organizationId);
   const source = await requireSource(params.organizationId);
   const folder = configuredServerRulesFolder();

@@ -9,6 +9,7 @@ import {
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
+  selfServiceInForce,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
@@ -345,7 +346,13 @@ export default routes;
 async function withServersIncluded<
   T extends { selfService: { enabled: boolean }; source: unknown },
 >(request: { organizationId: string; user: { id: string } }, status: T) {
-  if (!status.selfService.enabled) return status;
+  // Release 1.4: the flag is the deployment's; only a GitHub App source
+  // gets the check and the include pull request.
+  if (
+    !status.selfService.enabled ||
+    !(await selfServiceInForce(request.organizationId))
+  )
+    return status;
   try {
     const opened = await ensureSelfServiceInclude({
       organizationId: request.organizationId,

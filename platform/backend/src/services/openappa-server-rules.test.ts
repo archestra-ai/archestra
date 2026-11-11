@@ -1824,6 +1824,18 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
       (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null,
     gitlabTokenId: null,
   };
+  // The servers' folder is the deployment's: a saved source keeps its
+  // validations apart from it, as a created repository must.
+  await expect(
+    configureAppaGithubSync({
+      organizationId: org.id,
+      userId: admin.id,
+      source: { ...moved, validationDirectory: "mcp" },
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+    message: expect.stringContaining("validations folder"),
+  });
   // A move that does not save withdraws nothing: the branch keeps its
   // ruleset until the new source is really in place.
   server.use(

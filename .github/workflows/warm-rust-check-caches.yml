@@ -60,7 +60,9 @@ jobs:
 
       - name: Install musl dependencies
         if: steps.cargo-cache.outputs.cache-hit != 'true' && matrix.targets != ''
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
+          sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Warm check and test dependencies
         if: steps.cargo-cache.outputs.cache-hit != 'true'

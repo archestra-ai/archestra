@@ -337,7 +337,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
 
-  // On: the card says what is in place, and offers Disable.
+  // On: the card says what is in place.
   expect(
     await screen.findByText(/protects the policy on the/),
   ).toHaveTextContent("Ruleset protects the policy on the branch");
@@ -354,14 +354,10 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
     "Pull request #12 adds rules/servers/*.toml to appa.toml. Merge it so the servers' files apply.",
   );
   expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
-
-  fireEvent.click(screen.getByRole("button", { name: "Disable" }));
-  await waitFor(() => expect(actions).toHaveLength(3));
-  expect(actions[2]).toEqual({ action: "self_service", enabled: false });
-  expect(await screen.findByRole("button", { name: "Enable" })).toBeEnabled();
-  await waitFor(() =>
-    expect(screen.queryByText(/protects the policy on the/)).toBeNull(),
-  );
+  // Once on, the row offers no switch of its own: Edit changes or turns it off.
+  expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
 });
 
 test("locks self-service while the environment variable sets it, naming the variable and its values", async () => {
@@ -474,7 +470,7 @@ test("read-only users see status without mutation controls", async () => {
     screen.queryByRole("button", { name: "Sync now" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Edit source" }),
+    screen.queryByRole("button", { name: "Edit" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Stop syncing" }),
@@ -749,7 +745,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
   expect(
     await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
@@ -878,7 +874,7 @@ test("moving a GitHub sync to a new GitLab project starts GitLab fresh and repla
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   expect(await screen.findByText("Edit Git sync")).toBeVisible();
   // Back to the host step, then over to GitLab.
   while (!screen.queryByRole("button", { name: /^GitLab/ }))
@@ -942,7 +938,7 @@ test("moving a GitHub sync to an existing GitLab project connects that project",
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
   while (!screen.queryByRole("button", { name: /^GitLab/ }))
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
   fireEvent.click(screen.getByRole("button", { name: /^GitLab/ }));

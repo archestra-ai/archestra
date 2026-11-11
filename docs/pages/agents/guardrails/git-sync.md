@@ -73,8 +73,7 @@ Then [share each server](/docs/admin/access-control#share-a-resource) with the t
 What to know:
 
 - The card says what is in place, links the pull request until it is merged, and offers **Finish setup** while a part is missing.
-- **Edit source** changes self-service without disconnecting: the Repository step holds the switch and the folder.
-- **Disable** deletes the ruleset and hides the registry action. Open pull requests stay open.
+- **Edit** on the card changes self-service without disconnecting: the Repository step holds the switch and the folder. Unticking it deletes the ruleset and hides the registry action. Open pull requests stay open.
 
 ### Edit a Server's Rules
 
@@ -98,7 +97,7 @@ While self-service is on, Archestra keeps two things on the synced branch at eac
 
 ## Validations in Git
 
-With Git sync on, [validation files](/docs/agents/guardrails/policies#validating-the-policy) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit source** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
+With Git sync on, [validation files](/docs/agents/guardrails/policies#validating-the-policy) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
 
 What to know:
 

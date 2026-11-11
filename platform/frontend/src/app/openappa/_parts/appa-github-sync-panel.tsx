@@ -224,7 +224,7 @@ export function AppaGithubSyncPanel() {
                         onClick={() => setEditing(true)}
                       >
                         <span>
-                          {connected ? "Edit source" : `Reconnect ${git.label}`}
+                          {connected ? "Edit" : `Reconnect ${git.label}`}
                         </span>
                       </Button>
                       {connected && (
@@ -353,7 +353,6 @@ function SelfServiceRow({
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
   canManage: boolean;
 }) {
-  const update = useUpdateAppaGithubSync();
   const eligible = !!source.githubAppConfigId;
   const [setup, setSetup] = useState(false);
   const description = (
@@ -387,20 +386,8 @@ function SelfServiceRow({
               <p className="text-sm font-medium">Self-service MCP Guardrails</p>
               <p className="text-xs text-muted-foreground">{description}</p>
             </div>
-            {selfService.enabled ? (
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                className="shrink-0"
-                disabled={!canManage || update.isPending}
-                onClick={() =>
-                  update.mutate({ action: "self_service", enabled: false })
-                }
-              >
-                <span>{update.isPending ? "Disabling…" : "Disable"}</span>
-              </Button>
-            ) : (
+            {/* Once on, Edit on the card changes or turns it off. */}
+            {selfService.enabled ? null : (
               <Button
                 size="sm"
                 type="button"

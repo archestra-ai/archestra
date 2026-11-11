@@ -385,7 +385,7 @@ function SelfServiceRow({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium">Self-service MCP Guardrails</p>
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
             </div>
             {selfService.enabled ? (
               <Button
@@ -488,10 +488,10 @@ function RepositoryProtection({
     data.branchRules.state !== "active" || data.include.state === "missing";
   return (
     <>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {protectionSentence(data.branchRules, appName, branchUrl, data.app)}
       </p>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {includeSentence(data.include, policyFile, folderUrl)}
         {unfinished && onFinishSetup ? (
           <Button

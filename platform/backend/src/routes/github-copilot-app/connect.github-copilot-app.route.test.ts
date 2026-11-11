@@ -1569,6 +1569,66 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
+  test("refuses a plan when a concurrent connect saved one for its organization first, and keeps nothing", async () => {
+    // A connect for my-org that raced this one saved its plan after this one
+    // passed the check: only the unique index on the organization sees it.
+    const { secretManager } = await import("@/secrets-manager");
+    const raced = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot My Org",
+        provider: "github-copilot",
+        secretId: (
+          await secretManager().createSecret({ apiKey: "in-flight" }, "raced")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      { githubAppAccount: "https://github.com/my-org" },
+    );
+    const secrets = async () =>
+      (await db.select().from(schema.secretsTable)).length;
+    const credentials = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
+    const before = {
+      secrets: await secrets(),
+      credentials: await credentials(),
+    };
+
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const refused = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json().error.message).toBe(
+      "my-org already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.",
+    );
+    expect(await planIds()).toEqual([]);
+    expect({
+      secrets: await secrets(),
+      credentials: await credentials(),
+    }).toEqual(before);
+
+    // Once that plan is gone, the organization takes a plan again, and the
+    // plan holds its organization for the next connect.
+    await LlmProviderApiKeyModel.delete(raced.id);
+    const connected = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(connected.statusCode, connected.body).toBe(200);
+    const [stored] = await db
+      .select({
+        githubAppAccount: schema.llmProviderApiKeysTable.githubAppAccount,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .where(eq(schema.llmProviderApiKeysTable.id, connected.json().id));
+    expect(stored?.githubAppAccount).toBe("https://github.com/my-org");
+  });
+
   async function setConnection(credentialKey: string) {
     const { setRuntimeCredentialConnection } = await import(
       "@/services/agent-runtime/runtime-credentials"

@@ -49,6 +49,7 @@ import type {
 } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
+import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 import CreatedByModel from "./created-by";
@@ -170,6 +171,11 @@ class LlmProviderApiKeyModel {
       publishToOrganization?: boolean;
       /** The value being stored, to record its credential kind. */
       apiKeyValue?: string | null;
+      /**
+       * The GitHub organization a new GitHub Copilot plan bills; a second
+       * plan for it fails on the unique index (`isGithubAppAccountTaken`).
+       */
+      githubAppAccount?: string;
     },
   ): Promise<LlmProviderApiKey> {
     return await db.transaction(async (tx) => {
@@ -189,6 +195,9 @@ class LlmProviderApiKeyModel {
               ...data,
               ...(options && "apiKeyValue" in options
                 ? { credentialKind: credentialKindOf(options.apiKeyValue) }
+                : {}),
+              ...(options?.githubAppAccount
+                ? { githubAppAccount: options.githubAppAccount }
                 : {}),
             },
             userIdField: "createdBy",
@@ -1293,6 +1302,17 @@ class LlmProviderApiKeyModel {
    * The organization's GitHub Copilot plan keys (GitHub App keys) with their
    * stored values, in one query. Personal sign-in tokens are never read.
    */
+  /**
+   * Whether creating a GitHub Copilot plan failed because its GitHub
+   * organization already has one (`githubAppAccount`'s unique index).
+   */
+  static isGithubAppAccountTaken(error: unknown): boolean {
+    return isUniqueConstraintError(
+      error,
+      "chat_api_keys_github_app_account_unique",
+    );
+  }
+
   static async findGithubAppKeyValues(
     organizationId: string,
   ): Promise<Array<{ id: string; name: string; value: string | null }>> {

@@ -763,9 +763,7 @@ function isDefaultPlanName(plan: {
   const name = plan.name.trim().toLowerCase();
   const login = plan.organization?.toLowerCase();
   const defaults = [
-    ...(login
-      ? [`github copilot (${login})`, `github copilot ${login}`]
-      : []),
+    ...(login ? [`github copilot (${login})`, `github copilot ${login}`] : []),
     ...(plan.organizationName
       ? [`github copilot ${plan.organizationName.trim().toLowerCase()}`]
       : []),

@@ -33,8 +33,9 @@ export type LlmProviderCredentialKind = z.infer<
 export const SelectLlmProviderApiKeySchema = createSelectSchema(
   schema.llmProviderApiKeysTable,
 )
-  // Server-side bookkeeping; clients get the derived `subscriptionKind`.
-  .omit({ credentialKind: true })
+  // Server-side bookkeeping; clients get the derived `subscriptionKind`, and
+  // `githubOrganization` for a plan.
+  .omit({ credentialKind: true, githubAppAccount: true })
   .extend({
     provider: SupportedProvidersSchema,
     scope: ResourceVisibilityScopeSchema,
@@ -58,6 +59,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     createdByServiceAccountId: true,
     requiresReauthentication: true,
     credentialKind: true,
+    githubAppAccount: true,
   })
   .extend({
     provider: SupportedProvidersSchema,
@@ -75,6 +77,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
     createdByServiceAccountId: true,
     requiresReauthentication: true,
     credentialKind: true,
+    githubAppAccount: true,
     createdAt: true,
     updatedAt: true,
   })

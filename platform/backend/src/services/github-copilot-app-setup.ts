@@ -539,6 +539,7 @@ class CopilotGithubAppSetup {
           grants,
           target: { id: randomUUID(), name, authorId: null },
         });
+      const reference = decodeGithubAppReference(apiKey);
       const secret = await secretManager().createSecret(
         { apiKey },
         SECRET_NAME,
@@ -559,13 +560,23 @@ class CopilotGithubAppSetup {
             teamId: null,
             isPrimary: false,
           },
-          { initialPermissionGrants: grants, apiKeyValue: apiKey },
+          {
+            initialPermissionGrants: grants,
+            apiKeyValue: apiKey,
+            // The unique index refuses a second plan for the organization,
+            // also when two connects race past assertNoOtherPlan.
+            githubAppAccount: reference
+              ? githubAppAccountOf(reference)
+              : undefined,
+          },
         );
         keyId = created.id;
       } catch (error) {
         await secretManager()
           .deleteSecret(secret.id)
           .catch(() => undefined);
+        if (LlmProviderApiKeyModel.isGithubAppAccountTaken(error))
+          throw new ApiError(409, planTakenMessage(organization));
         throw error;
       }
     }
@@ -763,16 +774,10 @@ class CopilotGithubAppSetup {
     githubUrl: string;
     replaceKeyId?: string;
   }) {
-    const target = {
-      login: params.organization.toLowerCase(),
-      host: normalizeGithubWeb(params.githubUrl),
-    };
+    const target = githubAppAccountOf(params);
     const isTarget = (value: string | null) => {
       const reference = decodeGithubAppReference(value);
-      return (
-        reference?.organization.toLowerCase() === target.login &&
-        normalizeGithubWeb(reference.githubUrl) === target.host
-      );
+      return !!reference && githubAppAccountOf(reference) === target;
     };
     const plans = await LlmProviderApiKeyModel.findGithubAppKeyValues(
       params.organizationId,
@@ -782,11 +787,7 @@ class CopilotGithubAppSetup {
     const taken = plans.some(
       (plan) => plan.id !== params.replaceKeyId && isTarget(plan.value),
     );
-    if (taken)
-      throw new ApiError(
-        409,
-        `${params.organization} already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.`,
-      );
+    if (taken) throw new ApiError(409, planTakenMessage(params.organization));
   }
 
   /** An organization's GitHub Copilot key the user may act on. */
@@ -997,9 +998,21 @@ function copilotPlanName(organization: string): string {
   return `GitHub Copilot ${organization}`;
 }
 
-/** A GitHub web address in one spelling, to compare two. */
-function normalizeGithubWeb(url: string): string {
-  return url.trim().replace(/\/+$/, "").toLowerCase();
+/**
+ * The GitHub organization a plan bills, in one spelling: its GitHub web
+ * address and login, in lower case (`https://github.com/acme`). Two plans
+ * with the same one bill the same organization.
+ */
+function githubAppAccountOf(params: {
+  organization: string;
+  githubUrl: string;
+}): string {
+  const web = params.githubUrl.trim().replace(/\/+$/, "").toLowerCase();
+  return `${web}/${params.organization.toLowerCase()}`;
+}
+
+function planTakenMessage(organization: string): string {
+  return `${organization} already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.`;
 }
 
 function assertCopilotRequests(

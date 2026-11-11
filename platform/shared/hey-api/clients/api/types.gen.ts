@@ -142211,6 +142211,10 @@ export type GetSkillsData = {
          * Include manifest bodies (default true). False returns empty content for lightweight lists.
          */
         includeContent?: boolean;
+        /**
+         * Admin-only: list skills visible to this user in the current organization, using the target user's permissions.
+         */
+        visibleTo?: string;
         search?: string;
         sourceRepo?: string;
         /**

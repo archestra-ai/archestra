@@ -476774,11 +476774,16 @@
                       "account": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "url": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
                       "id",
-                      "account"
+                      "account",
+                      "url"
                     ],
                     "additionalProperties": false
                   }

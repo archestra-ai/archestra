@@ -122797,6 +122797,7 @@ export type GetAppaGithubAppAccountsResponses = {
     200: Array<{
         id: string;
         account: string | null;
+        url: string | null;
     }>;
 };
 

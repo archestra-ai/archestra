@@ -932,6 +932,9 @@ export function GithubSyncSetupDialog({
             <SelectedAppBar
               provider="github"
               name={appLabel ?? "GitHub App"}
+              url={
+                accounts.data?.find((entry) => entry.id === appId)?.url ?? null
+              }
               icon={
                 mode === "pick"
                   ? (apps.find((app) => app.id === pickedId)?.icon ?? null)
@@ -1496,12 +1499,15 @@ function RepositoryNotice({
 function SelectedAppBar({
   provider,
   name,
+  url,
   icon,
   account,
   onChange,
 }: {
   provider: GitProvider;
   name: string;
+  /** The App's or token's page on its host; the name links there. */
+  url?: string | null;
   icon: string | null;
   account: string | null;
   onChange: () => void;
@@ -1513,7 +1519,18 @@ function SelectedAppBar({
         className="size-3.5"
         size={14}
       />
-      <span className="min-w-0 truncate font-medium">{name}</span>
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+        >
+          {name}
+        </a>
+      ) : (
+        <span className="min-w-0 truncate font-medium">{name}</span>
+      )}
       {account ? <AccountChip account={account} provider={provider} /> : null}
       <Button
         type="button"

@@ -252,16 +252,29 @@ class OpenAppaGithubAppSetup {
     return Promise.all(
       (await this.githubApps(organizationId)).map(async (app) => {
         try {
-          const installation = await fetchAsGithubApp<Installation>({
-            githubUrl: app.api,
-            appId: app.appId,
-            privateKey: app.privateKey,
-            path: `/app/installations/${encodeURIComponent(app.installationId)}`,
-          });
-          return { id: app.id, account: installation.account?.login ?? null };
+          const asApp = <T>(path: `/app${string}`) =>
+            fetchAsGithubApp<T>({
+              githubUrl: app.api,
+              appId: app.appId,
+              privateKey: app.privateKey,
+              path,
+            });
+          const [installation, profile] = await Promise.all([
+            asApp<Installation>(
+              `/app/installations/${encodeURIComponent(app.installationId)}`,
+            ),
+            // The App's own page on GitHub, so setup can link to it.
+            asApp<{ html_url?: unknown }>("/app").catch(() => null),
+          ]);
+          return {
+            id: app.id,
+            account: installation.account?.login ?? null,
+            url:
+              typeof profile?.html_url === "string" ? profile.html_url : null,
+          };
         } catch (err) {
           logger.warn({ err }, "OpenAPPA could not read a GitHub App account");
-          return { id: app.id, account: null };
+          return { id: app.id, account: null, url: null };
         }
       }),
     );

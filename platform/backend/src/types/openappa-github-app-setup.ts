@@ -138,5 +138,7 @@ export const AppaGithubAppAccountsSchema = z.array(
   z.object({
     id: z.string().uuid(),
     account: z.string().nullable(),
+    /** The App's page on GitHub, for a link to it. */
+    url: z.string().nullable(),
   }),
 );

@@ -490,7 +490,7 @@ function RepositoryProtection({
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        {protectionSentence(data.branchRules, appName, branchUrl)}
+        {protectionSentence(data.branchRules, appName, branchUrl, data.app)}
       </p>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
         {includeSentence(data.include, policyFile, folderUrl)}
@@ -576,13 +576,20 @@ function protectionSentence(
   rules: Protection["branchRules"],
   appName: string,
   branchUrl: string | null,
+  app: Protection["app"],
 ): ReactNode {
   const ruleset = hostLink(rules.url, "ruleset");
+  // The App by its own name, linked to its page; "GitHub App" before it is known.
+  const githubApp = app ? (
+    <>{hostLink(app.url, app.name)} App</>
+  ) : (
+    <span>GitHub App</span>
+  );
   if (rules.checkRule === "unposted")
     return (
       <>
         The Self-service branch protection {ruleset} holds pull requests until
-        the GitHub App can post the check.
+        the {githubApp} can post the check.
       </>
     );
   switch (rules.state) {
@@ -604,8 +611,8 @@ function protectionSentence(
     case "needs_permission":
       return (
         <>
-          The Self-service branch protection ruleset waits for the GitHub
-          App&apos;s Administration permission.
+          The Self-service branch protection ruleset waits for the {githubApp}
+          &apos;s Administration permission.
         </>
       );
     default:

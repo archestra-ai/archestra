@@ -220,6 +220,8 @@ type GithubAppProfile = {
   login: string;
   /** The App's name on GitHub, as its pages show it. */
   name: string;
+  /** The App's own page on GitHub. */
+  htmlUrl: string | null;
   /** The App's permissions page on GitHub, where an administrator grants more. */
   settingsUrl: string;
   /** The installation's page, where a changed set of permissions is accepted. */
@@ -274,6 +276,7 @@ export async function githubAppProfile(source: {
   const app = await asApp<{
     slug?: unknown;
     name?: unknown;
+    html_url?: unknown;
     owner?: { login?: unknown; type?: unknown } | null;
   }>("/app");
   if (typeof app.slug !== "string" || !app.slug)
@@ -297,6 +300,7 @@ export async function githubAppProfile(source: {
   const profile = {
     login: `${app.slug}[bot]`,
     name: typeof app.name === "string" && app.name ? app.name : app.slug,
+    htmlUrl: typeof app.html_url === "string" ? app.html_url : null,
     settingsUrl,
     installationUrl,
   };

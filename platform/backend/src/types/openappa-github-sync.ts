@@ -142,6 +142,9 @@ const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
  * a change.
  */
 export const AppaGithubAppGrantsSchema = z.object({
+  /** The App's name on GitHub, and its page there. */
+  name: z.string(),
+  url: z.string().nullable(),
   settingsUrl: z.string(),
   installationUrl: z.string().nullable(),
   permissions: z.array(

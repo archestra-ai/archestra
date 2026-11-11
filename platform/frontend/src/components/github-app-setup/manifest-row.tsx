@@ -25,7 +25,7 @@ export function ManifestRow({
 }: {
   index: number;
   title: React.ReactNode;
-  hint: string;
+  hint: React.ReactNode;
   /**
    * Takes the hint's place while this step's last attempt failed, in the
    * hint's own lines (clamped, whole in its tooltip), so nothing moves. A

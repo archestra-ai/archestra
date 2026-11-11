@@ -121832,6 +121832,8 @@ export type GetAppaRepositoryProtectionResponses = {
     200: {
         checkName: string;
         app?: {
+            name: string;
+            url: string | null;
             settingsUrl: string;
             installationUrl: string | null;
             permissions: Array<{
@@ -121939,6 +121941,8 @@ export type GetAppaGithubAppGrantsResponses = {
      * Default Response
      */
     200: {
+        name: string;
+        url: string | null;
         settingsUrl: string;
         installationUrl: string | null;
         permissions: Array<{

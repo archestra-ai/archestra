@@ -2397,6 +2397,9 @@ export type RepositoryProtection = {
    * Absent for GitLab.
    */
   app?: {
+    /** The App's name on GitHub, and its page there. */
+    name: string;
+    url: string | null;
     settingsUrl: string;
     installationUrl: string | null;
     permissions: Array<{
@@ -2594,6 +2597,8 @@ async function githubAppReadiness(
     }),
   );
   return {
+    name: profile.name,
+    url: profile.htmlUrl,
     settingsUrl: profile.settingsUrl,
     installationUrl: profile.installationUrl,
     permissions,

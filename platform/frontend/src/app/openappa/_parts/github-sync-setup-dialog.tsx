@@ -504,6 +504,7 @@ export function GithubSyncSetupDialog({
     DocsPage.PlatformAiToolGuardrailsGitSync,
   );
   const header = headerFor({
+    githubApp: appLabel ?? null,
     editing: !!editing,
     step,
     origin,
@@ -1047,7 +1048,7 @@ export function GithubSyncSetupDialog({
               <FieldDescription>
                 {gitlab
                   ? "Projects the token can reach."
-                  : "The repositories the selected App can access."}
+                  : `The repositories the ${appLabel ? `${appLabel} App` : "selected App"} can access.`}
                 {repositories.data?.manageUrl ? (
                   <>
                     {" "}
@@ -1172,7 +1173,7 @@ export function GithubSyncSetupDialog({
                       ? repositories.error.message
                       : gitlab
                         ? "The token can't reach any project."
-                        : `${appLabel ?? "The App"} can't access any. Give it access on GitHub.`}
+                        : `${appLabel ? `The ${appLabel} App` : "The App"} can't access any. Give it access on GitHub.`}
                   </InlineNoticeText>
                   <Button
                     type="button"
@@ -1677,6 +1678,8 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
 }
 
 function headerFor(params: {
+  /** The selected App's name, once there is one. */
+  githubApp: string | null;
   editing: boolean;
   step: Step;
   origin: Origin | null;
@@ -1748,7 +1751,7 @@ function headerFor(params: {
   if (params.step === "repo")
     return {
       title: "Choose the policy repository",
-      description: "From the repositories the GitHub App can see.",
+      description: `From the repositories the ${params.githubApp ? `${params.githubApp} App` : "GitHub App"} can see.`,
     };
   return {
     title: "Connecting the repository",

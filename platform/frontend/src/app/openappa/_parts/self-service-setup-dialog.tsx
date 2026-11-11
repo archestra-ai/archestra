@@ -1,7 +1,13 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ArrowLeft, Check, ExternalLink, LoaderCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
@@ -76,7 +82,7 @@ export function SelfServiceSetupDialog({
     true;
   const ready = NEEDED.every(granted);
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
-  const header = headerFor(step, appName);
+  const header = headerFor(step, appName, grants.data?.name ?? null);
   return (
     <StandardDialog
       open={open}
@@ -178,11 +184,11 @@ export function SelfServiceSetupDialog({
   );
 }
 
-function headerFor(step: Step, appName: string) {
+function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "app")
     return {
       title: "Turn on self-service",
-      description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The GitHub App needs two more permissions for that.`,
+      description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs two more permissions for that.`,
     };
   if (step === "folder")
     return {
@@ -251,26 +257,23 @@ function AppStep({
           index={1}
           title={
             <>
-              Grant Administration and Checks on the{" "}
-              <a
-                href={grants.settingsUrl.replace(/\/permissions$/, "")}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-4 hover:text-foreground/80"
-              >
-                App
-              </a>
+              Grant <code>Administration</code> and <code>Checks</code>{" "}
+              permissions to the {grants.name} App
             </>
           }
-          hint="Both as read and write, on the App's permissions page. Contents and Pull requests stay as they are."
+          hint={
+            <>
+              Set both to <code>Read and write</code>
+            </>
+          }
           inlineAction
-          waiting={checking}
+          waiting={false}
           error={error}
           onCheckAgain={onCheckAgain}
           result={ready ? grantedChip : null}
           action={
             <GitHubConnectButton
-              label="Update App permissions"
+              label="Update App"
               onClick={() =>
                 openGithubWindow(grants.settingsUrl, GITHUB_WINDOW)
               }
@@ -279,10 +282,10 @@ function AppStep({
         />
         <ManifestRow
           index={2}
-          title="Accept the change on the installation"
-          hint="GitHub asks the account the App is installed on to accept new permissions."
+          title="Accept new permissions"
+          hint={null}
           inlineAction
-          waiting={checking}
+          waiting={false}
           onCheckAgain={onCheckAgain}
           result={ready ? grantedChip : null}
           action={
@@ -295,7 +298,7 @@ function AppStep({
                   openGithubWindow(grants.installationUrl ?? "", GITHUB_WINDOW)
                 }
               >
-                <span>Accept on the installation</span>
+                <span>Accept new permissions</span>
                 <ExternalLink className="size-3" aria-hidden />
               </Button>
             ) : null
@@ -304,7 +307,9 @@ function AppStep({
       </ol>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
         {ready ? (
-          <span>The App has every permission self-service needs.</span>
+          <span>
+            The {grants.name} App has every permission self-service needs.
+          </span>
         ) : (
           <span>
             Missing:{" "}
@@ -315,11 +320,15 @@ function AppStep({
         <Button
           type="button"
           variant="outline"
-          size="xs"
+          size="icon-xs"
+          aria-label="Check again"
           disabled={checking}
           onClick={onCheckAgain}
         >
-          <span>{checking ? "Checking…" : "Check again"}</span>
+          <RefreshCw
+            className={cn("size-3.5", checking && "animate-spin")}
+            aria-hidden
+          />
         </Button>
       </div>
       {grants.permissions.some((entry) => entry.granted) ? (

@@ -473471,6 +473471,13 @@
                     "app": {
                       "type": "object",
                       "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "settingsUrl": {
                           "type": "string"
                         },
@@ -473505,6 +473512,8 @@
                         }
                       },
                       "required": [
+                        "name",
+                        "url",
                         "settingsUrl",
                         "installationUrl",
                         "permissions"
@@ -473857,6 +473866,13 @@
                   "nullable": true,
                   "type": "object",
                   "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "settingsUrl": {
                       "type": "string"
                     },
@@ -473891,6 +473907,8 @@
                     }
                   },
                   "required": [
+                    "name",
+                    "url",
                     "settingsUrl",
                     "installationUrl",
                     "permissions"

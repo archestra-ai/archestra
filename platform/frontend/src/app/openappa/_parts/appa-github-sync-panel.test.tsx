@@ -170,6 +170,8 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     ),
     http.get(`${url}/app-grants`, () =>
       HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
         settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
         installationUrl: "https://github.com/settings/installations/7",
         permissions: [
@@ -184,7 +186,11 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   show();
   expect(
     await screen.findByText(
-      /waits for the GitHub App's Administration permission/,
+      (_, element) =>
+        element?.tagName === "P" &&
+        /waits for the GitHub App's Administration permission/.test(
+          element.textContent ?? "",
+        ),
     ),
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
@@ -195,10 +201,10 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     await within(dialog).findByText(/Missing: Administration and Checks/),
   ).toBeVisible();
   expect(
-    within(dialog).getByRole("button", { name: /Update App permissions/ }),
+    within(dialog).getByRole("button", { name: /Update App/ }),
   ).toBeEnabled();
   expect(
-    within(dialog).getByRole("button", { name: /Accept on the installation/ }),
+    within(dialog).getByRole("button", { name: /Accept new permissions/ }),
   ).toBeEnabled();
   expect(
     within(dialog).getByRole("button", { name: "Continue" }),
@@ -236,6 +242,8 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   server.use(
     http.get(`${url}/app-grants`, () =>
       HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
         settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
         installationUrl: "https://github.com/settings/installations/7",
         permissions: [
@@ -1140,6 +1148,8 @@ test("links the pull request that includes the servers' folder while it waits, a
     ),
     http.get(`${url}/app-grants`, () =>
       HttpResponse.json({
+        name: "Policy App",
+        url: "https://github.com/apps/policy-app",
         settingsUrl: "https://github.com/settings/apps/policy-app/permissions",
         installationUrl: "https://github.com/settings/installations/7",
         permissions: [

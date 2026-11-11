@@ -74,7 +74,7 @@ function CostExportsDescription() {
       <ExternalDocsLink
         href={getDocsUrl(
           DocsPage.PlatformCostExports,
-          "export-costs-to-object-storage",
+          "schedule-exports-to-object-storage",
         )}
         className="hover:underline"
       >

@@ -2,12 +2,12 @@
 title: Blob Providers
 description: Connect an Amazon S3 bucket, a Google Cloud Storage bucket, or an Azure Blob Storage container once, so features that write files, such as scheduled cost exports, send them there
 order: 6
-lastUpdated: 2026-11-10
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/costs-and-limits/costs#export-costs-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
+Connect your organization's bucket once, and Archestra features that write files send them there. A [scheduled cost export](/docs/llm-proxy/costs-and-limits/exports#schedule-exports-to-object-storage) picks the provider by name and never sees its credentials, so nobody pastes cloud keys into each feature. On AWS, Google Cloud, and Azure, Archestra can sign in as its own pod identity, so there is no key to store or rotate.
 
 A blob provider writes to one of three stores:
 

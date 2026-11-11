@@ -1,6 +1,6 @@
 ---
 title: Costs
-description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label, and export them to your own bucket
+description: Break down organization-wide API spend, subscription usage, tokens, and requests by credential, team, agent, model, person, app, skill, or label
 order: 1
 lastUpdated: 2026-11-11
 ---
@@ -43,7 +43,7 @@ Below the headline cards, use the cost explorer to break down usage by any dimen
 2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
 3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Agent**, **Person**, **Credential**, **Provider**, and **Model** split by each other, so you can see who uses each agent, or which models each team used and what they cost. The **Tokens by agent and person** and **Spend by team and model** presets open two of these.
 
-Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export** to download the current table as CSV, JSON, or Parquet, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
+Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export** to [download the current table](/docs/llm-proxy/costs-and-limits/exports#download-a-view), or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
 
 ## Group Proxy Costs by Label
 
@@ -81,69 +81,7 @@ What to know:
 - Totals count each request once, even when it counts for both a team and its parent. A parent's row includes its child teams' usage, so rows can add up to more than the total.
 - Agent sharing, team membership, and which team is a child of which are read as they are now. Changing any of them, including moving a team under another parent, changes past figures here. A limit keeps the usage it already counted.
 
-## Export Costs to Object Storage
-
-Schedule a file of every hour's or day's model spend into your own bucket, so your FinOps tools show Archestra's LLM costs next to your cloud bill. Each file is a CSV in [FOCUS 1.2](https://focus.finops.org/), the FinOps Foundation's open format for cost and usage data, which tools such as Athena, BigQuery, and DuckDB read as a table.
-
-Before you start, add a [blob provider](/docs/admin/blob-providers) for an Amazon S3 or Google Cloud Storage bucket, or an Azure Blob Storage container. Managing exports takes the [`costExport`](/docs/reference/permissions#costExport:read) permissions. Scheduling, changing, or running one also requires [`llmCost:read`](/docs/reference/permissions#llmCost:read), so the permission never exports spend its holder could not see.
-
-1. Open **Costs & Limits → Exports** and click **Schedule export**.
-2. Name it and pick the blob provider under **Destination**.
-3. Under **How often**, pick **Daily** for one file per UTC day or **Hourly** for one file per hour.
-4. Under **Start from**, keep **Now**, or pick **A date** or **All recorded usage** to also write past usage.
-5. Optionally change the **Folder**, `cost-exports` by default.
-6. Click **Schedule**, then **Run now** to write a file right away. The row shows **Writing now…**, then **Healthy** once the file is in the bucket.
-
-Each row shows whether the export is **Healthy**, **Waiting for first file**, **Failing**, or **Paused**. A failing row shows why the bucket refused the file: click **Fix destination** to edit the blob provider, then **Retry**. For each error and its fix, see [Fix a Failed Connection Test](/docs/admin/blob-providers#fix-a-failed-connection-test).
-
-### Where Files Land
-
-Each period is one file, under the blob provider's key prefix, then the export's path prefix:
-
-```text
-<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10.csv
-<provider prefix>/cost-exports/year=2026/month=11/day=10/archestra-focus-2026-11-10T14.csv
-```
-
-The first line is a daily file and the second an hourly file for 14:00 to 15:00 UTC. The `year=`, `month=`, and `day=` folders are Hive-style partitions, so a query that filters by date reads only the matching files.
-
-### When Files Are Written
-
-Archestra writes a period once it has been over for 15 minutes, so requests still running at its end are counted. Expect each file about 15 to 20 minutes after its hour or day ends.
-
-- With **Start from** set to **Now**, the first file is the period in progress when you create the export. A past start is a backfill: every period since then is written, oldest first.
-- **Run now** writes every period that is due. When none is due, it rewrites the latest completed period.
-- A period always goes to the same key. A rerun or retry overwrites its file, so a period is never in two files.
-- After an outage or a failed write, the export writes every period since its last file.
-- A failing export retries on its own, less often the longer it fails: 5 minutes after the first failure, up to once an hour.
-
-### What Each Row Holds
-
-Each row is one hour of usage for one combination of provider, model, billing mode, team, agent, app or Knowledge connector, and person. Archestra does not bill model usage: the provider does, so the provider is the row's vendor and your organization is the billing account.
-
-| FOCUS column | Holds |
-| --- | --- |
-| `BilledCost`, `EffectiveCost` | Billed spend in USD. `0` for [subscription traffic](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost), which the provider does not bill per token. |
-| `ListCost` | Archestra's list-price estimate for every request, including subscription traffic. |
-| `ProviderName`, `PublisherName`, `InvoiceIssuerName` | The model provider, such as Anthropic or OpenAI. |
-| `BillingAccountId`, `BillingAccountName` | Your Archestra organization. |
-| `SubAccountId`, `SubAccountName` | The billing team. Empty when the request has none. |
-| `ResourceId`, `ResourceName`, `ResourceType` | The agent, LLM proxy, MCP gateway, app, or Knowledge connector that made the request. |
-| `SkuId` | The model. |
-| `ConsumedQuantity` | Input plus output tokens. |
-| `ChargePeriodStart`, `ChargePeriodEnd` | The hour, in UTC. The billing period is the calendar month. |
-| `Tags` | JSON with `archestra:billing-mode`, `archestra:provider-api`, and, when known, `archestra:team`, `archestra:user`, and `archestra:resource`. |
-
-Archestra-specific columns start with `x_`, as FOCUS reserves for custom columns: `x_BillingMode`, `x_InputTokens`, `x_OutputTokens`, `x_CacheReadTokens`, `x_CacheWriteTokens`, `x_Requests`, `x_ProviderApi`, `x_UserId`, and `x_UserEmail`.
-
-What to know:
-
-- Files name each person by email. Limit who can read the bucket or container accordingly.
-- To sum spend, add `BilledCost`. Adding `ListCost` counts subscription traffic at list price.
-- Changing the schedule never writes an hour twice. After a switch from hourly to daily, the rest of the current day is written as hourly files, and daily files start at the next midnight UTC.
-
 ## What to Know
 
-- **A split exports every metric:** the CSV of a split **Summary** has one line per row and split value, with requests, tokens, billed spend, and subscription estimate side by side.
-- **Query the same data via API:** the footer of the cost explorer shows the exact request behind the current view, so you can copy it for scripts or internal billing pipelines. [`GET /api/statistics/llm-usage`](/docs/reference/api/operations#tag/statistics/GET/api/statistics/llm-usage) groups requests, tokens, and spend by any mix of day, team, agent, person, credential, provider, and model.
+- **Export the numbers:** download a view, pull it from the API, or schedule files into your own bucket. See [Export Costs](/docs/llm-proxy/costs-and-limits/exports).
 - **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

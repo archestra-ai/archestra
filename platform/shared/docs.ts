@@ -63,7 +63,7 @@ export const DocsPage = {
   PlatformClaudeCodeExample: "integrations/ai-clients/claude-code",
   PlatformClaudeDesktopExample: "integrations/ai-clients/claude-desktop",
   PlatformConnection: "get-started/connect",
-  PlatformCostExports: "llm-proxy/costs-and-limits/costs",
+  PlatformCostExports: "llm-proxy/costs-and-limits/exports",
   PlatformCostsAndLimits: "llm-proxy/costs-and-limits",
   PlatformDeployment: "admin/deployment",
   PlatformDeploymentConfiguration: "admin/deployment/configuration",

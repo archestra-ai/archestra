@@ -21,7 +21,9 @@ runs:
     - name: Install Chromium
       working-directory: ./platform
       shell: bash
-      run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
+      run: |
+        "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
+        pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
 
     - name: Check screenshot determinism helpers
       working-directory: ./platform

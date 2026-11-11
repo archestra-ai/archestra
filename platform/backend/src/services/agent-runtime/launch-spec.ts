@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isClaudeCodeRuntimeCommand,
+  isCodexRuntimeCommand,
   isDefaultBrandedAppName,
   providerDisplayNames,
   type ResolvedAgentRuntimeTiers,
@@ -253,7 +254,7 @@ export async function buildAgentRunLaunchSpec(params: {
   const isClaudeCodeRuntime = isClaudeCodeRuntimeCommand(
     params.runtime.command?.[0],
   );
-  const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
+  const isCodexRuntime = isCodexRuntimeCommand(params.runtime.command?.[0]);
   if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
       409,

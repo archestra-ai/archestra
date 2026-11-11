@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import db from "@/database";
 import logger from "@/logging";
@@ -94,9 +93,9 @@ function key(
   poolId: string,
   member: Pick<Member, "providerApiKeyId" | "modelId">,
 ) {
-  const deployment = createHash("sha256")
-    .update(JSON.stringify([member.providerApiKeyId, member.modelId]))
-    .digest("hex");
+  // These are non-secret database/model IDs, not provider credentials. JSON
+  // preserves tuple boundaries without an unnecessary credential-like hash.
+  const deployment = JSON.stringify([member.providerApiKeyId, member.modelId]);
   return `model-pool-usage:${poolId}:${deployment}`;
 }
 

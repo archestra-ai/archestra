@@ -14,7 +14,7 @@
  * output has reached the client, a failure goes to the client as before,
  * because it cannot accept a second answer in its place.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SupportedProvider } from "@archestra/shared";
 import {
@@ -737,7 +737,7 @@ class PoolRetrySelection {
           (member) => (usage.get(member.memberId) ?? 0) === least,
         );
         // Unlike weighted affinity, usage routing makes a fresh choice each time.
-        return tied[Math.floor(Math.random() * tied.length)];
+        return tied[randomInt(tied.length)];
       }
       // Retain the initial affinity/weighted plan; retries and order fallbacks
       // draw again, always among the lowest healthy order.
@@ -977,7 +977,7 @@ function benchKey(poolId: string, memberId: string, kind?: "credit") {
 
 /** A number in [0, 1): seeded draws repeat for the same seed. */
 function random(seed: string | undefined, draw: number): number {
-  if (seed === undefined) return Math.random();
+  if (seed === undefined) return randomInt(0x100000000) / 0x100000000;
   const digest = createHash("sha256").update(`${seed}:${draw}`).digest();
   return digest.readUInt32BE(0) / 2 ** 32;
 }

@@ -1,7 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import logger from "@/logging";
+import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   configureAppaGithubSync,
   createAppaGithubRepository,
@@ -78,9 +78,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         description:
           "The GitHub App's permissions against what self-service needs, with the pages that grant them",
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(
-          AppaGithubAppGrantsSchema.nullable(),
-        ),
+        response: constructResponseSchema(AppaGithubAppGrantsSchema.nullable()),
       },
     },
     async (request, reply) =>

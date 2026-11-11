@@ -58,22 +58,7 @@ include = [
 ]
 ```
 
-GitHub App sources only. [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead.
-
-### Turn It On
-
-Click **Enable** under **Self-service MCP Guardrails** on the Git sync card in **Settings → Guardrails**. The dialog walks through three steps:
-
-1. **GitHub App:** grant the App **Administration** and **Checks** with **Update App**, then **Approve the request** on the installation. The refresh button reads what GitHub grants now.
-2. **Folder:** where each server's file goes, `mcp` unless you change it. Any nested folder works; no wildcards, no `..`.
-3. **Turn on:** Archestra creates the branch ruleset and, unless `appa.toml` includes the folder already, opens a pull request in your name that adds the include line and starts the folder. Merge it.
-
-Then [share each server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed, and share the **APPA Keeper** agent with those teams for use.
-
-What to know:
-
-- The card says what is in place, links the pull request until it is merged, and offers **Finish setup** while a part is missing.
-- **Edit** on the card changes self-service without disconnecting: the Repository step holds the switch and the folder. Unticking it deletes the ruleset and hides the registry action. Open pull requests stay open.
+Tick it when you set up Git sync, or click **Enable** on the Git sync card in **Settings → Guardrails** later; the dialog walks you through it. Then [share each server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed, and share the **APPA Keeper** agent with those teams for use. **Edit** on the card changes or turns it off later. GitHub App sources only; [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead.
 
 ### Edit a Server's Rules
 

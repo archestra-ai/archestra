@@ -61,7 +61,10 @@ use appa_eventlog::{
     postgres::{LeaseError, PostgresError},
 };
 use appa_runtime::{
-    api::{ExecuteRemedyPlanArgs, PublishedDeployment, RemedyAttempt, Runtime},
+    api::{
+        ExecuteRemedyPlanArgs, PublishedDeployment, RemedyAttempt, RemedyOutcome, RemedyRefusal,
+        Runtime,
+    },
     hooks,
 };
 use appa_runtime_api::{
@@ -833,6 +836,12 @@ impl State {
                 spelling: recorded.spelling,
                 dispatch: recorded.dispatch,
             };
+            let unanswered = matches!(
+                outcome,
+                RemedyOutcome::Refused {
+                    reason: RemedyRefusal::Unanswered { .. }
+                }
+            );
             let response = render_remedy_outcome(
                 outcome,
                 &RemedyAct {
@@ -841,6 +850,13 @@ impl State {
                     ruling: input.ruling,
                 },
             )?;
+            if unanswered && result_key.is_none() {
+                // An untracked remedy is keyed by its arguments, so a completed receipt would
+                // answer an identical retry with this notice instead of running it. The attempt
+                // committed nothing the receipt guards: the retry vouches afresh.
+                receipts.release(true);
+                return Ok(response);
+            }
             return finish_remedy(
                 &self.store,
                 receipts,

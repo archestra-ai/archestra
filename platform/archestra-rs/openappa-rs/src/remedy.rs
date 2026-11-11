@@ -18,7 +18,9 @@ use crate::{
     session::session_actor,
 };
 use appa_eventlog::encryption::StorageCipher;
-use appa_runtime::api::{ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation, RemedyRefusal};
+use appa_runtime::api::{
+    ExecuteRemedyPlanArgs, NoAnswerClass, RemedyOutcome, RemedyPresentation, RemedyRefusal,
+};
 use appa_runtime_api::ProposedCall;
 use napi_derive::napi;
 use serde::Serialize;
@@ -460,6 +462,16 @@ pub(crate) fn render_remedy_outcome(
                 "OpenAPPA remedy interrupted: {detail}"
             )));
         }
+        // Nothing was applied and the offer stands, so the model learns how to go on rather
+        // than the turn ending on a runtime failure.
+        RemedyOutcome::Refused {
+            reason: RemedyRefusal::Unanswered { annotator, class },
+        } => (
+            OutputSource::Runtime,
+            None,
+            true,
+            render_unanswered(&annotator, class),
+        ),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
         } => {
@@ -539,6 +551,19 @@ fn denied_block(feedback: &str) -> &str {
         }
         _ => feedback,
     }
+}
+
+/// Built from the typed class: the runtime's own text may change wording or grow detail.
+fn render_unanswered(annotator: &str, class: NoAnswerClass) -> String {
+    let next = match class.is_transient() {
+        true => "Call execute_remedy_plan again with the same offer id.".to_owned(),
+        false => format!(
+            "A retry will not help until an administrator checks the configuration of `{annotator}`."
+        ),
+    };
+    format!(
+        "[appa] Not applied: the policy check `{annotator}` gave no answer ({class}). Nothing changed and the offer still stands. {next}"
+    )
 }
 
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {

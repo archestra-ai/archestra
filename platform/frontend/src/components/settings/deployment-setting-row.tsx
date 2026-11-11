@@ -24,7 +24,10 @@ import { cn } from "@/lib/utils/tailwind";
  * variable, as the Break the glass settings do; otherwise it is a select.
  */
 export function DeploymentSettingRow<T extends string>(props: {
+  /** Names the setting in labels. */
   title: string;
+  /** The heading as shown, when it carries markup; the title otherwise. */
+  heading?: ReactNode;
   description: ReactNode;
   value: T | undefined;
   disabled: boolean;
@@ -101,7 +104,9 @@ export function DeploymentSettingRow<T extends string>(props: {
       )}
     >
       <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium leading-5">{props.title}</h3>
+        <h3 className="text-sm font-medium leading-5">
+          {props.heading ?? props.title}
+        </h3>
         <div className="text-sm leading-5 text-muted-foreground">
           {props.description}
         </div>

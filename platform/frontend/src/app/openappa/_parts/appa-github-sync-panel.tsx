@@ -357,11 +357,6 @@ function SelfServiceRow({
   const [setup, setSetup] = useState(false);
   const description = (
     <>
-      MCP Guardrails Self-Service is{" "}
-      <strong className="font-medium text-foreground">
-        {selfService.enabled ? "Enabled" : "Disabled"}
-      </strong>
-      .{" "}
       {eligible
         ? "MCP owners can manage MCP Guardrails. Additional GitHub App permissions are added to ensure the related pull requests are checked."
         : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
@@ -374,6 +369,14 @@ function SelfServiceRow({
         <DeploymentSettingRow
           compact
           title="MCP Guardrails Self-Service"
+          heading={
+            <>
+              MCP Guardrails Self-Service is{" "}
+              <strong className="font-bold">
+                {selfService.enabled ? "Enabled" : "Disabled"}
+              </strong>
+            </>
+          }
           description={description}
           value={selfService.enabled ? "enabled" : "disabled"}
           disabled

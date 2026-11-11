@@ -119,7 +119,7 @@ The policy can live in a folder of a repository that holds other work, such as `
 
 What to know:
 
-- An App created before Archestra kept these lacks the Checks and Administration permissions; **Enable** asks for them first, with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
+- An App created before Archestra kept these lacks the Administration and Checks permissions; **Enable** asks for them first, with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
 - To be rid of the ruleset, click **Disable** under **Self-service** on the Git sync card. A ruleset turned off or stripped of the rule on GitHub is put back at the next sync.
 
 ## Validations in Git

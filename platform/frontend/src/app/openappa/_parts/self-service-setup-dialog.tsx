@@ -34,7 +34,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "folder", label: "Folder" },
   { id: "enable", label: "Turn on" },
 ];
-const NEEDED = ["checks", "administration"] as const;
+const NEEDED = ["administration", "checks"] as const;
 const DEFAULT_FOLDER = "mcp";
 /** A folder beside the policy file: no `.` or `..` segment, no slash at either end. */
 const FOLDER =
@@ -250,7 +250,7 @@ function AppStep({
       <ol className="overflow-hidden rounded-lg border bg-card">
         <ManifestRow
           index={1}
-          title="Grant Checks and Administration on the App"
+          title="Grant Administration and Checks on the App"
           hint="Both as read and write, on the App's permissions page. Contents and Pull requests stay as they are."
           inlineAction
           waiting={checking}

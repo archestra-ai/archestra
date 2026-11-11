@@ -22,6 +22,7 @@ import {
   type streamText,
   type ToolSet,
 } from "ai";
+import { resolveRunLlmSelection } from "@/agents/a2a/llm-selection";
 import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
@@ -35,7 +36,6 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
-import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
 import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -78,7 +78,6 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import type { A2AAttachment } from "@/types/a2a-attachment";
-import { resolveForkParentSelection } from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -348,6 +347,8 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
+  // An agent set to a pool runs on it; a fork runs on its parent's model.
+  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
   const {
     modelId: resolvedModelId,
     selectedModel,
@@ -357,14 +358,13 @@ export async function executeA2AMessage(
     agent,
     organizationId,
     userId,
+    selfFork: params.selfFork,
     ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
   });
   // Run on the key that was selected with the model (the agent's own, or the
   // organization default's). Without it, key lookup prefers the caller's
   // personal key and the run sends a key the selection never chose.
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
-  // An agent set to a pool runs on it; a fork runs on its parent's model.
-  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
   // A fork that asked for fast or smart runs on it, never auto routed; one on
   // normal follows its parent's routing.
   const autoRouterId =
@@ -1328,40 +1328,6 @@ export async function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
-
-/**
- * A fork starts from its parent's model, moved to its tier when one is asked
- * for; any other run resolves from the agent's own configuration.
- */
-async function resolveRunLlmSelection(params: {
-  agent: {
-    llmApiKeyId: string | null;
-    modelId: string | null;
-    autoRouterId: string | null;
-    runtime: unknown;
-  };
-  organizationId: string;
-  userId: string;
-  parentLlm?: ModelSelection;
-  tier?: SubagentModelTier;
-}) {
-  const { llmApiKeyId, modelId, autoRouterId } = params.agent;
-  const base = await resolveForkParentSelection({
-    agent: { llmApiKeyId, modelId, autoRouterId },
-    organizationId: params.organizationId,
-    userId: params.userId,
-    parentLlm: params.parentLlm,
-    allowAutoModel: params.agent.runtime === null,
-  });
-  return params.tier
-    ? resolveSubagentTierSelection({
-        tier: params.tier,
-        parent: base,
-        organizationId: params.organizationId,
-        userId: params.userId,
-      })
-    : base;
-}
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {

@@ -34,7 +34,7 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { useFeature } from "@/lib/config/config.query";
@@ -111,12 +111,15 @@ function ModelPools() {
     enabled: canReadProviders === true,
     toastOnError: false,
   });
+  const { data: session } = useSession();
   const needsFirstProvider =
     canReadProviders === true &&
     providerKeys.isSuccess &&
-    // Only shared keys on a provider a pool can serve are of use here.
+    // Shared connections and the signed-in user's personal subscriptions.
     !providerKeys.data.some(
-      (key) => key.userId === null && isModelPoolProvider(key.provider),
+      (key) =>
+        (key.userId === null || key.userId === session?.user.id) &&
+        isModelPoolProvider(key.provider),
     ) &&
     query.isSuccess &&
     pools.length === 0;
@@ -250,7 +253,7 @@ function ModelPools() {
         <EmptyState
           icon={Server}
           title="Connect your first model provider"
-          description="A pool serves a model from shared provider keys. Add one, then create a pool."
+          description="A pool serves a model from provider connections, including your subscriptions. Add one, then create a pool."
           action={
             <PermissionButton
               size="sm"
@@ -392,7 +395,7 @@ function ModelPools() {
         open={providerDialogOpen}
         onOpenChange={setProviderDialogOpen}
         title="Add model provider"
-        description="Add a provider API key or a self-hosted endpoint"
+        description="Add a provider API key, subscription, or self-hosted endpoint"
         onSuccess={() => setCreating(true)}
       />
       {creating ? (

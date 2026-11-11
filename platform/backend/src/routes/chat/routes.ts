@@ -139,7 +139,10 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
-import { resolveChatModelPool } from "@/services/chat-model-pools";
+import {
+  resolveAgentModelPool,
+  resolveChatModelPool,
+} from "@/services/chat-model-pools";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -630,15 +633,39 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
+      // Pool membership and ownership can change between turns. Re-anchor
+      // before model/provider and attachment selection, never on the owner's
+      // stored personal credential. Only the current agent's configured pool
+      // inherits its shared-key access; other pools need the caller's own grant.
+      const poolAgent =
+        config.llmProxy.modelPoolsEnabled && conversation.modelPoolId
+          ? await AgentModel.findLlmSelectionFieldsById(conversation.agentId)
+          : null;
+      const poolSelection =
+        config.llmProxy.modelPoolsEnabled && conversation.modelPoolId
+          ? await (conversation.modelPoolId === poolAgent?.modelPoolId
+              ? resolveAgentModelPool
+              : resolveChatModelPool)({
+              organizationId,
+              userId: user.id,
+              modelPoolId: conversation.modelPoolId,
+            })
+          : null;
+      if (poolSelection) {
+        conversation.modelId = poolSelection.modelId;
+        conversation.chatApiKeyId = poolSelection.chatApiKeyId;
+      }
+
       // Auto is a live selection, not the normal tier snapshot saved when
       // the conversation began. Refresh only this turn's view, including its
       // provider, before attachment gating and wire/client selection.
-      const autoSelection = conversation.autoRouterId
-        ? await resolveAutoModelSelection(
-            organizationId,
-            conversation.autoRouterId,
-          )
-        : null;
+      const autoSelection =
+        !poolSelection && conversation.autoRouterId
+          ? await resolveAutoModelSelection(
+              organizationId,
+              conversation.autoRouterId,
+            )
+          : null;
       if (autoSelection) {
         conversation.modelId = autoSelection.modelId;
         conversation.chatApiKeyId = autoSelection.chatApiKeyId;
@@ -1356,7 +1383,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     externalAgentId,
                     sessionId: conversationId,
                     source: "chat",
-                    agentLlmApiKeyId: agent.llmApiKeyId,
+                    agentLlmApiKeyId:
+                      poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
                     providerKeySelection: autoSelection?.chatApiKeyId
                       ? { providerApiKeyId: autoSelection.chatApiKeyId }
                       : undefined,
@@ -1459,7 +1487,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     selectedModel,
                     modelId: conversation.modelId,
                     inputModalities: modelRow?.inputModalities ?? null,
-                    agentLlmApiKeyId: agent.llmApiKeyId,
+                    agentLlmApiKeyId:
+                      poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
                     abortSignal: chatAbortController.signal,
@@ -1599,7 +1628,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           externalAgentId,
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
-                          agentLlmApiKeyId: agent.llmApiKeyId,
+                          agentLlmApiKeyId:
+                            poolSelection?.chatApiKeyId ?? agent.llmApiKeyId,
                           providerKeySelection: autoSelection?.chatApiKeyId
                             ? { providerApiKeyId: autoSelection.chatApiKeyId }
                             : undefined,
@@ -3216,9 +3246,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      const effectiveModelPoolId =
+        modelPoolId ??
+        (config.llmProxy.modelPoolsEnabled &&
+        modelPoolId === undefined &&
+        !modelId &&
+        !chatApiKeyId &&
+        !autoRouterId
+          ? agent.modelPoolId
+          : null);
+
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (!modelPoolId && chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
+      if (
+        !effectiveModelPoolId &&
+        chatApiKeyId &&
+        chatApiKeyId !== agent.llmApiKeyId
+      ) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
@@ -3226,12 +3270,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // pool -> explicit pick -> member -> agent -> organization -> best available.
       // The explicit pick is a (model, key) pair — both are carried so the
       // chosen key is honored instead of being re-derived.
-      const llmSelection = modelPoolId
+      const llmSelection = effectiveModelPoolId
         ? {
-            ...(await resolveChatModelPool({
+            ...(await (effectiveModelPoolId === agent.modelPoolId
+              ? resolveAgentModelPool
+              : resolveChatModelPool)({
               organizationId,
               userId: user.id,
-              modelPoolId,
+              modelPoolId: effectiveModelPoolId,
             })),
             selectedModel: null,
           }
@@ -3291,7 +3337,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
-          modelPoolId: modelPoolId ?? null,
+          modelPoolId: effectiveModelPoolId ?? null,
           autoRouterId:
             ("autoRouterId" in llmSelection && llmSelection.autoRouterId) ||
             null,
@@ -3360,6 +3406,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // The agent picker sends only agentId. Its configured pool comes with
+      // it unless the request deliberately chooses a key, model or router.
+      if (
+        config.llmProxy.modelPoolsEnabled &&
+        nextAgent?.modelPoolId &&
+        body.modelPoolId === undefined &&
+        body.autoRouterId === undefined &&
+        body.modelId === undefined &&
+        body.chatApiKeyId === undefined
+      ) {
+        body.modelPoolId = nextAgent.modelPoolId;
+      }
+
       // Validate chatApiKeyId if provided. Skip validation when it is the
       // configured key of the agent the conversation will run on after this
       // update (permission flows through agent access) — the new agent when
@@ -3380,7 +3439,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.chatApiKeyId = auto.chatApiKeyId;
         body.modelPoolId = null;
       } else if (body.modelPoolId) {
-        const pooled = await resolveChatModelPool({
+        const agentModelPoolId = nextAgent
+          ? nextAgent.modelPoolId
+          : currentConversation.agent
+            ? (
+                await AgentModel.findLlmSelectionFieldsById(
+                  currentConversation.agent.id,
+                  user.id,
+                )
+              )?.modelPoolId
+            : null;
+        const pooled = await (body.modelPoolId === agentModelPoolId
+          ? resolveAgentModelPool
+          : resolveChatModelPool)({
           organizationId,
           userId: user.id,
           modelPoolId: body.modelPoolId,

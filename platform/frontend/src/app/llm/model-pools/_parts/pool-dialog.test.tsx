@@ -29,7 +29,7 @@ vi.mock("@/components/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "http://localhost:9000/v1",
 }));
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
 import {
   useAppearanceSettings,
@@ -72,6 +72,9 @@ function pool(benchedUntil: string | null): ModelPool {
 
 describe("PoolDialog", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({ data: null } as ReturnType<
+      typeof useSession
+    >);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
@@ -175,6 +178,41 @@ describe("PoolDialog", () => {
     ).toHaveValue(5);
     expect(screen.getByText(/Cooling down · \d+ s/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("retains another owner's connection without offering it for new members", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    saved.members = [
+      {
+        ...saved.members[0],
+        providerApiKeyId: "foreign-key",
+        providerApiKeyName: "Owner's Copilot",
+        provider: "github-copilot",
+        modelId: "gpt-4.1",
+      },
+    ];
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    expect(screen.getByRole("textbox", { name: "Provider key" })).toHaveValue(
+      "Owner's Copilot",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Provider key" }),
+    ).toHaveAttribute("readonly");
+    await user.type(screen.getByLabelText("Stream timeout"), "60");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    await user.click(
+      screen.getByRole("button", { name: "Add member to order 1" }),
+    );
+    expect(
+      screen.getAllByRole("textbox", { name: "Provider key" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Provider key" }),
+    ).toHaveTextContent("Z.ai");
   });
 
   it("keeps Save off while a weight is out of range", async () => {

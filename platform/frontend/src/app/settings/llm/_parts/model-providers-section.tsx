@@ -2,8 +2,12 @@
 
 import {
   builtInProviderLabel,
+  type CopilotPlan,
+  CopilotPlanSchema,
+  GITHUB_COPILOT_ORGANIZATION_LABEL,
   MAX_INTEGRATION_DISPLAY_NAME_LENGTH,
   type ModelProviderOverrides,
+  PERSONAL_SUBSCRIPTION_PROVIDERS,
   pruneIntegrationOverrides,
   type SupportedProvider,
   SupportedProviders,
@@ -40,7 +44,9 @@ import { providerSearchHaystack } from "@/lib/provider-search";
  * controls.
  *
  * A provider switched off leaves every picker, and the API refuses to
- * configure it. Keys that already exist keep working.
+ * configure it. Keys that already exist keep working. GitHub Copilot gets one
+ * card per plan, so personal subscriptions and enterprise plans switch off
+ * separately; both off is GitHub Copilot off.
  */
 export function ModelProvidersSection() {
   const { data: organization } = useOrganization();
@@ -71,10 +77,14 @@ export function ModelProvidersSection() {
   // by the name people here actually know it by, and the entry's aliases, so a
   // generic entry is findable by the products it serves.
   const query = search.trim().toLowerCase();
-  const visible = SupportedProviders.filter((provider) =>
+  const visible = CARDS.filter(({ provider, plan }) =>
     providerSearchHaystack({
       provider,
-      labels: [builtInProviderLabel(provider), draft[provider]?.displayName],
+      labels: [
+        cardLabel({ provider, plan }),
+        cardName(draft[provider] ?? EMPTY_DRAFT_ENTRY, plan),
+        cardNote({ provider, plan }),
+      ],
     })
       .toLowerCase()
       .includes(query),
@@ -90,10 +100,33 @@ export function ModelProvidersSection() {
     const next: ModelProviderOverrides = {};
     for (const provider of SupportedProviders) {
       const entry = draft[provider];
-      next[provider] = {
-        hidden: entry.hidden,
-        displayName: entry.displayName.trim() || null,
-      };
+      const displayName = entry.displayName.trim() || null;
+      if (provider !== "github-copilot") {
+        next[provider] = { hidden: entry.hidden, displayName };
+        continue;
+      }
+      // Both plan cards off is GitHub Copilot off, stored as the provider
+      // switch so every other place reads one answer.
+      const bothOff = CopilotPlanSchema.options.every(
+        (plan) => entry.hiddenPlans[plan],
+      );
+      const enterpriseName = entry.enterpriseDisplayName.trim() || null;
+      next[provider] = bothOff
+        ? {
+            hidden: true,
+            displayName,
+            plans: { enterprise: { displayName: enterpriseName } },
+          }
+        : {
+            displayName,
+            plans: {
+              personal: { hidden: entry.hiddenPlans.personal },
+              enterprise: {
+                hidden: entry.hiddenPlans.enterprise,
+                displayName: enterpriseName,
+              },
+            },
+          };
     }
     await updateMutation.mutateAsync({
       modelProviderOverrides: pruneIntegrationOverrides(next),
@@ -137,51 +170,78 @@ export function ModelProvidersSection() {
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {visible.map((provider) => {
+                    {visible.map(({ provider, plan }) => {
                       const entry = draft[provider] ?? EMPTY_DRAFT_ENTRY;
-                      const label = builtInProviderLabel(provider);
+                      const label = cardLabel({ provider, plan });
+                      const id = plan ? `${provider}-${plan}` : provider;
+                      const note = cardNote({ provider, plan });
+                      const fullLabel = note
+                        ? `${label} ${note.toLowerCase()}`
+                        : label;
+                      const available = plan
+                        ? !entry.hiddenPlans[plan]
+                        : !entry.hidden;
                       return (
                         <div
-                          key={provider}
-                          data-testid={`model-provider-row-${provider}`}
-                          data-hidden={entry.hidden}
-                          className="rounded-lg border bg-card/40 p-3 transition-colors data-[hidden=true]:opacity-60"
+                          key={id}
+                          data-testid={`model-provider-row-${id}`}
+                          data-hidden={!available}
+                          className="flex flex-col rounded-lg border bg-card/40 p-3 transition-colors data-[hidden=true]:opacity-60"
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <ProviderIcon provider={provider} size={18} />
-                              <span className="truncate text-sm font-medium">
-                                {label}
-                              </span>
+                          <div className="mb-2 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <ProviderIcon provider={provider} size={18} />
+                                <span className="truncate text-sm font-medium">
+                                  {label}
+                                </span>
+                              </div>
+                              {note ? (
+                                <p className="mt-0.5 truncate pl-[26px] text-xs text-muted-foreground">
+                                  {note}
+                                </p>
+                              ) : null}
                             </div>
                             <Label
-                              htmlFor={`model-provider-available-${provider}`}
+                              htmlFor={`model-provider-available-${id}`}
                               className="flex shrink-0 items-center gap-2 text-[11.5px] font-medium text-muted-foreground"
                             >
                               <Switch
-                                id={`model-provider-available-${provider}`}
-                                checked={!entry.hidden}
+                                id={`model-provider-available-${id}`}
+                                checked={available}
                                 onCheckedChange={(checked) =>
-                                  patch(provider, { hidden: !checked })
+                                  plan
+                                    ? patch(provider, {
+                                        hiddenPlans: {
+                                          ...entry.hiddenPlans,
+                                          [plan]: !checked,
+                                        },
+                                      })
+                                    : patch(provider, { hidden: !checked })
                                 }
                                 disabled={locked}
-                                aria-label={`Make ${label} available`}
+                                aria-label={`Make ${fullLabel} available`}
                               />
                               <span>Available</span>
                             </Label>
                           </div>
                           <Input
-                            aria-label={`${label} display name`}
-                            value={entry.displayName}
+                            aria-label={`${fullLabel} display name`}
+                            value={cardName(entry, plan)}
                             onChange={(event) =>
-                              patch(provider, {
-                                displayName: event.target.value,
-                              })
+                              patch(
+                                provider,
+                                plan === "enterprise"
+                                  ? {
+                                      enterpriseDisplayName: event.target.value,
+                                    }
+                                  : { displayName: event.target.value },
+                              )
                             }
                             placeholder={`Show as “${label}”`}
                             maxLength={MAX_INTEGRATION_DISPLAY_NAME_LENGTH}
                             disabled={locked}
-                            className="mt-2 text-sm"
+                            className="mt-auto text-sm"
                           />
                         </div>
                       );
@@ -204,10 +264,67 @@ export function ModelProvidersSection() {
   );
 }
 
-/** The name input is controlled, so the draft holds "" rather than null. */
-type DraftEntry = { hidden: boolean; displayName: string };
+/** One card in the grid: a provider, or one of GitHub Copilot's two plans. */
+type ProviderCard = { provider: SupportedProvider; plan?: CopilotPlan };
 
-const EMPTY_DRAFT_ENTRY: DraftEntry = { hidden: false, displayName: "" };
+const CARDS: ProviderCard[] = SupportedProviders.flatMap(
+  (provider): ProviderCard[] =>
+    provider === "github-copilot"
+      ? CopilotPlanSchema.options.map((plan) => ({ provider, plan }))
+      : [{ provider }],
+);
+
+/**
+ * The name a card ships with: the GitHub Copilot enterprise plan has its own,
+ * every other card the provider's.
+ */
+function cardLabel({ provider, plan }: ProviderCard): string {
+  return plan === "enterprise"
+    ? GITHUB_COPILOT_ORGANIZATION_LABEL
+    : builtInProviderLabel(provider);
+}
+
+/** The name an admin typed on this card: the plan's own, or the provider's. */
+function cardName(entry: DraftEntry, plan: CopilotPlan | undefined): string {
+  return plan === "enterprise"
+    ? entry.enterpriseDisplayName
+    : entry.displayName;
+}
+
+const PERSONAL_SUBSCRIPTION_NOTE = "Personal subscription";
+const ENTERPRISE_PLAN_NOTE = "Enterprise plan";
+
+/**
+ * The note beside a card's name: every personal subscription provider gets
+ * one, from the shared list, so a subscription added later is noted with no
+ * edit here. GitHub Copilot's enterprise plan card is the one exception.
+ */
+function cardNote({ provider, plan }: ProviderCard): string | null {
+  if (plan === "enterprise") return ENTERPRISE_PLAN_NOTE;
+  return PERSONAL_SUBSCRIPTION_PROVIDERS.includes(provider)
+    ? PERSONAL_SUBSCRIPTION_NOTE
+    : null;
+}
+
+/**
+ * The name inputs are controlled, so the draft holds "" rather than null. The
+ * GitHub Copilot personal card edits the provider's name, the enterprise card
+ * its own.
+ */
+type DraftEntry = {
+  hidden: boolean;
+  displayName: string;
+  /** GitHub Copilot only: its cards read and write these, never `hidden`. */
+  hiddenPlans: Record<CopilotPlan, boolean>;
+  enterpriseDisplayName: string;
+};
+
+const EMPTY_DRAFT_ENTRY: DraftEntry = {
+  hidden: false,
+  displayName: "",
+  hiddenPlans: { personal: false, enterprise: false },
+  enterpriseDisplayName: "",
+};
 
 function toDraft(
   overrides: ModelProviderOverrides | null,
@@ -215,9 +332,16 @@ function toDraft(
   const draft = {} as Record<SupportedProvider, DraftEntry>;
   for (const provider of SupportedProviders) {
     const override = overrides?.[provider];
+    const hidden = override?.hidden === true;
     draft[provider] = {
-      hidden: override?.hidden === true,
+      hidden,
       displayName: override?.displayName ?? "",
+      // GitHub Copilot switched off as a provider shows both plan cards off.
+      hiddenPlans: {
+        personal: hidden || override?.plans?.personal?.hidden === true,
+        enterprise: hidden || override?.plans?.enterprise?.hidden === true,
+      },
+      enterpriseDisplayName: override?.plans?.enterprise?.displayName ?? "",
     };
   }
   return draft;

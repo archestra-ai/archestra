@@ -551,35 +551,37 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   test.for([
     true,
     false,
-  ])("an Auto selection follows changed normal tiers on the next turn (%s)", async (autoModel, {
+  ])("an Auto selection follows changed normal tiers on the next turn (%s)", async (onAutoRouter, {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    const { configureAutoRouting, setAutoRoutingTiers } = await import(
-      "@/test/auto-routing"
-    );
-    const { default: AutoRoutingSettingsModel } = await import(
-      "@/models/auto-routing-settings"
-    );
+    const {
+      autoRouterId,
+      configureAutoRouting,
+      setAutoRoutingEnabled,
+      setAutoRoutingTiers,
+    } = await import("@/test/auto-routing");
+    const { default: AutoRouterModel } = await import("@/models/auto-router");
     config.autoRouting.enabled = true;
     const tiers = await configureAutoRouting(organizationId);
-    const old = await AutoRoutingSettingsModel.find(organizationId);
+    const routerId = await autoRouterId(organizationId);
+    const old = await AutoRouterModel.find(routerId);
     await ConversationModel.update(conversationId, user.id, organizationId, {
-      autoModel,
+      autoRouterId: onAutoRouter ? routerId : null,
       modelId: tiers[1].id,
       chatApiKeyId: old?.normalApiKeyId,
     });
-    await setAutoRoutingTiers(organizationId, { normal: tiers[2] });
+    await setAutoRoutingTiers(organizationId, { normal: tiers[2] }, routerId);
     const replacementKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret({ secret: { apiKey: "synthetic-current-normal" } })).id,
       { provider: "openai", access: "org" },
     );
-    const current = await AutoRoutingSettingsModel.find(organizationId);
+    const current = await AutoRouterModel.find(routerId);
     if (!current?.fastApiKeyId || !current.smartApiKeyId)
       throw new Error("missing tier keys");
-    await AutoRoutingSettingsModel.update(organizationId, {
-      enabled: false,
+    await setAutoRoutingEnabled(organizationId, false);
+    await AutoRouterModel.update(routerId, {
       tiers: {
         fast: { modelId: tiers[0].id, providerApiKeyId: current.fastApiKeyId },
         normal: { modelId: tiers[2].id, providerApiKeyId: replacementKey.id },
@@ -607,9 +609,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     await executionPromise;
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: tiers[autoModel ? 2 : 1].modelId,
+        model: tiers[onAutoRouter ? 2 : 1].modelId,
         provider: "openai",
-        providerKeySelection: autoModel
+        providerKeySelection: onAutoRouter
           ? { providerApiKeyId: replacementKey.id }
           : undefined,
       }),

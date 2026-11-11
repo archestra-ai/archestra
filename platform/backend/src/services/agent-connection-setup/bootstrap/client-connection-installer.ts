@@ -245,8 +245,12 @@ const installerEnv = { ...process.env, ARCHESTRA_CONNECT_INSTALLER: '1' };
 function finishSetup(ending, platform) {
   if (!ending) return;
   const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
-  const summary = ending.signIn
+  const summary = ending.signIn && ending.label === 'Grok'
+    ? 'Grok connection settings are saved. Browser authorization can be completed or renewed below.'
+    : ending.signIn
     ? ending.label + ' connection settings are saved. MCP sign-in is still required.'
+    : ending.label === 'Grok'
+    ? 'Grok connection settings are saved. A successful model request has not been verified.'
     : ending.label + ' is connected to ' + ending.appName + '.';
   console.log('\n' + paint('1;32', summary));
   if (ending.parts.length) {
@@ -266,8 +270,9 @@ function finishSetup(ending, platform) {
       // A Node.js helper the setup installed in the home directory runs with
       // this Node.js on every platform, without a shell to expand its path.
       const nodeHelper = !piReconnect && ending.signIn.command?.[0] === 'node' && /^~\/[\w./-]+$/.test(ending.signIn.command[1] ?? '');
-      const windowsLine = !piReconnect && !nodeHelper && ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
-      const runnable = ending.signIn.command && (piReconnect || nodeHelper || platform !== 'windows' || windowsLine !== null);
+      const grokSignIn = !piReconnect && !nodeHelper && ending.signIn.command?.[0] === 'node' && ending.label === 'Grok';
+      const windowsLine = !piReconnect && !nodeHelper && !grokSignIn && ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
+      const runnable = ending.signIn.command && (piReconnect || nodeHelper || grokSignIn || platform !== 'windows' || windowsLine !== null);
       const signInQuestion = piReconnect
         ? '  Authorize now? Keep your existing Pi login or choose to sign in again. [Y/n] '
         : '  Authorize now? This opens ' + ending.appName + ' in your browser. [Y/n] ';
@@ -276,14 +281,37 @@ function finishSetup(ending, platform) {
           ? spawnSync(process.execPath, [join(homedir(), '.archestra', 'pi', 'launch.cjs'), '--reconnect'], { stdio: [terminal, 'inherit', 'inherit'], shell: false })
           : nodeHelper
           ? spawnSync(process.execPath, [join(homedir(), ...ending.signIn.command[1].slice(2).split('/')), ...ending.signIn.command.slice(2)], { stdio: [terminal, 'inherit', 'inherit'], shell: false })
+          : grokSignIn
+          ? spawnSync(process.execPath, ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'], shell: false })
           : windowsLine !== null
           ? spawnSync(windowsLine, { stdio: [terminal, 'inherit', 'inherit'], shell: true })
           : spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'] });
         console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);
-      } else console.log('  ' + ending.signIn.text);
+        if (ending.label === 'Grok' && (child.error || child.status !== 0)) {
+          process.exitCode = child.status || 1;
+          console.log('Grok setup is incomplete: MCP authorization failed. Settings were preserved. Finish gateway authorization before signing in to the provider or starting Grok.');
+          return;
+        }
+      } else console.log('  ' + (grokSignIn ? 'Fresh authorization skipped. Any existing native login was kept unchanged, but was not rechecked. Authorize later with: ' : '') + ending.signIn.text);
     }
-    const shell = ending.launch && terminal !== null ? launchShell(platform) : null;
-    if (shell && ask(terminal, '\n' + paint('1', 'Start ' + ending.label + ' now?') + ' [Y/n] ')) {
+    let providerSignInFailed = false;
+    if (ending.providerSignIn) {
+      const login = ending.providerSignIn;
+      console.log('\n' + paint('1', 'Sign in to ' + login.label));
+      console.log('This is separate from MCP gateway authorization. Existing profile credentials are not copied.');
+      const nodeHelper = login.command?.length === 2 && login.command[0] === 'node' && /^~\/[\w./-]+$/.test(login.command[1]);
+      if (ending.label === 'Grok') console.log('Your existing native login is reused and refreshed by Grok. Renew it here only if needed.');
+      if (nodeHelper && terminal !== null && ask(terminal, ending.label === 'Grok' ? '  Renew native login now? [y/N] ' : '  Sign in now? [Y/n] ', ending.label !== 'Grok')) {
+        const child = spawnSync(process.execPath, [join(homedir(), ...login.command[1].slice(2).split('/'))], { stdio: [terminal, 'inherit', 'inherit'], shell: false });
+        providerSignInFailed = !!child.error || child.status !== 0;
+        if (providerSignInFailed) process.exitCode = child.status || 1;
+        console.log(providerSignInFailed ? '  Subscription sign-in did not finish. ' + login.howTo : paint('1;32', '  Native sign-in finished. Proxy guardrails admission is still pending the first model response.'));
+      } else console.log('  Native sign-in skipped. Existing native login was kept; Grok will check and refresh it when needed. ' + login.text + '\n  ' + login.howTo);
+    }
+    const nativeLaunch = ending.launch?.command?.[0] === 'node';
+    if (nativeLaunch && ending.label === 'Grok' && terminal !== null) console.log(ending.providerSignIn ? 'Managed start reuses your native subscription login and model selection. Guardrails admission awaits the first proxy response.' : 'Managed start requires the selected provider LLM credential. MCP login alone is not sufficient; missing API credentials stop before Grok opens.');
+    const shell = !nativeLaunch && ending.launch && terminal !== null ? launchShell(platform) : null;
+    if (!providerSignInFailed && (nativeLaunch || shell) && terminal !== null && ask(terminal, '\n' + paint('1', 'Start ' + ending.label + ' now?') + ' [Y/n] ')) {
       console.log('');
       // Ctrl+C belongs to the agent now. Without a listener it would also end
       // this process, and the shell would take the keyboard back from the agent.
@@ -292,7 +320,13 @@ function finishSetup(ending, platform) {
       try {
         // An interactive shell loads the profile wrapper the setup installed,
         // so the agent starts exactly as it will from a new terminal.
-        const child = spawnSync(shell, ['-ic', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] });
+        const child = nativeLaunch
+          ? spawnSync(process.execPath, ending.launch.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'], shell: false })
+          : spawnSync(shell, ['-ic', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] });
+        if (nativeLaunch && (child.error || child.status !== 0)) {
+          process.exitCode = child.status || 1;
+          console.log('Grok did not finish successfully. Connection settings remain saved; this is not a readiness confirmation.');
+        }
         if (!child.error) return;
       } finally { process.removeListener('SIGINT', keepRunning); }
     }
@@ -333,7 +367,7 @@ function terminalDevice() {
   return name && name !== '??' ? '/dev/' + name : '/dev/tty';
 }
 // Enter or anything but "n" means yes.
-function ask(terminal, question) {
+function ask(terminal, question, defaultYes = true) {
   process.stdout.write(question);
   const byte = Buffer.alloc(1);
   let answer = '';
@@ -343,7 +377,7 @@ function ask(terminal, question) {
     if (read === 0 || byte[0] === 10) break;
     answer += byte.toString('utf8');
   }
-  return !/^\s*n/i.test(answer);
+  return defaultYes ? !/^\s*n/i.test(answer) : /^\s*y/i.test(answer);
 }
 async function openDesktopTerminal({ origin, platform, noOpen, setupToken }) {
   // Desktop owns the agent process. A separate OS terminal survives its restart.

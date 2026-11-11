@@ -22,7 +22,7 @@ const SECRET: &str = "s3cret-value-7f3a";
 const SECRET_SHA256: &str = "a9794f37712ef58f7758db8b2bbb0c207ee00a8c2cda0a8fb3d428868970e98a";
 
 #[tokio::test]
-#[ignore = "requires the isolated Dagger 0.21.9 fixture from on-pull-requests-dagger-sdk.yml"]
+#[ignore = "requires the isolated Dagger 0.21.11 fixture from on-pull-requests-dagger-sdk.yml"]
 async fn real_sdk_exec_files_secrets_and_typed_errors() -> eyre::Result<()> {
     let cli = PathBuf::from(std::env::var("_EXPERIMENTAL_DAGGER_CLI_BIN")?);
     eyre::ensure!(cli.is_absolute() && cli.is_file(), "explicit CLI required");
@@ -50,7 +50,7 @@ async fn real_sdk_exec_files_secrets_and_typed_errors() -> eyre::Result<()> {
     );
     // Engine::start retries via the SDK cache if the explicit CLI fails. Both
     // paths must resolve to the same verified binary, not an automatic download.
-    let cached_cli = PathBuf::from(std::env::var("XDG_CACHE_HOME")?).join("dagger/dagger-0.21.9");
+    let cached_cli = PathBuf::from(std::env::var("XDG_CACHE_HOME")?).join("dagger/dagger-0.21.11");
     eyre::ensure!(
         cached_cli.canonicalize()? == cli.canonicalize()?,
         "SDK fallback must use the same verified CLI"
@@ -78,7 +78,7 @@ async fn real_sdk_exec_files_secrets_and_typed_errors() -> eyre::Result<()> {
         dagger_sdk::connect_opts(config, move |client| async move {
             let version = client.version().await?;
             eyre::ensure!(
-                version.trim_start_matches('v') == "0.21.9",
+                version.trim_start_matches('v') == "0.21.11",
                 "wrong engine: {version}"
             );
 

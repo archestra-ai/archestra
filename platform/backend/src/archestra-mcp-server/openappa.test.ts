@@ -902,7 +902,7 @@ describe("OpenAPPA tool execution", () => {
     expect(elicitSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-        message: "Approve this email?",
+        message: expect.stringContaining("Approve this email?"),
         kind: "openappa_review",
         reviewedTool: "archestra__todo_write",
         reviewedArguments: VALID_TODO,
@@ -1196,7 +1196,8 @@ describe("OpenAPPA tool execution", () => {
             content: [
               {
                 type: "text",
-                text: "[appa] this offer no longer stands; re-propose the call",
+                // RemedyRefusal::Superseded at the pinned OpenAPPA revision.
+                text: "[appa] This session or its policy changed after this offer was made, so the offer no longer applies. Call the blocked tool again with the same arguments; it will be checked again.",
               },
             ],
           },

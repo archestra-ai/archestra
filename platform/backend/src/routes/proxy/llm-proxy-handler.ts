@@ -1,3 +1,4 @@
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
@@ -22,7 +23,7 @@ import { uuidv7 } from "@/utils/uuid";
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -136,7 +137,10 @@ import {
   scrubOpenappaIngress,
 } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
-import { APPA_WITHDRAWN_CHILD_RETURN } from "@/proxy/plugins/appa-plugin-archestra/types";
+import {
+  APPA_WITHDRAWN_CHILD_RETURN,
+  GROK_DEFERRED_TOOLS,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
@@ -256,6 +260,7 @@ import {
   redactEncryptedChatInteraction,
   resolveEncryptedChatAuditContext,
 } from "./utils/encrypted-chat-session";
+import { GrokDeferredTools } from "./utils/grok-deferred-tools";
 import type { SessionSource } from "./utils/headers/session-id";
 
 const {
@@ -359,6 +364,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  abortSignal?: AbortSignal;
   prepareAttempt: (member: PlannedMember) => Promise<void>;
   checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
@@ -735,6 +741,11 @@ async function handleObservedLLMProxy<
 
   // Removes gateway tool attestation markers from the body in place
   // before adapters, logs, provider requests, or database records access them.
+  const grokDeferred =
+    utils.headers.clientApp.detectGrokClientId(request.headers) ||
+    request.headers["x-archestra-agent-id"] === "grok-build"
+      ? new GrokDeferredTools(body)
+      : undefined;
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
@@ -1272,12 +1283,23 @@ async function handleObservedLLMProxy<
     personalTokenUserId ??
     regularVirtualKeyUserId;
 
+  if (
+    proof.serviceAccountId &&
+    serviceAccountId &&
+    proof.serviceAccountId !== serviceAccountId
+  ) {
+    throw new ApiError(401, "Credentials identify different service accounts.");
+  }
+  serviceAccountId ??= proof.serviceAccountId;
   if (serviceAccountId && authenticatedUserId) {
     throw new ApiError(
       401,
       "Credentials identify both a user and a service account.",
     );
   }
+  const authenticatedPrincipalId = serviceAccountId
+    ? serviceAccountUserId(serviceAccountId)
+    : authenticatedUserId;
   if (serviceAccountId) {
     // A caller-supplied user hint cannot change the credential's principal.
     userId = undefined;
@@ -1370,6 +1392,7 @@ async function handleObservedLLMProxy<
           },
           grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
           sessionId,
+          retryCountHeader: headersForExtraction["x-archestra-num-retries"],
         })
       : null;
   const endpointModel = modelPoolPlan
@@ -1419,7 +1442,7 @@ async function handleObservedLLMProxy<
       provider: providerName,
       modelId: alias,
       organizationId: resolvedAgent.organizationId,
-      authenticatedUserId,
+      authenticatedUserId: authenticatedPrincipalId,
     });
     if (!aliasAccess.allowed) throw new ApiError(403, aliasAccess.message);
   }
@@ -1551,18 +1574,24 @@ async function handleObservedLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A user's chat or agent call on `auto` (marked by the in-process caller,
-    // which resolved the chat or agent to it) is routed across the auto-routing
-    // tiers. The router picks the session's tier and key, which the call is
+    // A user's chat or agent call on an auto router (named by the in-process
+    // caller, which resolved the chat or agent to it) is routed across that
+    // router's tiers. The router picks the session's tier and key, which the call is
     // sent with the way a pool member is, even when the tier is the model the
     // call names: the tier's key first, else one the user may use. A call the
     // router cannot route runs on the model it names (the normal tier). Agent
     // Runtime agents are never routed. A pooled call is accounted for by its
     // pool; it is never also routed.
+    const autoRouterHeader =
+      headersForExtraction[AUTO_ROUTER_ID_HEADER.toLowerCase()];
+    const autoRouterId =
+      typeof autoRouterHeader === "string" && autoRouterHeader
+        ? autoRouterHeader
+        : null;
     const autoRouteWire =
       internalCall &&
       config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      autoRouterId !== null &&
       resolvedAgent.runtime === null &&
       !modelPoolPlan
         ? poolWire
@@ -1622,6 +1651,14 @@ async function handleObservedLLMProxy<
       organizationId: resolvedAgent.organizationId,
       llmProxyId: resolvedAgent.id,
     });
+    if (appaActive && hasProxyPlugins && grokDeferred)
+      gatewayToolDeclarations.push(
+        ...grokDeferred.prepare({
+          organizationId: resolvedAgent.organizationId,
+          interactionType: provider.interactionType,
+          body,
+        }),
+      );
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
@@ -1629,6 +1666,7 @@ async function handleObservedLLMProxy<
         internalChat: isInternalChat,
         clientBindings,
       });
+    grokDeferred?.bindIdentity(toolIdentity);
 
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
@@ -1660,10 +1698,11 @@ async function handleObservedLLMProxy<
     }
 
     const autoRoute =
-      autoRouteUser && autoRouteWire
+      autoRouteUser && autoRouteWire && autoRouterId
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
+            routerId: autoRouterId,
             userId: autoRouteUser.id,
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
@@ -1799,7 +1838,7 @@ async function handleObservedLLMProxy<
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
-      authenticatedUserId,
+      authenticatedUserId: authenticatedPrincipalId,
       catalogModel: catalogModel ?? undefined,
       policySnapshot: catalogModel
         ? {
@@ -1886,6 +1925,8 @@ async function handleObservedLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      if (appaActive && grokDeferred)
+        pluginContext.resources.set(GROK_DEFERRED_TOOLS, grokDeferred);
       if (
         (admission.kind === "ungoverned" || admission.kind === "waived") &&
         admission.withdrawnChildReturn
@@ -2106,7 +2147,10 @@ async function handleObservedLLMProxy<
     // Every request owns its upstream work, including retries and pool members.
     const abortSignal = clientDisconnectSignal({ request, reply });
     const createUpstreamClient = (target: {
-      adapter: Pick<typeof provider, "createClient" | "provider">;
+      adapter: Pick<
+        typeof provider,
+        "createClient" | "provider" | "isSubscriptionCredential"
+      >;
       apiKey: string | undefined;
       baseUrl: string | undefined;
       headers: Record<string, string>;
@@ -2134,6 +2178,14 @@ async function handleObservedLLMProxy<
         llmProviderApiKeyId: target.providerApiKeyId,
         sessionId: sessionId ?? undefined,
         onResponseHeaders: (responseHeaders) => {
+          if (target.adapter.provider === "xai") {
+            billingMode = utils.resolveInteractionBillingMode({
+              isSubscriptionCredential:
+                target.adapter.isSubscriptionCredential?.(target.apiKey) ===
+                true,
+              autodetectEnabled: config.llmCost.subscriptionAutodetect,
+            });
+          }
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
@@ -2154,7 +2206,10 @@ async function handleObservedLLMProxy<
       const row = await LlmProviderApiKeyModel.findById(
         member.providerApiKeyId,
       );
-      const adapter = memberAdapter(member.provider);
+      const adapter = memberAdapter(
+        member.provider,
+        modelPoolPlan ? (poolWire ?? undefined) : undefined,
+      );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
       }
@@ -2193,7 +2248,7 @@ async function handleObservedLLMProxy<
             provider: member.provider,
             modelId,
             organizationId: resolvedAgent.organizationId,
-            authenticatedUserId,
+            authenticatedUserId: authenticatedPrincipalId,
           });
           if (!access.allowed) throw new ApiError(403, access.message);
         }
@@ -2312,7 +2367,22 @@ async function handleObservedLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
+            abortSignal,
             prepareAttempt: async (member) => {
+              if (
+                poolWire === "openai-responses" &&
+                member.provider === "azure"
+              ) {
+                await validateAzureModelOperation({
+                  providerApiKeyId: member.providerApiKeyId,
+                  modelId: member.modelId,
+                  operation: "responses",
+                  parameters: requestAdapter.getOriginalRequest() as Record<
+                    string,
+                    unknown
+                  >,
+                });
+              }
               await ModelModel.assertAvailable({
                 provider: member.provider,
                 modelId: member.modelId,
@@ -3866,6 +3936,14 @@ async function handleStreaming<
     const lifecycleError = clientDisconnected
       ? new ApiError(499, "Client disconnected during inference")
       : error;
+    if (ctx.modelPool && ctx.upstreamAttempt.attemptOutcome === "answered") {
+      // Opening a pooled stream chose the member; it did not prove the
+      // generation completed. A later failure is terminal, never failover.
+      ctx.upstreamAttempt.attemptOutcome = "failed";
+      ctx.upstreamAttempt.failureReason =
+        poolFailoverReason(lifecycleError, ctx.upstreamAttempt.provider)
+          ?.reason ?? "stream_failed";
+    }
     streamFailureMessage = upstreamErrorMessage(
       lifecycleError,
       provider.extractErrorMessage,
@@ -3910,6 +3988,7 @@ async function handleStreaming<
         ? codexError.completion.choices[0].finish_reason
         : "error";
     }
+    if (provider.provider === "xai") billingMode = getBillingMode();
     const eofError =
       error instanceof ResponsesStreamIncompleteError &&
       appaWireFamily(provider.interactionType) === "openai:responses"
@@ -4979,7 +5058,7 @@ async function failResponsesGeneration(params: {
   response: unknown;
   ctx: Pick<
     LLMProxyContext<unknown>,
-    "pluginRegistry" | "pluginContext" | "telemetry"
+    "pluginRegistry" | "pluginContext" | "telemetry" | "upstreamAttempt"
   >;
   error?: Error;
 }): Promise<boolean> {
@@ -4992,6 +5071,11 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
+  if (response?.status === "failed" && params.ctx.upstreamAttempt.modelPoolId) {
+    params.ctx.upstreamAttempt.attemptOutcome = "failed";
+    params.ctx.upstreamAttempt.failureReason =
+      typeof details?.code === "string" ? details.code : "generation_failed";
+  }
   if (
     response?.status === "incomplete" ||
     (params.error instanceof CodexResponsesGenerationError &&
@@ -5059,20 +5143,25 @@ async function evaluateProxyPluginToolCalls(
         ? call.arguments
         : JSON.stringify(call.arguments),
   }));
+  const grokDeferred = context.resources.get(GROK_DEFERRED_TOOLS) as
+    | GrokDeferredTools
+    | undefined;
   const outcome = await registry.onToolCalls({
     ...context,
-    toolCalls,
+    toolCalls: grokDeferred?.unwrapCalls(toolCalls) ?? toolCalls,
     canRewriteToolCalls,
     canShowToolCallReview,
   });
   if (outcome.decision === "allow") {
-    const releasedCalls = outcome.toolCalls.map((toolCall) => ({
+    const authorizedCalls = outcome.toolCalls.map((toolCall) => ({
       ...toolCall,
       arguments:
         typeof toolCall.arguments === "string"
           ? toolCall.arguments
           : JSON.stringify(toolCall.arguments),
     }));
+    const releasedCalls =
+      grokDeferred?.wrapCalls(authorizedCalls) ?? authorizedCalls;
     return {
       refusal: null,
       toolCalls: releasedCalls,
@@ -5296,6 +5385,7 @@ async function openUpstream<TRequest, T>(params: {
   try {
     return await openThroughModelPool({
       plan: pool.plan,
+      signal: pool.abortSignal,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
       prepareAttempt: (member) => {
@@ -5377,7 +5467,7 @@ function logUpstreamRetry(params: {
   const { attempt, delayMs, provider, model } = params;
   logger.warn(
     { attempt, delayMs, provider, model },
-    "Retrying upstream connection before receiving model output",
+    "Retrying upstream call before receiving model output",
   );
 }
 

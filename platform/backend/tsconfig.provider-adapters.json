@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "./.tsbuild/provider-adapters.tsbuildinfo"
   },
   "files": [
+    "src/routes/proxy/adapters/xai-native-session.ts",
     "src/routes/proxy/adapters/anthropic-openai-translator.ts",
     "src/routes/proxy/adapters/anthropic-openai.ts",
     "src/routes/proxy/adapters/anthropic.ts",

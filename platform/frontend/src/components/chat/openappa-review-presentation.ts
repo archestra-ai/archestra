@@ -135,10 +135,12 @@ export function getReviewCardView({
   message,
   reviewedTool,
   reviewedArguments,
+  reviewedCoverage,
 }: {
   message: string;
   reviewedTool?: string;
   reviewedArguments?: string;
+  reviewedCoverage?: string[];
 }): ReviewCardView {
   const presentation = parseReviewPresentation({
     message,
@@ -146,7 +148,7 @@ export function getReviewCardView({
     ...(reviewedArguments ? { reviewedArguments } : {}),
   });
   if (presentation.tool || presentation.arguments !== undefined) {
-    const accepted = acceptedCoverage(presentation.rest);
+    const accepted = reviewedCoverage ?? acceptedCoverage(presentation.rest);
     const description = accepted?.length
       ? [
           REVIEW_STATUS_DESCRIPTION,

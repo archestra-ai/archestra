@@ -1090,6 +1090,25 @@ attention = ["finance-signoff"]
 
 An authority's [tags](#tags) select the tools it can review for unmet audience, trust, or effects requirements. Attention approvals are selected by `permits.attention` instead.
 
+`except_tags` removes tools from that selection. The authority cannot approve an unmet audience, trust, or effects requirement of a tool that has one of these tags. Attention approvals are not affected. In this example, `rollout` approves an unmet trust requirement of every tool except `send_payment`:
+
+```toml
+[[policy.tool]]
+name = "send_payment"
+tags = ["enforced"]
+requires = { trust = "trusted" }
+delta = {}
+
+[[policy.authority]]
+name = "rollout"
+except_tags = ["enforced"]
+
+[policy.authority.permits]
+trust_below = "trusted"
+```
+
+No other authority permits `trust_below`, so `send_payment` stays blocked while the trajectory is below `trusted`. Each tag in `except_tags` MUST be on at least one tool and MUST NOT be in the authority's own `tags`. OpenAPPA refuses to load a policy that breaks either rule.
+
 The optional `hint` explains what the authority reviews. It does not expand `permits`.
 
 ### Implementing an authority
@@ -1099,7 +1118,7 @@ An authority can use a built-in reviewer, an HTTP service, or a local program. C
 | Implementation | Behavior |
 |---|---|
 | `builtin = "hitl"` | Asks a person to review the exact call and the requirements to be approved. |
-| `builtin = "approve"` | Automatically approves every matching request within `permits`. |
+| `builtin = "approve"` | Automatically approves every matching request within `permits`. When a blocked call has a plan that needs only `approve` authorities, OpenAPPA applies that plan itself and releases the call. The agent does not see the block. A plan that also accepts a narrowing stays with the agent. |
 | `builtin = "claude-code"` or `builtin = "llm"` | A model approves or denies using the declaration, call, and unmet requirements. |
 | `builtin = "<module name>"` | Runs a module loaded from `--modules-dir` with the same system permissions as OpenAPPA. |
 | `url` or `command` | Asks an external service or local program to approve or deny the call. |
@@ -1347,6 +1366,24 @@ version = 2
 timeout_ms = 2000
 max_body_bytes = 65536
 ```
+
+An entry can also name every policy file in one folder, such as `mcp/*.toml`. Then each team can add its own file without a change to the root:
+
+```toml
+include = [
+  "batteries/github/appa.toml",
+  "mcp/*.toml",
+]
+```
+
+In such an entry, `*` matches any run of characters in a file name. Only the file name can hold `*`, and it MUST end in `.toml`. The matching files load at the entry's position, in file-name order, as if `include` listed each one. The following rules apply to such an entry:
+
+- Only a regular file matches. A hidden file, a folder and a symbolic link do not match.
+- The folder MUST be the root file's folder or a folder in it, after OpenAPPA resolves symbolic links. The entry MUST NOT contain `..`.
+- A folder that does not exist matches no file.
+- The root file does not match its own entry.
+- A file that another entry names on its own loads only at that entry. Two such entries cannot match the same file.
+- A hosted policy cannot use such an entry, because no files are beside it.
 
 OpenAPPA checks declarations in the root file first, then declarations from included files in the order listed by `include`. The following rules apply:
 

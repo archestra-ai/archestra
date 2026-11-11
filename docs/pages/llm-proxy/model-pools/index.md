@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-11-06
+lastUpdated: 2026-11-10
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -46,7 +46,7 @@ For example, a `gpt-6.1-sol` pool with an OpenAI key of weight 3 and an Azure AI
 
 ## When a Member Fails
 
-A request moves to the next member when a member fails before it starts to answer. The client sees an error only when the last member fails, or when the request itself is at fault.
+A request moves to another healthy member when one fails before it starts to answer, within the pool's [retries](#retries). The client sees an error when the last member fails, or when the request itself is at fault.
 
 | When the member | What happens |
 | --- | --- |
@@ -59,13 +59,27 @@ A request moves to the next member when a member fails before it starts to answe
 
 A member with a transient failure cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
 
-- The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
-- Members cooling down after transient failures remain fallback candidates, the one back soonest first. Credit-exhausted members stay excluded; if all eligible members are credit-exhausted, the request fails with `503` without contacting a provider.
+- The last member has nowhere to move to, so the pool does not time it out.
+- Members cooling down are skipped. If every member is cooling down, the request fails with `503` without contacting a provider.
 - A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
 
-### Timeouts and Cooldown
+### Retries
 
-Set these under **Timeouts and cooldown** when you create or edit a pool. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
+Retries are always on. After a temporary failure, the pool selects a healthy deployment again. Change the counts and delays under **Failover** when you edit a pool; a blank field keeps its default, shown on hover of its help icon. Each selection uses order and weight: a healthy member in order 1 takes precedence over order 2.
+
+- **Retries:** additional selections after the first, from 0 to 10; the default is 2. Members share this budget, rather than receiving that many attempts each. Once exhausted, each later order gets a separate fallback attempt and retry budget. Set 0 to skip additional selections within the current group, not to disable later-order fallbacks.
+- **Retries by error type:** give connection errors, timeouts, rate limits, or server errors their own retry count. The first failure chooses the budget for that group or order fallback; switching members or encountering a different error does not reset it. Invalid requests are returned immediately; rejected credentials, missing models and exhausted credit move to later-order fallbacks.
+- **Backoff:** starts at 500 ms, doubles up to 8000 ms, and uses 75–100% of that delay. A provider's positive `Retry-After` replaces the delay when within the maximum; longer waits move to a later order instead.
+
+Under **Member overrides**, set a member's retries, delays or retries by error type for when that member has the first failure. Blank fields use the pool's values, and removing a member removes its override. A request can override every retry count with `x-archestra-num-retries: 0` through `10`; it cannot enable retries for permanent failures or after streaming output starts.
+
+- A retry can select a later order when all lower-order members are cooling down. Once an explicit order fallback begins, its retries stay within that order.
+- Cooling members are excluded from selections. If none are healthy, the request fails instead of replaying a cooling member. A pool with only one member gives it its bounded recovery attempts before putting it on cooldown.
+- Each dispatched attempt appears in proxy logs and counts toward `x-archestra-attempts`. Retries can add latency and provider charges, especially after timeouts; set **Retries** to 0 to keep only order fallbacks.
+
+## Timeouts and Cooldown
+
+Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
 
 | Setting | Default | What it sets |
 | --- | --- | --- |
@@ -110,12 +124,12 @@ Point a client at any of these endpoints and ask for the pool's name as the mode
 | --- | --- | --- |
 | **Unified Model API** | `https://<archestra-host>/v1/unified-model` | Any OpenAI-compatible client. `/models` lists the pool under its plain name. |
 | **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
-| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions |
+| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions or Responses |
 
 Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-6.1-sol`.
 
 - **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
-- **Members on another API:** Claude Code and OpenAI clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
+- **Members on another API:** Claude Code and OpenAI Chat Completions clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
 
 ## See Which Member Answered
 
@@ -129,7 +143,7 @@ Each attempt is priced as the member that made it, with that member's provider a
 
 ## Limits
 
-- Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Unified Model API.
+- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI or Azure AI Foundry; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
 - Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
 - Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
 - Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

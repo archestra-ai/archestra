@@ -1030,8 +1030,10 @@ poolTest(
     expect(
       rows.find((row) => row.providerApiKeyId === unavailable.id),
     ).toMatchObject({
-      inputTokens: null,
-      outputTokens: null,
+      // No upstream call was dispatched for this member. Its failed-attempt
+      // receipt records zero usage, not the preceding member's observed usage.
+      inputTokens: 0,
+      outputTokens: 0,
       model: "gemini-2.5-flash",
       attemptOutcome: "failed",
       failureReason: "key_unavailable",
@@ -1598,7 +1600,9 @@ for (const vertex of [false, true]) {
             id: pool.poolId,
             input: {
               name: "gemini-pool",
-              cooldownSeconds: 0,
+              // Failed deployments must sit out both the fresh weighted
+              // retry and the follow-up turn; zero cooldown allows reselection.
+              cooldownSeconds: 30,
               members: [
                 ...["gemini-3.8-flash", "gemini-3.7-flash"].map(
                   (modelId, index) => ({
@@ -1885,6 +1889,10 @@ for (const vertex of [false, true]) {
               json: () => JSON.parse(body),
             };
           };
+          // The seeded initial plan is Gemini A, Gemini B, Sonnet. Make the
+          // fresh retry draw choose B before Sonnet as well, deterministically.
+          const random = vi.spyOn(Math, "random").mockReturnValue(0);
+          onTestFinished(() => random.mockRestore());
           const first = await ask();
           expect(first.statusCode, first.body).toBe(200);
           const frames = stream

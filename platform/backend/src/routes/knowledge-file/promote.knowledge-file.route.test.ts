@@ -2,7 +2,10 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -82,6 +85,39 @@ describe("promote a chat attachment into the knowledge repository", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("lands an indexed attachment in the configured environment", async ({
+    makeKnowledgeBase,
+  }) => {
+    const environment = await createEnvironment({
+      organizationId,
+      userId: user.id,
+      data: { name: "Support" },
+    });
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource: "knowledgeSource",
+      environmentId: environment.id,
+    });
+    const kb = await makeKnowledgeBase(organizationId, {
+      access: { users: [user.id], preset: "manage" },
+    });
+    const { attachment } = await makeAttachment({
+      ownerId: user.id,
+      orgId: organizationId,
+    });
+    const response = await promote({
+      attachmentId: attachment.id,
+      knowledgeBaseId: kb.id,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const connectors = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+      kb.id,
+      { canReadAll: true },
+    );
+    expect(connectors).toHaveLength(1);
+    expect(connectors[0].environmentId).toBe(environment.id);
   });
 
   test("copies the attachment into the repository", async () => {

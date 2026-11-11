@@ -38,7 +38,7 @@ class RoutingDecisionModel {
   }
 
   static async find(params: {
-    organizationId: string;
+    routerId: string;
     sessionKey: RoutingSessionKey;
     segment?: number;
   }): Promise<RoutingDecision | null> {
@@ -47,7 +47,7 @@ class RoutingDecisionModel {
       .from(decisions)
       .where(
         and(
-          eq(decisions.organizationId, params.organizationId),
+          eq(decisions.routerId, params.routerId),
           eq(decisions.sessionKey, params.sessionKey),
           eq(decisions.segment, params.segment ?? 0),
         ),
@@ -62,6 +62,7 @@ class RoutingDecisionModel {
   }) {
     const models = schema.modelsTable;
     const versions = schema.routingScorerVersionsTable;
+    const routers = schema.autoRoutersTable;
     const [row] = await db
       .select({
         decision: decisions,
@@ -70,6 +71,7 @@ class RoutingDecisionModel {
           provider: models.provider,
           modelId: models.modelId,
         },
+        router: { id: routers.id, name: routers.name },
         scorerVersion: {
           id: versions.id,
           name: versions.name,
@@ -80,6 +82,7 @@ class RoutingDecisionModel {
       .from(usage)
       .innerJoin(decisions, eq(decisions.id, usage.decisionId))
       .innerJoin(models, eq(models.id, decisions.modelId))
+      .innerJoin(routers, eq(routers.id, decisions.routerId))
       .leftJoin(versions, eq(versions.id, decisions.scorerVersionId))
       .where(
         and(
@@ -93,7 +96,12 @@ class RoutingDecisionModel {
       sessionKey: _sessionKey,
       ...decision
     } = SelectRoutingDecisionSchema.parse(row.decision);
-    return { ...decision, model: row.model, scorerVersion: row.scorerVersion };
+    return {
+      ...decision,
+      model: row.model,
+      router: row.router,
+      scorerVersion: row.scorerVersion,
+    };
   }
 
   /** The session's decision: `values` when first, else the one a concurrent request stored. */
@@ -104,11 +112,7 @@ class RoutingDecisionModel {
       .insert(decisions)
       .values(values)
       .onConflictDoNothing({
-        target: [
-          decisions.organizationId,
-          decisions.sessionKey,
-          decisions.segment,
-        ],
+        target: [decisions.routerId, decisions.sessionKey, decisions.segment],
       })
       .returning();
     if (inserted) {

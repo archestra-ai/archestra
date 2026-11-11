@@ -49,11 +49,16 @@ crate-type = ["cdylib"]
 # split (#800), credential files and dotenv modes matched as path tokens with a
 # lower-trust return floor (#803), and recorders in place of the runtime file
 # ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
-# v0.40.1 and the LLM log tools labeled in the archestra battery (#852).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b4e430286c866801fc6c01c1e512e78fafe365fd" }
+# v0.40.1 and the LLM log tools labeled in the archestra battery (#852); then
+# v0.42.0 and empty child turns settled under their recorded return contract (#807);
+# then stale call offers refused as superseded (#884), a typed scope on reviews
+# (#888), and a return declared ahead kept in the family log (#887);
+# then an authority's `except_tags`, and plans that need only stock `approve`
+# authorities applied at the block and recorded (#889).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d13921f5be24d2ce9760b6889720d7ca4a43b45d", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d13921f5be24d2ce9760b6889720d7ca4a43b45d" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d13921f5be24d2ce9760b6889720d7ca4a43b45d", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d13921f5be24d2ce9760b6889720d7ca4a43b45d" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

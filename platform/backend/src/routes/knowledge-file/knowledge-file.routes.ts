@@ -33,6 +33,7 @@ import {
 } from "@/models";
 import type { KbFileViewer } from "@/models/kb-file";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import {
   findAccessibleKnowledgeBase,
   findAccessibleKnowledgeBasesForFiles,
@@ -525,6 +526,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fileIds: [file.id],
           knowledgeBaseId,
           organizationId,
+          newConnectorEnvironmentId:
+            await resolveDefaultEnvironmentForNewResource({
+              organizationId,
+              userId: user.id,
+              resource: "knowledgeSource",
+            }),
         });
         knowledgeBases.push(
           ...((
@@ -876,6 +883,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         fileIds,
         knowledgeBaseId,
         organizationId,
+        newConnectorEnvironmentId:
+          await resolveDefaultEnvironmentForNewResource({
+            organizationId,
+            userId: viewer.userId,
+            resource: "knowledgeSource",
+          }),
       });
 
       // The audit hook cannot derive these itself: the response carries

@@ -37,7 +37,7 @@ import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { resolveSubagentTierSelection } from "@/agents/subagent-tiers";
 import { canUseAgent } from "@/auth/permission-gated";
-import { agentUsesAutoModel } from "@/auto-routing/organization-default";
+import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -367,10 +367,11 @@ export async function executeA2AMessage(
   const modelPoolId = params.selfFork ? null : agent.modelPoolId;
   // A fork that asked for fast or smart runs on it, never auto routed; one on
   // normal follows its parent's routing.
-  const autoRoutable =
+  const autoRouterId =
     !modelPoolId &&
-    !(params.selfFork && (params.tier === "fast" || params.tier === "smart")) &&
-    (await agentUsesAutoModel(agent, organizationId));
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"))
+      ? await agentAutoRouterId(agent, organizationId)
+      : null;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -460,7 +461,7 @@ export async function executeA2AMessage(
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
       modelPoolId,
-      autoRoutable,
+      autoRouterId,
       appaSubagentToken: params.appaSubagent?.token,
       // A Scheduled task run has no person to answer approvals.
       unattended: scheduleTriggerRunId !== undefined,
@@ -651,7 +652,7 @@ export async function executeA2AMessage(
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
                 modelPoolId,
-                autoRoutable,
+                autoRouterId,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,
@@ -1336,7 +1337,7 @@ async function resolveRunLlmSelection(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-    autoModel: boolean;
+    autoRouterId: string | null;
     runtime: unknown;
   };
   organizationId: string;
@@ -1344,9 +1345,9 @@ async function resolveRunLlmSelection(params: {
   parentLlm?: ModelSelection;
   tier?: SubagentModelTier;
 }) {
-  const { llmApiKeyId, modelId, autoModel } = params.agent;
+  const { llmApiKeyId, modelId, autoRouterId } = params.agent;
   const base = await resolveForkParentSelection({
-    agent: { llmApiKeyId, modelId, autoModel },
+    agent: { llmApiKeyId, modelId, autoRouterId },
     organizationId: params.organizationId,
     userId: params.userId,
     parentLlm: params.parentLlm,

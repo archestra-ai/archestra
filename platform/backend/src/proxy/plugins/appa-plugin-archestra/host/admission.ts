@@ -7,6 +7,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
+import { resolveChildTrajectoryReferences } from "@/openappa/child-trajectory-reference";
 import { forkedSession } from "@/openappa/lineage";
 import {
   APPA_PARENT_HEADER,
@@ -433,6 +434,16 @@ async function governedAdmission(params: {
       400,
       "OpenAPPA does not recognize this client, so Guardrails blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
     );
+  }
+  if (appaActive && ingress.childTrajectoryReferences?.length) {
+    ingress.childTrajectoryReceipts = [
+      ...(ingress.childTrajectoryReceipts ?? []),
+      ...(await resolveChildTrajectoryReferences({
+        organizationId: agent.organizationId,
+        callerId,
+        references: ingress.childTrajectoryReferences,
+      })),
+    ];
   }
   // The facts that bind a child trajectory. Read without preparing the
   // request for enforcement, which changes the body and refuses tool

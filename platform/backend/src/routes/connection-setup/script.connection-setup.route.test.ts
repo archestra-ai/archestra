@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   CLAUDE_CODE_CLIENT_ID,
   COPILOT_CLI_CLIENT_ID,
@@ -8,6 +12,7 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
+import { parse } from "smol-toml";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -24,6 +29,10 @@ import {
 } from "@/models";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import { getAvailableLlmModels } from "@/routes/llm-provider-models";
+import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
+import { openaiAdapterFactory } from "@/routes/proxy/adapters/openai";
+import { xaiAdapterFactory } from "@/routes/proxy/adapters/xai";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import { resolveMarketplaceViewer } from "@/skills/marketplace/static-marketplace";
@@ -159,6 +168,143 @@ describe("GET /api/connection-setups/script/:token", () => {
       url: `/api/connection-setups/script/${rawToken}`,
       remoteAddress: nextRemoteAddress(),
     });
+  }
+
+  test("Grok binds an approved setup to the gateway and proxy, and consumes its one-time ticket", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const { rawToken } = await createSetup({
+      clientId: "grok-build",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      provider: "xai",
+      proxyAuth: "provider-key",
+      model: "synthetic-model",
+    });
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup).toMatchObject({
+      clientId: "grok-build",
+      mcpGatewayId: gateway.id,
+      provider: "xai",
+      includeSkills: false,
+    });
+    const script = await fetchScript(rawToken);
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("BEGIN ARCHESTRA GROK CONNECTION");
+    expect(script.body).toContain("grok-build");
+    expect(script.body).toContain("{{session_id}}");
+    expect(script.body).toContain("XAI_API_KEY");
+    expect(script.body).not.toContain("--always-approve");
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+  });
+
+  for (const provider of ["xai", "openai", "anthropic"] as const) {
+    for (const proxyAuth of ["virtual-key", "provider-key"] as const) {
+      test(`Grok ${provider} ${proxyAuth} carries the catalog's upstream model through the generated TOML to the selected provider request`, async ({
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const key = await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret()).id,
+          { provider },
+        );
+        const upstreamModel = `${provider}/synthetic-model:revision`;
+        const model = await ModelModel.create({
+          provider,
+          modelId: upstreamModel,
+          externalId: `catalog/${upstreamModel}`,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+        });
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          model.id,
+        ]);
+        const catalog = await getAvailableLlmModels({
+          query: { provider, apiKeyId: key.id },
+          userId: user.id,
+          organizationId,
+        });
+        const selected = catalog.find((entry) => entry.dbId === model.id);
+        expect(selected).toMatchObject({ id: upstreamModel, dbId: model.id });
+        if (!selected) throw new Error("Expected selected model in catalog");
+        const { rawToken } = await createSetup({
+          clientId: "grok-build",
+          baseUrl: "http://localhost:9000/v1",
+          provider,
+          proxyAuth,
+          model: selected.id,
+        });
+        const response = await fetchScript(rawToken);
+        expect(response.statusCode, response.body).toBe(200);
+        if (proxyAuth === "provider-key") {
+          const setup = await ConnectionSetupModel.findByToken(rawToken);
+          expect(setup?.virtualApiKeyId).toBeTruthy();
+        }
+        const source = response.body.match(
+          /node - <<'ARCHESTRA_NODE_SETUP'\n([\s\S]*?)\nARCHESTRA_NODE_SETUP/,
+        )?.[1];
+        expect(source).toBeTruthy();
+        const home = mkdtempSync(path.join(tmpdir(), "grok-model-contract-"));
+        try {
+          const installed = spawnSync(process.execPath, ["-"], {
+            input: source,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              HOME: home,
+              GROK_HOME: path.join(home, "grok"),
+            },
+          });
+          expect(installed.status, installed.stderr).toBe(0);
+          const parsed = parse(
+            readFileSync(
+              path.join(home, ".archestra/grok/native/config.toml"),
+              "utf8",
+            ),
+          ) as {
+            model: {
+              archestra: {
+                model: string;
+                base_url: string;
+                api_backend: string;
+              };
+            };
+          };
+          const connection = parsed.model.archestra;
+          expect(new URL(connection.base_url).pathname).toMatch(
+            new RegExp(`/v1/(?:connection-setup/[^/]+/)?${provider}$`),
+          );
+          expect(connection.api_backend).toBe(
+            provider === "anthropic" ? "messages" : "chat_completions",
+          );
+          const body = {
+            model: connection.model,
+            messages: [{ role: "user" as const, content: "Synthetic request" }],
+            max_tokens: 16,
+          };
+          const requestAdapter =
+            provider === "anthropic"
+              ? anthropicAdapterFactory.createRequestAdapter(body)
+              : provider === "xai"
+                ? xaiAdapterFactory.createRequestAdapter(body)
+                : openaiAdapterFactory.createRequestAdapter(body);
+          expect(requestAdapter.getModel()).toBe(upstreamModel);
+          expect(requestAdapter.toProviderRequest()).toMatchObject({
+            model: upstreamModel,
+          });
+          expect(connection.model).not.toBe(model.id);
+          expect(connection.model).not.toBe(`${provider}:${upstreamModel}`);
+        } finally {
+          rmSync(home, { recursive: true, force: true });
+        }
+      });
+    }
   }
 
   test("cursor installer points Cursor at the Model Router with its virtual key", async ({
@@ -1351,7 +1497,10 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(allowed.body).toContain("codex mcp add 'gate'");
   });
 
-  test("re-validates plugin:admin before rendering executable hooks", async () => {
+  test.each([
+    "claude-code",
+    "grok-build",
+  ] as const)("%s excludes unsupported plugins or re-validates plugin:admin before rendering executable hooks", async (clientId) => {
     const originalFeatureState = config.beta;
     config.beta = false;
     const plugin = await PluginModel.create({
@@ -1375,7 +1524,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     const { rawToken } = await ConnectionSetupModel.create({
       organizationId,
       userId: user.id,
-      clientId: "claude-code",
+      clientId,
       platform: "macos",
       baseUrl: "http://localhost:9000/v1",
       mcpGatewayId: null,
@@ -1402,6 +1551,12 @@ describe("GET /api/connection-setups/script/:token", () => {
     );
     try {
       mockUserHasPermission.mockResolvedValue(false);
+      if (clientId === "grok-build") {
+        const response = await fetchScript(rawToken);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toContain(plugin.pluginSlug);
+        return;
+      }
       expect((await fetchScript(rawToken)).statusCode).toBe(410);
 
       mockUserHasPermission.mockResolvedValue(true);

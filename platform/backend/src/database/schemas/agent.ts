@@ -5,13 +5,11 @@ import type {
 } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   check,
   index,
   integer,
   jsonb,
-  numeric,
   text,
   timestamp,
   uniqueIndex,
@@ -26,14 +24,13 @@ import type {
 } from "@/types/agent";
 import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
-import type { AutoRoutingBudgetPreset } from "@/types/auto-routing";
 import type { NetworkPolicy } from "@/types/environment";
+import autoRoutersTable from "./auto-router";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import modelPoolsTable from "./model-pool";
-import routingScorerVersionsTable from "./routing-scorer-version";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -121,41 +118,13 @@ const agentsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
-     * Runs on auto routing: each session goes to the organization's fast,
-     * normal or smart tier. `llmApiKeyId`, `modelId` and `modelPoolId` are
-     * then null. Never set on Agent Runtime agents.
+     * Runs on this auto router: each session goes to its fast, normal or
+     * smart tier. `llmApiKeyId`, `modelId` and `modelPoolId` are then null.
+     * Never set on Agent Runtime agents. ON DELETE SET NULL.
      */
-    autoModel: boolean("auto_model").notNull().default(false),
-    /**
-     * Auto routing (the org's `llm_proxy` row only). Server-managed: written
-     * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
-     */
-    autoRoutingEnabled: boolean("auto_routing_enabled")
-      .notNull()
-      .default(false),
-    autoRoutingBudgetUsdPerDay: numeric("auto_routing_budget_usd_per_day", {
-      precision: 12,
-      scale: 2,
+    autoRouterId: uuid("auto_router_id").references(() => autoRoutersTable.id, {
+      onDelete: "set null",
     }),
-    /**
-     * When set, each fit derives the daily budget from this preset and the
-     * current usage instead of using `autoRoutingBudgetUsdPerDay`, which stays
-     * as the custom budget to return to.
-     */
-    autoRoutingBudgetPreset: text(
-      "auto_routing_budget_preset",
-    ).$type<AutoRoutingBudgetPreset>(),
-    autoRoutingScorerVersionId: uuid(
-      "auto_routing_scorer_version_id",
-    ).references(() => routingScorerVersionsTable.id),
-    autoRoutingGeneration: bigint("auto_routing_generation", { mode: "number" })
-      .notNull()
-      .default(0),
-    autoRoutingPlannedGeneration: bigint("auto_routing_planned_generation", {
-      mode: "number",
-    })
-      .notNull()
-      .default(0),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(

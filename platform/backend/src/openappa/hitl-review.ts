@@ -598,6 +598,19 @@ function buildHitlAskUserCard(staged: PendingHitlReview): HitlAskUserArguments {
       ),
     shortQuestion: `Approve the ${preview.subject}?`,
     callPreview: previewText({ preview, accepted, summary: review.summary }),
+    // Grok's preview is plain text and wraps to the actual terminal width.
+    // Generate it from the reviewed data; stripping Markdown from the other
+    // preview would also strip literal payload characters and retain its wraps.
+    plainCallPreview: [
+      ...(accepted
+        ? acceptedBlock(accepted)
+        : [formatReviewQuestion(review.text)]),
+      ...summaryBlock(review.summary),
+      Object.keys(args).length
+        ? `Full arguments (YAML, not summarized):\n${dumpYaml(args, { lineWidth: -1, noRefs: true })}`
+        : "This call has no arguments.",
+      "Approve lets this exact call run. Deny keeps it blocked.",
+    ].join("\n\n"),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -1156,7 +1169,7 @@ function approvalQuestion(params: {
  * What an approval accepts besides the person's attention, or undefined when
  * the review text's coverage is not in the shape read here.
  */
-function acceptedCoverage(text: string): string[] | undefined {
+export function acceptedCoverage(text: string): string[] | undefined {
   return reviewCoverage(text)?.filter(
     (line) => !line.startsWith("attention: "),
   );
@@ -1435,7 +1448,7 @@ function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.
   // Replace only the runtime's decorative prefix, never the reviewed payload.
   return text.startsWith(PIXEL_REVIEW_HEADING)
-    ? `[OpenAPPA] Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
+    ? `Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
     : text;
 }
 

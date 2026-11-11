@@ -183,8 +183,8 @@ export function TimeoutFields({
           placeholder="Auto"
           disabled={disabled}
         >
-          Seconds for a full non-streamed response. Auto is 3 min plus 1 s per
-          20 tokens the request lets the model write, up to 30 min.
+          Seconds for a full non-streamed response. Default Auto: 3 min plus 1 s
+          per 20 tokens the request lets the model write, up to 30 min.
         </SecondsField>
         <SecondsField
           form={form}
@@ -229,7 +229,11 @@ function SecondsField({
           {label}
         </Label>
         <HelpTip topic={label}>
-          {children} At most {MAX_SECONDS[name]} s.
+          {children}
+          {/^\d+$/.test(placeholder) ? (
+            <span> Default {placeholder} s.</span>
+          ) : null}{" "}
+          At most {MAX_SECONDS[name]} s.
         </HelpTip>
       </span>
       <Controller

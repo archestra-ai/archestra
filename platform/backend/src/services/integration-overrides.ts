@@ -2,7 +2,9 @@ import {
   builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
+  type CopilotPlan,
   integrationLabel,
+  isCopilotPlanHidden,
   isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
@@ -34,6 +36,32 @@ export async function assertModelProviderAllowed(params: {
       params.provider,
       builtInProviderLabel(params.provider),
     )} is turned off for this organization. Ask an administrator to re-enable it under Settings → LLM → Model providers.`,
+  );
+}
+
+/**
+ * Rejects setting up one GitHub Copilot plan when GitHub Copilot is off, or
+ * when an admin turned off just this plan. Keys that exist keep working.
+ */
+export async function assertCopilotPlanAllowed(params: {
+  organizationId: string;
+  plan: CopilotPlan;
+}): Promise<void> {
+  await assertModelProviderAllowed({
+    organizationId: params.organizationId,
+    provider: "github-copilot",
+  });
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  if (!isCopilotPlanHidden(modelProviderOverrides, params.plan)) return;
+  const label = integrationLabel(
+    modelProviderOverrides,
+    "github-copilot",
+    builtInProviderLabel("github-copilot"),
+  );
+  throw new ApiError(
+    400,
+    `${label} ${COPILOT_PLAN_NOUNS[params.plan]} are turned off for this organization. Ask an administrator to turn them on under Settings → LLM → Model providers.`,
   );
 }
 
@@ -92,3 +120,13 @@ export async function getHiddenMessagingChannels(
   }
   return hidden;
 }
+
+// ===================================================================
+// Internal
+// ===================================================================
+
+/** The plan names the Model Providers page uses for its two sections. */
+const COPILOT_PLAN_NOUNS: Record<CopilotPlan, string> = {
+  personal: "personal subscriptions",
+  enterprise: "enterprise plans",
+};

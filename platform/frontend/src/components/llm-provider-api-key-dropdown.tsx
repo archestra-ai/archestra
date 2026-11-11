@@ -105,15 +105,18 @@ interface LlmProviderApiKeyDropdownProps {
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
   /**
-   * The `auto` model, offered first while auto routing is on: it picks a
-   * fast, normal or smart model per session. A picked `auto` replaces the key.
+   * The auto routers, offered first while auto routing is on: each picks a
+   * fast, normal or smart model per session. A picked router replaces the key.
    */
-  auto?: {
+  autoRouters?: Array<{
+    id: string;
+    /** "Auto", or "Auto · support" for a named router. */
+    label: string;
     selected: boolean;
     /** The tiers it routes across. */
     description?: string;
     onSelect: () => void;
-  };
+  }>;
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -145,8 +148,9 @@ export function LlmProviderApiKeyDropdown({
   pools = [],
   selectedPoolId = null,
   onSelectPool,
-  auto,
+  autoRouters = [],
 }: LlmProviderApiKeyDropdownProps) {
+  const { enterprisePlanName } = useModelProviderCatalog();
   const selectableKeys = useMemo(
     () =>
       availableKeys.filter(
@@ -182,7 +186,8 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const autoSelected = auto?.selected ?? false;
+  const selectedAutoRouter = autoRouters.find((router) => router.selected);
+  const autoSelected = !!selectedAutoRouter;
   const selectedPool = autoSelected
     ? undefined
     : pools.find((pool) => pool.id === selectedPoolId);
@@ -221,7 +226,9 @@ export function LlmProviderApiKeyDropdown({
               {autoSelected ? (
                 <>
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate font-medium">Auto</span>
+                  <span className="truncate font-medium">
+                    {selectedAutoRouter?.label}
+                  </span>
                 </>
               ) : selectedPool ? (
                 <>
@@ -238,7 +245,10 @@ export function LlmProviderApiKeyDropdown({
                   />
                   <span className="truncate font-medium">
                     {isOrganizationSubscription(selectedKey)
-                      ? organizationSubscriptionName(selectedKey)
+                      ? organizationSubscriptionName(
+                          selectedKey,
+                          enterprisePlanName,
+                        )
                       : selectedKey.name}
                   </span>
                   {selectedKeyIsSubscription && (
@@ -320,24 +330,29 @@ export function LlmProviderApiKeyDropdown({
                 </CommandItem>
               </CommandGroup>
             )}
-            {auto && (
+            {autoRouters.length > 0 && (
               <CommandGroup>
-                <CommandItem
-                  value="auto"
-                  keywords={["auto", "auto routing"]}
-                  onSelect={auto.onSelect}
-                  className="cursor-pointer"
-                >
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span>Auto</span>
-                    <span className="text-xs text-muted-foreground">
-                      {auto.description ??
-                        "Picks a fast, normal or smart model per session"}
-                    </span>
-                  </div>
-                  {auto.selected && <CheckIcon className="h-4 w-4 shrink-0" />}
-                </CommandItem>
+                {autoRouters.map((router) => (
+                  <CommandItem
+                    key={router.id}
+                    value={`auto-router-${router.id}`}
+                    keywords={[router.label, "auto", "auto routing"]}
+                    onSelect={router.onSelect}
+                    className="cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span>{router.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {router.description ??
+                          "Picks a fast, normal or smart model per session"}
+                      </span>
+                    </div>
+                    {router.selected && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
               </CommandGroup>
             )}
             {allowOrganizationDefault && onSelectOrganizationDefault && (
@@ -472,7 +487,10 @@ export function LlmProviderApiKeyDropdown({
                       />
                       <div className="flex min-w-0 flex-col">
                         <span className="truncate">
-                          {organizationSubscriptionName(key)}
+                          {organizationSubscriptionName(
+                            key,
+                            enterprisePlanName,
+                          )}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                           {organizationSubscriptionSubtitle(key)}

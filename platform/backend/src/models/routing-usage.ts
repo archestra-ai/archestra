@@ -34,9 +34,9 @@ class RoutingUsageModel {
       .onConflictDoNothing({ target: usage.interactionId });
   }
 
-  /** The organization's latest usage recorded since `since`: a range probe over recent usage only. */
+  /** The router's latest usage recorded since `since`: a range probe over recent usage only. */
   static async findLatestCreatedAt(
-    organizationId: string,
+    routerId: string,
     since: Date,
   ): Promise<Date | null> {
     const [row] = await db
@@ -44,10 +44,7 @@ class RoutingUsageModel {
       .from(usage)
       .innerJoin(decisions, eq(decisions.id, usage.decisionId))
       .where(
-        and(
-          gte(usage.createdAt, since),
-          eq(decisions.organizationId, organizationId),
-        ),
+        and(gte(usage.createdAt, since), eq(decisions.routerId, routerId)),
       );
     return row?.at ?? null;
   }
@@ -168,7 +165,7 @@ class RoutingUsageModel {
 export default RoutingUsageModel;
 
 type FitWindow = {
-  organizationId: string;
+  routerId: string;
   scorerVersionId: string;
   inputWatermark: Date;
 };
@@ -189,7 +186,7 @@ function fitWindow(params: FitWindow) {
   const watermark = params.inputWatermark.getTime();
   return {
     where: and(
-      eq(decisions.organizationId, params.organizationId),
+      eq(decisions.routerId, params.routerId),
       eq(decisions.scorerVersionId, params.scorerVersionId),
       isNotNull(decisions.features),
       eq(decisions.featuresSchemaVersion, FEATURES_SCHEMA_VERSION),

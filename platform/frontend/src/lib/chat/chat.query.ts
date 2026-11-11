@@ -123,22 +123,22 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
   }
-  // A pool or `auto` comes with a key and model (a member's, the normal
+  // A pool or an auto router comes with a key and model (a member's, the normal
   // tier's), and a key, model or agent change leaves it (or takes the new
   // agent's).
-  if (variables.modelPoolId !== undefined || variables.autoModel) {
+  if (variables.modelPoolId !== undefined || variables.autoRouterId) {
     merged.modelId = updatedConversation.modelId;
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
   }
   if (
     variables.modelPoolId !== undefined ||
-    variables.autoModel !== undefined ||
+    variables.autoRouterId !== undefined ||
     variables.modelId !== undefined ||
     variables.chatApiKeyId !== undefined ||
     variables.agentId !== undefined
   ) {
     merged.modelPoolId = updatedConversation.modelPoolId;
-    merged.autoModel = updatedConversation.autoModel;
+    merged.autoRouterId = updatedConversation.autoRouterId;
   }
   if (variables.agentId !== undefined) {
     merged.agentId = updatedConversation.agentId;
@@ -547,7 +547,7 @@ export function useCreateConversation() {
       modelId,
       chatApiKeyId,
       modelPoolId,
-      autoModel,
+      autoRouterId,
       title,
       projectId,
       encryptedChat,
@@ -571,7 +571,7 @@ export function useCreateConversation() {
               modelId,
               chatApiKeyId: chatApiKeyId ?? undefined,
               modelPoolId: modelPoolId ?? undefined,
-              autoModel: autoModel || undefined,
+              autoRouterId: autoRouterId ?? undefined,
               title,
               projectId: projectId ?? undefined,
               encryptedChat: encryptedChat || undefined,
@@ -613,7 +613,7 @@ export function useUpdateConversation() {
       modelId,
       chatApiKeyId,
       modelPoolId,
-      autoModel,
+      autoRouterId,
       agentId,
       projectId,
       pinnedAt,
@@ -630,7 +630,7 @@ export function useUpdateConversation() {
               modelId,
               chatApiKeyId,
               modelPoolId,
-              autoModel,
+              autoRouterId,
               agentId,
               projectId,
               pinnedAt,

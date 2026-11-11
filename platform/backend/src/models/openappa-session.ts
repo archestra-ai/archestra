@@ -24,10 +24,134 @@ const table = schema.openappaSessionsTable;
 
 /**
  * Lineage queries and session-receipt tokens for OpenAPPA runtime records.
- * The native runtime writes every row. The proxy reads these rows to
- * attach a new session to an existing history.
+ * The native runtime owns session rows. The host also retains immutable
+ * identity indexes and receipts in the shared operations ledger.
  */
 class OpenAppaSessionModel {
+  /**
+   * Bind an observed native Grok ID after verified child admission. Resuming a
+   * transcript changes its native ID while retaining the governed actor.
+   * This index contains identity only, never a message body or authorization.
+   */
+  static async retainGrokChildIdentity(params: {
+    organizationId: string;
+    callerId?: string;
+    parentId: string;
+    childSessionId: string;
+    nativeId: string;
+  }): Promise<void> {
+    const existing = await OpenAppaSessionModel.grokChildIdentity(params);
+    if (existing) {
+      if (existing !== params.childSessionId)
+        throw new ApiError(409, "Grok native child identity is already bound.");
+      return;
+    }
+    const operations = schema.openappaOperationsTable;
+    await db.execute(sql`
+      INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
+      SELECT child.organization_id, child.parent_id, child.caller_id, child.root,
+        ${`grok-child-identity:${params.nativeId}`}, 'complete',
+        ${JSON.stringify({ childSessionId: params.childSessionId })}::jsonb,
+        '{"decision":"ack"}'::jsonb
+      FROM ${table} AS child
+      WHERE child.organization_id = ${params.organizationId}
+        AND child.session_id = ${params.childSessionId}
+        AND child.parent_id = ${params.parentId}
+        AND child.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}
+      ON CONFLICT DO NOTHING
+    `);
+    const retained = await OpenAppaSessionModel.grokChildIdentity(params);
+    if (retained && retained !== params.childSessionId)
+      throw new ApiError(409, "Grok native child identity is already bound.");
+  }
+
+  static async grokChildIdentity(params: {
+    organizationId: string;
+    callerId?: string;
+    parentId: string;
+    nativeId: string;
+  }): Promise<string | undefined> {
+    const operations = schema.openappaOperationsTable;
+    const rows = await db.execute<{ childSessionId: string }>(sql`
+      SELECT child.session_id AS "childSessionId"
+      FROM ${operations} AS binding
+      JOIN ${table} AS child
+        ON child.organization_id = binding.organization_id
+        AND child.root = binding.root
+        AND child.parent_id = binding.session_id
+        AND child.caller_id IS NOT DISTINCT FROM binding.caller_id
+        AND child.session_id = binding.input->>'childSessionId'
+      WHERE binding.organization_id = ${params.organizationId}
+        AND binding.session_id = ${params.parentId}
+        AND binding.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}
+        AND binding.operation_id = ${`grok-child-identity:${params.nativeId}`}
+        AND binding.status = 'complete'
+      LIMIT 2
+    `);
+    return rows.rows.length === 1 ? rows.rows[0].childSessionId : undefined;
+  }
+
+  /** Immutable host receipt, indexed by the existing session/operation key. */
+  static async retainChildBinding(params: {
+    session: {
+      organization_id: string;
+      session_id: string;
+      caller_id?: string;
+    };
+    digest: string;
+    footer: string;
+  }): Promise<void> {
+    const operations = schema.openappaOperationsTable;
+    const { session, digest, footer } = params;
+    await db.execute(sql`
+      INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
+      SELECT organization_id, session_id, caller_id, root,
+        ${`host-child-binding:${digest}`}, 'complete',
+        ${JSON.stringify({ event: "host_child_binding", footer })}::jsonb, '{"decision":"ack"}'::jsonb
+      FROM ${table}
+      WHERE organization_id = ${session.organization_id}
+        AND session_id = ${session.session_id}
+        AND caller_id IS NOT DISTINCT FROM ${session.caller_id ?? null}
+      ON CONFLICT DO NOTHING
+    `);
+    const retained = await OpenAppaSessionModel.childBinding({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+      callerId: session.caller_id,
+      digest,
+    });
+    if (retained !== footer)
+      throw new ApiError(503, "OpenAPPA could not retain the child binding");
+  }
+
+  static async childBinding(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    digest: string;
+  }): Promise<string | undefined> {
+    const operations = schema.openappaOperationsTable;
+    const [row] = await db
+      .select({
+        footer: sql<string>`${operations.input}->>'footer'`,
+      })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          eq(operations.operationId, `host-child-binding:${params.digest}`),
+          eq(operations.status, "complete"),
+          sql`${operations.input}->>'event' = 'host_child_binding'`,
+        ),
+      )
+      .limit(1);
+    return typeof row?.footer === "string" ? row.footer : undefined;
+  }
+
   /** Reads retained bytes only for their authenticated recipient after enforcement is waived. */
   static async waivedPeerBody(params: {
     organizationId: string;
@@ -376,12 +500,26 @@ class OpenAppaSessionModel {
     parentId?: string;
     toolCallIds: readonly string[];
   }): Promise<Map<string, unknown>> {
+    const calls = await OpenAppaSessionModel.recordedToolCalls(params);
+    return new Map([...calls].map(([id, call]) => [id, call.decision]));
+  }
+
+  /** Scoped runtime receipts; original inputs are read only when history needs restoration. */
+  static async recordedToolCalls(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    toolCallIds: readonly string[];
+    includeInput?: boolean;
+  }): Promise<Map<string, { decision: unknown; input?: unknown }>> {
     if (params.toolCallIds.length === 0) return new Map();
     const operations = schema.openappaOperationsTable;
     const rows = await db
       .select({
         operationId: operations.operationId,
         decision: operations.decision,
+        input: params.includeInput ? operations.input : sql<null>`NULL`,
       })
       .from(operations)
       .innerJoin(
@@ -419,7 +557,10 @@ class OpenAppaSessionModel {
     return new Map(
       rows.map((row) => [
         row.operationId.replace(/^(?:peer-read-)?call:/, ""),
-        openPlainJson(row.decision),
+        {
+          decision: openPlainJson(row.decision),
+          ...(params.includeInput ? { input: openPlainJson(row.input) } : {}),
+        },
       ]),
     );
   }
@@ -484,6 +625,51 @@ class OpenAppaSessionModel {
       }
     }
     return result;
+  }
+
+  /**
+   * Completed results already governed in this exact trajectory. A client may
+   * omit their bytes from old history without creating a new return crossing.
+   * Read IDs only: checking an omission must not reload the pruned output.
+   */
+  static async completedToolResultIds(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    toolCallIds: readonly string[];
+  }): Promise<Set<string>> {
+    if (params.toolCallIds.length === 0) return new Set();
+    const results = schema.openappaProcessedResultsTable;
+    const rows = await db
+      .select({ toolCallId: results.toolCallId })
+      .from(results)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, results.organizationId),
+          eq(table.sessionId, results.sessionId),
+          eq(table.root, results.root),
+        ),
+      )
+      .where(
+        and(
+          eq(results.organizationId, params.organizationId),
+          eq(results.sessionId, params.sessionId),
+          params.callerId
+            ? and(
+                eq(results.callerId, params.callerId),
+                eq(table.callerId, params.callerId),
+              )
+            : and(isNull(results.callerId), isNull(table.callerId)),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          inArray(results.toolCallId, [...params.toolCallIds]),
+          eq(results.status, "complete"),
+        ),
+      );
+    return new Set(rows.map((row) => row.toolCallId));
   }
 
   /**

@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   allowedIntegrationIds,
+  copilotEnterprisePlanLabel,
   integrationLabel,
+  isCopilotPlanHidden,
   isIntegrationHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
+  ModelProviderOverridesSchema,
   orderedPopularAgentIds,
   PopularAgentIdSchema,
   PopularAgentOverridesSchema,
   pruneIntegrationOverrides,
+  StoredModelProviderOverridesSchema,
   withAllowedIntegrationIds,
   withOrderedPopularAgentIds,
 } from "./integration-overrides";
@@ -207,5 +211,144 @@ describe("coding agent ordering", () => {
     expect(orderedPopularAgentIds(overrides, catalog)).toEqual(order);
     expect(overrides.hermes).toEqual({ position: 0 });
     expect(overrides.opencode).toEqual({ hidden: true });
+  });
+});
+
+describe("GitHub Copilot plans", () => {
+  it("offers both plans when nothing is turned off", () => {
+    expect(isCopilotPlanHidden(null, "personal")).toBe(false);
+    expect(isCopilotPlanHidden({ "github-copilot": {} }, "enterprise")).toBe(
+      false,
+    );
+  });
+
+  it("hides only the plan an admin turned off", () => {
+    const overrides = {
+      "github-copilot": { plans: { personal: { hidden: true } } },
+    };
+    expect(isCopilotPlanHidden(overrides, "personal")).toBe(true);
+    expect(isCopilotPlanHidden(overrides, "enterprise")).toBe(false);
+  });
+
+  it("hides both plans when GitHub Copilot itself is off", () => {
+    const overrides = { "github-copilot": { hidden: true } };
+    expect(isCopilotPlanHidden(overrides, "personal")).toBe(true);
+    expect(isCopilotPlanHidden(overrides, "enterprise")).toBe(true);
+  });
+
+  it("accepts one plan turned off on GitHub Copilot", () => {
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        "github-copilot": { plans: { enterprise: { hidden: true } } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("refuses plans on any other provider", () => {
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        openai: { plans: { personal: { hidden: true } } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses both plans off, which is GitHub Copilot off", () => {
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        "github-copilot": {
+          plans: { personal: { hidden: true }, enterprise: { hidden: true } },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses an unknown plan", () => {
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        "github-copilot": { plans: { team: { hidden: true } } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("reads a stored row from a newer build without failing", () => {
+    // An older build reads with this lenient schema: unknown keys drop, the
+    // rest of the row stays usable.
+    const parsed = StoredModelProviderOverridesSchema.parse({
+      "github-copilot": {
+        hidden: false,
+        plans: { personal: { hidden: true }, future: { hidden: true } },
+        futureField: 1,
+      },
+    });
+    expect(parsed["github-copilot"]).toEqual({
+      hidden: false,
+      plans: { personal: { hidden: true } },
+    });
+  });
+
+  it("keeps a turned-off plan through pruning, also while the provider is off", () => {
+    expect(
+      pruneIntegrationOverrides({
+        "github-copilot": {
+          hidden: true,
+          plans: { personal: { hidden: true }, enterprise: { hidden: false } },
+        },
+      }),
+    ).toEqual({
+      "github-copilot": { hidden: true, plans: { personal: { hidden: true } } },
+    });
+  });
+
+  it("names the enterprise plan GitHub Copilot Organization until an admin names it", () => {
+    expect(copilotEnterprisePlanLabel(null)).toBe(
+      "GitHub Copilot Organization",
+    );
+    expect(
+      copilotEnterprisePlanLabel({
+        "github-copilot": {
+          displayName: "Copilot",
+          plans: { enterprise: { displayName: " Copilot for Teams " } },
+        },
+      }),
+    ).toBe("Copilot for Teams");
+  });
+
+  it("keeps the enterprise plan's name through pruning, and refuses a name on the personal plan", () => {
+    expect(
+      pruneIntegrationOverrides({
+        "github-copilot": {
+          plans: { enterprise: { hidden: false, displayName: " Org " } },
+        },
+      }),
+    ).toEqual({
+      "github-copilot": { plans: { enterprise: { displayName: "Org" } } },
+    });
+    expect(
+      ModelProviderOverridesSchema.safeParse({
+        "github-copilot": { plans: { personal: { displayName: "Mine" } } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("drops plans that are all on", () => {
+    expect(
+      pruneIntegrationOverrides({
+        "github-copilot": {
+          plans: { personal: { hidden: false }, enterprise: {} },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps the plans when the availability chips rewrite the overrides", () => {
+    expect(
+      withAllowedIntegrationIds(
+        { "github-copilot": { plans: { enterprise: { hidden: true } } } },
+        ["openai", "github-copilot"],
+        ["openai", "github-copilot"],
+      ),
+    ).toEqual({
+      "github-copilot": { plans: { enterprise: { hidden: true } } },
+    });
   });
 });

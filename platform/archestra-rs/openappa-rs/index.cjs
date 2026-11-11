@@ -9,6 +9,7 @@ module.exports.executeRemedyByOffer = wrapAsync(binding, "executeRemedyByOffer")
 module.exports.loadOfferReview = wrapAsync(binding, "loadOfferReview");
 module.exports.retainedOfferRefusal = wrapSync(binding, "retainedOfferRefusal");
 module.exports.loadChildReturns = wrapAsync(binding, "loadChildReturns");
+module.exports.loadChildRejections = wrapAsync(binding, "loadChildRejections");
 module.exports.loadChildAddresses = wrapAsync(binding, "loadChildAddresses");
 module.exports.sendPeerMessage = wrapAsync(binding, "sendPeerMessage");
 module.exports.admitPeerMessage = wrapAsync(binding, "admitPeerMessage");

@@ -54,7 +54,10 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
-import { assertModelProviderAllowed } from "@/services/integration-overrides";
+import {
+  assertCopilotPlanAllowed,
+  assertModelProviderAllowed,
+} from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
@@ -471,6 +474,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         provider: body.provider,
       });
+      // A GitHub Copilot key made here is always a personal sign-in: the
+      // organization's plan comes only from the GitHub App setup.
+      if (body.provider === "github-copilot") {
+        await assertCopilotPlanAllowed({ organizationId, plan: "personal" });
+      }
 
       assertPerUserCredentialOwnership({
         provider: body.provider,
@@ -901,10 +909,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // A key for a provider the admins switched off is frozen: it can be
       // deleted, but not renamed, rescoped, or rotated back into service.
+      // The same holds for a GitHub Copilot key whose plan is turned off.
       await assertModelProviderAllowed({
         organizationId,
         provider: apiKeyFromDB.provider,
       });
+      if (apiKeyFromDB.provider === "github-copilot") {
+        await assertCopilotPlanAllowed({
+          organizationId,
+          plan: (await LlmProviderApiKeyModel.isGithubAppKey(apiKeyFromDB.id))
+            ? "enterprise"
+            : "personal",
+        });
+      }
 
       // Who can reach the key is not editable here: access lives in the key's
       // permission policy, which the permissions API writes on its own. The
@@ -1243,6 +1260,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "Only personal subscription keys can be reconnected — shared keys use the regular edit flow.",
         );
+      }
+      // A reconnect puts a sign-in back into service, so a personal Copilot
+      // key whose plan the admins turned off stays as it is.
+      if (keyRow.provider === "github-copilot") {
+        await assertCopilotPlanAllowed({ organizationId, plan: "personal" });
       }
       // The new credential must be subscription material for this key's
       // provider: a per-user provider's own token (GitHub/Microsoft Copilot) or

@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -171,12 +171,20 @@ const saveTiers = vi.fn();
 
 vi.mock("@/lib/organization.query");
 
+let mockAutoRouters: Array<{
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+}> = [];
+
 vi.mock("@/lib/hooks/use-organization-default-model", () => ({
   useOrganizationDefaultModel: () => ({
     model: null,
     label: null,
-    auto: null,
-    defaultAutoModel: false,
+    autoRoutedTiers: null,
+    autoRouters: mockAutoRouters,
+    defaultAutoRouterId: null,
   }),
 }));
 
@@ -230,6 +238,7 @@ beforeEach(() => {
   ];
   mockRuntimeBackend = null;
   mockRuntimeEnabled = undefined;
+  mockAutoRouters = [];
   mockModels = [
     {
       id: "gemini-2.5-pro",
@@ -370,6 +379,119 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+});
+
+describe("Default model on an auto router", () => {
+  const routers = [
+    {
+      id: "router-a",
+      name: "auto",
+      label: "Auto",
+      description: "Haiku, Sonnet, Opus",
+    },
+    {
+      id: "router-b",
+      name: "auto:support",
+      label: "Auto · support",
+      description: "Flash, Pro, Ultra",
+    },
+  ];
+  const useSavedOrganization = (overrides: Record<string, unknown>) => {
+    mockOrganization = { ...mockOrganization, ...overrides };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+  };
+  const openDefaultPicker = (
+    user: ReturnType<typeof userEvent.setup>,
+    selected: RegExp,
+  ) => user.click(screen.getByRole("button", { name: selected }));
+
+  beforeEach(() => {
+    // cmdk, inside the key dropdown, needs both in jsdom.
+    global.ResizeObserver = class ResizeObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    };
+    Element.prototype.scrollIntoView = vi.fn();
+    mockAutoRouters = routers;
+    mutateAsync.mockResolvedValue({});
+  });
+
+  it("offers each router and saves the picked one's id, leaving the model and key alone", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await openDefaultPicker(user, /gemini - org/);
+    expect(
+      screen.getByRole("option", { name: /^Auto\s*Haiku, Sonnet, Opus/ }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("option", { name: /Auto · support.*Flash, Pro, Ultra/ }),
+    );
+
+    expect(
+      screen.getByText(
+        /New chats and agents on the default use Auto · support/,
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        defaultAutoRouterId: "router-b",
+      }),
+    );
+  });
+
+  it("moves the default from one router to another", async () => {
+    useSavedOrganization({ defaultAutoRouterId: "router-b" });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      screen.getByText(
+        /New chats and agents on the default use Auto · support/,
+      ),
+    ).toBeInTheDocument();
+    await openDefaultPicker(user, /^Auto · support$/);
+    await user.click(
+      screen.getByRole("option", { name: /^Auto\s*Haiku, Sonnet, Opus/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        defaultAutoRouterId: "router-a",
+      }),
+    );
+  });
+
+  it("sends null when a provider key replaces the router, and offers the fast and smart models again", async () => {
+    useSavedOrganization({ defaultAutoRouterId: "router-a" });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.queryByText("Fast model")).not.toBeInTheDocument();
+    await openDefaultPicker(user, /^Auto$/);
+    await user.click(screen.getByRole("option", { name: /gemini - org/ }));
+
+    expect(screen.getByText("Fast model")).toBeInTheDocument();
+    expect(screen.getByText("Smart model")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ defaultAutoRouterId: null }),
+    );
+  });
+
+  it("keeps a saved router that is no longer offered selected as Auto", () => {
+    mockAutoRouters = [];
+    useSavedOrganization({ defaultAutoRouterId: "router-gone" });
+    renderPage();
+
+    expect(
+      screen.getByText(/New chats and agents on the default use Auto\./),
+    ).toBeInTheDocument();
   });
 });
 

@@ -58,8 +58,9 @@ function family() {
             session_id: session.session_id,
             ...(session.parent_id ? { parent_id: session.parent_id } : {}),
           },
-          execution_mode: 'tracked',
-          tool_call_id: toolCallId,
+          ...(toolCallId === undefined
+            ? { execution_mode: 'untracked' }
+            : { execution_mode: 'tracked', tool_call_id: toolCallId }),
           arguments: args,
           original_arguments: JSON.stringify(args),
           presentation,
@@ -148,6 +149,46 @@ test('a return declared ahead, as the gateway does without an offer, releases on
 
   const next = await run.hook(run.parent, run.spawnCall('s2'));
   assert.equal(next.decision, 'deny_call', 'a declaration covers one spawn');
+});
+
+/** The attempts the family's log recorded declarations ahead under, in log order. */
+async function aheadDeclarations(client, session) {
+  return (await client.query(
+    `SELECT convert_from(payload, 'UTF8')::jsonb #>> '{host,attempt,host}' AS attempt FROM openappa_events
+       WHERE root = (SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2)
+         AND convert_from(payload, 'UTF8')::jsonb #>> '{host,kind}' = 'ahead_declared'
+       ORDER BY seq`,
+    [session.organization_id, session.session_id],
+  )).rows.map((row) => row.attempt);
+}
+
+test('a declaration ahead is made under its tool call id, and a retry of it answers from the record', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    assert.equal((await run.hook(run.parent, run.call('c0', 'publish'))).decision, 'allow_call');
+
+    const untracked = await run.remedy(run.parent, undefined, { label: {} });
+    assert.equal(untracked.decision, 'mcp_result', JSON.stringify(untracked));
+    assert.equal(untracked.result.isError, true, 'an untracked remedy names no attempt to declare under');
+    assert.deepEqual(await aheadDeclarations(client, run.parent), []);
+    assert.equal((await run.hook(run.parent, run.spawnCall('held'))).decision, 'deny_call', 'the spawn stays held');
+
+    const declared = await run.remedy(run.parent, 'ahead:1', { label: {} });
+    assert.equal(declared.result.isError, false, JSON.stringify(declared));
+    assert.deepEqual(await aheadDeclarations(client, run.parent), ['remedy:ahead:1']);
+    assert.deepEqual(await run.remedy(run.parent, 'ahead:1', { label: {} }), declared, 'the retry replays the declaration');
+    assert.deepEqual(await aheadDeclarations(client, run.parent), ['remedy:ahead:1'], 'and declares nothing again');
+
+    const call = await run.hook(run.parent, run.spawnCall('s1'));
+    assert.equal(call.decision, 'allow_call', JSON.stringify(call));
+    assert.ok(call.spawn_binding);
+    assert.equal((await run.hook(run.parent, run.spawnCall('s2'))).decision, 'deny_call', 'one declaration released one spawn');
+  } finally {
+    await client.end();
+  }
 });
 
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {

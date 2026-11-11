@@ -5,6 +5,7 @@ import {
   type PoolFormMember,
   toFormValues,
   toPoolInput,
+  withRetryValue,
 } from "./pool-form";
 
 function member(
@@ -25,6 +26,7 @@ describe("toFormValues and toPoolInput", () => {
       streamTimeoutSeconds: null,
       timeoutSeconds: null,
       cooldownSeconds: null,
+      retrySettings: null,
       createdAt: "",
       updatedAt: "",
       virtualApiKeyIds: [],
@@ -38,6 +40,7 @@ describe("toFormValues and toPoolInput", () => {
         priority,
         weight: 1,
         enabled: true,
+        retrySettings: null,
         createdAt: "",
         benchedUntil: null,
         benchReason: null,
@@ -51,6 +54,42 @@ describe("toFormValues and toPoolInput", () => {
       ["m2", 2],
       ["m3", 3],
     ]);
+  });
+});
+
+describe("retry settings", () => {
+  it("preserves zero retries and per-member overrides when saving unrelated edits", () => {
+    const input = toPoolInput({
+      ...toFormValues(null),
+      name: "test",
+      retrySettings: { numRetries: 0, retryPolicy: { rateLimitError: 4 } },
+      members: [
+        {
+          ...member("test", 1),
+          retrySettings: { retryPolicy: { timeoutError: 0 } },
+        },
+      ],
+    });
+    expect(input.retrySettings).toEqual({
+      numRetries: 0,
+      retryPolicy: { rateLimitError: 4 },
+    });
+    expect(input.members[0].retrySettings).toEqual({
+      retryPolicy: { timeoutError: 0 },
+    });
+    expect(toPoolInput(toFormValues(null)).retrySettings).toBeNull();
+  });
+});
+
+describe("withRetryValue", () => {
+  it("goes back to null, the defaults, once the last field is cleared", () => {
+    const set = withRetryValue(null, "rateLimitError", 3);
+    expect(set).toEqual({ retryPolicy: { rateLimitError: 3 } });
+    expect(withRetryValue(set, "rateLimitError", undefined)).toBeNull();
+  });
+
+  it("keeps 0 as a value", () => {
+    expect(withRetryValue(null, "numRetries", 0)).toEqual({ numRetries: 0 });
   });
 });
 

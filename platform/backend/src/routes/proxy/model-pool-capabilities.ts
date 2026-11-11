@@ -17,6 +17,21 @@ export async function compatiblePoolMembers(params: {
   wire: PoolWire;
   request: unknown;
 }): Promise<PlannedMember[]> {
+  if (params.wire === "openai-responses") {
+    const body = asRecord(params.request);
+    // Stored state belongs to one provider account. Affinity alone cannot
+    // make that state available to another member during failover.
+    if (
+      body?.previous_response_id ||
+      body?.conversation ||
+      body?.background ||
+      hasStoredResponsesReferences(body)
+    )
+      throw new ApiError(
+        400,
+        "Model pools require the complete Responses input history and synchronous execution; stored response, conversation, item, file, prompt, vector-store, container and skill references and background execution are not supported.",
+      );
+  }
   const requirements = requestRequirements(params.request, params.wire);
   const [models, azureRows] = await Promise.all([
     ModelModel.findByProviderModelIds(params.members),
@@ -78,6 +93,69 @@ export async function compatiblePoolMembers(params: {
 
 // === Internal helpers ===
 
+/** Inspect protocol fields, never arbitrary function arguments or JSON schemas. */
+function hasStoredResponsesReferences(
+  body: Record<string, unknown> | undefined,
+): boolean {
+  if (asRecord(body?.prompt)?.id) return true;
+  const containerHasState = (value: unknown): boolean => {
+    const container = asRecord(value);
+    return (
+      typeof value === "string" ||
+      Boolean(container?.container_id) ||
+      (Array.isArray(container?.file_ids) && container.file_ids.length > 0) ||
+      (Array.isArray(container?.skills) &&
+        container.skills.some(
+          (skill) => asRecord(skill)?.type === "skill_reference",
+        ))
+    );
+  };
+  const contentHasFile = (content: unknown): boolean =>
+    Array.isArray(content) &&
+    content.some((raw) => {
+      const part = asRecord(raw);
+      return (
+        (part?.type === "input_file" || part?.type === "input_image") &&
+        Boolean(part.file_id)
+      );
+    });
+  if (
+    Array.isArray(body?.input) &&
+    body.input.some((raw) => {
+      const item = asRecord(raw);
+      return (
+        item?.type === "item_reference" ||
+        (item?.type === "computer_call_output" &&
+          Boolean(asRecord(item.output)?.file_id)) ||
+        (item?.type === "code_interpreter_call" &&
+          Boolean(item.container_id)) ||
+        (item?.type === "shell_call" && containerHasState(item.environment)) ||
+        contentHasFile(item?.content) ||
+        contentHasFile(item?.output)
+      );
+    })
+  )
+    return true;
+  const toolsHaveState = (tools: unknown): boolean =>
+    Array.isArray(tools) &&
+    tools.some((raw) => {
+      const tool = asRecord(raw);
+      if (tool?.type === "namespace") return toolsHaveState(tool.tools);
+      if (tool?.type === "file_search")
+        return (
+          Array.isArray(tool.vector_store_ids) &&
+          tool.vector_store_ids.length > 0
+        );
+      if (tool?.type === "image_generation")
+        return Boolean(asRecord(tool.input_image_mask)?.file_id);
+      if (tool?.type === "code_interpreter")
+        return containerHasState(tool.container);
+      if (tool?.type === "shell") return containerHasState(tool.environment);
+      return false;
+    });
+  return toolsHaveState(body?.tools);
+}
+
 type Requirements = {
   modalities: Set<ModelInputModality>;
   text: string[];
@@ -116,8 +194,16 @@ function requestRequirements(request: unknown, wire: PoolWire): Requirements {
       const block = asRecord(raw);
       if (!block) continue;
       text(block.text);
-      if (wire === "openai-chat" || wire === "anthropic") {
-        if (block.type === "image_url" || block.type === "image")
+      if (
+        wire === "openai-chat" ||
+        wire === "anthropic" ||
+        wire === "openai-responses"
+      ) {
+        if (
+          block.type === "image_url" ||
+          block.type === "image" ||
+          block.type === "input_image"
+        )
           result.modalities.add("image");
         if (block.type === "input_audio") result.modalities.add("audio");
         if (block.type === "video_url") result.modalities.add("video");
@@ -139,6 +225,30 @@ function requestRequirements(request: unknown, wire: PoolWire): Requirements {
           )
             result.modalities.add("pdf");
         }
+        if (block.type === "input_file") {
+          if (typeof block.file_data === "string")
+            mime(/^data:([^;,]+)/.exec(block.file_data)?.[1]);
+          if (
+            typeof block.filename === "string" &&
+            /\.pdf$/i.test(block.filename)
+          )
+            result.modalities.add("pdf");
+        }
+        if (block.type === "function_call") {
+          text(block.name);
+          text(block.arguments);
+        }
+        if (block.type === "custom_tool_call") {
+          text(block.name);
+          text(block.input);
+        }
+        if (
+          block.type === "function_call_output" ||
+          block.type === "custom_tool_call_output"
+        )
+          blocks(block.output);
+        if (block.type === "message" || block.role) blocks(block.content);
+        if (block.type === "reasoning") blocks(block.summary);
         if (block.type === "tool_use") {
           text(block.name);
           json(block.input);
@@ -178,7 +288,11 @@ function requestRequirements(request: unknown, wire: PoolWire): Requirements {
       }
     }
   };
-  if (wire === "gemini") {
+  if (wire === "openai-responses") {
+    text(body.instructions);
+    blocks(body.input);
+    json(body.tools);
+  } else if (wire === "gemini") {
     for (const message of Array.isArray(body.contents) ? body.contents : [])
       blocks(asRecord(message)?.parts);
     blocks(asRecord(body.systemInstruction ?? body.system_instruction)?.parts);

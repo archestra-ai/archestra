@@ -1,6 +1,6 @@
 import config from "@/config";
 import { ModelModel, OrganizationModel } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import type { GatewayAgent, Model } from "@/types";
 import type {
   OrganizationDefaultModel,
@@ -9,62 +9,65 @@ import type {
 import { loadTrio } from "./tiers";
 
 /**
- * Whether an agent's runs go to auto routing: it is set to `auto` itself, or
- * it has no model, key or pool of its own and the organization default is
- * `auto`. Agent Runtime agents are never routed: their CLI reaches the proxy
- * from its pod on a single-provider key with the model fixed at launch.
+ * The auto router an agent's runs go to: the one it is set to itself, or the
+ * organization default's when it has no model, key or pool of its own. Null
+ * when its runs are not auto routed. Agent Runtime agents never are: their CLI
+ * reaches the proxy from its pod on a single-provider key with the model fixed
+ * at launch.
  */
-export async function agentUsesAutoModel(
+export async function agentAutoRouterId(
   agent: Pick<
     GatewayAgent,
-    "autoModel" | "llmApiKeyId" | "modelId" | "modelPoolId" | "runtime"
+    "autoRouterId" | "llmApiKeyId" | "modelId" | "modelPoolId" | "runtime"
   >,
   organizationId: string,
-): Promise<boolean> {
-  if (!config.autoRouting.enabled || agent.runtime !== null) return false;
-  if (agent.autoModel) return true;
+): Promise<string | null> {
+  if (!config.autoRouting.enabled || agent.runtime !== null) return null;
+  if (agent.autoRouterId) return agent.autoRouterId;
   if (
     agent.llmApiKeyId !== null ||
     agent.modelId !== null ||
     agent.modelPoolId !== null
   ) {
-    return false;
+    return null;
   }
   const organization = await OrganizationModel.getById(organizationId);
-  return organization?.defaultAutoModel ?? false;
+  return organization?.defaultAutoRouterId ?? null;
 }
 
 /**
  * What "Organization default" currently runs on, named for any member, and
- * whether `auto` is offered: auto routing is on and its tiers are set. With
- * auto routing off, chats and agents on an `auto` default run on the normal
+ * the auto routers offered as a model: auto routing is on and their tiers are
+ * set. With auto routing off, chats and agents on a router run on its normal
  * tier.
  */
 export async function describeOrganizationDefaultModel(
   organizationId: string,
 ): Promise<OrganizationDefaultModel> {
   const organization = await OrganizationModel.getById(organizationId);
-  const settings = config.autoRouting.enabled
-    ? await AutoRoutingSettingsModel.find(organizationId)
+  const routers = config.autoRouting.enabled
+    ? await AutoRouterModel.list(organizationId)
+    : [];
+  const autoRouters: OrganizationDefaultModel["autoRouters"] = [];
+  for (const router of routers) {
+    const loaded = router.enabled ? await loadTrio(router) : null;
+    if (loaded?.kind !== "ok") continue;
+    autoRouters.push({
+      id: router.id,
+      name: router.name,
+      tiers: {
+        fast: toRef(loaded.trio[0]),
+        normal: toRef(loaded.trio[1]),
+        smart: toRef(loaded.trio[2]),
+      },
+    });
+  }
+  const defaultRouter =
+    routers.find((router) => router.id === organization?.defaultAutoRouterId) ??
+    null;
+  const normal = defaultRouter?.normalModelId
+    ? await ModelModel.findById(defaultRouter.normalModelId)
     : null;
-  const loaded = settings?.enabled ? await loadTrio(settings) : null;
-  const autoRouting: OrganizationDefaultModel["autoRouting"] =
-    loaded?.kind === "ok"
-      ? {
-          active: true,
-          tiers: {
-            fast: toRef(loaded.trio[0]),
-            normal: toRef(loaded.trio[1]),
-            smart: toRef(loaded.trio[2]),
-          },
-        }
-      : { active: false };
-  const defaultAutoModel =
-    config.autoRouting.enabled && (organization?.defaultAutoModel ?? false);
-  const normal =
-    defaultAutoModel && settings?.normalModelId
-      ? await ModelModel.findById(settings.normalModelId)
-      : null;
   const model =
     normal ??
     (organization?.defaultModelId
@@ -72,8 +75,8 @@ export async function describeOrganizationDefaultModel(
       : null);
   return {
     model: model ? toRef(model) : null,
-    defaultAutoModel,
-    autoRouting,
+    defaultAutoRouterId: defaultRouter?.id ?? null,
+    autoRouters,
   };
 }
 

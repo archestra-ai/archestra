@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.28",
+  "version": "1.5.0-rc.29",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -27,6 +27,7 @@
     "./interactions/session-source": "./interactions/session-source.ts",
     "./mcp-image-pull-policy": "./mcp-image-pull-policy.ts",
     "./model-constants": "./model-constants.ts",
+    "./model-pool-retries": "./model-pool-retries.ts",
     "./model-price": "./model-price.ts",
     "./opencode-family": "./opencode-family.ts",
     "./oauth": "./oauth.ts",

@@ -641,16 +641,14 @@ async function expectOnePeelForGuardedCall(page: Page): Promise<void> {
   await expect(peel).toHaveCount(1);
   await expect(
     page.getByRole("button", {
-      name: /^(get remedy plans|execute remedy plan)/,
+      name: /^(Checked what's allowed|Guardrails step)/,
     }),
   ).toHaveCount(0);
 
   await peel.click();
   await expect(page.getByText("Guardrails", { exact: true })).toBeVisible();
-  const steps = page.getByText(
-    new RegExp(`^(${NOTICE_TOOL}|${CONTROL_TOOL})$`),
-  );
-  await expect(steps).toHaveText([NOTICE_TOOL, CONTROL_TOOL]);
+  const steps = page.getByText(/^(Checked what's allowed|Guardrails step)$/);
+  await expect(steps).toHaveText(["Checked what's allowed", "Guardrails step"]);
 }
 
 // === The scripted provider turns =============================================

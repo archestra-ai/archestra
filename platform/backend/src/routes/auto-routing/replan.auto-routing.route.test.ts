@@ -3,33 +3,45 @@ import { eq } from "drizzle-orm";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import {
+  autoRouterId,
+  configureAutoRouting,
+  ensureAutoRouter,
+  setAutoRoutingEnabled,
+} from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { recordQueries } from "@/test/query-counter";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
-describe("POST /api/auto-routing/replan", () => {
+describe("POST /api/auto-routing/routers/:id/replan", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
     config.autoRouting.minSessions = 30;
   });
 
-  const replan = () =>
-    ctx.app.inject({ method: "POST", url: "/api/auto-routing/replan" });
+  const replan = async () =>
+    ctx.app.inject({
+      method: "POST",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/replan`,
+    });
 
-  test("fits an active plan at the current settings and leaves other organizations alone", async ({
+  test("fits an active plan at the current settings and leaves other routers alone", async ({
     makeOrganization,
   }) => {
     const trio = await configureAutoRouting(ctx.organizationId);
     const other = await makeOrganization();
     await configureAutoRouting(other.id);
+    const routerId = await autoRouterId(ctx.organizationId);
+    const otherRouterId = await autoRouterId(other.id);
+    const sibling = await ensureAutoRouter(ctx.organizationId, "auto:sibling");
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId,
       modelId: trio[2].id,
       scorerVersionId: (await activeSourceVersion()).id,
       sessions: 40,
@@ -45,14 +57,16 @@ describe("POST /api/auto-routing/replan", () => {
       fit: { status: "active" },
     });
     expect(body.plannedGeneration).toBe(body.generation);
-    expect(await RoutingPlanModel.findActive(ctx.organizationId)).toMatchObject(
-      {
-        id: body.fit.planId,
-        trigger: "manual",
-        generation: body.generation,
-      },
+    expect(await RoutingPlanModel.findActive(routerId)).toMatchObject({
+      id: body.fit.planId,
+      trigger: "manual",
+      generation: body.generation,
+    });
+    expect((await AutoRouterModel.find(otherRouterId))?.generation).toBe(1);
+    expect((await AutoRouterModel.find(sibling.id))?.generation).toBe(
+      sibling.generation,
     );
-    expect((await AutoRoutingSettingsModel.find(other.id))?.generation).toBe(1);
+    expect(await RoutingPlanModel.findActive(sibling.id)).toBeNull();
   });
 
   test("a re-plan with nothing new keeps the active plan without recording another", async () => {
@@ -68,7 +82,10 @@ describe("POST /api/auto-routing/replan", () => {
     expect(body.generation).toBe(first.generation);
     expect(body.status.activePlan.id).toBe(first.fit.planId);
     expect(
-      await RoutingPlanModel.findHistory(ctx.organizationId, 10),
+      await RoutingPlanModel.findHistory(
+        await autoRouterId(ctx.organizationId),
+        10,
+      ),
     ).toHaveLength(1);
   });
 
@@ -119,6 +136,7 @@ describe("POST /api/auto-routing/replan", () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await seedFitHistory({
       organizationId: ctx.organizationId,
+      routerId: await autoRouterId(ctx.organizationId),
       modelId: trio[2].id,
       scorerVersionId: (await activeSourceVersion()).id,
       sessions: 29,
@@ -139,17 +157,18 @@ describe("POST /api/auto-routing/replan", () => {
 
   test("does not fit while auto routing is disabled", async () => {
     await configureAutoRouting(ctx.organizationId);
-    await AutoRoutingSettingsModel.update(ctx.organizationId, {
-      enabled: false,
-    });
+    await setAutoRoutingEnabled(ctx.organizationId, false);
 
     const response = await replan();
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({ fit: null, generation: 3 });
-    expect(await RoutingPlanModel.findHistory(ctx.organizationId, 1)).toEqual(
-      [],
-    );
+    expect(response.json()).toMatchObject({ fit: null, generation: 2 });
+    expect(
+      await RoutingPlanModel.findHistory(
+        await autoRouterId(ctx.organizationId),
+        1,
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -160,6 +179,7 @@ async function seedHistory(
 ) {
   await seedFitHistory({
     organizationId,
+    routerId: await autoRouterId(organizationId),
     modelId,
     scorerVersionId: (await activeSourceVersion()).id,
     sessions,

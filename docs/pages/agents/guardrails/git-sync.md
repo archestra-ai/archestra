@@ -58,7 +58,7 @@ include = [
 ]
 ```
 
-Tick it when you set up Git sync, or click **Enable** on the Git sync card in **Settings → Guardrails** later; the dialog walks you through it. Then [share each server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed, and share the **APPA Keeper** agent with those teams for use. **Edit** on the card changes or turns it off later. GitHub App sources only; [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead.
+Enable it in the Guardrails setting when setting up git sync or afterwards. Can also be controlled with the [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) env var.
 
 ### Edit a Server's Rules
 

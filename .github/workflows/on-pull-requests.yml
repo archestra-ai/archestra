@@ -536,7 +536,9 @@ jobs:
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
+          sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Rust workspace checks and musl compile check
         working-directory: ./platform/archestra-rs
@@ -851,6 +853,7 @@ jobs:
       - name: Ensure Zsh and PowerShell for shell runtime tests
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
+            "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
             sudo apt-get update
             sudo apt-get install -y zsh
           fi
@@ -979,10 +982,13 @@ jobs:
       # apt mirror outages must not fail the job when the runner image already
       # carries Chromium's system libraries: retry install-deps, then prove the
       # browser launches instead of trusting apt's exit code.
+      # apt-mirror-fallback.sh first moves apt off Ubuntu's mirrors when their
+      # names do not resolve, so each attempt does not spend minutes timing out.
       - name: Install Chromium for Playwright
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: |
           pnpm --filter @frontend exec playwright install chromium
+          "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
           for attempt in 1 2 3; do
             if pnpm --filter @frontend exec playwright install-deps chromium; then
               exit 0
@@ -996,6 +1002,7 @@ jobs:
       - name: Install Chromium system dependencies
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: |
+          "$GITHUB_WORKSPACE/.github/scripts/apt-mirror-fallback.sh"
           for attempt in 1 2 3; do
             if pnpm --filter @frontend exec playwright install-deps chromium; then
               exit 0

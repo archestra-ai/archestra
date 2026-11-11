@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   DocsPage,
   getDocsUrl,
+  type gitWebUrls,
 } from "@archestra/shared";
 import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -273,6 +274,7 @@ export function AppaGithubSyncPanel() {
                 {connected && !source.setupPullRequestNumber && (
                   <SelfServiceRow
                     source={source}
+                    urls={urls}
                     selfService={selfService}
                     canManage={canManage === true}
                   />
@@ -341,10 +343,13 @@ type Protection = NonNullable<
  */
 function SelfServiceRow({
   source,
+  urls,
   selfService,
   canManage,
 }: {
   source: Source;
+  /** Browser links into the repository, for the branch and the folder. */
+  urls: ReturnType<typeof gitWebUrls> | null;
   selfService: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"];
   canManage: boolean;
 }) {
@@ -411,6 +416,13 @@ function SelfServiceRow({
         {selfService.enabled ? (
           <RepositoryProtection
             policyPath={source.path ?? "appa.toml"}
+            branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
+            folderUrl={(folder) =>
+              urls?.tree(
+                source.ref ?? "HEAD",
+                policyFolderOf(source.path ?? "appa.toml", folder),
+              ) ?? null
+            }
             onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
@@ -449,11 +461,23 @@ function SelfServiceDocsLink() {
   );
 }
 
+/** A folder beside the policy file, as a repository path. */
+function policyFolderOf(policyPath: string, folder: string): string {
+  const slash = policyPath.lastIndexOf("/");
+  return slash < 0 ? folder : `${policyPath.slice(0, slash)}/${folder}`;
+}
+
 function RepositoryProtection({
   policyPath,
+  branchUrl,
+  folderUrl,
   onFinishSetup,
 }: {
   policyPath: string;
+  /** The synced branch on the host, for the ruleset sentence. */
+  branchUrl: string | null;
+  /** The servers' folder on the host, for the include sentence. */
+  folderUrl: (folder: string) => string | null;
   /** Opens the self-service setup again, for a part that is still missing. */
   onFinishSetup?: () => void;
 }) {
@@ -466,10 +490,10 @@ function RepositoryProtection({
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        {protectionSentence(data.branchRules, appName)}
+        {protectionSentence(data.branchRules, appName, branchUrl)}
       </p>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-        {includeSentence(data.include, policyFile)}
+        {includeSentence(data.include, policyFile, folderUrl)}
         {unfinished && onFinishSetup ? (
           <Button
             size="xs"
@@ -492,13 +516,15 @@ function RepositoryProtection({
 function includeSentence(
   include: Protection["include"],
   policyFile: string,
+  folderUrl: (folder: string) => string | null,
 ): ReactNode {
   const entry = <code>{`${include.folder}/*.toml`}</code>;
   switch (include.state) {
     case "included":
       return (
         <span>
-          Each server&apos;s rules file lives in <code>{include.folder}/</code>.
+          MCP servers&apos; policy files go to{" "}
+          {hostLink(folderUrl(include.folder), `${include.folder}/`)}
         </span>
       );
     case "pull_open":
@@ -530,22 +556,28 @@ function includeSentence(
  * check the App cannot post comes first, since a rule that requires it holds
  * every pull request.
  */
-function protectionSentence(
-  rules: Protection["branchRules"],
-  appName: string,
-): ReactNode {
-  const ruleset = rules.url ? (
+/** A link into the repository on its host, or the text alone without one. */
+function hostLink(href: string | null | undefined, text: string): ReactNode {
+  return href ? (
     <a
-      href={rules.url}
+      href={href}
       target="_blank"
       rel="noreferrer"
       className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
     >
-      ruleset
+      {text}
     </a>
   ) : (
-    <span>ruleset</span>
+    <span>{text}</span>
   );
+}
+
+function protectionSentence(
+  rules: Protection["branchRules"],
+  appName: string,
+  branchUrl: string | null,
+): ReactNode {
+  const ruleset = hostLink(rules.url, "ruleset");
   if (rules.checkRule === "unposted")
     return (
       <>
@@ -555,7 +587,12 @@ function protectionSentence(
     );
   switch (rules.state) {
     case "active":
-      return <>The Self-service branch protection {ruleset} is on.</>;
+      return (
+        <>
+          {hostLink(rules.url, "Ruleset")} protects the policy on the{" "}
+          {hostLink(branchUrl, "branch")}
+        </>
+      );
     case "incomplete":
     case "missing":
       return (

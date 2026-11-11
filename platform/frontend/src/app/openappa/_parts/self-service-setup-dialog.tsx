@@ -171,7 +171,6 @@ export function SelfServiceSetupDialog({
       {step === "enable" ? (
         <EnableStep
           directory={alreadyOn ? directory : chosen}
-          alreadyOn={alreadyOn}
           policyFile={policyFile}
         />
       ) : null}
@@ -334,18 +333,14 @@ type Progress = "waiting" | "running" | "done" | "failed";
  */
 function EnableStep({
   directory,
-  alreadyOn,
   policyFile,
 }: {
   directory: string;
-  alreadyOn: boolean;
   policyFile: string;
 }) {
   const update = useUpdateAppaGithubSync();
   const protection = useAppaRepositoryProtection(false);
-  const [switched, setSwitched] = useState<Progress>(
-    alreadyOn ? "done" : "waiting",
-  );
+  const [switched, setSwitched] = useState<Progress>("waiting");
   const [rules, setRules] = useState<{
     state: Progress;
     detail?: Protection["branchRules"];
@@ -363,11 +358,10 @@ function EnableStep({
 
   async function run() {
     try {
-      if (!alreadyOn) {
-        setSwitched("running");
-        await mutate({ action: "self_service", enabled: true, directory });
-        setSwitched("done");
-      }
+      // Already on, the same call brings a ruleset that went missing back.
+      setSwitched("running");
+      await mutate({ action: "self_service", enabled: true, directory });
+      setSwitched("done");
       setRules({ state: "running" });
       setInclude({ state: "running" });
       const read = (await refetch()).data ?? null;

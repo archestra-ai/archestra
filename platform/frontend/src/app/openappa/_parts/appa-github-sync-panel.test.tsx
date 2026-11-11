@@ -325,11 +325,15 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
 
   // On: the card says what is in place, and offers Disable.
   expect(
-    await screen.findByText(/Self-service branch protection/),
-  ).toHaveTextContent("The Self-service branch protection ruleset is on.");
-  expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
+    await screen.findByText(/protects the policy on the/),
+  ).toHaveTextContent("Ruleset protects the policy on the branch");
+  expect(screen.getByRole("link", { name: "Ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
+  );
+  expect(screen.getByRole("link", { name: "branch" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/tree/main",
   );
   const link = await screen.findByRole("link", { name: "Pull request #12" });
   expect(link.closest("p")).toHaveTextContent(
@@ -342,7 +346,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   expect(actions[2]).toEqual({ action: "self_service", enabled: false });
   expect(await screen.findByRole("button", { name: "Enable" })).toBeEnabled();
   await waitFor(() =>
-    expect(screen.queryByText(/Self-service branch protection/)).toBeNull(),
+    expect(screen.queryByText(/protects the policy on the/)).toBeNull(),
   );
 });
 

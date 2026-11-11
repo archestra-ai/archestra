@@ -27,10 +27,12 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
 import {
+  ensureSelfServiceInclude,
   getServerRules,
   getServerRulesChangeStatus,
   previewServerRulesChange,
   proposeServerRulesChange,
+  selfServiceIncludeState,
 } from "./openappa-server-rules";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture
@@ -2192,4 +2194,306 @@ test("a policy in a folder of a repository that holds other work gets the same o
   expect(runs).toEqual([
     expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
   ]);
+});
+
+test("the self-service folder is chosen when turning on: the servers' files live there, one pull request in the administrator's name includes it, an include already in place or on its way needs none, a stale one is closed, and the folder cannot move while on", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ name: "Alex" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: "payments_api",
+      serverType: "remote",
+      serverUrl: "https://payments.example.com/mcp",
+      scope: "org",
+    },
+    { organizationId: org.id },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: "payments_api__refund_payment",
+    description: "refund_payment",
+    parameters: {},
+    catalogId: catalog.id,
+  });
+  await connectApp({ organizationId: org.id, selfService: false });
+  const INCLUDED = `include = ["rules/servers/*.toml"]\n${RULES}`;
+  const PULL_HEAD = "6".repeat(40);
+  const STALE_HEAD = "7".repeat(40);
+  const files: Record<string, Record<string, string>> = {
+    [FIRST]: { "appa.toml": RULES },
+    [SECOND]: { "appa.toml": INCLUDED },
+    main: { "appa.toml": RULES },
+    [PULL_HEAD]: { "appa.toml": INCLUDED },
+    // Our earlier pull request, for the default folder.
+    [STALE_HEAD]: { "appa.toml": `include = ["mcp/*.toml"]\n${RULES}` },
+  };
+  serveRepository({ head: FIRST, files });
+  let openPulls: Array<{
+    number: number;
+    html_url: string;
+    head: { sha: string };
+  }> = [];
+  const trees: Array<{ tree: Array<{ path: string; content: string }> }> = [];
+  const commits: Array<{ message: string }> = [];
+  const refs: Array<{ ref: string }> = [];
+  const pulls: Array<{ title: string; body: string; head: string }> = [];
+  const patched: Array<{ number: string; body: Record<string, unknown> }> = [];
+  const deleted: string[] = [];
+  server.use(
+    http.get(`${REPO}/rulesets`, () => HttpResponse.json([])),
+    http.post(`${REPO}/rulesets`, () =>
+      HttpResponse.json({ id: 5 }, { status: 201 }),
+    ),
+    http.delete(
+      `${REPO}/rulesets/:id`,
+      () => new HttpResponse(null, { status: 204 }),
+    ),
+    // The chosen folder holds no file yet.
+    http.get(`${REPO}/contents/rules/servers`, () =>
+      HttpResponse.json({ message: "Not Found" }, { status: 404 }),
+    ),
+    http.get(`${REPO}/pulls`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("head") ===
+          "example:archestra/openappa-self-service"
+          ? openPulls
+          : [],
+      ),
+    ),
+    http.patch(`${REPO}/pulls/:number`, async ({ params, request }) => {
+      patched.push({
+        number: String(params.number),
+        body: (await request.json()) as Record<string, unknown>,
+      });
+      return HttpResponse.json({});
+    }),
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, async ({ request }) => {
+      trees.push((await request.json()) as (typeof trees)[number]);
+      return HttpResponse.json({ sha: "4".repeat(40) });
+    }),
+    http.post(`${REPO}/git/commits`, async ({ request }) => {
+      commits.push((await request.json()) as (typeof commits)[number]);
+      return HttpResponse.json({ sha: "5".repeat(40) });
+    }),
+    http.post(`${REPO}/git/refs`, async ({ request }) => {
+      refs.push((await request.json()) as (typeof refs)[number]);
+      return HttpResponse.json({});
+    }),
+    http.delete(
+      `${REPO}/git/refs/heads/archestra/openappa-self-service`,
+      ({ request }) => {
+        deleted.push(new URL(request.url).pathname);
+        return new HttpResponse(null, { status: 422 });
+      },
+    ),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 9,
+        html_url: "https://github.com/example/policies/pull/9",
+      });
+    }),
+  );
+  await syncAppaGithubPolicy(org.id);
+
+  // A folder the servers' files cannot live in is refused before anything changes.
+  const turnOn = (directory: string) =>
+    updateAppaGithubSync({
+      organizationId: org.id,
+      action: "self_service",
+      enabled: true,
+      directory,
+    });
+  await expect(turnOn("traces")).rejects.toMatchObject({ statusCode: 400 });
+  await expect(turnOn("batteries/mine")).rejects.toMatchObject({
+    statusCode: 400,
+  });
+  expect((await getAppaGithubSync(org.id)).selfService).toMatchObject({
+    enabled: false,
+    directory: "mcp",
+  });
+
+  const on = await turnOn("rules/servers");
+  expect(on.selfService).toEqual({
+    enabled: true,
+    setting: true,
+    directory: "rules/servers",
+  });
+  // Moving the folder while on would turn the servers' files into
+  // organization policy: that takes off and on again.
+  await expect(turnOn("mcp")).rejects.toMatchObject({ statusCode: 409 });
+  expect((await getAppaGithubSync(org.id)).selfService.directory).toBe(
+    "rules/servers",
+  );
+  // Turning on again with the same folder changes nothing.
+  expect((await turnOn("rules/servers")).selfService.directory).toBe(
+    "rules/servers",
+  );
+
+  // Our pull request from an earlier folder waits: it is not this one's,
+  // so it is closed and a new one opened. The policy lacks the include and
+  // the folder does not exist: the pull request adds the line and a README,
+  // in the name of whoever asked, from a fixed branch.
+  openPulls = [
+    {
+      number: 8,
+      html_url: "https://github.com/example/policies/pull/8",
+      head: { sha: STALE_HEAD },
+    },
+  ];
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "missing",
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toEqual({ number: 9, url: "https://github.com/example/policies/pull/9" });
+  expect(patched).toEqual([
+    {
+      number: "8",
+      body: {
+        state: "closed",
+        body: expect.stringContaining("rules/servers/"),
+      },
+    },
+  ]);
+  expect(trees[0]?.tree.map((file) => file.path)).toEqual([
+    "appa.toml",
+    "rules/servers/README.md",
+  ]);
+  expect(trees[0]?.tree[0]?.content).toContain('"rules/servers/*.toml"');
+  expect(trees[0]?.tree[1]?.content).toContain("rules/servers/*.toml");
+  expect(refs.map((entry) => entry.ref)).toEqual([
+    "refs/heads/archestra/openappa-self-service",
+  ]);
+  expect(deleted).toEqual([
+    "/repos/example/policies/git/refs/heads/archestra/openappa-self-service",
+  ]);
+  expect(commits[0]?.message).toMatch(
+    new RegExp(`\\n\\nRequested-by: ${admin.email}$`),
+  );
+  expect(pulls[0]).toMatchObject({
+    head: "archestra/openappa-self-service",
+    body: expect.stringContaining(admin.email),
+  });
+
+  // The pull request for this folder waits: nothing more is opened.
+  openPulls = [
+    {
+      number: 9,
+      html_url: "https://github.com/example/policies/pull/9",
+      head: { sha: PULL_HEAD },
+    },
+  ];
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "pull_open",
+    pull: { number: 9, url: "https://github.com/example/policies/pull/9" },
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toBeNull();
+  expect(pulls).toHaveLength(1);
+
+  // Merged on the branch but not pulled yet: included, and no pull request.
+  openPulls = [];
+  files.main = { "appa.toml": INCLUDED };
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "included",
+  });
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toBeNull();
+  expect(pulls).toHaveLength(1);
+  files.main = { "appa.toml": RULES };
+
+  // The servers' files live in the chosen folder, and are held to their
+  // server there, as they were under mcp/.
+  const read = await getServerRules({
+    organizationId: org.id,
+    userId: admin.id,
+    catalogId: catalog.id,
+  });
+  expect(read).toMatchObject({
+    path: "rules/servers/payments_api.toml",
+    included: false,
+    content: null,
+  });
+  expect(read.starter).toContain("through rules/servers/*.toml");
+  const change = {
+    organizationId: org.id,
+    userId: admin.id,
+    catalogId: catalog.id,
+    expectedCommit: FIRST,
+  };
+  const preview = await previewServerRulesChange({
+    ...change,
+    content: REFUNDS,
+  });
+  expect(preview).toMatchObject({
+    valid: true,
+    path: "rules/servers/payments_api.toml",
+  });
+  expect(preview.rootChange).toContain('"rules/servers/*.toml"');
+  await expect(
+    previewServerRulesChange({
+      ...change,
+      content: `${REFUNDS}\n[[policy.tool]]\nname = "helpdesk__close_ticket"\ndelta = {}\n`,
+    }),
+  ).rejects.toThrow(
+    /^rules\/servers\/payments_api\.toml may hold only rules for the tools of the MCP server it is named for/,
+  );
+
+  // Once the include is pulled, it is in place for good: off and on again
+  // with the same folder opens nothing.
+  serveRepository({ head: SECOND, files });
+  await syncAppaGithubPolicy(org.id);
+  expect(
+    (await OpenAppaGithubSyncModel.find(org.id))?.lastSyncError,
+  ).toBeNull();
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "included",
+  });
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  expect((await turnOn("rules/servers")).selfService.directory).toBe(
+    "rules/servers",
+  );
+  expect(
+    await ensureSelfServiceInclude({
+      organizationId: org.id,
+      userId: admin.id,
+    }),
+  ).toBeNull();
+  expect(pulls).toHaveLength(1);
+
+  // Off, then on with another folder.
+  await updateAppaGithubSync({
+    organizationId: org.id,
+    action: "self_service",
+    enabled: false,
+  });
+  expect((await turnOn("mcp")).selfService.directory).toBe("mcp");
 });

@@ -476,49 +476,133 @@ async function withInclude(root: string, entry: string): Promise<string> {
 /**
  * Whether the policy file includes the self-service folder, which is what
  * makes each server's file apply: included, or the open pull request that
- * adds the line waits, or neither. Null without a connected GitHub source.
+ * adds the line waits, or neither. Read from the repository, not the accepted
+ * copy alone: an include merged but not pulled yet counts, and a pull request
+ * left from an earlier folder does not.
  */
 export async function selfServiceIncludeState(organizationId: string) {
   const source = await OpenAppaGithubSyncModel.find(organizationId);
   const folder = serverRulesFolderOf(source);
+  const situation = await includeSituation({ organizationId, source, folder });
+  return situation.state === "pull_open"
+    ? { folder, state: situation.state, pull: situation.pull }
+    : { folder, state: situation.state };
+}
+
+type IncludeSituation =
+  | { state: "included" }
+  | { state: "pull_open"; pull: { number: number; url: string } }
+  | {
+      state: "missing";
+      /** Our open pull request for another folder, to close before a new one. */
+      stale?: { number: number; url: string };
+    };
+
+/**
+ * Where the folder's include stands, in this order: the accepted policy has
+ * it; the synced branch has it, so a sync is queued and nothing is opened;
+ * our pull request for it waits; our pull request waits for another folder;
+ * nothing.
+ */
+async function includeSituation(params: {
+  organizationId: string;
+  source: Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>;
+  folder: string;
+}): Promise<IncludeSituation> {
+  const { organizationId, source, folder } = params;
   const root = await guardrailsPolicyService.get(organizationId);
   if (includesServerRulesFolder(root.content, folder))
-    return { folder, state: "included" as const };
-  if (!source?.interval || !source.repo || !source.githubAppConfigId)
-    return { folder, state: "missing" as const };
+    return { state: "included" };
+  if (
+    !source?.interval ||
+    !source.repo ||
+    !source.path ||
+    !source.githubAppConfigId
+  )
+    return { state: "missing" };
+  const repo = source.repo;
   const { token, api } = await githubWriter({
     ...source,
-    repo: source.repo,
+    repo,
     githubAppConfigId: source.githubAppConfigId,
   });
-  const pull = await openPullFor({
+  const base = `${api}/repos/${repo}`;
+  const branch =
+    source.ref ??
+    (await github<{ default_branch: string }>({ token, url: base }))
+      .default_branch;
+  const atBranch = await rootAt({
     token,
-    base: `${api}/repos/${source.repo}`,
-    repo: source.repo,
-    head: INCLUDE_BRANCH,
+    base,
+    path: source.path,
+    ref: branch,
   });
-  return pull
-    ? { folder, state: "pull_open" as const, pull }
-    : { folder, state: "missing" as const };
+  if (atBranch !== null && includesServerRulesFolder(atBranch, folder)) {
+    // Merged, not pulled yet: the next pull brings it, so nothing to open.
+    await OpenAppaGithubSyncModel.enqueue(organizationId);
+    return { state: "included" };
+  }
+  const pull = await openPullFor({ token, base, repo, head: INCLUDE_BRANCH });
+  if (!pull) return { state: "missing" };
+  const atHead = pull.headSha
+    ? await rootAt({ token, base, path: source.path, ref: pull.headSha })
+    : null;
+  return atHead !== null && includesServerRulesFolder(atHead, folder)
+    ? { state: "pull_open", pull: { number: pull.number, url: pull.url } }
+    : { state: "missing", stale: { number: pull.number, url: pull.url } };
+}
+
+/** The policy file's text at `ref`, or null when the ref has none. */
+async function rootAt(params: {
+  token: string;
+  base: string;
+  path: string;
+  ref: string;
+}): Promise<string | null> {
+  const path = params.path.split("/").map(encodeURIComponent).join("/");
+  const response = await githubFetch({
+    url: `${params.base}/contents/${path}?ref=${encodeURIComponent(params.ref)}`,
+    token: params.token,
+    accept: "application/vnd.github.raw+json",
+  }).catch(() => null);
+  if (!response) return null;
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new ApiError(502, `GitHub returned HTTP ${response.status}`);
+  return response.text();
 }
 
 /**
  * Open the pull request that adds `<folder>/*.toml` to the policy file's
  * include list, in the caller's name, when the file lacks it and no such
- * pull request waits. Returns what was opened, or null when nothing was.
+ * pull request waits. Returns what was opened, or null when nothing was:
+ * an include already in place, or on its way, needs no pull request, and
+ * one of ours left from an earlier folder is closed first.
  */
 export async function ensureSelfServiceInclude(params: Caller) {
   const source = await requireSource(params.organizationId);
   const folder = serverRulesFolderOf(source);
   const entry = serverRulesInclude(folder);
+  const situation = await includeSituation({
+    organizationId: params.organizationId,
+    source,
+    folder,
+  });
+  if (situation.state !== "missing") return null;
   const root = await guardrailsPolicyService.get(params.organizationId);
-  if (includesServerRulesFolder(root.content, folder)) return null;
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
-  if (
-    await openPullFor({ token, base, repo: source.repo, head: INCLUDE_BRANCH })
-  )
-    return null;
+  if (situation.stale) {
+    await github({
+      token,
+      url: `${base}/pulls/${situation.stale.number}`,
+      method: "PATCH",
+      body: {
+        state: "closed",
+        body: `Closed by ${archestraMcpBranding.appName}: the self-service folder is now \`${folder}/\`, and a new pull request includes it.`,
+      },
+    });
+  }
   const after = await withInclude(root.content, entry);
   const requester = await UserModel.getById(params.userId);
   const title = `Include each MCP server's Guardrails rules file`;
@@ -724,16 +808,26 @@ async function openPullFor(params: {
   base: string;
   repo: string;
   head: string;
-}): Promise<{ number: number; url: string } | null | undefined> {
+}): Promise<
+  { number: number; url: string; headSha?: string } | null | undefined
+> {
   const owner = params.repo.slice(0, params.repo.indexOf("/"));
   try {
-    const pulls = await github<Array<{ number?: number; html_url?: string }>>({
+    const pulls = await github<
+      Array<{ number?: number; html_url?: string; head?: { sha?: string } }>
+    >({
       token: params.token,
       url: `${params.base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${params.head}`)}`,
     });
     const pull = pulls[0];
     return pull?.number && pull.html_url
-      ? { number: pull.number, url: pull.html_url }
+      ? {
+          number: pull.number,
+          url: pull.html_url,
+          ...(typeof pull.head?.sha === "string"
+            ? { headSha: pull.head.sha }
+            : {}),
+        }
       : null;
   } catch (err) {
     logger.warn({ err }, "OpenAPPA could not look for a rules pull request");

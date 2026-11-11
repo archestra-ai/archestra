@@ -36,6 +36,19 @@ describe("model pool routing usage", () => {
       ).get("member"),
     ).toBe(0);
   });
+  test("deployment tuple boundaries keep similar identifiers separate", async () => {
+    const first = { memberId: "first", providerApiKeyId: "a:b", modelId: "c" };
+    const second = {
+      memberId: "second",
+      providerApiKeyId: "a",
+      modelId: "b:c",
+    };
+    await ModelPoolUsageModel.record({ poolId: "pool", ...first, tokens: 7 });
+    await ModelPoolUsageModel.record({ poolId: "pool", ...second, tokens: 11 });
+    const usage = await ModelPoolUsageModel.read("pool", [first, second]);
+    expect(usage.get("first")).toBe(7);
+    expect(usage.get("second")).toBe(11);
+  });
   test("malformed routing hints do not reject requests and the next completion repairs the counter", async () => {
     const member = {
       memberId: "member",

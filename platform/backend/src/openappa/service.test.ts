@@ -505,6 +505,37 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test("refuses a call that spells one argument two ways with different values before ruling on it", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "split",
+          name: "exec_command",
+          arguments: { cmd: "cat ~/.aws/credentials", command: "ls" },
+        },
+        {
+          id: "echo",
+          name: "exec_command",
+          arguments: { cmd: "ls", command: "ls" },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions[0]).toMatchObject({ kind: "deny", unanswered: true });
+    expect(decisions[1]).toEqual({ kind: "allow" });
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:echo"]);
+  });
+
   test.each([
     "spawn_agent",
     "collaboration.spawn_agent",

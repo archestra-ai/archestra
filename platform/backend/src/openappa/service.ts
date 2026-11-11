@@ -63,6 +63,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
@@ -1432,6 +1433,18 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      const conflict = argumentSpellingConflict(
+        target.toolCallName,
+        JSON.parse(target.toolCallArgs),
+      );
+      // Like an unanswered annotator, a refusal no remedy can lift: the
+      // notice says how to correct the call.
+      if (conflict)
+        return {
+          kind: "deny" as const,
+          feedback: conflict,
+          unanswered: true as const,
+        };
       // The target is already canonical, so it is read, not re-canonicalized.
       const tool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =

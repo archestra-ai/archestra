@@ -29,12 +29,34 @@ export function normalizeCommandExecutionArguments(
     return args;
   }
   const normalized = { ...(args as Record<string, unknown>) };
-  if (normalized.command !== undefined && normalized.cmd === undefined) {
+  if (normalized.command != null && normalized.cmd == null) {
     normalized.cmd = normalized.command;
-  } else if (normalized.cmd !== undefined && normalized.command === undefined) {
+  } else if (normalized.cmd != null && normalized.command == null) {
     normalized.command = normalized.cmd;
   }
   return normalized;
+}
+
+/**
+ * The refusal for a call that spells one argument both ways with different
+ * values, or null. The policy reads one spelling while the client's tool may
+ * execute the other, so the call is refused before it is ruled on.
+ */
+export function argumentSpellingConflict(
+  toolName: string,
+  args: unknown,
+): string | null {
+  if (
+    !isCommandExecutionTool(toolName) ||
+    typeof args !== "object" ||
+    args === null
+  )
+    return null;
+  const { command, cmd } = args as Record<string, unknown>;
+  if (command == null || cmd == null) return null;
+  if (typeof command === "string" && typeof cmd === "string" && command === cmd)
+    return null;
+  return "[appa] Blocked: this call sets both `command` and `cmd`, to different values. The tool did not run. Make the call again with only the argument the tool defines.";
 }
 
 /**

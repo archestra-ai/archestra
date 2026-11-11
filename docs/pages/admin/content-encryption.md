@@ -2,7 +2,7 @@
 title: "Content Encryption at Rest"
 sidebarTitle: Encryption
 description: Encrypt stored messages and tool results and rotate their keys
-order: 6
+order: 7
 lastUpdated: 2026-11-09
 ---
 

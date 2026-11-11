@@ -43,6 +43,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Guardrails",
     description: <GuardrailsDescription />,
   },
+  "/settings/blob-providers": {
+    title: "Blob Providers",
+    description: <BlobProvidersDescription />,
+  },
   "/settings/credentials": {
     title: "Credentials",
     description: <CredentialsDescription />,
@@ -300,6 +304,18 @@ function GuardrailsDescription() {
         OpenAPPA
       </ExternalDocsLink>{" "}
       policy on tool calls, and where the policy lives.
+    </>
+  );
+}
+
+function BlobProvidersDescription() {
+  return (
+    <>
+      Object storage that features write files to, such as scheduled cost
+      exports. Configure a bucket once and reuse it everywhere.{" "}
+      <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformBlobProviders)}>
+        Learn more
+      </ExternalDocsLink>
     </>
   );
 }

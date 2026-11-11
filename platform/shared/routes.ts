@@ -810,6 +810,20 @@ export const RouteId = {
   UpdateGithubPat: "updateGithubPat",
   DeleteGithubPat: "deleteGithubPat",
 
+  // Blob providers (organization object storage destinations)
+  ListBlobProviders: "listBlobProviders",
+  CreateBlobProvider: "createBlobProvider",
+  UpdateBlobProvider: "updateBlobProvider",
+  DeleteBlobProvider: "deleteBlobProvider",
+  TestBlobProvider: "testBlobProvider",
+
+  // Scheduled cost exports to blob providers
+  ListCostExports: "listCostExports",
+  CreateCostExport: "createCostExport",
+  UpdateCostExport: "updateCostExport",
+  DeleteCostExport: "deleteCostExport",
+  RunCostExport: "runCostExport",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",

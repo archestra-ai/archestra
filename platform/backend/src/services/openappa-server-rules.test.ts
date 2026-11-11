@@ -1830,7 +1830,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     configureAppaGithubSync({
       organizationId: org.id,
       userId: admin.id,
-      source: { ...moved, validationDirectory: "mcp" },
+      source: { ...moved, ref: "main", validationDirectory: "mcp" },
     }),
   ).rejects.toMatchObject({
     statusCode: 400,

@@ -27,9 +27,9 @@ import {
   type AutoRouterUpdate,
   type AutoRoutingBackfillState,
   type AutoRoutingPlanDetail,
-  type AutoRoutingPreview,
   type AutoRoutingSimulation,
   type AutoRoutingState,
+  type AutoRoutingUsage,
 } from "@/lib/auto-routing.query";
 import type { LlmModel } from "@/lib/llm-models.query";
 import {
@@ -37,10 +37,8 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { ConfigureAutoRoutingButton } from "../_parts/configure-button";
-import AutoRoutingDiagnosticsPage from "./diagnostics/page";
+import { RouterActions } from "../_parts/router-actions";
 import AutoRoutingOverviewPage from "./page";
-import AutoRoutingPlansPage from "./plans/page";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
@@ -147,6 +145,19 @@ const activePlan: AutoRoutingPlanDetail = {
   plan: null,
 };
 
+const emptyUsage: AutoRoutingUsage = {
+  windowDays: 7,
+  sessions: 0,
+  requests: 0,
+  costUsd: 0,
+  allSmartCostUsd: 0,
+  tiers: [
+    { tier: "fast", sessions: 0, requests: 0, costUsd: 0 },
+    { tier: "normal", sessions: 0, requests: 0, costUsd: 0 },
+    { tier: "smart", sessions: 0, requests: 0, costUsd: 0 },
+  ],
+};
+
 function catalogModel(
   dbId: string,
   id: string,
@@ -195,6 +206,7 @@ const server = setupServer(
   http.get(`${ROUTER_URL}/plans/${PLAN_ID}`, () =>
     HttpResponse.json(activePlan),
   ),
+  http.get(`${ROUTER_URL}/usage`, () => HttpResponse.json(emptyUsage)),
   http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
     HttpResponse.json([]),
   ),
@@ -203,9 +215,6 @@ const server = setupServer(
       backfill: null,
       scoreOffer: null,
     } satisfies AutoRoutingBackfillState),
-  ),
-  http.get(`${ROUTER_URL}/diagnostics`, () =>
-    HttpResponse.json({ status: "cold_start" }),
   ),
   http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
     HttpResponse.json([]),
@@ -587,138 +596,74 @@ describe("AutoRoutingOverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("simulates a traffic change on the active plan without saving", async () => {
-    settings = withActivePlan(makeSettings());
-    const simulated: unknown[] = [];
+  it("switches to what the router routed and what it saved against all-smart", async () => {
+    const asked: string[] = [];
     server.use(
-      http.post(`${ROUTER_URL}/simulate`, async ({ request }) => {
-        simulated.push(await request.json());
-        return HttpResponse.json(feasibleSimulation(0.71));
+      http.get(`${ROUTER_URL}/usage`, ({ request }) => {
+        const days = new URL(request.url).searchParams.get("days") ?? "";
+        asked.push(days);
+        return HttpResponse.json({
+          windowDays: Number(days),
+          sessions: 40,
+          requests: 300,
+          costUsd: 28,
+          allSmartCostUsd: 112,
+          tiers: [
+            { tier: "fast", sessions: 30, requests: 200, costUsd: 7 },
+            { tier: "normal", sessions: 8, requests: 80, costUsd: 9 },
+            { tier: "smart", sessions: 2, requests: 20, costUsd: 12 },
+          ],
+        } satisfies AutoRoutingUsage);
       }),
     );
     const user = userEvent.setup();
-    renderDiagnostics();
-    await user.click(await screen.findByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×3" }));
+    renderPage();
 
-    const whatIf = screen.getByTestId("auto-routing-what-if");
-    expect(await within(whatIf).findByText("71.0%")).toBeInTheDocument();
-    expect(within(whatIf).getByText("$20.00/day")).toBeInTheDocument();
-    expect(whatIf).toHaveTextContent(
-      "30M tokens/day, 450 sessions/day (now 10M tokens/day, 150 sessions/day)",
-    );
-    expect(simulated).toEqual([{ budgetUsdPerDay: 20, volumeMultiplier: 3 }]);
-    expect(updates).toEqual([]);
-  });
-
-  it("labels the simulated tier split with the models the simulation fitted", async () => {
-    settings = withActivePlan(makeSettings());
-    server.use(
-      http.post(`${ROUTER_URL}/simulate`, () =>
-        HttpResponse.json(feasibleSimulation(0.71)),
-      ),
-    );
-    const user = userEvent.setup();
-    renderDiagnostics();
-    await user.click(await screen.findByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×3" }));
-
-    const whatIf = screen.getByTestId("auto-routing-what-if");
-    expect(
-      await within(whatIf).findByText(
-        "fast · claude-haiku: 50.0% sessions, 20.0% tokens",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("shows a result only for the current inputs", async () => {
-    settings = withActivePlan(makeSettings());
-    let release = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    server.use(
-      http.post(`${ROUTER_URL}/simulate`, async ({ request }) => {
-        const body = (await request.json()) as { volumeMultiplier: number };
-        if (body.volumeMultiplier === 5) await held;
-        return HttpResponse.json(
-          feasibleSimulation(body.volumeMultiplier === 5 ? 0.6 : 0.71),
-        );
+    await user.click(
+      await screen.findByRole("button", {
+        name: "What it routed in the last 7 days",
       }),
     );
-    const user = userEvent.setup();
-    renderDiagnostics();
-    const whatIf = await screen.findByTestId("auto-routing-what-if");
-    await user.click(within(whatIf).getByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×3" }));
-    expect(await within(whatIf).findByText("71.0%")).toBeInTheDocument();
+    const usage = await screen.findByTestId("auto-routing-usage");
+    expect(await within(usage).findByText("$28.00")).toBeInTheDocument();
+    expect(usage).toHaveTextContent("$4.00/day on average");
+    expect(within(usage).getByText("$84.00")).toBeInTheDocument();
+    expect(usage).toHaveTextContent(
+      "75% less than sending everything to claude-opus",
+    );
+    expect(usage).toHaveTextContent("300 requests");
+    expect(
+      within(usage).getByText("fast · claude-haiku: 30 sessions, $7.00"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-plan-placeholder"),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(whatIf).getByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×5" }));
-
-    expect(await within(whatIf).findByText("Simulating…")).toBeInTheDocument();
-    expect(within(whatIf).queryByText("71.0%")).not.toBeInTheDocument();
-    release();
-    expect(await within(whatIf).findByText("60.0%")).toBeInTheDocument();
-
-    await user.clear(within(whatIf).getByLabelText("Budget (USD/day)"));
-
-    expect(within(whatIf).queryByText("60.0%")).not.toBeInTheDocument();
-    expect(within(whatIf).queryByText("Simulating…")).not.toBeInTheDocument();
-  });
-
-  it("retries a simulation refused while an earlier one finishes", async () => {
-    settings = withActivePlan(makeSettings());
-    let calls = 0;
-    server.use(
-      http.post(`${ROUTER_URL}/simulate`, () => {
-        calls += 1;
-        return calls === 1
-          ? HttpResponse.json(
-              {
-                error: {
-                  message: "A simulation is already running",
-                  type: "api_rate_limit_error",
-                },
-              },
-              { status: 429 },
-            )
-          : HttpResponse.json(feasibleSimulation(0.71));
+    await user.click(
+      screen.getByRole("button", {
+        name: "What it routed in the last 14 days",
       }),
     );
-    const user = userEvent.setup();
-    renderDiagnostics();
-    await user.click(await screen.findByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×3" }));
-
-    const whatIf = screen.getByTestId("auto-routing-what-if");
     expect(
-      await within(whatIf).findByText("71.0%", {}, { timeout: 3000 }),
+      await within(screen.getByTestId("auto-routing-usage")).findByText(
+        "$2.00/day on average",
+      ),
     ).toBeInTheDocument();
-    expect(calls).toBe(2);
+    expect(asked).toEqual(["7", "14"]);
   });
 
-  it("reports the minimum budget when the simulated traffic cannot be afforded", async () => {
-    settings = withActivePlan(makeSettings());
-    server.use(
-      http.post(`${ROUTER_URL}/simulate`, () =>
-        HttpResponse.json({
-          status: "infeasible",
-          minBudgetUsdPerDay: 31.4,
-          baseline: { tokensPerDay: 10_000_000, sessionsPerDay: 150 },
-        } satisfies AutoRoutingSimulation),
-      ),
-    );
+  it("says when nothing went through the router in the window", async () => {
     const user = userEvent.setup();
-    renderDiagnostics();
-    await user.click(await screen.findByLabelText("Traffic"));
-    await user.click(await screen.findByRole("option", { name: "×10" }));
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "What it routed in the last 7 days",
+      }),
+    );
 
-    expect(
-      await within(screen.getByTestId("auto-routing-what-if")).findByText(
-        "$31.40/day",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("auto-routing-usage")).toHaveTextContent(
+      "No requests went through this router in the last 7 days.",
+    );
   });
 
   it("labels the plan's tier split with the models it was fitted for", async () => {
@@ -762,21 +707,17 @@ describe("AutoRoutingOverviewPage", () => {
   });
 
   it("shows the plan a save fitted", async () => {
-    let plans: AutoRoutingPlanDetail[] = [];
     server.use(
       http.put(ROUTER_URL, () => {
-        plans = [activePlan];
         settings = withActivePlan(makeSettings({ budgetUsdPerDay: 30 }));
         return HttpResponse.json({
           ...settings,
           fit: { status: "active", planId: PLAN_ID },
         } satisfies AutoRoutingSettingsChange);
       }),
-      http.get(`${ROUTER_URL}/plans`, () => HttpResponse.json(plans)),
     );
     const user = userEvent.setup();
-    renderPage(<AutoRoutingPlansPage />);
-    expect(await screen.findByText("No plans yet")).toBeInTheDocument();
+    renderPage();
     const budget = await openConfigure(user);
     await user.clear(budget);
     await user.type(budget, "30");
@@ -789,7 +730,6 @@ describe("AutoRoutingOverviewPage", () => {
     expect(
       screen.queryByTestId("auto-routing-evaluating"),
     ).not.toBeInTheDocument();
-    expect(await screen.findByText("420")).toBeInTheDocument();
   });
   it("shows the error of a save whose fit failed", async () => {
     const error =
@@ -820,99 +760,6 @@ describe("AutoRoutingOverviewPage", () => {
       ),
     ).toBeInTheDocument();
   });
-  it("previews the tier a prompt would get", async () => {
-    const previewed: unknown[] = [];
-    server.use(
-      http.post(`${ROUTER_URL}/preview`, async ({ request }) => {
-        previewed.push(await request.json());
-        return HttpResponse.json({
-          tierNeeded: [0.1, 0.2, 0.7],
-          pLong: 0.25,
-          reason: "planned",
-          planId: PLAN_ID,
-          chosen: { tier: "smart", model: tier("claude-opus", 3) },
-          propensity: 0.6,
-          expectedCostUsd: 0.42,
-          scorerCostUsd: 0.000123,
-        } satisfies AutoRoutingPreview);
-      }),
-    );
-    const user = userEvent.setup();
-    renderDiagnostics();
-    await user.type(
-      await screen.findByLabelText("Try a prompt"),
-      "Refactor the billing module",
-    );
-    await user.click(screen.getByRole("button", { name: "Preview" }));
-
-    const result = await screen.findByTestId("auto-routing-preview");
-    expect(previewed).toEqual([{ text: "Refactor the billing module" }]);
-    expect(result).toHaveTextContent("smart");
-    expect(result).toHaveTextContent("anthropic/claude-opus");
-    expect(within(result).getByText("70.0%")).toBeInTheDocument();
-    expect(within(result).getByText("25.0%")).toBeInTheDocument();
-    expect(within(result).getByText("$0.000123")).toBeInTheDocument();
-    expect(within(result).getByText("$0.42")).toBeInTheDocument();
-  });
-
-  it("previews request JSON with context, rejects invalid JSON locally and clears stale results on edits", async () => {
-    const previewed: unknown[] = [];
-    server.use(
-      http.post(`${ROUTER_URL}/preview`, async ({ request }) => {
-        previewed.push(await request.json());
-        return HttpResponse.json({
-          tierNeeded: [0.1, 0.2, 0.7],
-          pLong: 0.25,
-          reason: "planned",
-          planId: PLAN_ID,
-          chosen: { tier: "smart", model: tier("claude-opus", 3) },
-          propensity: 1,
-          expectedCostUsd: null,
-          scorerCostUsd: null,
-        } satisfies AutoRoutingPreview);
-      }),
-    );
-    const user = userEvent.setup();
-    renderDiagnostics();
-    await user.click(
-      await screen.findByRole("switch", { name: "Use request JSON" }),
-    );
-    const input = screen.getByLabelText("Opening request JSON");
-    await user.click(input);
-    await user.paste("not JSON");
-    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Enter valid JSON containing the request body.",
-    );
-    expect(previewed).toEqual([]);
-
-    const request = {
-      instructions: "Review migration locking.",
-      input: "Review this change.",
-      tools: [{ type: "function", name: "inspect_schema", description: null }],
-    };
-    await user.clear(input);
-    await user.click(input);
-    await user.paste(JSON.stringify(request));
-    expect(screen.queryByText("Invalid request JSON")).not.toBeInTheDocument();
-    await user.type(
-      screen.getByLabelText("Client identifier (optional)"),
-      "opencode",
-    );
-    await user.click(screen.getByRole("button", { name: "Preview" }));
-    expect(await screen.findByTestId("auto-routing-preview")).toHaveTextContent(
-      "smart",
-    );
-    expect(previewed).toEqual([{ request, client: "opencode" }]);
-
-    await user.type(input, " ");
-    expect(
-      screen.queryByTestId("auto-routing-preview"),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("switch", { name: "Use request JSON" }));
-    expect(screen.getByLabelText("Try a prompt")).toHaveValue("");
-  });
-
   it("refuses an infeasible budget, keeping the edited value", async () => {
     const message =
       "Budget too low for these models: the cheapest routing costs $8.86/day.";
@@ -1473,13 +1320,50 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("beside an active plan with nothing to score, offers only a scan", async () => {
-    settings = makeSettings({
-      status: {
-        ...makeSettings().status,
-        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
-      },
+  it("scores past sessions from the header menu in one step", async () => {
+    settings = withActivePlan(makeSettings());
+    const cutoff = new Date().toISOString();
+    const scores = serveBackfill({
+      backfill: scanned({ cutoff }),
+      scoreOffer: { ...offer, cutoff },
     });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-figures"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("auto-routing-past-sessions"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: "Auto router actions" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Score past sessions…" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByTestId("auto-routing-scan-findings"),
+    ).toHaveTextContent("240 past sessions found");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Score 240 sessions" }),
+    );
+
+    await waitFor(() =>
+      expect(scores).toEqual([
+        {
+          backfillId: offer.backfillId,
+          scorerVersionId: offer.scorerVersionId,
+          maxSessions: 240,
+          maxCostUsd: 1,
+        },
+      ]),
+    );
+  });
+
+  it("counts past sessions again when the dialog opens on a stale scan", async () => {
+    settings = withActivePlan(makeSettings());
     serveBackfill({
       backfill: scanned({
         status: "done",
@@ -1501,10 +1385,41 @@ describe("past sessions", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: "Scan past sessions" }),
+      await screen.findByRole("button", { name: "Auto router actions" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Score past sessions…" }),
     );
 
+    expect(
+      await within(await screen.findByRole("dialog")).findByText(
+        "Looking for past sessions in the interaction log…",
+      ),
+    ).toBeInTheDocument();
     await waitFor(() => expect(scans).toBe(1));
+  });
+
+  it("reports a scoring run beside an active plan, with a way to stop it", async () => {
+    settings = withActivePlan(makeSettings());
+    serveBackfill({
+      backfill: scanned({
+        status: "running",
+        phase: "score",
+        maxCostUsd: 2,
+        spentCostUsd: 0.5,
+        progress: { sample: 240, scored: 120, noText: 0, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    const notice = await screen.findByTestId("auto-routing-past-sessions");
+    expect(notice).toHaveTextContent("Scoring past sessions");
+    expect(notice).toHaveTextContent("120 of 240 scored");
+    expect(notice).toHaveTextContent("$0.50 of $2.00");
+    expect(
+      within(notice).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
   });
 
   it("shows spend only for a scoring run, not for a scan", async () => {
@@ -1573,22 +1488,9 @@ function renderPage(sibling?: React.ReactNode) {
   render(
     <QueryClientProvider client={queryClient}>
       <AutoRouterIdContext.Provider value={ROUTER_ID}>
-        <ConfigureAutoRoutingButton />
+        <RouterActions />
         <AutoRoutingOverviewPage />
         {sibling}
-      </AutoRouterIdContext.Provider>
-    </QueryClientProvider>,
-  );
-}
-
-function renderDiagnostics() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <AutoRouterIdContext.Provider value={ROUTER_ID}>
-        <AutoRoutingDiagnosticsPage />
       </AutoRouterIdContext.Provider>
     </QueryClientProvider>,
   );

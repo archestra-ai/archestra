@@ -15,6 +15,7 @@ const reads = (routerId: string) =>
     { method: "GET", url: "/api/auto-routing/routers/available" },
     { method: "GET", url: `/api/auto-routing/routers/${routerId}` },
     { method: "GET", url: `/api/auto-routing/routers/${routerId}/plans` },
+    { method: "GET", url: `/api/auto-routing/routers/${routerId}/usage` },
     {
       method: "POST",
       url: `/api/auto-routing/routers/${routerId}/simulate`,

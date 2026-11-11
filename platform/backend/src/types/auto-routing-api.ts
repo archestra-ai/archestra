@@ -231,6 +231,36 @@ export const AutoRoutingPlanDetailSchema = AutoRoutingPlanSummarySchema.extend({
 });
 export type AutoRoutingPlanDetail = z.infer<typeof AutoRoutingPlanDetailSchema>;
 
+/** What an auto router routed over a recent window, per tier, with the all-smart counterfactual. */
+/** Usage windows the router page offers. */
+export const AutoRoutingUsageQuerySchema = z.object({
+  days: z.coerce
+    .number()
+    .int()
+    .refine((days) => days === 7 || days === 14, "days must be 7 or 14")
+    .default(7),
+});
+
+export const AutoRoutingUsageResponseSchema = z.object({
+  windowDays: z.number().int().positive(),
+  /** Sessions with at least one request in the window. */
+  sessions: z.number().int().nonnegative(),
+  requests: z.number().int().nonnegative(),
+  /** What the routed requests were billed. */
+  costUsd: z.number(),
+  /** The same tokens priced at the current smart model's list price; null without a smart model. */
+  allSmartCostUsd: z.number().nullable(),
+  tiers: z.array(
+    z.object({
+      tier: AutoRoutingTierNameSchema,
+      sessions: z.number().int().nonnegative(),
+      requests: z.number().int().nonnegative(),
+      costUsd: z.number(),
+    }),
+  ),
+});
+export type AutoRoutingUsage = z.infer<typeof AutoRoutingUsageResponseSchema>;
+
 export const AutoRoutingPlansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

@@ -37,17 +37,6 @@ export function parsePlanSummary(document: unknown): PlanSummary | null {
   return PlanSummarySchema.safeParse(document).data ?? null;
 }
 
-const REJECTION_REASONS: Record<string, string> = {
-  stale_generation: "Settings changed while the plan was fitting.",
-  stale_scorer_version: "The scorer changed while the plan was fitting.",
-  stale_watermark: "A plan fitted on newer usage was already published.",
-};
-
-/** Why a `rejected` fit lost at publication, from its stored reason. */
-export function rejectionReason(error: string | null): string {
-  return (error && REJECTION_REASONS[error]) ?? "Superseded by a newer fit.";
-}
-
 /** The usage window an active plan was fitted on, which the backend stores in its diagnostics. */
 const FittedHistorySchema = z.object({
   history: z.object({

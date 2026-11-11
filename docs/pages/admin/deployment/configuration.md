@@ -1547,9 +1547,9 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: `Check OpenAPPA Guardrails`.
   - Values: up to 100 characters. A rename moves the ruleset and its required check over at the next sync.
 
-- **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Sets **Self-service MCP Guardrails** under **Settings → Guardrails**, on the Git sync card, for the whole deployment: whether the people who can edit an MCP server [change its Guardrails rules themselves](/docs/agents/guardrails/git-sync#self-service-mcp-guardrails) through pull requests. While it is set, it overrides the setting saved with the Git sync source, and the setting cannot be edited there. Unset it to edit the setting again.
+- **`ARCHESTRA_OPENAPPA_SELF_SERVICE`** - Controls the MCP Guardrails Self-Service feature - whether the MCP owners can edit Guardrail policies for these MCPs themselves. Overrides related configuration from Settings.
   - Default: unset (the saved setting applies, off unless turned on)
-  - Values: `enabled`, `disabled`. Other values stop startup.
+  - Values: `enabled`, `disabled`.
 
 - **`ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE`** - Sets **Human approval** under [Break the glass](/docs/agents/guardrails/policies#yells) for the whole deployment. While it is set, it overrides the value saved in **Settings → Guardrails**, and the setting cannot be edited there. Unset it to edit the setting again.
   - Default: unset (the saved setting applies, `block` unless changed)

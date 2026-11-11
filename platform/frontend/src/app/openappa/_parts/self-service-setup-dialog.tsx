@@ -448,7 +448,8 @@ export function SelfServiceOutcomeStep({
         await mutate({ action: "include_servers" });
         const again = (await refetch()).data ?? null;
         setInclude(
-          again && again.include.state !== "missing"
+          again?.include.state === "included" ||
+            again?.include.state === "pull_open"
             ? { state: "done", detail: again.include }
             : { state: "failed", detail: again?.include },
         );

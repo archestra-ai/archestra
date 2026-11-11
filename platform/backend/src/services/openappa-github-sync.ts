@@ -1081,12 +1081,20 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   }
   const deployment = await deploymentState(organizationId, row.sourceCommit);
   const checking = pulls.slice(0, MAX_CHECKED_PULLS);
+  // What the source reads decides which files a pull request governs, so a
+  // policy file, validations folder or servers' folder moved makes every
+  // stored result stale, the unrelated ones included.
   const keys = checking.map((pull) =>
     checkKey(
       "checked",
-      "v2",
+      "v3",
       organizationId,
       source.repo,
+      source.ref ?? "",
+      source.path,
+      source.validationDirectory ?? "",
+      serverRulesFolderOf(source),
+      String(source.githubAppConfigId ?? ""),
       checkName,
       pull.head,
       pull.result,
@@ -2534,16 +2542,22 @@ async function withdrawRepositoryProtection(organizationId: string) {
 }
 
 /**
- * Before a source is saved: a repository the sync leaves, or a source saved
- * with self-service off, gives its ruleset back first.
+ * Before a source is saved: a repository or branch the sync leaves, or a
+ * source saved with self-service off, gives its ruleset back first.
  */
 async function beforeSourceChange(
   organizationId: string,
-  next: { repo: string; selfService: boolean },
+  next: { repo: string; ref?: string | null; selfService: boolean },
 ) {
   const current = await OpenAppaGithubSyncModel.find(organizationId);
   if (!selfServiceActive(current)) return;
-  if (current?.repo !== next.repo || !next.selfService)
+  // Another repository, or another branch of the same one: the ruleset on
+  // the branch the sync leaves would require a check nobody posts there.
+  if (
+    current?.repo !== next.repo ||
+    (current.ref ?? null) !== (next.ref ?? null) ||
+    !next.selfService
+  )
     await withdrawRepositoryProtection(organizationId);
 }
 

@@ -527,6 +527,13 @@ function includeSentence(
           adds {entry} to {policyFile}. Merge it and re-sync.
         </span>
       );
+    case "unknown":
+      return (
+        <span>
+          Could not read the policy repository to tell whether {policyFile}{" "}
+          includes {entry}. Try again in a moment.
+        </span>
+      );
     default:
       return (
         <span>

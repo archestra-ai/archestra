@@ -484,7 +484,19 @@ async function withInclude(root: string, entry: string): Promise<string> {
 export async function selfServiceIncludeState(organizationId: string) {
   const source = await OpenAppaGithubSyncModel.find(organizationId);
   const folder = serverRulesFolderOf(source);
-  const situation = await includeSituation({ organizationId, source, folder });
+  let situation: IncludeSituation;
+  try {
+    situation = await includeSituation({ organizationId, source, folder });
+  } catch (error) {
+    // A repository that cannot be read for now says so, rather than
+    // "missing", which would offer to open a pull request that may exist.
+    if (!(error instanceof ApiError && error.statusCode === 502)) throw error;
+    logger.warn(
+      { organizationId, error },
+      "OpenAPPA could not read where the self-service include stands",
+    );
+    return { folder, state: "unknown" as const };
+  }
   return situation.state === "pull_open"
     ? { folder, state: situation.state, pull: situation.pull }
     : { folder, state: situation.state };
@@ -544,7 +556,14 @@ async function includeSituation(params: {
     return { state: "included" };
   }
   const pull = await openPullFor({ token, base, repo, head: INCLUDE_BRANCH });
-  if (!pull) return { state: "missing" };
+  // A lookup that failed is not an absent pull request: closing or replacing
+  // one on that reading would lose a valid pull request to a passing fault.
+  if (pull === undefined)
+    throw new ApiError(
+      502,
+      "Could not look for the include pull request on GitHub; try again",
+    );
+  if (pull === null) return { state: "missing" };
   const atHead = pull.headSha
     ? await rootAt({ token, base, path: source.path, ref: pull.headSha })
     : null;
@@ -553,7 +572,10 @@ async function includeSituation(params: {
     : { state: "missing", stale: { number: pull.number, url: pull.url } };
 }
 
-/** The policy file's text at `ref`, or null when the ref has none. */
+/**
+ * The policy file's text at `ref`, or null when the ref has none. A read
+ * that failed throws: "unreadable" must not pass for "absent".
+ */
 async function rootAt(params: {
   token: string;
   base: string;
@@ -565,8 +587,9 @@ async function rootAt(params: {
     url: `${params.base}/contents/${path}?ref=${encodeURIComponent(params.ref)}`,
     token: params.token,
     accept: "application/vnd.github.raw+json",
-  }).catch(() => null);
-  if (!response) return null;
+  }).catch(() => {
+    throw new ApiError(502, "Could not read the policy file from GitHub");
+  });
   if (response.status === 404) return null;
   if (!response.ok)
     throw new ApiError(502, `GitHub returned HTTP ${response.status}`);

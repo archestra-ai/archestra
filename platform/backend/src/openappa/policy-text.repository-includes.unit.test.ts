@@ -5,6 +5,7 @@ import {
   governsServerTool,
   includedFileErrors,
   includesServerRules,
+  includesServerRulesFolder,
   isRepositoryInclude,
   repositoryIncludePaths,
   serverCatchAllPrefixes,
@@ -643,4 +644,26 @@ version = 2
   expect(
     await withIncludeEntry("[policy]\nversion = 2\n", "mcp/*.toml"),
   ).toContain('include = ["mcp/*.toml"]');
+});
+
+test("a folder counts as included only through its whole glob: one file by name or a narrower glob leaves other servers out", () => {
+  const root = (entries: string[]) =>
+    `include = [${entries.map((entry) => JSON.stringify(entry)).join(", ")}]\n[policy]\nversion = 2\n`;
+  expect(includesServerRulesFolder(root(["mcp/*.toml"]), "mcp")).toBe(true);
+  expect(
+    includesServerRulesFolder(
+      root(["batteries/archestra/appa.toml", "rules/servers/*.toml"]),
+      "rules/servers",
+    ),
+  ).toBe(true);
+  // A named file, a narrower glob, another folder, or a nested one: not the folder.
+  expect(includesServerRulesFolder(root(["mcp/a.toml"]), "mcp")).toBe(false);
+  expect(includesServerRulesFolder(root(["mcp/a*.toml"]), "mcp")).toBe(false);
+  expect(includesServerRulesFolder(root(["mcps/*.toml"]), "mcp")).toBe(false);
+  expect(includesServerRulesFolder(root(["mcp/*.toml"]), "mcp/payments")).toBe(
+    false,
+  );
+  expect(includesServerRulesFolder("[policy]\nversion = 2\n", "mcp")).toBe(
+    false,
+  );
 });

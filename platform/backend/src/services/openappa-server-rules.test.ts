@@ -16,6 +16,7 @@ import { createGitlabToken } from "@/services/git-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   checkDueAppaGithubSyncs,
+  configureAppaGithubSync,
   getAppaGithubSync,
   getAppaSelfService,
   getRepositoryProtection,
@@ -1837,13 +1838,45 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
   });
   expect(await getRepositoryProtection(org.id)).toBeNull();
 
-  // Stopping the sync takes the ruleset away too: nothing posts the check then.
+  // Another branch of the same repository: the ruleset on the branch the
+  // sync leaves goes first, since nothing posts the check there any more;
+  // the next sync brings one on the new branch.
   await updateAppaGithubSync({
     organizationId: org.id,
     action: "self_service",
     enabled: true,
   });
   listed = [{ id: 5, name: CHECK, source_type: "Repository" }];
+  const moved = {
+    repo: "example/policies",
+    path: "appa.toml",
+    interval: "1h" as const,
+    validationDirectory: "",
+    githubPatId: null,
+    githubAppConfigId:
+      (await OpenAppaGithubSyncModel.find(org.id))?.githubAppConfigId ?? null,
+    gitlabTokenId: null,
+    selfService: true,
+    selfServiceDirectory: "mcp",
+  };
+  calls.length = 0;
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: { ...moved, ref: "policy-v2" },
+  });
+  expect(calls).toEqual(["DELETE 5"]);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.ref).toBe("policy-v2");
+  // The same branch saved again: nothing to withdraw.
+  calls.length = 0;
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: { ...moved, ref: "policy-v2" },
+  });
+  expect(calls).toEqual([]);
+
+  // Stopping the sync takes the ruleset away too: nothing posts the check then.
   calls.length = 0;
   await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
   expect(calls).toEqual(["DELETE 5"]);
@@ -2121,9 +2154,13 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({
   makeOrganization,
+  makeUser,
+  makeMember,
 }) => {
   config.openappa.enabled = true;
   const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
   await connectApp({ organizationId: org.id, path: "guardrails/appa.toml" });
   const rulesetWrites: unknown[] = [];
   const runs: Array<{ head_sha: string; conclusion: string }> = [];
@@ -2162,7 +2199,20 @@ test("a policy in a folder of a repository that holds other work gets the same o
       ]),
     ),
     http.get(`${REPO}/pulls/:number/files`, () =>
-      HttpResponse.json([{ filename: "src/app/main.ts" }]),
+      HttpResponse.json([{ filename: "other/appa.toml" }]),
+    ),
+    http.get(`${REPO}/contents/other`, () =>
+      HttpResponse.json([
+        {
+          type: "file",
+          name: "appa.toml",
+          path: "other/appa.toml",
+          sha: createHash("sha1").update(RULES).digest("hex"),
+        },
+      ]),
+    ),
+    http.get(`${REPO}/contents/other/appa.toml`, () =>
+      HttpResponse.text(RULES),
     ),
     http.post(`${REPO}/check-runs`, async ({ request }) => {
       runs.push((await request.json()) as (typeof runs)[number]);
@@ -2193,6 +2243,34 @@ test("a policy in a folder of a repository that holds other work gets the same o
   await checkDueAppaGithubSyncs();
   expect(runs).toEqual([
     expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
+  ]);
+
+  // The policy file moves to the very file that pull request changes: the
+  // result stored for the old source does not stand in for the new one, so
+  // the pull request is judged again, and now its policy is checked.
+  const row = await OpenAppaGithubSyncModel.find(org.id);
+  await configureAppaGithubSync({
+    organizationId: org.id,
+    userId: admin.id,
+    source: {
+      repo: "example/policies",
+      ref: "main",
+      path: "other/appa.toml",
+      interval: "1h",
+      validationDirectory: "",
+      githubPatId: null,
+      githubAppConfigId: row?.githubAppConfigId ?? null,
+      gitlabTokenId: null,
+      selfService: true,
+      selfServiceDirectory: "mcp",
+    },
+  });
+  // A saved source has no accepted commit until it is pulled again.
+  await syncAppaGithubPolicy(org.id);
+  await checkDueAppaGithubSyncs();
+  expect(runs).toEqual([
+    expect.objectContaining({ head_sha: head, conclusion: "skipped" }),
+    expect.objectContaining({ head_sha: head, conclusion: "success" }),
   ]);
 });
 
@@ -2407,6 +2485,43 @@ test("the self-service folder is chosen when turning on: the servers' files live
       userId: admin.id,
     }),
   ).toBeNull();
+  expect(pulls).toHaveLength(1);
+
+  // GitHub failing to answer is not "no pull request": nothing is closed,
+  // no branch is deleted and no pull request is opened on such a reading.
+  server.use(
+    http.get(
+      `${REPO}/pulls`,
+      () => HttpResponse.json({ message: "bad gateway" }, { status: 502 }),
+      { once: true },
+    ),
+  );
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "unknown",
+  });
+  server.use(
+    http.get(
+      `${REPO}/pulls`,
+      () => HttpResponse.json({ message: "bad gateway" }, { status: 502 }),
+      { once: true },
+    ),
+  );
+  await expect(
+    ensureSelfServiceInclude({ organizationId: org.id, userId: admin.id }),
+  ).rejects.toMatchObject({ statusCode: 502 });
+  // Nor is the policy file at the branch head unreadable the same as absent.
+  server.use(
+    http.get(`${REPO}/contents/appa.toml`, () => HttpResponse.error(), {
+      once: true,
+    }),
+  );
+  expect(await selfServiceIncludeState(org.id)).toEqual({
+    folder: "rules/servers",
+    state: "unknown",
+  });
+  expect(patched).toHaveLength(1);
+  expect(deleted).toHaveLength(1);
   expect(pulls).toHaveLength(1);
 
   // Merged on the branch but not pulled yet: included, and no pull request.

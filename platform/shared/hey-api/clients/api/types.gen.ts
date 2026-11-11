@@ -122846,7 +122846,7 @@ export type GetAppaRepositoryProtectionResponses = {
         };
         include: {
             folder: string;
-            state: 'included' | 'pull_open' | 'missing';
+            state: 'included' | 'pull_open' | 'missing' | 'unknown';
             pull?: {
                 number: number;
                 url: string;

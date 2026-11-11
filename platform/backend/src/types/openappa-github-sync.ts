@@ -180,11 +180,12 @@ export const AppaRepositoryProtectionSchema = z
     /**
      * Whether the policy file includes the self-service folder, which is
      * what makes the servers' files apply: `included`, or `pull_open` while
-     * the pull request that adds the line waits, or `missing`.
+     * the pull request that adds the line waits, or `missing`; `unknown`
+     * while the repository cannot be read.
      */
     include: z.object({
       folder: z.string(),
-      state: z.enum(["included", "pull_open", "missing"]),
+      state: z.enum(["included", "pull_open", "missing", "unknown"]),
       pull: z.object({ number: z.number().int(), url: z.string() }).optional(),
     }),
   })

@@ -368,14 +368,16 @@ function withIncludeLine(root: string, entry: string): string | null {
 }
 
 /**
- * Whether the root folds in every file of the servers' folder through one
- * glob entry over it, such as `mcp/*.toml`.
+ * Whether the root folds in every file of the servers' folder through the
+ * one glob entry over it, `<folder>/*.toml`. A narrower entry, one file by
+ * name or `mcp/a*.toml`, does not count: a server outside it would still
+ * need a root change.
  */
 export function includesServerRulesFolder(
   content: string,
   folder: string,
 ): boolean {
-  return includesServerRules(content, serverRulesPath(folder, "a"));
+  return repositoryIncludePaths(content).includes(serverRulesInclude(folder));
 }
 
 /** The repository include entries a root document lists, in its order. */

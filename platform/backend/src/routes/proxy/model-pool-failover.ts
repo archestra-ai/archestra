@@ -429,7 +429,9 @@ export async function openThroughModelPool<T>(params: {
     attempt.providerApiKeyId = member.providerApiKeyId;
     attempt.provider = member.provider;
     attempt.modelId = member.modelId;
-    attempt.poolUsageModelId = attempt.trackPoolUsage ? member.modelId : undefined;
+    attempt.poolUsageModelId = attempt.trackPoolUsage
+      ? member.modelId
+      : undefined;
     attempt.attempt = attempted + 1;
     attempt.failureReason = undefined;
     attempt.interactionRecorded = undefined;

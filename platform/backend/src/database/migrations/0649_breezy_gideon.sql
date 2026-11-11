@@ -1,0 +1,1 @@
+ALTER TABLE "model_pools" ADD COLUMN "routing_strategy" text DEFAULT 'weighted' NOT NULL;

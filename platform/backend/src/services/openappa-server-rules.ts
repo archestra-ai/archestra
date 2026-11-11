@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isBuiltInCatalogId, slugifyMcpServerName } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -33,7 +32,11 @@ import {
   repositoryPath,
   resolveOpenAppaGithubAccess,
 } from "@/services/openappa-github-access";
-import { hasOwnFile, selfServiceActive } from "@/services/openappa-github-sync";
+import {
+  hasOwnFile,
+  policyCheckNameFor,
+  selfServiceActive,
+} from "@/services/openappa-github-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 
@@ -231,7 +234,7 @@ export async function proposeServerRulesChange(
     ...opened,
     repo: change.source.repo,
     ...change.view,
-    instruction: `Give the user the link. Once its ${config.openappa.policyCheckName} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
+    instruction: `Give the user the link. Once its ${await policyCheckNameFor(change.source)} check passes, the user merges it on GitHub themselves, or anyone with write access to the repository does; no other approval is needed. Git sync then applies it. Check its state with get_guardrails_server_rules_change_status.`,
   };
 }
 
@@ -512,7 +515,9 @@ export async function ensureSelfServiceInclude(params: Caller) {
   if (includesServerRulesFolder(root.content, folder)) return null;
   const { token, api } = await githubWriter(source);
   const base = `${api}/repos/${source.repo}`;
-  if (await openPullFor({ token, base, repo: source.repo, head: INCLUDE_BRANCH }))
+  if (
+    await openPullFor({ token, base, repo: source.repo, head: INCLUDE_BRANCH })
+  )
     return null;
   const after = await withInclude(root.content, entry);
   const requester = await UserModel.getById(params.userId);

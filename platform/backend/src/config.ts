@@ -2374,7 +2374,7 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  */
 export function parseOpenAppaPolicyCheckName(value?: string): string {
   const name = value?.trim() ?? "";
-  if (name === "") return "Guardrails Policy Admission";
+  if (name === "") return ":githubAppName check OpenAPPA guardrails";
   if (name.length > 100)
     throw new Error(
       "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",

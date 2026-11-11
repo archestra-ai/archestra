@@ -349,6 +349,8 @@ function EnableStep({
   const [rules, setRules] = useState<{
     state: Progress;
     detail?: Protection["branchRules"];
+    /** The ruleset's name: the check's, as the protection reports it. */
+    name?: string;
   }>({ state: "waiting" });
   const [include, setInclude] = useState<{
     state: Progress;
@@ -371,8 +373,12 @@ function EnableStep({
       const read = (await refetch()).data ?? null;
       setRules(
         read?.branchRules.state === "active"
-          ? { state: "done", detail: read.branchRules }
-          : { state: "failed", detail: read?.branchRules },
+          ? { state: "done", detail: read.branchRules, name: read.checkName }
+          : {
+              state: "failed",
+              detail: read?.branchRules,
+              name: read?.checkName,
+            },
       );
       if (
         read?.include.state === "included" ||
@@ -424,9 +430,7 @@ function EnableStep({
             rel="noreferrer"
             className="font-medium text-foreground underline underline-offset-4"
           >
-            {detail.state === "active"
-              ? "Guardrails Policy Admission"
-              : "ruleset"}
+            {rules.name ?? "ruleset"}
           </a>
         </span>
       );

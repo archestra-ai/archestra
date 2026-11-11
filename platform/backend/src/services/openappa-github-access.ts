@@ -218,6 +218,8 @@ async function jobAccess(params: {
 type GithubAppProfile = {
   /** The login the App acts as, `<slug>[bot]`: the committer of every commit it makes. */
   login: string;
+  /** The App's name on GitHub, as its pages show it. */
+  name: string;
   /** The App's permissions page on GitHub, where an administrator grants more. */
   settingsUrl: string;
   /** The installation's page, where a changed set of permissions is accepted. */
@@ -271,6 +273,7 @@ export async function githubAppProfile(source: {
     fetchAsGithubApp<T>({ githubUrl: api, appId, privateKey, path });
   const app = await asApp<{
     slug?: unknown;
+    name?: unknown;
     owner?: { login?: unknown; type?: unknown } | null;
   }>("/app");
   if (typeof app.slug !== "string" || !app.slug)
@@ -291,7 +294,12 @@ export async function githubAppProfile(source: {
     installationUrl =
       typeof installation?.html_url === "string" ? installation.html_url : null;
   }
-  const profile = { login: `${app.slug}[bot]`, settingsUrl, installationUrl };
+  const profile = {
+    login: `${app.slug}[bot]`,
+    name: typeof app.name === "string" && app.name ? app.name : app.slug,
+    settingsUrl,
+    installationUrl,
+  };
   appProfiles.set(source.githubAppConfigId, profile);
   return profile;
 }
@@ -601,7 +609,9 @@ export const openappaRepositoryIncludes = new OpenAppaRepositoryIncludes();
 
 /** The self-service folder of the organization's source, or the default. */
 async function serverRulesFolderFor(organizationId: string): Promise<string> {
-  return serverRulesFolderOf(await OpenAppaGithubSyncModel.find(organizationId));
+  return serverRulesFolderOf(
+    await OpenAppaGithubSyncModel.find(organizationId),
+  );
 }
 
 function fold(params: {

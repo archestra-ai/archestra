@@ -55,6 +55,8 @@ delta = {}
 timeout_ms = 2000
 max_body_bytes = 65536
 `;
+/** The policy check's name for the tests' App, from the default template. */
+const CHECK = "Policy App check OpenAPPA guardrails";
 const INCLUDING = `include = ["mcp/payments_api.toml"]\n${RULES}`;
 const REFUNDS = `[policy]
 version = 2
@@ -197,6 +199,10 @@ async function connectApp(params: {
     permissions?: Record<string, string>;
   }> = [];
   server.use(
+    // The App as GitHub names it: the policy check is named after it.
+    http.get("https://api.github.com/app", () =>
+      HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
+    ),
     http.post(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
       async ({ request }) => {
@@ -586,7 +592,7 @@ test("each open pull request carries the checks a pull would make on its merge r
   const owner = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
   server.use(
     http.get("https://api.github.com/app", () =>
-      HttpResponse.json({ slug: "acme-guardrails" }),
+      HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
     ),
     http.get(`${REPO}/pulls`, ({ request }) => {
       expect(new URL(request.url).searchParams.get("base")).toBe("main");
@@ -655,12 +661,12 @@ test("each open pull request carries the checks a pull would make on its merge r
   await checkDueAppaGithubSyncs();
   expect(runs).toEqual([
     expect.objectContaining({
-      name: "Guardrails Policy Admission",
+      name: CHECK,
       head_sha: goodHead,
       conclusion: "success",
     }),
     expect.objectContaining({
-      name: "Guardrails Policy Admission",
+      name: CHECK,
       head_sha: badHead,
       conclusion: "failure",
       output: expect.objectContaining({
@@ -1417,9 +1423,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     type: "required_status_checks",
     parameters: {
       strict_required_status_checks_policy: false,
-      required_status_checks: [
-        { context: "Guardrails Policy Admission", integration_id: 123 },
-      ],
+      required_status_checks: [{ context: CHECK, integration_id: 123 }],
     },
   };
 
@@ -1429,7 +1433,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     {
       method: "POST",
       body: {
-        name: "Guardrails Policy Admission",
+        name: CHECK,
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1440,12 +1444,10 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
   ]);
 
   // Read back as GitHub stores it, with its own defaults added: complete.
-  listed = [
-    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
-  ];
+  listed = [{ id: 5, name: CHECK, source_type: "Repository" }];
   existing = {
     id: 5,
-    name: "Guardrails Policy Admission",
+    name: CHECK,
     target: "branch",
     source_type: "Repository",
     enforcement: "active",
@@ -1456,9 +1458,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
         type: "required_status_checks",
         parameters: {
           do_not_enforce_on_create: false,
-          required_status_checks: [
-            { context: "Guardrails Policy Admission", integration_id: 123 },
-          ],
+          required_status_checks: [{ context: CHECK, integration_id: 123 }],
           strict_required_status_checks_policy: false,
         },
       },
@@ -1502,7 +1502,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     {
       method: "PUT",
       body: {
-        name: "Guardrails Policy Admission",
+        name: CHECK,
         target: "branch",
         enforcement: "active",
         conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
@@ -1521,7 +1521,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
               strict_required_status_checks_policy: true,
               required_status_checks: [
                 { context: "ci" },
-                { context: "Guardrails Policy Admission", integration_id: 123 },
+                { context: CHECK, integration_id: 123 },
               ],
             },
           },
@@ -1558,7 +1558,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
     {
       method: "PUT",
       body: expect.objectContaining({
-        name: "Guardrails Policy Admission",
+        name: CHECK,
         rules: [ourRule],
       }),
     },
@@ -1581,9 +1581,7 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
             type: "required_status_checks",
             parameters: {
               strict_required_status_checks_policy: true,
-              required_status_checks: [
-                { context: "Guardrails Policy Admission", integration_id: 123 },
-              ],
+              required_status_checks: [{ context: CHECK, integration_id: 123 }],
             },
           },
         ],
@@ -1598,12 +1596,10 @@ test("Archestra keeps one ruleset on the synced branch that requires the policy 
 
   // Turned off on GitHub: turned back on, with its rule. Only turning
   // self-service off takes the ruleset away.
-  listed = [
-    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
-  ];
+  listed = [{ id: 5, name: CHECK, source_type: "Repository" }];
   existing = {
     ...existing,
-    name: "Guardrails Policy Admission",
+    name: CHECK,
     enforcement: "disabled",
   };
   written.length = 0;
@@ -1649,12 +1645,12 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
   await connectApp({ organizationId: org.id, selfService: false });
   serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
   const ourCheck = {
-    context: "Guardrails Policy Admission",
+    context: CHECK,
     integration_id: 123,
   };
   const ours = {
     id: 5,
-    name: "Guardrails Policy Admission",
+    name: CHECK,
     target: "branch",
     source_type: "Repository",
     enforcement: "active",
@@ -1752,7 +1748,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
   });
   expect(calls).toEqual(["POST rulesets"]);
   listed = [
-    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
+    { id: 5, name: CHECK, source_type: "Repository" },
     { id: 7, name: "Release rules", source_type: "Repository" },
   ];
   expect((await getRepositoryProtection(org.id))?.branchRules).toEqual({
@@ -1845,9 +1841,7 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     action: "self_service",
     enabled: true,
   });
-  listed = [
-    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
-  ];
+  listed = [{ id: 5, name: CHECK, source_type: "Repository" }];
   calls.length = 0;
   await updateAppaGithubSync({ organizationId: org.id, action: "disconnect" });
   expect(calls).toEqual(["DELETE 5"]);
@@ -1869,7 +1863,7 @@ test("without the Checks permission no ruleset is created, one that already requ
   const written: string[] = [];
   const withCheck = {
     id: 5,
-    name: "Guardrails Policy Admission",
+    name: CHECK,
     target: "branch",
     source_type: "Repository",
     enforcement: "active",
@@ -1880,9 +1874,7 @@ test("without the Checks permission no ruleset is created, one that already requ
         type: "required_status_checks",
         parameters: {
           strict_required_status_checks_policy: false,
-          required_status_checks: [
-            { context: "Guardrails Policy Admission", integration_id: 123 },
-          ],
+          required_status_checks: [{ context: CHECK, integration_id: 123 }],
         },
       },
     ],
@@ -1902,9 +1894,7 @@ test("without the Checks permission no ruleset is created, one that already requ
   });
   expect(written).toEqual([]);
 
-  listed = [
-    { id: 5, name: "Guardrails Policy Admission", source_type: "Repository" },
-  ];
+  listed = [{ id: 5, name: CHECK, source_type: "Repository" }];
   expect((await syncAndProtect(org.id))?.branchRules).toEqual({
     state: "active",
     url: "https://github.com/example/policies/rules/5",
@@ -2065,7 +2055,7 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   }> = [];
   server.use(
     http.get("https://api.github.com/app", () =>
-      HttpResponse.json({ slug: "acme-guardrails" }),
+      HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
     ),
     http.get(`${REPO}/pulls`, () =>
       HttpResponse.json(
@@ -2138,7 +2128,7 @@ test("a policy in a folder of a repository that holds other work gets the same o
   const head = "a".repeat(40);
   server.use(
     http.get("https://api.github.com/app", () =>
-      HttpResponse.json({ slug: "acme-guardrails" }),
+      HttpResponse.json({ slug: "acme-guardrails", name: "Policy App" }),
     ),
     http.get(`${REPO}/commits/:ref`, () => HttpResponse.json({ sha: FIRST })),
     http.get(`${REPO}/contents/guardrails`, () =>
@@ -2189,9 +2179,7 @@ test("a policy in a folder of a repository that holds other work gets the same o
           type: "required_status_checks",
           parameters: {
             strict_required_status_checks_policy: false,
-            required_status_checks: [
-              { context: "Guardrails Policy Admission", integration_id: 123 },
-            ],
+            required_status_checks: [{ context: CHECK, integration_id: 123 }],
           },
         },
       ],

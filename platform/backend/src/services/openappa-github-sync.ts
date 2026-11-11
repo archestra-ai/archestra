@@ -704,6 +704,8 @@ async function setSelfService(params: {
     );
   }
   if (params.enabled) {
+    if (params.row.repo)
+      await forgetRefusedChecks(params.organizationId, params.row.repo);
     try {
       await maintainRepositoryProtection(params.organizationId);
     } catch (error) {
@@ -982,7 +984,32 @@ export async function checkDueAppaGithubSyncs() {
  * product-free name by default. A renamed deployment moves the ruleset and
  * its required check over at the next sync.
  */
-const POLICY_CHECK_NAME = config.openappa.policyCheckName;
+const POLICY_CHECK_NAME_TEMPLATE = config.openappa.policyCheckName;
+/** The placeholder the template may carry for the GitHub App's name. */
+const APP_NAME_PLACEHOLDER = ":githubAppName";
+
+/** The check's name for one App, from ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME. */
+function renderPolicyCheckName(appName: string): string {
+  return POLICY_CHECK_NAME_TEMPLATE.split(APP_NAME_PLACEHOLDER)
+    .join(appName)
+    .trim();
+}
+
+/**
+ * The name of the check this source's GitHub App posts, and of the ruleset
+ * that requires it: the template with the App's own name in it, read from
+ * GitHub once per App. A template without the placeholder names every App's
+ * check the same.
+ */
+export async function policyCheckNameFor(source: {
+  organizationId: string;
+  githubAppConfigId: string | null;
+}): Promise<string> {
+  if (!POLICY_CHECK_NAME_TEMPLATE.includes(APP_NAME_PLACEHOLDER))
+    return POLICY_CHECK_NAME_TEMPLATE;
+  const profile = await githubAppProfile(source);
+  return renderPolicyCheckName(profile?.name ?? "OpenAPPA");
+}
 
 /** The most open pull requests checked in one repository each minute. */
 const MAX_CHECKED_PULLS = 50;
@@ -1062,8 +1089,9 @@ async function checkAppaGithubPullRequests(organizationId: string) {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.repo || !row.path || !row.interval || !row.sourceCommit) return;
   const source = { ...row, repo: row.repo, path: row.path };
-  const refused = checkKey("refused", organizationId, source.repo);
+  const refused = refusedChecksKey(organizationId, source.repo);
   if (await cacheManager.get(refused)) return;
+  const checkName = await policyCheckNameFor(source);
   let pulls: CheckedPull[];
   try {
     pulls = await githubPullRequests(source);
@@ -1085,7 +1113,7 @@ async function checkAppaGithubPullRequests(organizationId: string) {
       "v2",
       organizationId,
       source.repo,
-      POLICY_CHECK_NAME,
+      checkName,
       pull.head,
       pull.result,
     ),
@@ -1186,6 +1214,26 @@ async function checkAppaGithubPullRequests(organizationId: string) {
         ),
       );
   }
+}
+
+/** The key under which a refused round of checks waits ten minutes. */
+function refusedChecksKey(organizationId: string, repo: string) {
+  return checkKey("refused", organizationId, repo);
+}
+
+/**
+ * Forget a refusal: the App was just granted what it lacked, so the next
+ * minute's round posts the checks instead of waiting out the ten minutes.
+ */
+async function forgetRefusedChecks(organizationId: string, repo: string) {
+  await cacheManager
+    .delete(refusedChecksKey(organizationId, repo))
+    .catch((err) =>
+      logger.warn(
+        { organizationId, err },
+        "OpenAPPA could not forget a refused policy check",
+      ),
+    );
 }
 
 /** A shared cache key for the policy check, from its parts. */
@@ -1352,6 +1400,7 @@ async function githubPullRequests(
   });
   if (!token) return [];
   const base = `${api}/repos/${source.repo}`;
+  const checkName = await policyCheckNameFor(source);
   const appId = await checkIntegrationId(source);
   const branch =
     source.ref ??
@@ -1387,7 +1436,7 @@ async function githubPullRequests(
         head,
         result: merged && /^[a-f0-9]{40}$/.test(merged) ? merged : head,
         post: (outcome) =>
-          postGithubCheck({ base, token, head, appId, outcome }),
+          postGithubCheck({ base, token, head, appId, outcome, checkName }),
         ...(number
           ? {
               judge: () =>
@@ -1700,6 +1749,7 @@ async function postGithubCheck(params: {
   head: string;
   appId: number | undefined;
   outcome: PullOutcome;
+  checkName: string;
 }) {
   const { base, token, head, outcome } = params;
   const { title, summary } = checkSummary(outcome);
@@ -1719,7 +1769,7 @@ async function postGithubCheck(params: {
     (run) => (typeof run.id === "number" ? [run.id] : []),
   );
   const body = {
-    name: POLICY_CHECK_NAME,
+    name: params.checkName,
     status: "completed",
     conclusion: !outcome.accepted
       ? "failure"
@@ -2330,9 +2380,6 @@ export function hasOwnFile(
 // Repository protection: who reviews each server's file, and the branch rules
 // =============================================================================
 
-/** The ruleset Archestra keeps on the synced branch: the check's name. */
-const RULESET_NAME = POLICY_CHECK_NAME;
-
 /** The permissions the GitHub App needs, each tried as its own job token. */
 const GITHUB_APP_PERMISSIONS = [
   "contents",
@@ -2400,8 +2447,9 @@ async function repositoryProtection(params: {
     path: row.path,
     sourceCommit: row.sourceCommit,
   };
+  const checkName = await policyCheckNameFor(source);
   const [branchRules, app] = await Promise.all([
-    githubBranchRules(source, params.apply).catch((error) => ({
+    githubBranchRules(source, params.apply, checkName).catch((error) => ({
       state: "error" as const,
       detail: protectionError(error),
     })),
@@ -2413,7 +2461,7 @@ async function repositoryProtection(params: {
       return undefined;
     }),
   ]);
-  return { checkName: POLICY_CHECK_NAME, ...(app ? { app } : {}), branchRules };
+  return { checkName, ...(app ? { app } : {}), branchRules };
 }
 
 /**
@@ -2432,6 +2480,10 @@ export async function getAppaGithubAppGrants(
     path: row.path,
     sourceCommit: row.sourceCommit ?? "",
   });
+  // Read when the switch's dialog checks again: a grant that just arrived
+  // should not wait out a refused round of checks.
+  if (grants?.permissions.every((permission) => permission.granted))
+    await forgetRefusedChecks(organizationId, row.repo);
   return grants ?? null;
 }
 
@@ -2570,6 +2622,8 @@ type Ruleset = {
 async function githubBranchRules(
   source: ConnectedSource,
   apply: boolean,
+  /** The check's name for this App, and the ruleset's. */
+  checkName: string,
 ): Promise<RepositoryProtection["branchRules"]> {
   let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
   try {
@@ -2601,9 +2655,7 @@ async function githubBranchRules(
   // Ours by name, or by its shape: a deployment renamed since
   // (ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) finds its ruleset again and
   // renames it, instead of leaving one that holds every pull request.
-  let ours = repositoryRulesets.find(
-    (ruleset) => ruleset.name === RULESET_NAME,
-  );
+  let ours = repositoryRulesets.find((ruleset) => ruleset.name === checkName);
   let existing: Awaited<ReturnType<typeof githubCall<Ruleset>>> | null = null;
   if (!ours && integrationId) {
     for (const candidate of repositoryRulesets.slice(0, 25)) {
@@ -2621,7 +2673,7 @@ async function githubBranchRules(
   const page = (id: number) => `${web}/${source.repo}/rules/${id}`;
   // The check is required only while this App may post it: a required check
   // nobody posts holds every pull request for good.
-  const check = await policyCheckAccess(source);
+  const check = await policyCheckAccess(source, checkName);
   if (!check.postable) {
     if (!ours) return { state: "needs_permission", detail: check.detail };
     existing ??= await githubCall<Ruleset>({
@@ -2631,12 +2683,12 @@ async function githubBranchRules(
     return {
       state: "active",
       url: page(ours.id),
-      ...(existing.ok && requiresPolicyCheck(existing.body.rules)
+      ...(existing.ok && requiresPolicyCheck(existing.body.rules, checkName)
         ? { checkRule: "unposted" as const, detail: check.detail }
         : { detail: check.detail }),
     };
   }
-  const desired = desiredRuleset({ branch, integrationId });
+  const desired = desiredRuleset({ branch, integrationId, checkName });
   if (!ours) {
     if (!apply) return { state: "missing" };
     const created = await githubCall<{ id: number }>({
@@ -2694,6 +2746,7 @@ async function removeGithubBranchRules(source: {
   githubAppConfigId: string | null;
   githubPatId: string | null;
 }) {
+  const checkName = await policyCheckNameFor(source);
   let access: Awaited<ReturnType<typeof resolveOpenAppaGithubAccess>>;
   try {
     access = await resolveOpenAppaGithubAccess(source, {
@@ -2725,11 +2778,11 @@ async function removeGithubBranchRules(source: {
     });
     if (!read.ok) continue;
     const ours =
-      candidate.name === RULESET_NAME ||
+      candidate.name === checkName ||
       (integrationId !== undefined &&
         isOurRulesetShape(read.body.rules, integrationId));
     const requires =
-      requiresPolicyCheck(read.body.rules) ||
+      requiresPolicyCheck(read.body.rules, checkName) ||
       (integrationId !== undefined &&
         requiresOurCheck(read.body.rules, integrationId));
     if (!ours && !requires) continue;
@@ -2743,7 +2796,7 @@ async function removeGithubBranchRules(source: {
           token,
           url: `${base}/rulesets/${candidate.id}`,
           method: "PUT",
-          body: withoutPolicyCheck(read.body, integrationId),
+          body: withoutPolicyCheck(read.body, integrationId, checkName),
         });
     // Already gone: the same outcome.
     if (!written.ok && written.status !== 404)
@@ -2774,6 +2827,7 @@ function requiresOurCheck(
 function withoutPolicyCheck(
   existing: Ruleset,
   integrationId: number | undefined,
+  checkName: string,
 ): Ruleset {
   const rules = (existing.rules ?? []).flatMap((rule) => {
     if (rule.type !== "required_status_checks") return [rule];
@@ -2783,7 +2837,7 @@ function withoutPolicyCheck(
     }>;
     const kept = checks.filter(
       (check) =>
-        check.context !== POLICY_CHECK_NAME &&
+        check.context !== checkName &&
         (integrationId === undefined || check.integration_id !== integrationId),
     );
     if (kept.length === 0) return [];
@@ -2811,6 +2865,7 @@ function withoutPolicyCheck(
  */
 async function policyCheckAccess(
   source: ConnectedSource,
+  checkName: string,
 ): Promise<{ postable: true } | { postable: false; detail: string }> {
   if (!source.githubAppConfigId) return { postable: true };
   try {
@@ -2823,7 +2878,7 @@ async function policyCheckAccess(
     if (error instanceof MissingGithubPermission)
       return {
         postable: false,
-        detail: `The GitHub App cannot post the ${POLICY_CHECK_NAME} check: ${error.message}`,
+        detail: `The GitHub App cannot post the ${checkName} check: ${error.message}`,
       };
     throw error;
   }
@@ -2848,7 +2903,10 @@ function isOurRulesetShape(
 }
 
 /** Whether a rule requires the policy check, under any App. */
-function requiresPolicyCheck(rules: Rule[] | undefined): boolean {
+function requiresPolicyCheck(
+  rules: Rule[] | undefined,
+  checkName: string,
+): boolean {
   return (rules ?? []).some(
     (rule) =>
       rule.type === "required_status_checks" &&
@@ -2856,7 +2914,7 @@ function requiresPolicyCheck(rules: Rule[] | undefined): boolean {
         (rule.parameters?.required_status_checks ?? []) as Array<{
           context?: string;
         }>
-      ).some((check) => check.context === POLICY_CHECK_NAME),
+      ).some((check) => check.context === checkName),
   );
 }
 
@@ -2873,9 +2931,10 @@ function requiresPolicyCheck(rules: Rule[] | undefined): boolean {
 function desiredRuleset(params: {
   branch: string;
   integrationId?: number;
+  checkName: string;
 }): Ruleset & { bypass_actors: unknown[]; rules: Rule[] } {
   return {
-    name: RULESET_NAME,
+    name: params.checkName,
     target: "branch",
     enforcement: "active",
     conditions: {
@@ -2889,7 +2948,7 @@ function desiredRuleset(params: {
           strict_required_status_checks_policy: false,
           required_status_checks: [
             {
-              context: POLICY_CHECK_NAME,
+              context: params.checkName,
               // Only this App's check counts: no one posts a passing one
               // with a token of their own.
               ...(params.integrationId

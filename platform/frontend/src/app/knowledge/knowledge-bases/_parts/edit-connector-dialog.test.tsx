@@ -230,7 +230,13 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     await waitFor(() => expect(input).toBeVisible());
     expect(row.getByText(/Use a file extension/)).toBeVisible();
     expect(mockMutateAsync).not.toHaveBeenCalled();
-    fireEvent.change(input, { target: { value: ".md" } });
+    await user.clear(input);
+    await waitFor(() =>
+      expect(row.queryByText(/Use a file extension/)).not.toBeInTheDocument(),
+    );
+    expect(input).toBeVisible();
+    await user.type(input, ".md");
+    expect(input).toBeVisible();
     const config = await save(user);
     expect(config.repositoryOverrides[0]).toMatchObject({
       includeRepositoryFiles: false,

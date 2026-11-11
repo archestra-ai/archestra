@@ -428,7 +428,8 @@ function RepositoryControls({
               hidden={
                 setting.name === "fileTypes" &&
                 !values.includeRepositoryFiles &&
-                !fieldState.error
+                !fieldState.error &&
+                !form.formState.isSubmitted
               }
             >
               <FormLabel>{setting.label}</FormLabel>

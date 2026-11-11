@@ -319,16 +319,23 @@ function memberTransportOnWire(params: {
 
   if (inbound === "openai-chat" && target === "bedrock-converse") {
     const translate = (request: unknown) => {
-      const { converseBody, openaiContext } = openaiToConverse(
-        request as OpenAi.Types.ChatCompletionsRequest,
-      );
+      const openaiRequest = request as OpenAi.Types.ChatCompletionsRequest;
+      // Model-specific options must use the selected member, not the pool alias.
+      const { converseBody, openaiContext } = openaiToConverse({
+        ...openaiRequest,
+        model: modelId,
+      });
       return {
         body: {
           ...converseBody,
           modelId,
           messages: withBedrockToolCallIds(converseBody.messages ?? []),
         } as Bedrock.Types.ConverseRequest,
-        openaiContext: { ...openaiContext, includeUsageInStream: true },
+        openaiContext: {
+          ...openaiContext,
+          requestedModel: openaiRequest.model,
+          includeUsageInStream: true,
+        },
       };
     };
     return {

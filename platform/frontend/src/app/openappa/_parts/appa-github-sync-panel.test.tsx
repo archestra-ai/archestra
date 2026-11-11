@@ -425,7 +425,7 @@ test("self-service needs a GitHub App: a source without one cannot enable it", a
   ).toBeVisible();
   expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
     "href",
-    expect.stringContaining("git-sync#let-each-servers-team-own-its-rules"),
+    expect.stringContaining("git-sync#self-service-mcp-guardrails"),
   );
   expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
 });

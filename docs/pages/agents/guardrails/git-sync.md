@@ -22,25 +22,10 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
    - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
    - **Use an existing repository:** one that already holds an OpenAPPA policy.
-2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with the [permissions below](#github-app-permissions) and no keys to copy. Install it on the policy repository only: its tokens never reach past that repository, and so GitHub's own grant need not either. To let the people who edit an MCP server change its rules themselves, check **Enable MCP servers Guardrails self-service** on this step; a new App then asks for the Checks and Administration permissions too, and the repository step asks for the **Self-service folder**. You can [turn it on later](#let-each-servers-team-own-its-rules).
+2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only. Tick **Enable MCP servers Guardrails self-service** here to let [MCP owners manage their servers' Guardrails](#self-service-mcp-guardrails); you can turn it on later too.
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
-
-### GitHub App Permissions
-
-Each permission serves one part of Git sync, and a part whose permission is missing is reported on **Settings → Guardrails**, not failed. The App subscribes to no events: sync polls the repository on its schedule, so GitHub needs no route to Archestra.
-
-| Permission | Access | What it does | Without it |
-| --- | --- | --- | --- |
-| Metadata | Read | Lists the repositories the installation covers, in setup. GitHub grants it to every App. | Nothing to choose. |
-| Contents | Read and write | Reads `appa.toml`, the server files and the validations at each sync and for each pull request it checks. Writes the first policy into a new repository and the branch of each pull request Archestra opens. | Nothing syncs. |
-| Pull requests | Read and write | Finds the open pull requests to check, with who opened them and what they change. Opens pull requests: a server's rules from the APPA Keeper, and the first policy when rules block a direct commit. | Sync reads, but proposes and checks nothing. |
-| Checks | Read and write, [self-service](#let-each-servers-team-own-its-rules) only | Posts the policy check on each pull request into the synced branch. | No check. The branch rules do without it until it is granted. |
-| Administration | Read and write, [self-service](#let-each-servers-team-own-its-rules) only | Creates the policy check's ruleset on the synced branch and restores its rules. | No branch rules. Settings shows them off. |
-| Workflows | Read and write, GitHub Enterprise Server only | Lets setup commit the template's workflow files into an empty repository; GitHub refuses that commit otherwise. On GitHub.com the template repository brings them. | Setup on GitHub Enterprise Server fails on the workflow files. |
-
-Each job mints its own token, good for the policy repository and under an hour, with that job's slice alone: reading the policy takes Contents read; checking pull requests takes Pull requests read and Checks write; opening a pull request takes Contents and Pull requests write; the branch rules take Administration write. An App created without self-service lacks Checks and Administration: once self-service is on, **Settings → Guardrails** lists what is missing under **Self-service**, and **Update App permissions** opens the App's permissions page on GitHub. Grant them as read and write, accept the change on the installation, then click **Check again**.
+The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. Self-service adds Checks and Administration. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
 
 ### GitLab
 
@@ -62,9 +47,9 @@ Before you connect, the dialog checks what the repository holds:
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
 
-## Let Each Server's Team Own Its Rules
+## Self-service MCP Guardrails
 
-With **Self-service** on, the people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) change its Guardrails rules themselves, through a pull request, without a Guardrails permission. They do it in a chat with the **APPA Keeper** agent, which only administrators can use until you [share the agent](/docs/admin/access-control#share-a-resource) with their team. Each server's rules live in their own file in the **Self-service folder** beside the policy file, `mcp/<tool prefix>.toml` unless you chose another folder. One line in `appa.toml` includes every such file, so a server's first file needs no change to `appa.toml`:
+With self-service on, the people who [can edit an MCP server](/docs/admin/access-control#share-a-resource) change its Guardrails rules themselves, through a pull request, with no Guardrails permission. Each server's rules live in their own file, `mcp/<tool prefix>.toml` by default, which `appa.toml` includes with one line:
 
 ```toml
 include = [
@@ -73,54 +58,43 @@ include = [
 ]
 ```
 
-Any include entry may name every matching file in one folder this way, as OpenAPPA 0.41 and later read one: `teams/*.toml`, `policies/ops-*.toml`. Only the file name holds `*`, it ends in `.toml`, and the files load at the entry's position in name order, each once. Lay the repository out as you like and move files between folders freely; Git sync reads the files the commit holds. Only a file in the self-service folder, `mcp/<tool prefix>.toml`, is a server's own file, held to that server's tools; a file anywhere else is organization policy, with no scope. Only Archestra reads the `<tool prefix>__*` rules below: a workflow that replays validations with `appa`, such as the template's **Validate OpenAPPA policy**, fails on a file that has one. The [policy check](#protect-each-servers-file) checks each pull request the way Git sync does, every included file folded in.
+GitHub App sources only. [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead.
 
-When two files write a rule for the same tool, the first one in the composed policy wins for a call, whole: the root's rules come first, then each included file's in `include` order, and a glob's files in name order. An exact tool name always beats `*`. So `appa.toml` overrides any included file, and an entry listed before `mcp/*.toml` overrides a server's file while one listed after it yields to it. Nothing merges and nothing warns: a shadowed rule is dead for that call. Two files cannot declare the same annotator.
+### Turn It On
 
-### Before Editors Start
+Click **Enable** under **Self-service MCP Guardrails** on the Git sync card in **Settings → Guardrails**. The dialog walks through three steps:
 
-Self-service is off until you turn it on. Off, only people with [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) change the policy, the MCP registry shows no **Edit Guardrails rules**, and Archestra posts no check and keeps no branch rules. Three things put a server's rules in its editors' hands; each is in place once and holds for every server.
+1. **GitHub App:** grant the App **Administration** and **Checks** with **Update App**, then **Approve the request** on the installation. The refresh button reads what GitHub grants now.
+2. **Folder:** where each server's file goes, `mcp` unless you change it. Any nested folder works; no wildcards, no `..`.
+3. **Turn on:** Archestra creates the branch ruleset and, unless `appa.toml` includes the folder already, opens a pull request in your name that adds the include line and starts the folder. Merge it.
 
-1. **Self-service on, with a GitHub App source.** Check **Enable MCP servers Guardrails self-service** when you set Git sync up, or click **Enable** under **Self-service** on the Git sync card in **Settings → Guardrails** later. Either way you pick the **Self-service folder**, `mcp` unless you change it. **Enable** walks you through it: the App's two extra permissions, with **Update App permissions** and the installation to accept them on, then the folder, then the branch ruleset and a pull request in your name that starts the folder and adds `<folder>/*.toml` to `appa.toml`. A repository the setup creates includes the folder from its first commit. **Self-service** links the pull request until it is merged, and offers **Finish setup** while a part is still missing. To change self-service later, click **Edit source**: the Repository step holds the switch and the folder. A new folder gets its own pull request; files in the old folder become organization policy. A GitLab project or a token cannot: the check and the branch rules are the App's. [`ARCHESTRA_OPENAPPA_SELF_SERVICE`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_SELF_SERVICE) sets it for the whole deployment instead, and the switch is then locked.
-2. **Editors on the server.** [Share the server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed. Those people get **Edit Guardrails rules**, and the policy check passes their own changes.
-3. **The APPA Keeper for those teams.** Only administrators can use the agent until you share it with the editors' teams for use.
-
-**Disable** deletes Archestra's ruleset, takes its check out of any other ruleset that required it, and hides the registry action again. Open pull requests stay open under the repository's own rules.
-
-To merge, an editor needs write access to the repository on GitHub, or someone who has it clicks **Merge** for them. Nobody needs to approve.
-
-### Change a Server's Rules
-
-1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row actions, or open the server's page, click **⋯**, then **Edit Guardrails rules**. The APPA Keeper chat opens on that server. An editor of the server without [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) gets the same chat from **Configure Guardrails with agent**, on the last step of editing the server. A server with no file yet starts from a file that names each of its tools with no rule, so the first change decides about every tool on purpose; a tool left without a rule keeps the organization's defaults.
-2. Ask for the change, for example "refunds need a trusted session". The Keeper writes the file and shows the diff.
-3. Click **Approve**. The Keeper opens a pull request that changes only that file. If `appa.toml` does not include the self-service folder yet, the first pull request adds its `<folder>/*.toml` line.
-4. When the policy check passes, merge it. A server's only editor merges their own change; no one else's approval is needed. Git sync applies it at the next sync.
+Then [share each server](/docs/admin/access-control#share-a-resource) with the team that owns it, with editing allowed, and share the **APPA Keeper** agent with those teams for use.
 
 What to know:
 
-- A rule in `appa.toml` wins over a server file's rule for the same tool, so the organization's own rules stay in force.
-- A server file starts with `[policy]` and `version = 2`, like `appa.toml`, and holds only rules for that server's tools and annotators named `<tool prefix>.<name>`. `<tool prefix>__*`, such as `payments_api__*`, covers each of the server's tools the file has no rule for, including tools it gains later. Git sync refuses a commit whose server file reaches further, such as `*`, another server's tool, or an annotator name a battery uses, whoever approved it.
-- A server file uses the organization's authorities and sanitizers but declares none of its own. To have a person approve a call, require an attention mark an authority permits, such as `requires = { attention = ["payments-refund"] }`. To clean a tool's result, give the tool a sanitizer's tag and list it under `[policy.deployment]` `confined_results`.
+- The card says what is in place, links the pull request until it is merged, and offers **Finish setup** while a part is missing.
+- **Edit source** changes self-service without disconnecting: the Repository step holds the switch and the folder.
+- **Disable** deletes the ruleset and hides the registry action. Open pull requests stay open.
 
-## Protect Each Server's File
+### Edit a Server's Rules
 
-A change from the APPA Keeper needs no one's approval: the policy check on its pull request confirms that the person who asked may edit that server, and the branch rules make the check the gate, so a server's only editor merges their own change. A pull request a person opens on GitHub is the repository's own business: who may open and merge one, and who reviews it, is set by GitHub's permissions, rulesets and any `CODEOWNERS` file you keep, none of which Archestra writes or reads. Archestra never merges anything itself. While self-service is on, it keeps two things at each sync:
-
-- **The policy check:** a pull request into the synced branch that changes a file Git sync reads gets the policy check within a minute. It fails when Git sync would refuse the result, whoever opened it, and, for a pull request Archestra opened, when the person who asked may no longer edit the server or someone else pushed a commit onto its branch. A pull request that changes no such file gets the check as skipped at once, which passes, so a required check never holds it. The check and the ruleset are named after the GitHub App, `Check OpenAPPA Guardrails [<App name> App]`; [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) changes the name.
-- **Branch rules:** the policy check's ruleset on the synced branch holds one rule: the check, from Archestra's App, must pass before a merge. Nothing else about the branch changes: pull requests, reviews, pushes and history stay the repository's to rule, so the same ruleset fits a dedicated policy repository and a folder in a repository that holds other work. Rules an administrator adds to it on GitHub stay; the rule itself comes back at the next sync if it is removed or the ruleset is turned off there. The ruleset is created only once the App may post the check; without the Checks permission, Settings says so. Archestra adds no bypass; one an administrator adds on GitHub stays.
-
-Who asked for a pull request Archestra opened is read from what GitHub vouches for: its commits are signed for the App, and each names the person who asked in a `Requested-by` line of its message, which the signature covers. Git sync itself applies any valid commit that reaches the branch, whoever merged it, and refuses an invalid one, keeping the last accepted policy.
-
-Under **Self-service** on the Git sync card, **Settings → Guardrails** says whether the ruleset is on, with a link to it.
-
-### Sync Into a Folder of an Existing Repository
-
-The policy can live in a folder of a repository that holds other work, such as `guardrails/appa.toml` in a product repository. Set the **Policy file** under **Advanced** when you connect. Nothing else differs: every pull request gets the policy check, skipped at once when it changes nothing under that folder or in the validations folder, and the ruleset requires that check alone, so the branch's other rules, reviews and pushes are untouched. Since a required check stops pushes straight to the branch, which no check runs for, changes to that branch go through pull requests.
+1. In the **MCP Registry**, click **Edit Guardrails rules** in the server's row, or under **⋯** on its page. The APPA Keeper opens on that server; a server without a file starts from one that names each tool with no rule.
+2. Ask for the change, for example "refunds need a trusted session". The Keeper shows the diff.
+3. Click **Approve**. The Keeper opens a pull request that changes only that file.
+4. When the check passes, merge it. Git sync applies it at the next sync.
 
 What to know:
 
-- An App created before Archestra kept these lacks the Administration and Checks permissions; **Enable** asks for them first, with **Update App permissions**. Until they are granted and accepted on the installation, the parts the App cannot do are reported as off. A ruleset that already requires the check while the App cannot post it holds every pull request; Settings says so until the permission is granted.
-- To be rid of the ruleset, click **Disable** under **Self-service** on the Git sync card. A ruleset turned off or stripped of the rule on GitHub is put back at the next sync.
+- A rule in `appa.toml` wins over a server file's rule for the same tool.
+- A server file holds rules for its own server's tools only; `<tool prefix>__*` covers every tool the file names no rule for. Git sync refuses a file that reaches further, whoever approved it.
+- To merge, an editor needs write access to the repository, or someone who has it merges for them. Nobody needs to approve.
+
+### The Check and the Ruleset
+
+While self-service is on, Archestra keeps two things on the synced branch at each sync, and never merges anything itself:
+
+- **The check**, `Check OpenAPPA Guardrails [<App name> App]`, posted within a minute on each pull request that changes a file Git sync reads, and skipped on any other. It fails when Git sync would refuse the result, and, for a pull request Archestra opened, when the person who asked may no longer edit the server or someone else pushed to its branch. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) renames it.
+- **The ruleset**, named like the check, with one rule: that check must pass before a merge. Pull requests, reviews, pushes and history stay the repository's to rule, so it fits a folder in a repository that holds other work too. Rules an administrator adds stay; the check rule comes back at the next sync if removed.
 
 ## Validations in Git
 

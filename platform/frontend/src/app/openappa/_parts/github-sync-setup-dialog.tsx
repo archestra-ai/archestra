@@ -536,7 +536,7 @@ export function GithubSyncSetupDialog({
           MCP owners can manage MCP Guardrails. Additional GitHub App
           permissions are added to ensure the related pull requests are checked.{" "}
           <a
-            href={`${policyDocsUrl}#let-each-servers-team-own-its-rules`}
+            href={`${policyDocsUrl}#self-service-mcp-guardrails`}
             target="_blank"
             rel="noreferrer"
             className="text-primary underline underline-offset-2 hover:text-primary/80"

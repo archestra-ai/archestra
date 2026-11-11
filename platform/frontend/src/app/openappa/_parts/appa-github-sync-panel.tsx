@@ -445,7 +445,7 @@ function SelfServiceDocsLink() {
   const href = getVisibleDocsUrl(
     getDocsUrl(
       DocsPage.PlatformAiToolGuardrailsGitSync,
-      "let-each-servers-team-own-its-rules",
+      "self-service-mcp-guardrails",
     ),
   );
   if (!href) return null;

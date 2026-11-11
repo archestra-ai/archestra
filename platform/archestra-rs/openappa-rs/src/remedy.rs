@@ -119,6 +119,10 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
+    /// The review's coverage items as JSON text. Absent means unknown (a
+    /// review stored before the runtime typed it, or one that joins several
+    /// authorities), so show `text`; `[]` means the ruling accepts nothing else.
+    pub scope: Option<String>,
 }
 
 /// Reads an offer's original refusal from authenticated, host-scoped journal
@@ -176,6 +180,7 @@ pub async fn load_offer_review(
             let row = client.query_opt(
                 &format!(
                     "SELECT entry->>'text' AS text, \
+                     (entry->'scope')::text AS scope, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
                      COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
                      FROM openappa_operations o \
@@ -197,6 +202,7 @@ pub async fn load_offer_review(
                     session_id,
                     tool: row.get("tool"),
                     arguments: row.get("arguments"),
+                    scope: row.get("scope"),
                 }));
             }
             let opened = sealed::read(
@@ -238,6 +244,7 @@ fn review_in(
             text: review["text"].as_str().unwrap_or_default().to_owned(),
             tool: source["tool"].as_str().map(str::to_owned),
             arguments: source.get("arguments").map(Value::to_string),
+            scope: review.get("scope").map(Value::to_string),
         })
     })
 }
@@ -1391,6 +1398,28 @@ mod stored_approved_output_tests {
         assert_eq!(
             stored_approved_output(&long, &decision("another text")),
             long
+        );
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::review_in;
+    use serde_json::json;
+
+    #[test]
+    fn a_review_stored_before_typed_scope_leaves_it_unknown() {
+        let input = json!({ "context": { "tool": "send_email", "arguments": {} } });
+        let old = json!({ "review": [{ "offer_id": "o1", "text": "approve?" }] });
+        let typed = json!({ "review": [{
+            "offer_id": "o2", "text": "approve?", "authority": "operator", "scope": [],
+        }] });
+        let receipts = [(input.clone(), old), (input, typed)];
+
+        assert_eq!(review_in(receipts.clone(), "o1", "s").unwrap().scope, None);
+        assert_eq!(
+            review_in(receipts, "o2", "s").unwrap().scope.as_deref(),
+            Some("[]")
         );
     }
 }

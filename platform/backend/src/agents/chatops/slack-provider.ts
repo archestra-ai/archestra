@@ -72,12 +72,17 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
-import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
+import {
+  escapeSlackText,
+  slackMessageText,
+  slackThreadMessageText,
+} from "./slack-message-text";
 import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
   footerWithoutAgentName,
+  formatApprovalAlsoAccepts,
   formatApprovalReviewText,
   formatApprovalToolArgs,
   isSlackDmChannel,
@@ -893,8 +898,12 @@ class SlackProvider implements ChatOpsProvider {
       : null;
     const subject = options.reviewText
       ? // The review text may carry column-aligned art; keep it monospace.
-        `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
+        `\`\`\`\n${formatApprovalReviewText(options.reviewText, 2800, escapeSlackText)}\n\`\`\``
       : `\`${options.toolName}\``;
+    const alsoAccepts = formatApprovalAlsoAccepts(
+      options.alsoAccepts,
+      escapeSlackText,
+    );
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -906,6 +915,14 @@ class SlackProvider implements ChatOpsProvider {
             text: `*Approval required*\n${subject}\nReview this tool call before it can continue.`,
           },
         },
+        ...(alsoAccepts
+          ? [
+              {
+                type: "section" as const,
+                text: { type: "mrkdwn" as const, text: alsoAccepts },
+              },
+            ]
+          : []),
         {
           type: "actions" as const,
           elements: [

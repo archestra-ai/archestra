@@ -1169,7 +1169,7 @@ function approvalQuestion(params: {
  * What an approval accepts besides the person's attention, or undefined when
  * the review text's coverage is not in the shape read here.
  */
-export function acceptedCoverage(text: string): string[] | undefined {
+function acceptedCoverage(text: string): string[] | undefined {
   return reviewCoverage(text)?.filter(
     (line) => !line.startsWith("attention: "),
   );

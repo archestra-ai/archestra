@@ -500,6 +500,7 @@ export function McpElicitationCard({
         reviewedTool={question.request.reviewedTool}
         reviewedArguments={question.request.reviewedArguments}
         reviewedCoverage={question.request.reviewedCoverage}
+        reviewedText={question.request.reviewedText}
         disabled={isSubmitting || !question.isPending}
         secondaryText={
           isSubmitting ? (

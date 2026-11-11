@@ -15,6 +15,7 @@ import { metrics } from "@/observability";
 import type { CreateClientOptions, OpenAi } from "@/types";
 import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+import { withSystemForDeveloperRole } from "./openai-translator-utils";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 export const kimiCodeAdapterFactory = wrapKimiCodeDeveloperRole(
@@ -90,34 +91,5 @@ function wrapKimiCodeDeveloperRole(
         onAccepted,
       );
     },
-  };
-}
-
-/**
- * Kimi Code's `/coding/v1/chat/completions` rejects `role: "developer"` with
- * HTTP 400 (`role 'developer' is not allowed`). Rewrite any `developer` message
- * sent by a governed client (e.g., Copilot CLI, OpenCode, Pi) to `system`.
- */
-function withSystemForDeveloperRole(
-  request: OpenAi.Types.ChatCompletionsRequest,
-): OpenAi.Types.ChatCompletionsRequest {
-  if (!Array.isArray(request.messages)) return request;
-  if (
-    !request.messages.some(
-      (message) => (message as { role?: string } | null)?.role === "developer",
-    )
-  ) {
-    return request;
-  }
-  return {
-    ...request,
-    messages: request.messages.map((message) =>
-      (message as { role?: string } | null)?.role === "developer"
-        ? ({
-            ...(message as Record<string, unknown>),
-            role: "system",
-          } as typeof message)
-        : message,
-    ),
   };
 }

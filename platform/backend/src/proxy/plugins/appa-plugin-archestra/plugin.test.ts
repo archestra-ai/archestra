@@ -1912,7 +1912,7 @@ describe("asking through the client's own question tool", () => {
     "openrouter:chatCompletions",
     "azure:chatCompletions",
     "perplexity:responses",
-  ] as const)("leaves providers without native APPA guardrails support untouched (%s)", async (interactionType) => {
+  ] as const)("preserves OpenAPPA guidance delivery on governed appaWireFamily providers (%s)", async (interactionType) => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({ sessionId: "user:user|opencode-session" });
     context.interactionType = interactionType;
@@ -1944,14 +1944,67 @@ describe("asking through the client's own question tool", () => {
                 role: "user",
                 content: [{ type: "input_text", text: "Hi" }],
               },
-            ],
+            ] as Array<Record<string, unknown>>,
           }
         : {
             messages: [
               { role: "system", content: "Base system." },
               { role: "user", content: "Hi" },
-            ],
+            ] as Array<Record<string, unknown>>,
           };
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const items = "input" in request ? request.input : request.messages;
+      expect(
+        Array.isArray(items) &&
+          items.some(
+            (item) =>
+              item.role === "developer" &&
+              JSON.stringify(item.content).includes(
+                "The organization's guardrails policy can block a tool call",
+              ),
+          ),
+      ).toBe(true);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "gemini:generateContent",
+    "cohere:chat",
+  ] as const)("leaves non-APPA interaction types untouched (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request = {
+      messages: [
+        { role: "system", content: "Base system." },
+        { role: "user", content: "Hi" },
+      ],
+    };
     const original = structuredClone(request);
     context.requestBody = request;
 

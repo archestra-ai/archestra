@@ -1639,7 +1639,6 @@ class AgentModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
-        loadBalanced: sql<boolean>`coalesce((${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean, false)`,
       })
       .from(schema.agentsTable)
       .where(

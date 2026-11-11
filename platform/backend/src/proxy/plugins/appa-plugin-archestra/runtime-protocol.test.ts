@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { ToolModel } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import * as agentRuntimeMetrics from "@/observability/metrics/agent-runtime";
@@ -626,16 +627,20 @@ describe("protected runtime protocol", () => {
     expect(evaluate.mock.calls[0][2]?.spawnCallIds?.size).toBe(0);
   });
 
-  test("classifies omitted-agent_id start_agent_run as a spawn for load-balanced Chat router agents and attested gateways only", async ({
+  test("classifies omitted-agent_id start_agent_run as a spawn iff the resolved caller has candidate runtime subagents", async ({
     makeOrganization,
     makeAgent,
+    makeAgentTool,
   }) => {
     const org = await makeOrganization();
-    await makeAgent({
+    const runtimeWorker = await makeAgent({
       organizationId: org.id,
       name: "Lobster Grok",
       runtime: runtimeConfig(),
     });
+    const workerDelegationTool = await ToolModel.findOrCreateDelegationTool(
+      runtimeWorker.id,
+    );
     const lobsterEnv = await makeAgent({
       organizationId: org.id,
       name: "Lobster Env",
@@ -647,6 +652,7 @@ describe("protected runtime protocol", () => {
         fallbackEnabled: true,
       },
     });
+    await makeAgentTool(lobsterEnv.id, workerDelegationTool.id);
     const plainChatAgent = await makeAgent({
       organizationId: org.id,
       name: "Plain Chat Agent",
@@ -663,10 +669,22 @@ describe("protected runtime protocol", () => {
         fallbackEnabled: true,
       },
     });
+    await makeAgentTool(lbGateway.id, workerDelegationTool.id);
+    const pooledPlainGateway = await makeAgent({
+      organizationId: org.id,
+      name: "Pooled Non-LB Gateway",
+      agentType: "mcp_gateway",
+    });
+    await makeAgentTool(pooledPlainGateway.id, workerDelegationTool.id);
     const plainGateway = await makeAgent({
       organizationId: org.id,
       name: "Plain Gateway",
       agentType: "mcp_gateway",
+    });
+    const unattestedProfile = await makeAgent({
+      organizationId: org.id,
+      name: "Unattested Profile",
+      agentType: "profile",
     });
 
     const plugin = new AppaPluginArchestra([]);
@@ -674,7 +692,7 @@ describe("protected runtime protocol", () => {
       .spyOn(service, "evaluateToolCalls")
       .mockResolvedValue([{ kind: "allow" }]);
 
-    // 1. Load-balanced Chat router (`Lobster Env`) omitting `agent_id` -> `spawn: true`
+    // 1. Load-balanced Chat router (`Lobster Env`) with runtime subagent omitting `agent_id` -> `spawn: true`
     const envChatCtx = request(org.id);
     envChatCtx.profileId = lobsterEnv.id;
     const envTrusted = envChatCtx.resources.get(
@@ -717,7 +735,7 @@ describe("protected runtime protocol", () => {
       }),
     ).toMatchObject({ toolCallId: "env-spawn", spawn: true });
 
-    // 2. Non-load-balanced Chat agent omitting `agent_id` -> `spawn: false`
+    // 2. Chat agent without runtime subagents omitting `agent_id` -> `spawn: false`
     const plainChatCtx = request(org.id);
     plainChatCtx.profileId = plainChatAgent.id;
     const plainTrusted = plainChatCtx.resources.get(
@@ -740,9 +758,11 @@ describe("protected runtime protocol", () => {
       evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("plain-no-spawn"),
     ).toBe(false);
 
-    // 3. Attested external gateway with vs without load balancing
+    // 3. Attested external gateways: both LB and non-LB gateways with assigned runtime
+    // subagents classify omitted `agent_id` as `spawn: true`; gateway without subagents -> `false`.
     for (const [gateway, expectedSpawn] of [
       [lbGateway, true],
+      [pooledPlainGateway, true],
       [plainGateway, false],
     ] as const) {
       const gwCtx = request(org.id);
@@ -777,6 +797,65 @@ describe("protected runtime protocol", () => {
         evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has(`gw-${gateway.id}`),
       ).toBe(expectedSpawn);
     }
+
+    // 4. Unattested / compat-mode call from a profile with no subagents stays `spawn: false`
+    // even when another agent in the organization (`lobsterEnv`) has load balancing enabled.
+    const compatCtx = request(org.id);
+    compatCtx.profileId = unattestedProfile.id;
+    const compatTrusted = compatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    compatTrusted.profileId = unattestedProfile.id;
+    await plugin.onSessionInit(compatCtx);
+    await plugin.onToolCalls({
+      ...compatCtx,
+      toolCalls: [
+        {
+          id: "compat-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Compat without agent_id" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("compat-no-spawn"),
+    ).toBe(false);
+
+    // 5. Observer path (`enforcement: "inactive"`) preserves `chat` and never signs a launch.
+    const observedCtx = request(org.id);
+    observedCtx.profileId = lobsterEnv.id;
+    const observedTrusted = observedCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    observedTrusted.profileId = lobsterEnv.id;
+    observedTrusted.chatSource = "chat";
+    observedTrusted.enforcement = "inactive";
+    observedTrusted.session = {
+      organization_id: org.id,
+      caller_id: "user:owner",
+      session_id: "user:owner|observed-chat",
+    };
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: observedTrusted.session.caller_id,
+      sessionId: observedTrusted.session.session_id,
+      actor: openappaActor(observedTrusted.session.session_id),
+      root: openappaActor(observedTrusted.session.session_id),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await plugin.onSessionInit(observedCtx);
+    const observedOutcome = await plugin.onToolCalls({
+      ...observedCtx,
+      toolCalls: [
+        {
+          id: "observed-omitted-launch",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Observed router launch" },
+        },
+      ],
+    });
+    expect(observedOutcome).toBeUndefined();
   });
 
   test("delivers the retained return contract before inference and does not end the retained runtime", async ({

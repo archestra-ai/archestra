@@ -201,6 +201,7 @@ import {
   agentRunUrl,
   submittedRunNextStep,
 } from "@/services/agent-runtime/run-handle";
+import { callerHasCandidateRuntimeSubagents } from "@/services/agent-subagent-exclusions";
 import {
   breakTheGlassActiveIn,
   getGuardrailsDeployment,
@@ -320,6 +321,7 @@ type AppaRequestShape = AppaRetainedShape &
 type AppaPluginObserver = {
   session: OpenAppaSession;
   profileId: string;
+  chat: boolean;
   adapter: AppaClientAdapter | undefined;
   identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
@@ -1740,6 +1742,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: binding.session.organization_id,
       profileId: binding.profileId,
+      callerId: binding.session.caller_id,
       chat: binding.chat,
       identity: binding.identity,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
@@ -2916,6 +2919,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       this.observers.set(context.resources, {
         session,
         profileId: trustedContext.profileId,
+        chat: trustedContext.chatSource !== undefined,
         adapter,
         identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
@@ -3631,6 +3635,7 @@ function signedCall(params: {
 async function resolveRuntimeCalls(params: {
   organizationId: string;
   profileId: string;
+  callerId?: string;
   chat?: boolean;
   identity: AppaTrustedContext["toolIdentity"];
   calls: readonly ToolCall[];
@@ -3676,16 +3681,14 @@ async function resolveRuntimeCalls(params: {
     )
   ) {
     const { organizationId } = params;
+    const actorUserId = params.callerId?.startsWith("user:")
+      ? params.callerId.slice("user:".length)
+      : undefined;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
     ]);
     const ids = new Set(runtimeTargets.map((target) => target.id));
-    const loadBalancedIds = new Set(
-      runtimeTargets
-        .filter((target) => target.loadBalanced)
-        .map((target) => target.id),
-    );
     const runtimeNames = new Set(
       runtimeTargets.map(
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
@@ -3700,6 +3703,19 @@ async function resolveRuntimeCalls(params: {
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
       ),
     ]);
+    const candidatePoolByCaller = new Map<string, Promise<boolean>>();
+    const hasCandidateSubagents = (callerAgentId: string): Promise<boolean> => {
+      let cached = candidatePoolByCaller.get(callerAgentId);
+      if (!cached) {
+        cached = callerHasCandidateRuntimeSubagents({
+          callerAgentId,
+          organizationId,
+          actorUserId,
+        });
+        candidatePoolByCaller.set(callerAgentId, cached);
+      }
+      return cached;
+    };
     for (const call of result.values()) {
       if (call.action === TOOL_START_AGENT_RUN_SHORT_NAME) {
         const rawAgentId =
@@ -3709,11 +3725,9 @@ async function resolveRuntimeCalls(params: {
         if (rawAgentId && rawAgentId.length > 0) {
           call.spawn = ids.has(rawAgentId) || runtimeNames.has(rawAgentId);
         } else if (call.args.agent_id === undefined || rawAgentId === "") {
-          call.spawn = call.gatewayId
-            ? loadBalancedIds.has(call.gatewayId)
-            : params.chat
-              ? loadBalancedIds.has(params.profileId)
-              : loadBalancedIds.size > 0;
+          call.spawn = await hasCandidateSubagents(
+            call.gatewayId ?? params.profileId,
+          );
         } else {
           call.spawn = false;
         }
@@ -4743,6 +4757,8 @@ async function signObservedRuntimeCalls(
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: observer.session.organization_id,
       profileId: observer.profileId,
+      callerId: observer.session.caller_id,
+      chat: observer.chat,
       identity: observer.identity,
       calls,
       resolution: toolNameResolution(observer),
@@ -8523,30 +8539,24 @@ type NativeAppaGuidanceWire =
   | "chatCompletions:noDeveloper";
 
 /**
- * Providers with native APPA guardrails support and how they carry guidance.
- * Providers without native APPA support are omitted so governed guidance leaves
- * their requests untouched.
+ * Governed Chat Completions providers that reject `role: "developer"` and must
+ * receive OpenAPPA guidance in the leading `system` prompt or last `user` turn.
+ * All other governed interaction types fall back to `appaWireFamily`.
  */
-const NATIVE_APPA_GUIDANCE_WIRES: Partial<
-  Record<SupportedProviderDiscriminator, NativeAppaGuidanceWire>
-> = {
-  "anthropic:messages": "anthropic:messages",
-  "bedrock:invoke": "anthropic:messages",
-  "openai:responses": "openai:responses",
-  "github-copilot:responses": "openai:responses",
-  "xai:responses": "openai:responses",
-  "openai:chatCompletions": "openai:chatCompletions",
-  "github-copilot:chatCompletions": "openai:chatCompletions",
-  "kimi-code:chatCompletions": "chatCompletions:noDeveloper",
-  "xai:chatCompletions": "chatCompletions:noDeveloper",
-};
+const CHAT_COMPLETIONS_NO_DEVELOPER: ReadonlySet<SupportedProviderDiscriminator> =
+  new Set(["kimi-code:chatCompletions", "xai:chatCompletions"]);
 
 function nativeAppaGuidanceWire(
   interactionType: string,
 ): NativeAppaGuidanceWire | undefined {
-  return NATIVE_APPA_GUIDANCE_WIRES[
-    interactionType as SupportedProviderDiscriminator
-  ];
+  if (
+    CHAT_COMPLETIONS_NO_DEVELOPER.has(
+      interactionType as SupportedProviderDiscriminator,
+    )
+  ) {
+    return "chatCompletions:noDeveloper";
+  }
+  return appaWireFamily(interactionType);
 }
 
 function requestCarriesInstruction(params: {
@@ -8620,7 +8630,7 @@ function insertRequestGuidance(params: {
   if (
     requestCarriesInstruction({
       request,
-      interactionType: wire,
+      interactionType: params.interactionType,
       text: guidance,
     })
   ) {

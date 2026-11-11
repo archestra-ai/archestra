@@ -1,13 +1,8 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import {
-  ArrowLeft,
-  Check,
-  LoaderCircle,
-  RefreshCw,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, LoaderCircle, RefreshCw } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
 import { openGithubWindow } from "@/components/github-app-setup/github-app-window";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
@@ -306,10 +301,12 @@ function AppStep({
       {grants.permissions.some((entry) => entry.granted) ? (
         <p className="text-xs text-muted-foreground">
           Granted:{" "}
-          {grants.permissions
-            .filter((entry) => entry.granted)
-            .map((entry) => PERMISSION_LABELS[entry.name])
-            .join(", ")}
+          {joined(
+            grants.permissions
+              .filter((entry) => entry.granted)
+              .map((entry) => PERMISSION_LABELS[entry.name]),
+            ", ",
+          )}
           .
         </p>
       ) : null}
@@ -321,8 +318,11 @@ function AppStep({
         ) : (
           <span>
             Missing:{" "}
-            {missing.map((name) => PERMISSION_LABELS[name]).join(" and ")}.
-            Check again once both are accepted.
+            {joined(
+              missing.map((name) => PERMISSION_LABELS[name]),
+              " and ",
+            )}
+            . Check again once both are accepted.
           </span>
         )}
         <Button
@@ -341,6 +341,16 @@ function AppStep({
       </div>
     </div>
   );
+}
+
+/** Permission names as code, separated as given. */
+function joined(names: string[], separator: string): ReactNode {
+  return names.map((name, index) => (
+    <span key={name}>
+      {index > 0 ? <span>{separator}</span> : null}
+      <code>{name}</code>
+    </span>
+  ));
 }
 
 type Progress = "waiting" | "running" | "done" | "failed";

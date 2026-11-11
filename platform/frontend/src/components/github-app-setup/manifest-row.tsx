@@ -55,7 +55,8 @@ export function ManifestRow({
     >
       <span
         className={cn(
-          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
+          // Centred on the title's first line, as the action is.
+          "-mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
           done &&
             "border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/50 dark:text-emerald-400",
         )}
@@ -142,7 +143,7 @@ export function ManifestRow({
       {showAction && inlineAction ? (
         <div
           className={cn(
-            "flex shrink-0 items-center gap-2 self-center",
+            "-mt-1.5 flex shrink-0 items-center gap-2 self-start",
             waiting && "invisible",
           )}
           inert={waiting}

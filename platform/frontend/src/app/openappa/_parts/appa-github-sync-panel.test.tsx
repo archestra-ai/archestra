@@ -198,7 +198,11 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     name: "Turn on self-service",
   });
   expect(
-    await within(dialog).findByText(/Missing: Administration and Checks/),
+    await within(dialog).findByText(
+      (_, element) =>
+        element?.tagName === "SPAN" &&
+        /^Missing: Administration and Checks\./.test(element.textContent ?? ""),
+    ),
   ).toBeVisible();
   expect(
     within(dialog).getByRole("button", { name: /Update App/ }),

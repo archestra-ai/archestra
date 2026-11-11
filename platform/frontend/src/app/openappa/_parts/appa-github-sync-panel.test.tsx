@@ -346,7 +346,13 @@ test("self-service needs a GitHub App: a source without one shows the switch off
   });
   expect(selector).toHaveTextContent("Off");
   expect(selector).toBeDisabled();
-  expect(screen.getByText(/Needs a GitHub App/)).toBeVisible();
+  expect(
+    screen.getByText(/Connect the policy repository through a GitHub App/),
+  ).toBeVisible();
+  expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+    "href",
+    expect.stringContaining("git-sync#let-each-servers-team-own-its-rules"),
+  );
   expect(screen.queryByText("Repository protection")).toBeNull();
 });
 

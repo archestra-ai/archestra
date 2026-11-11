@@ -722,10 +722,15 @@ export function GithubSyncSetupDialog({
               Let server editors change their own rules
             </Label>
             <FieldDescription>
-              The people who can edit an MCP server change its Guardrails rules
-              through a pull request, which a check from the App gates. The App
-              also needs Checks and Administration on the policy repository, for
-              the check and the branch ruleset.
+              Let MCP server editors manage its Guardrails rules themselves.{" "}
+              <a
+                href={`${policyDocsUrl}#let-each-servers-team-own-its-rules`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Learn more
+              </a>
             </FieldDescription>
             {selfServiceEnvironment ? (
               <FieldDescription>

@@ -1,11 +1,16 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   GitSourceBranch,
   GitSourceCard,
@@ -41,6 +46,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
@@ -356,7 +362,6 @@ function SelfServiceRow({
   canManage: boolean;
 }) {
   const update = useUpdateAppaGithubSync();
-  const appName = useAppName();
   const eligible = !!source.githubAppConfigId;
   return (
     <GitSourceNotice>
@@ -364,26 +369,19 @@ function SelfServiceRow({
         <DeploymentSettingRow
           title="Self-service"
           description={
-            eligible
-              ? `Let the people who can edit an MCP server change its Guardrails rules themselves, through a pull request. ${appName} posts a check that passes their own changes, keeps a branch ruleset that requires it, and shows Edit Guardrails rules in the MCP registry.`
-              : "Needs a GitHub App. Connect the policy repository through one to let the people who can edit an MCP server change its Guardrails rules themselves."
+            <>
+              {eligible
+                ? "Let MCP server editors manage its Guardrails rules themselves."
+                : "Connect the policy repository through a GitHub App to let MCP server editors manage its Guardrails rules themselves."}{" "}
+              <SelfServiceDocsLink />
+            </>
           }
           value={selfService.enabled ? "enabled" : "disabled"}
           disabled={!canManage || !eligible || update.isPending}
           environmentVariable={selfService.environment?.variable}
           options={[
-            {
-              value: "enabled",
-              label: "On",
-              description:
-                "Server editors change their servers' rules through pull requests the policy check gates.",
-            },
-            {
-              value: "disabled",
-              label: "Off",
-              description:
-                "Only people with the Guardrails permission change the policy. No check, no ruleset.",
-            },
+            { value: "enabled", label: "On" },
+            { value: "disabled", label: "Off" },
           ]}
           onChange={(value) =>
             update.mutate({
@@ -394,6 +392,26 @@ function SelfServiceRow({
         />
       </div>
     </GitSourceNotice>
+  );
+}
+
+/** How self-service works, on the Git sync docs page; the row says only what it is. */
+function SelfServiceDocsLink() {
+  const href = getVisibleDocsUrl(
+    getDocsUrl(
+      DocsPage.PlatformAiToolGuardrailsGitSync,
+      "let-each-servers-team-own-its-rules",
+    ),
+  );
+  if (!href) return null;
+  return (
+    <ExternalDocsLink
+      href={href}
+      showIcon={false}
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
+    >
+      Learn more
+    </ExternalDocsLink>
   );
 }
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import db from "@/database";
+import logger from "@/logging";
 import CacheEntryModel from "./cache-entry";
 
 type Member = { memberId: string; providerApiKeyId: string; modelId: string };
@@ -17,17 +18,26 @@ class ModelPoolUsageModel {
     const keys = members.map((member) => key(poolId, member));
     // Routing is a hint, not admission: a single statement gives a consistent
     // snapshot without blocking completions or other replicas' selections.
-    const result = await db.execute<{
-      key: string;
-      value: string;
-      now: string;
-    }>(sql`
+    const result = await db
+      .execute<{
+        key: string;
+        value: string;
+        now: string;
+      }>(sql`
       SELECT key, value, extract(epoch FROM statement_timestamp()) * 1000 AS now
       FROM keyv_cache WHERE key IN (${sql.join(
         keys.map((value) => sql`${value}`),
         sql`, `,
       )})
-    `);
+    `)
+      .catch(() => {
+        // A usage hint must never become a new hard allowance. Auth, health and
+        // Costs & Limits still run on the normal dispatch path.
+        logger.warn(
+          "Unable to read model pool routing usage; choosing randomly",
+        );
+        return { rows: [] };
+      });
     const minute = Math.floor(
       Number(result.rows[0]?.now ?? Date.now()) / 60_000,
     );
@@ -38,6 +48,19 @@ class ModelPoolUsageModel {
         decode(values.get(keys[index]), minute),
       ]),
     );
+  }
+
+  /** Bounded cleanup of removed pools/deployments, without blocking live rows. */
+  static async deleteExpired(): Promise<void> {
+    await db.execute(sql`
+      WITH expired AS (
+        SELECT key FROM keyv_cache
+        WHERE key LIKE 'model-pool-usage:%'
+          AND (value::jsonb ->> 'expires')::numeric <= extract(epoch FROM clock_timestamp()) * 1000
+        ORDER BY key LIMIT 1000 FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM keyv_cache USING expired WHERE keyv_cache.key = expired.key
+    `);
   }
 
   static async record(params: {
@@ -79,11 +102,22 @@ function key(
 
 function decode(raw: string | undefined, minute: number): number {
   if (!raw) return 0;
-  const value = JSON.parse(raw).value;
-  if (value.minute !== minute) return 0;
-  if (!Number.isSafeInteger(value.tokens) || value.tokens < 0)
-    throw new Error("Invalid model pool usage counter");
-  return value.tokens;
+  try {
+    const value = JSON.parse(raw).value;
+    if (
+      !value ||
+      !Number.isSafeInteger(value.minute) ||
+      !Number.isSafeInteger(value.tokens) ||
+      value.tokens < 0
+    )
+      throw new Error("Invalid counter");
+    return value.minute === minute ? value.tokens : 0;
+  } catch {
+    // A subsequent completion overwrites malformed data instead of leaving
+    // this pool unable to serve requests until manual cache repair.
+    logger.warn("Ignoring invalid model pool routing usage");
+    return 0;
+  }
 }
 
 export default ModelPoolUsageModel;

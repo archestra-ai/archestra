@@ -170,8 +170,8 @@ export function MembersEditor(props: MemberFields) {
           <Label>Members</Label>
           {count > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Order 1 is tried first. Members of an order split its traffic by
-              weight.
+              Order 1 is tried first. The selection strategy chooses among its
+              healthy members.
             </p>
           ) : null}
         </div>
@@ -419,7 +419,13 @@ function OrderCard({
             className="-my-1 flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md py-1 pl-1 text-left"
           >
             {folded ? (
-              <FoldedSummary bucket={bucket} options={fields.options} />
+              <FoldedSummary
+                bucket={bucket}
+                options={fields.options}
+                weighted={
+                  fields.form.watch("routingStrategy") !== "least-tokens"
+                }
+              />
             ) : (
               <span className="flex-1" />
             )}
@@ -451,9 +457,11 @@ function OrderCard({
 function FoldedSummary({
   bucket,
   options,
+  weighted,
 }: {
   bucket: OrderBucket;
   options: PoolOptions;
+  weighted: boolean;
 }) {
   const { members } = bucket;
   const names = [
@@ -497,7 +505,7 @@ function FoldedSummary({
       ) : null}
       {members.length > 3 ? (
         <Dot>{members.length} members</Dot>
-      ) : shares.length > 1 ? (
+      ) : weighted && shares.length > 1 ? (
         <Dot>{shares.join(" / ")}</Dot>
       ) : null}
       {off > 0 ? <Dot>{off} off</Dot> : null}
@@ -537,7 +545,11 @@ function OrderBody({
   const shared = members.length > 1;
   return (
     <>
-      <ColumnHeaders shared={shared} />
+      <ColumnHeaders
+        shared={
+          shared && fields.form.watch("routingStrategy") !== "least-tokens"
+        }
+      />
       <SortableContext
         items={members.map((member) => member.id)}
         strategy={withinOrder}

@@ -25,6 +25,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelPoolModel } from "@/models";
+import ModelPoolUsageModel from "@/models/model-pool-usage";
 import {
   ApiError,
   type ModelPool,
@@ -72,6 +73,8 @@ export interface UpstreamAttempt {
   requestedModel?: string;
   providerApiKeyId?: string;
   modelPoolId?: string;
+  trackPoolUsage?: boolean;
+  poolUsageModelId?: string;
   attempt?: number;
   attemptOutcome?: "answered" | "failed_over" | "failed";
   failureReason?: string;
@@ -105,6 +108,7 @@ export interface PlannedMember {
 export interface ModelPoolPlan {
   poolId: string;
   poolName: string;
+  routingStrategy?: "weighted" | "least-tokens";
   /** Members in the order they are tried. */
   members: PlannedMember[];
   /** The pool's own stream timeout; unset keeps the default. */
@@ -244,6 +248,7 @@ export async function planModelPool(params: {
   return {
     poolId: pool.id,
     poolName: pool.name,
+    routingStrategy: pool.routingStrategy,
     streamTimeoutMs: toMs(pool.streamTimeoutSeconds),
     timeoutMs: toMs(pool.timeoutSeconds),
     cooldownMs: toMs(pool.cooldownSeconds),
@@ -373,6 +378,7 @@ export async function openThroughModelPool<T>(params: {
 }): Promise<T> {
   const { plan, attempt } = params;
   attempt.modelPoolId = plan.poolId;
+  attempt.trackPoolUsage = plan.routingStrategy === "least-tokens" || undefined;
   let lastFailure:
     | {
         error: unknown;
@@ -423,6 +429,7 @@ export async function openThroughModelPool<T>(params: {
     attempt.providerApiKeyId = member.providerApiKeyId;
     attempt.provider = member.provider;
     attempt.modelId = member.modelId;
+    attempt.poolUsageModelId = attempt.trackPoolUsage ? member.modelId : undefined;
     attempt.attempt = attempted + 1;
     attempt.failureReason = undefined;
     attempt.interactionRecorded = undefined;
@@ -713,6 +720,22 @@ class PoolRetrySelection {
       if (eligible.length === 0) {
         if (!this.advanceOrder()) return undefined;
         continue;
+      }
+      if (this.plan.routingStrategy === "least-tokens") {
+        const usage = await ModelPoolUsageModel.read(
+          this.plan.poolId,
+          eligible,
+        );
+        const priority = Math.min(...eligible.map((member) => member.priority));
+        const tier = eligible.filter((member) => member.priority === priority);
+        const least = Math.min(
+          ...tier.map((member) => usage.get(member.memberId) ?? 0),
+        );
+        const tied = tier.filter(
+          (member) => (usage.get(member.memberId) ?? 0) === least,
+        );
+        // Unlike weighted affinity, usage routing makes a fresh choice each time.
+        return tied[Math.floor(Math.random() * tied.length)];
       }
       // Retain the initial affinity/weighted plan; retries and order fallbacks
       // draw again, always among the lowest healthy order.

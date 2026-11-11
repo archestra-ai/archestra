@@ -51,6 +51,7 @@ const pool: ModelPool = {
   id: "pool-fast-chat",
   organizationId: "test-org",
   name: POOL_NAME,
+  routingStrategy: "weighted" as const,
   streamTimeoutSeconds: null,
   timeoutSeconds: null,
   cooldownSeconds: null,

@@ -15,6 +15,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -260,6 +267,45 @@ function SecondsField({
           </InputGroup>
         )}
       />
+    </div>
+  );
+}
+
+/** An opt-in strategy; the existing weighted mode keeps session affinity. */
+export function RoutingStrategyField({
+  form,
+  disabled,
+}: {
+  form: PoolForm;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="pool-routing-strategy">Selection strategy</Label>
+      <Controller
+        control={form.control}
+        name="routingStrategy"
+        render={({ field }) => (
+          <Select
+            value={field.value ?? "weighted"}
+            onValueChange={field.onChange}
+            disabled={disabled}
+          >
+            <SelectTrigger id="pool-routing-strategy" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weighted">Weighted random</SelectItem>
+              <SelectItem value="least-tokens">Least tokens used</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      />
+      <FieldDescription>
+        {form.watch("routingStrategy") === "least-tokens"
+          ? "Chooses the member with the fewest completed tokens in this pool during the current minute. Ties are random. Each request chooses again, without session affinity."
+          : "Splits traffic by weight and keeps a session on the same healthy member."}
+      </FieldDescription>
     </div>
   );
 }

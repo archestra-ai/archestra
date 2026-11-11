@@ -73,6 +73,7 @@ describe("MemberCooldown and PoolHealth", () => {
       id: "pool",
       organizationId: "org",
       name: "glm-5",
+      routingStrategy: "weighted" as const,
       streamTimeoutSeconds: null,
       timeoutSeconds: null,
       cooldownSeconds: null,

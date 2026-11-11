@@ -113627,6 +113627,7 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -113676,6 +113677,7 @@ export type GetModelPoolsResponse = GetModelPoolsResponses[keyof GetModelPoolsRe
 
 export type CreateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -113791,6 +113793,7 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;
@@ -114014,6 +114017,7 @@ export type DeleteModelPoolResponse = DeleteModelPoolResponses[keyof DeleteModel
 
 export type UpdateModelPoolData = {
     body: {
+        routingStrategy?: 'weighted' | 'least-tokens';
         name: string;
         members: Array<{
             providerApiKeyId: string;
@@ -114131,6 +114135,7 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        routingStrategy: 'weighted' | 'least-tokens';
         streamTimeoutSeconds: number | null;
         timeoutSeconds: number | null;
         cooldownSeconds: number | null;

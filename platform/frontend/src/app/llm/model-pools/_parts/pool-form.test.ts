@@ -23,6 +23,7 @@ describe("toFormValues and toPoolInput", () => {
       id: "pool",
       organizationId: "org",
       name: "glm-5",
+      routingStrategy: "weighted" as const,
       streamTimeoutSeconds: null,
       timeoutSeconds: null,
       cooldownSeconds: null,
@@ -54,6 +55,20 @@ describe("toFormValues and toPoolInput", () => {
       ["m2", 2],
       ["m3", 3],
     ]);
+  });
+});
+
+describe("selection strategy", () => {
+  it("defaults to weighted and preserves member weights when opting into least-token selection", () => {
+    const values = toFormValues(null);
+    expect(values.routingStrategy).toBe("weighted");
+    const input = toPoolInput({
+      ...values,
+      routingStrategy: "least-tokens",
+      members: [member("one", 1, 7), member("two", 1, 3)],
+    });
+    expect(input.routingStrategy).toBe("least-tokens");
+    expect(input.members.map((row) => row.weight)).toEqual([7, 3]);
   });
 });
 

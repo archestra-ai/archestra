@@ -32,6 +32,7 @@ import {
   type GithubAppCredential,
   githubAppApiBase,
   githubAppKeyFingerprint,
+  githubOrganizationDisplayName,
   githubWebFromApi,
   resolveGithubAppCredential,
   validateGithubAppPrivateKey,
@@ -790,12 +791,20 @@ export async function copilotKeysUsingCredential(params: {
   const keys = await LlmProviderApiKeyModel.findGithubAppKeyValues(
     params.organizationId,
   );
-  return keys.flatMap((key) => {
-    const reference = decodeGithubAppReference(key.value);
-    return reference?.ref.credentialId === params.credentialId
-      ? [{ id: key.id, name: `GitHub Copilot for ${reference.organization}` }]
-      : [];
-  });
+  const using = await Promise.all(
+    keys.map(async (key) => {
+      const reference = decodeGithubAppReference(key.value);
+      if (reference?.ref.credentialId !== params.credentialId) return [];
+      // Named as every surface names a plan: after its GitHub organization.
+      const organization =
+        (await githubOrganizationDisplayName({
+          value: key.value,
+          organizationId: params.organizationId,
+        })) ?? reference.organization;
+      return [{ id: key.id, name: `GitHub Copilot ${organization}` }];
+    }),
+  );
+  return using.flat();
 }
 
 // ===================== Internals =====================

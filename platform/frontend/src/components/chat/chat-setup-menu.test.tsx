@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { autoModelChoice } from "@/lib/chat/auto-model";
@@ -15,6 +15,7 @@ const {
   pools,
   mutateConversation,
   hiddenProviders,
+  hiddenCopilotPlans,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -72,6 +73,7 @@ const {
     },
   ],
   hiddenProviders: new Set<string>(),
+  hiddenCopilotPlans: new Set<string>(),
   keys: [
     {
       id: "key-org",
@@ -147,7 +149,13 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
     isHidden: (provider: string) => hiddenProviders.has(provider),
-    canAddKey: (provider: string) => !hiddenProviders.has(provider),
+    isKeyHidden: (key: { provider: string; isGithubAppKey?: boolean }) =>
+      hiddenProviders.has(key.provider) ||
+      (key.provider === "github-copilot" &&
+        hiddenCopilotPlans.has(key.isGithubAppKey ? "enterprise" : "personal")),
+    canAddKey: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
   }),
 }));
 
@@ -166,6 +174,7 @@ beforeEach(() => {
   vi.mocked(useFeature).mockReturnValue(true);
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
+  hiddenCopilotPlans.clear();
   navigate.mockClear();
   readiness.splice(0);
   pools.splice(0);
@@ -432,6 +441,46 @@ describe("ChatSetupMenu", () => {
     );
     expect(
       screen.getByRole("button", { name: "Manage provider keys" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists each GitHub Copilot account by its own plan's switch, and names a plan after its organization", async () => {
+    keys.push(
+      {
+        id: "copilot-plan",
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        scope: "org",
+        userId: null,
+        isGithubAppKey: true,
+        githubOrganization: "acme",
+        githubOrganizationName: "Acme Inc",
+      } as LlmProviderApiKey,
+      {
+        id: "copilot-mine",
+        name: "My Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: "user-1",
+      } as LlmProviderApiKey,
+    );
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(
+      screen.getByRole("option", { name: /GitHub Copilot Acme Inc/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
+    ).toBeInTheDocument();
+    cleanup();
+
+    hiddenCopilotPlans.add("enterprise");
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
     ).toBeInTheDocument();
   });
 

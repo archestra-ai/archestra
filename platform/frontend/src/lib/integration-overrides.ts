@@ -10,6 +10,7 @@ import {
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
+  isProviderKeyHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   type ModelProviderOverride,
@@ -46,6 +47,14 @@ export type NamedIntegrationCatalog<Id extends string> =
      * Copilot itself. Never offer to set one up.
      */
     isCopilotPlanHidden: (plan: CopilotPlan) => boolean;
+    /**
+     * A key whose provider, or GitHub Copilot plan, the admin turned off.
+     * Never offer it.
+     */
+    isKeyHidden: (key: {
+      provider: SupportedProvider;
+      isGithubAppKey?: boolean | null;
+    }) => boolean;
     /**
      * The GitHub Copilot enterprise plan's name: the admin's, or "GitHub
      * Copilot Organization". A plan whose GitHub organization is known shows
@@ -98,6 +107,10 @@ export function useModelProviderCatalog(
         integrationLabel(overrides, id, builtInProviderLabel(id)),
       isCopilotPlanHidden: (plan: CopilotPlan) =>
         isCopilotPlanHidden(overrides, plan),
+      isKeyHidden: (key: {
+        provider: SupportedProvider;
+        isGithubAppKey?: boolean | null;
+      }) => isProviderKeyHidden(overrides, key),
       enterprisePlanName: copilotEnterprisePlanLabel(overrides),
       canAddKey: (id: SupportedProvider) =>
         id === "github-copilot"

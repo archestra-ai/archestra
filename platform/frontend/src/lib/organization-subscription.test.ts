@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   copilotCredentialSourceLabel,
   organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
 } from "./organization-subscription";
 
 describe("organizationSubscriptionName", () => {
@@ -12,6 +13,25 @@ describe("organizationSubscriptionName", () => {
         "Copilot for engineering",
       ),
     ).toBe("GitHub Copilot acme");
+  });
+
+  it("uses the name GitHub shows for the organization over its login", () => {
+    const plan = {
+      isGithubAppKey: true,
+      githubOrganization: "archestra-ai",
+      githubOrganizationName: "Archestra",
+    };
+    expect(organizationSubscriptionName(plan)).toBe("GitHub Copilot Archestra");
+    expect(organizationSubscriptionSubtitle(plan)).toBe(
+      "Billed to Archestra on GitHub",
+    );
+    // An organization without a name on GitHub keeps its login.
+    expect(
+      organizationSubscriptionName({
+        ...plan,
+        githubOrganizationName: null,
+      }),
+    ).toBe("GitHub Copilot archestra-ai");
   });
 
   it("falls back to the plan's name from Settings when the organization is unknown", () => {
@@ -35,6 +55,13 @@ describe("copilotCredentialSourceLabel", () => {
         organization: "acme",
       }),
     ).toBe("GitHub Copilot acme");
+    expect(
+      copilotCredentialSourceLabel({
+        kind: "organization",
+        organization: "archestra-ai",
+        organizationName: "Archestra",
+      }),
+    ).toBe("GitHub Copilot Archestra");
     expect(
       copilotCredentialSourceLabel({
         kind: "organization",

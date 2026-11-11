@@ -134,8 +134,16 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * the recorded credential kind; no secret is read or returned.
      */
     isGithubAppKey: z.boolean().optional(),
-    /** The GitHub organization a GitHub App key is installed on, and billed to. */
+    /**
+     * The login of the GitHub organization a GitHub App key is installed on,
+     * and billed to.
+     */
     githubOrganization: z.string().nullable().optional(),
+    /**
+     * The name GitHub shows for that organization ("Archestra" for
+     * `archestra-ai`). Null when it has none or GitHub didn't answer in time.
+     */
+    githubOrganizationName: z.string().nullable().optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   });
 

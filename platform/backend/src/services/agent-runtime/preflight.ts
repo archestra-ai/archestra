@@ -1,4 +1,5 @@
 import {
+  isCodexRuntimeCommand,
   isCredentialLevelSubscriptionProvider,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -181,7 +182,7 @@ export async function preflightAgentRuntimeModelReadiness(
     return;
   }
 
-  if (runtime.command?.[0] === "archestra-codex") {
+  if (isCodexRuntimeCommand(runtime.command?.[0])) {
     const requiredSubscription = userId
       ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
           organizationId: actor.organizationId,

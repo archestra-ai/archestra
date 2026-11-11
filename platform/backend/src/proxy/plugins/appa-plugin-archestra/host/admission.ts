@@ -484,6 +484,7 @@ async function governedAdmission(params: {
       body,
       headers,
       clientWire: ingress.clientWire,
+      agentRuntimeRun: boundRuntimeIdentity !== null,
     });
     const hasNativeClientSession =
       nativeSetupClientFromProvenance(identity.provenance) !== undefined;
@@ -712,6 +713,7 @@ async function governedAdmission(params: {
       callerId,
       isInternalChat,
       platformLoopback,
+      agentRuntimeRun: boundRuntimeIdentity !== null,
     });
     if (observedSession)
       return {
@@ -828,6 +830,7 @@ function observedAppaSession(params: {
   isInternalChat: boolean;
   /** A platform request over loopback with no credential of its own. */
   platformLoopback: boolean;
+  agentRuntimeRun: boolean;
 }): OpenAppaSession | undefined {
   const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
   const parentHeader = APPA_PARENT_HEADER.toLowerCase();
@@ -846,6 +849,7 @@ function observedAppaSession(params: {
       body: params.body,
       headers: params.headers,
       clientWire: params.clientWire,
+      agentRuntimeRun: params.agentRuntimeRun,
     });
     const headers = { ...params.headers };
     fillAppaSessionHeaders(headers, identity);
@@ -890,16 +894,29 @@ function clientSessionIdentity(params: {
   body: unknown;
   headers: Record<string, string | string[] | undefined>;
   clientWire: OpenappaIngress["clientWire"];
+  agentRuntimeRun: boolean;
 }): AppaSessionIdentity {
-  const { family, body, headers, clientWire } = params;
-  if (family) return extractAppaSessionIdentity({ family, body, headers });
+  const { family, body, headers, clientWire, agentRuntimeRun } = params;
+  if (family)
+    return extractAppaSessionIdentity({
+      family,
+      body,
+      headers,
+      agentRuntimeRun,
+    });
   if (clientWire)
     return extractAppaSessionIdentity({
       family: clientWire.family,
       body: clientWire.body,
       headers,
+      agentRuntimeRun,
     });
-  return extractAppaSessionIdentity({ family: undefined, body, headers });
+  return extractAppaSessionIdentity({
+    family: undefined,
+    body,
+    headers,
+    agentRuntimeRun,
+  });
 }
 
 function firstHeaderValue(

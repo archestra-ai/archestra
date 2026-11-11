@@ -1636,7 +1636,10 @@ class AgentModel {
 
   static async findRuntimeTargets(organizationId: string) {
     return db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
       .from(schema.agentsTable)
       .where(
         and(

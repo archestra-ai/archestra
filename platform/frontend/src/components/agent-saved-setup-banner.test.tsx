@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { availableLlmProviderApiKeysQueryKey } from "@/lib/llm-provider-api-keys-query-keys";
 import { AgentSavedSetupBanner } from "./agent-saved-setup-banner";
 
 vi.mock("@/lib/auth/auth.query");
@@ -136,5 +137,42 @@ describe("saved agent setup notices", () => {
     }
     expect(screen.queryByRole("button", { name: "Set up" })).toBeNull();
     expect(screen.queryByText(/internet connection/)).toBeNull();
+  });
+
+  it("prompts for a ChatGPT subscription when runtime command is archestra-codex-runtime", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+      isError: false,
+    } as never);
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    client.setQueryData(["agents", "agent-codex-runtime"], {
+      id: "agent-codex-runtime",
+      runtime: { command: ["archestra-codex-runtime"], credentials: [] },
+    });
+    client.setQueryData(
+      ["agents", "agent-codex-runtime", "runtime", "preflight"],
+      {
+        ready: false,
+        configured: [],
+        misconfigured: [],
+        incompatible: null,
+        missing: [],
+      },
+    );
+    client.setQueryData(
+      availableLlmProviderApiKeysQueryKey(undefined, undefined),
+      [],
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <AgentSavedSetupBanner agentId="agent-codex-runtime" canEditAgent />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Connect your ChatGPT subscription")).toBeVisible();
+    client.clear();
   });
 });

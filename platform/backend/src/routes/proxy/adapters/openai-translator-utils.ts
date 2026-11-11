@@ -127,3 +127,33 @@ export function parseJsonObject(raw: unknown): Record<string, unknown> {
 
   return {};
 }
+
+/**
+ * Rewrites Chat Completions `role: "developer"` messages to `role: "system"`
+ * without mutating the caller's request object, for OpenAI-compatible
+ * endpoints (such as Kimi Code and xAI Chat Completions) that reject
+ * `developer` with HTTP 400.
+ */
+export function withSystemForDeveloperRole<T extends { messages?: unknown }>(
+  request: T,
+): T {
+  if (!Array.isArray(request.messages)) return request;
+  if (
+    !request.messages.some(
+      (message) => (message as { role?: string } | null)?.role === "developer",
+    )
+  ) {
+    return request;
+  }
+  return {
+    ...request,
+    messages: request.messages.map((message) =>
+      (message as { role?: string } | null)?.role === "developer"
+        ? {
+            ...(message as Record<string, unknown>),
+            role: "system",
+          }
+        : message,
+    ),
+  };
+}

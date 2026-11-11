@@ -5,6 +5,7 @@ import {
   indexFilesIntoKnowledgeBase,
 } from "@/knowledge-base/file-upload/index-file";
 import { KbFileModel, OrganizationModel } from "@/models";
+import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ApiError } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { findAccessibleKnowledgeBase } from "./knowledge-base-access";
@@ -82,6 +83,12 @@ export async function upsertKnowledgeFile(params: {
   }
   if (!file)
     throw new ApiError(409, "This file cannot be replaced by this uploader");
+  const newConnectorEnvironmentId =
+    await resolveDefaultEnvironmentForNewResource({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "knowledgeSource",
+    });
   const results = [];
   for (const knowledgeBaseId of knowledgeBaseIds) {
     results.push({
@@ -90,6 +97,7 @@ export async function upsertKnowledgeFile(params: {
         fileIds: [file.id],
         knowledgeBaseId,
         organizationId: params.organizationId,
+        newConnectorEnvironmentId,
       })),
     });
   }

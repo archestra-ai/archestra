@@ -241,8 +241,21 @@ export function formatApprovalReviewText(
   escapeText: (text: string) => string = (text) => text,
 ): string {
   const escaped = escapeText(text);
-  if (escaped.length <= maxLength) return escaped;
-  // Longest source prefix whose escaped form fits.
+  return escaped.length <= maxLength
+    ? escaped
+    : `${escapedPrefixWithin(text, maxLength, escapeText)}\n… (truncated)`;
+}
+
+/**
+ * The longest prefix of `text` whose escaped form fits `maxLength`, escaped.
+ * The cut falls between source characters and never inside a surrogate pair,
+ * which Telegram rejects as malformed UTF-16.
+ */
+export function escapedPrefixWithin(
+  text: string,
+  maxLength: number,
+  escapeText: (text: string) => string,
+): string {
   let low = 0;
   let high = Math.min(text.length, maxLength);
   while (low < high) {
@@ -250,9 +263,8 @@ export function formatApprovalReviewText(
     if (escapeText(text.slice(0, mid)).length <= maxLength) low = mid;
     else high = mid - 1;
   }
-  // Never split a surrogate pair: Telegram rejects malformed UTF-16.
   const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
-  return `${escapeText(text.slice(0, end))}\n… (truncated)`;
+  return escapeText(text.slice(0, end));
 }
 
 /**

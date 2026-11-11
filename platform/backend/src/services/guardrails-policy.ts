@@ -29,6 +29,7 @@ import {
   touchedRuleNames,
 } from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
+import { SKILL_SANDBOX_TOOL_RESULTS_DIR } from "@/skills-sandbox/runtime-image";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -477,7 +478,7 @@ trust = { from = "suspicious", to = "trusted" }
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
-hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. For a command that only lists, reads or changes files in the sandbox, with no network access, leave delta.trust and delta.audience null. That includes ${SKILL_SANDBOX_TOOL_RESULTS_DIR}, the results of this conversation's earlier tool calls, labelled when those calls ran. The exception is a file that visibly holds credentials or secrets."
 ranks = ["suspicious", "trusted"]
 marks = []
 effects = []

@@ -1,7 +1,7 @@
 ---
 title: Logs and Auditing
 description: Investigate model requests, tool calls, and admin changes
-order: 7
+order: 8
 lastUpdated: 2026-11-06
 ---
 

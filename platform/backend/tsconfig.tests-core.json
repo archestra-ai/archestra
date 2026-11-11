@@ -14,6 +14,7 @@
     "src/tokenizers/**/*.test.ts",
     "src/integrations/**/*.test.ts",
     "src/git-hosts/**/*.test.ts",
+    "src/blob-providers/**/*.test.ts",
     "src/app-templates/**/*.test.ts"
   ],
   "references": [

@@ -76,6 +76,7 @@ export { default as EnvironmentDefaultUserLimitModel } from "./environment-defau
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
 export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
+export { default as GithubAppAccountModel } from "./github-app-account";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InstanceUsageModel } from "./instance-usage";

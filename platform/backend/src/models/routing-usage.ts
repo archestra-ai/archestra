@@ -85,6 +85,62 @@ class RoutingUsageModel {
   }
 
   /**
+   * The router's live usage recorded since `since`, per routed tier: the
+   * sessions and requests it served, what they were billed, and the billed
+   * requests' tokens split at `longContextThreshold` so they can be re-priced
+   * at another model. Billed means metered: subscription-covered requests
+   * count as sessions and requests but add no cost and no tokens, so a
+   * re-priced comparison stays like for like. Usage whose interaction was
+   * purged is left out.
+   */
+  static async findRoutedUsage(params: {
+    routerId: string;
+    since: Date;
+    longContextThreshold: number | null;
+  }) {
+    const interactions = schema.interactionsTable;
+    const prompt = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite}`;
+    const long =
+      params.longContextThreshold === null
+        ? sql`false`
+        : sql`${prompt} > ${params.longContextThreshold}`;
+    const short = sql`not (${long})`;
+    const metered = sql`${interactions.billingMode} = 'metered'`;
+    const block = (tokens: SQL) => {
+      const filter = sql`${metered} and ${tokens}`;
+      return {
+        input: total(usage.input, filter),
+        cacheRead: total(usage.cacheRead, filter),
+        cacheWrite: total(usage.cacheWrite, filter),
+        cacheWrite1h: total(usage.cacheWrite1h, filter),
+        output: total(usage.output, filter),
+      };
+    };
+    return db
+      .select({
+        tierIndex: decisions.tierIndex,
+        sessions: sql<number>`count(distinct ${decisions.id})`.mapWith(Number),
+        requests: count(),
+        costUsd:
+          sql<number>`coalesce(sum(${interactions.cost}) filter (where ${metered}), 0)`.mapWith(
+            Number,
+          ),
+        short: block(short),
+        long: block(long),
+      })
+      .from(usage)
+      .innerJoin(decisions, eq(decisions.id, usage.decisionId))
+      .innerJoin(interactions, eq(interactions.id, usage.interactionId))
+      .where(
+        and(
+          gte(usage.createdAt, params.since),
+          eq(decisions.routerId, params.routerId),
+        ),
+      )
+      .groupBy(decisions.tierIndex);
+  }
+
+  /**
    * Per decision of the given scorer version: its features and summed usage,
    * split into requests whose prompt (input + cache read + cache write)
    * exceeds `longContextThreshold` and the rest. Only sessions idle for a day

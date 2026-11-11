@@ -805,6 +805,17 @@ function parsePoolSize(params: {
 }
 
 /** @public — exported for testability */
+export const isChatMaxOutputTokensConfigured = (envValue?: string): boolean => {
+  if (!envValue?.trim()) return false;
+  const parsed = Number(envValue.trim());
+  return (
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= MAX_CHAT_MAX_OUTPUT_TOKENS
+  );
+};
+
+/** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
   envValue?: string | undefined,
 ): number =>
@@ -838,11 +849,7 @@ const parseOutputTokenCeiling = (params: {
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
   // ("1.5") are rejected rather than silently truncated to a tiny cap.
   const parsed = Number(value);
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 1 ||
-    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
-  ) {
+  if (!isChatMaxOutputTokensConfigured(value)) {
     logger.warn(
       `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
@@ -2224,9 +2231,13 @@ export function parseOpenAppaConfig({
   authSecret,
   humanApprovalMode,
   softBlockMode,
+  policyCheckName,
+  selfService,
 }: {
   humanApprovalMode?: string;
   softBlockMode?: string;
+  policyCheckName?: string;
+  selfService?: string;
   yellEnabled?: string;
   yellForwardingEnabled?: string;
   offerSigningSecret?: string;
@@ -2279,8 +2290,20 @@ export function parseOpenAppaConfig({
     provider: reviewSummaryProvider,
     model: reviewSummaryModel,
   });
+  // Whether an MCP server's editors change its own Guardrails rules through
+  // Git sync. Release 1.4 sets it only here; from 1.5 on, while it is set it
+  // overrides the setting saved with the Git sync source, so a cluster
+  // upgraded from 1.4 keeps the behaviour it was configured for.
+  const selfServiceOverride = optionalChoice(
+    "selfService",
+    OPENAPPA_SELF_SERVICE_VARIABLE,
+    selfService,
+    ["enabled", "disabled"] as const,
+  );
   return {
     enabled: true,
+    policyCheckName: parseOpenAppaPolicyCheckName(policyCheckName),
+    ...selfServiceOverride,
     yellEnabled: (yellEnabled ?? "true") === "true",
     // External diagnostic delivery requires its own opt-in in every environment.
     yellForwardingEnabled: forwarding === "true",
@@ -2296,6 +2319,9 @@ export function parseOpenAppaConfig({
       : {}),
   };
 }
+
+/** The variable that turns self-service Guardrails on or off for the deployment. */
+export const OPENAPPA_SELF_SERVICE_VARIABLE = "ARCHESTRA_OPENAPPA_SELF_SERVICE";
 
 /** An unset or empty variable sets nothing; any other value must be a choice. */
 function optionalChoice<
@@ -2342,6 +2368,22 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
  * from the organization's default provider. Validation errors name variables
  * only, never credential values.
  */
+/**
+ * The name of the check Archestra posts on the policy repository's pull
+ * requests, and of the branch ruleset that requires it. Carries no product
+ * name by default, so a white-labeled deployment shows its users none.
+ * @public — exported for testability
+ */
+export function parseOpenAppaPolicyCheckName(value?: string): string {
+  const name = value?.trim() ?? "";
+  if (name === "") return "Check OpenAPPA Guardrails";
+  if (name.length > 100)
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+  return name;
+}
+
 function parseOpenAppaReviewSummary({
   provider,
   model,
@@ -2433,6 +2475,8 @@ const openappa = parseOpenAppaConfig({
   yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
   humanApprovalMode: process.env.ARCHESTRA_OPENAPPA_HUMAN_APPROVAL_MODE,
   softBlockMode: process.env.ARCHESTRA_OPENAPPA_SOFT_BLOCK_MODE,
+  policyCheckName: process.env.ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME,
+  selfService: process.env.ARCHESTRA_OPENAPPA_SELF_SERVICE,
   yellForwardingEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED,
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
@@ -3332,6 +3376,11 @@ const config = {
     ),
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    // Nova high cannot send maxTokens. Distinguish the automatic default from
+    // an operator's explicit cap without adding another configuration option.
+    maxOutputTokensExplicitlyConfigured: isChatMaxOutputTokensConfigured(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),

@@ -40,6 +40,7 @@ export const resources = [
   "chat",
   "project",
   "llmCost",
+  "costExport",
   "llmLimit",
   "llmProviderApiKey",
   "llmVirtualKey",
@@ -94,6 +95,7 @@ export const resourceLabels: Record<Resource, string> = {
   chat: "Chats",
   project: "Projects",
   llmCost: "LLM Cost Analytics",
+  costExport: "Cost Exports",
   llmLimit: "LLM Limits",
   llmProviderApiKey: "LLM Provider API Keys",
   llmVirtualKey: "LLM Virtual Keys",
@@ -127,6 +129,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmModel: "Models listed in the model catalog for chat and agent use",
   llmLimit: "Rate, token, and spend limits for LLM usage",
   llmCost: "Organization-wide LLM token usage and cost reports",
+  costExport:
+    "Scheduled FOCUS exports of LLM cost and usage to a blob provider",
   mcpRegistry:
     "Catalog of approved MCP servers available to install and deploy",
   mcpServerInstallation:
@@ -177,6 +181,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmModel",
     "llmLimit",
     "llmCost",
+    "costExport",
   ],
   Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
   Administration: [

@@ -46,7 +46,15 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.terminal_attached": "Agent run terminal attached",
   "agentRun.terminal_detached": "Agent run terminal detached",
   "agentRun.terminal_interrupted": "Agent run interrupted from its terminal",
+  "blobProvider.created": "Blob provider added",
+  "blobProvider.updated": "Blob provider updated",
+  "blobProvider.deleted": "Blob provider deleted",
+  "blobProvider.tested": "Blob provider tested",
   "browserStorageState.deleted": "Browser saved login removed",
+  "costExport.created": "Cost export scheduled",
+  "costExport.updated": "Cost export updated",
+  "costExport.deleted": "Cost export deleted",
+  "costExport.run": "Cost export run",
   // Runtime credential
   "credential.created": "Credential created",
   "credential.updated": "Credential updated",
@@ -259,6 +267,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "userLimitUsage.reset": "User limit usage reset",
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
+  "virtualApiKey.updated": "Virtual API key updated",
   "virtualApiKey.deleted": "Virtual API key deleted",
   "virtualApiKey.bulk_deleted": "Virtual API keys bulk deleted",
   // Auth surface

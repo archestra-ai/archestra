@@ -98,6 +98,7 @@ export { default as auditLogsTable } from "./audit-log";
 export { default as autoRoutersTable } from "./auto-router";
 export { default as autoRouterVirtualApiKeysTable } from "./auto-router-virtual-api-key";
 export { default as autoRoutingTiersTable } from "./auto-routing-tier";
+export { default as blobProvidersTable } from "./blob-provider";
 export { default as browserStorageStatesTable } from "./browser-storage-state";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
@@ -127,6 +128,7 @@ export {
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
+export { default as costExportsTable } from "./cost-export";
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
@@ -134,6 +136,7 @@ export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
 export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
+export { default as githubAppAccountsTable } from "./github-app-account";
 export { default as guardrailsDeploymentTable } from "./guardrails-deployment";
 export { guardrailsPolicyRevisionsTable } from "./guardrails-policy";
 export { default as hookFilesTable } from "./hook-file";

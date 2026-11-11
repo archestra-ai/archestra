@@ -3330,6 +3330,112 @@ describe("setup choices on the approval page", () => {
     }
   });
 
+  it("waits for the user to pick one of several organizations' plans before preparing a setup", async () => {
+    const plan = (organization: string, organizationName: string) => ({
+      id: `copilot-plan-${organization}`,
+      provider: "github-copilot",
+      name: `GitHub Copilot (${organization})`,
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: organization,
+      githubOrganizationName: organizationName,
+    });
+    availableKeysMock.mockReturnValue({
+      data: [plan("acme", "Acme"), plan("acme-labs", "Acme Labs")],
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // No plan is taken for the user: Setup options open as required.
+      expect(
+        await screen.findByRole("button", { name: /Setup options/ }),
+      ).toHaveTextContent("required");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Choose the GitHub Copilot account this setup uses in Setup options. Each organization's plan is billed for its own requests.",
+      );
+      expect(
+        screen.getByRole("button", { name: /Approve connection/ }),
+      ).toBeDisabled();
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: /GitHub Copilot Acme Labs/ }),
+      );
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            providerApiKeyId: "copilot-plan-acme-labs",
+          }),
+        ),
+      );
+      expect(createSetupMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+      ).toHaveTextContent("GitHub Copilot Acme Labs");
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("asks for a pick between organizations' plans when personal subscriptions are off, even with a sign-in", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    const plan = (organization: string, organizationName: string) => ({
+      id: `copilot-plan-${organization}`,
+      provider: "github-copilot",
+      name: `GitHub Copilot (${organization})`,
+      isPrimary: false,
+      isGithubAppKey: true,
+      githubOrganization: organization,
+      githubOrganizationName: organizationName,
+    });
+    availableKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "copilot-own",
+          provider: "github-copilot",
+          name: "GitHub Copilot",
+          isPrimary: true,
+          isGithubAppKey: false,
+          githubOrganization: null,
+        },
+        plan("acme", "Acme"),
+        plan("acme-labs", "Acme Labs"),
+      ],
+    });
+    const { finish } = renderApproval({
+      client: findClient("copilot-cli"),
+      urlProvider: "github-copilot",
+    });
+    try {
+      // The sign-in's plan is off, so it is not bound in place of a pick.
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Choose the GitHub Copilot account this setup uses in Setup options.",
+      );
+      expect(
+        screen.getByRole("combobox", { name: "GitHub Copilot account" }),
+      ).toHaveTextContent("Choose an account");
+      expect(createSetupMock).not.toHaveBeenCalled();
+    } finally {
+      finish();
+    }
+  });
+
   it("offers Copilot CLI only GitHub Copilot models served through the Responses API", async () => {
     availableKeysMock.mockReturnValue({
       data: [

@@ -39,5 +39,8 @@ export function isRetryableError(error: Error): boolean {
     );
   }
 
-  return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
+  return (
+    msg === "Load failed" ||
+    RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p))
+  );
 }

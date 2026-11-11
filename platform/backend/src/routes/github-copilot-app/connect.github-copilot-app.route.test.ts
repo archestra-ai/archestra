@@ -8,6 +8,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   OrganizationModel,
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
@@ -49,6 +50,7 @@ function githubFake(options: {
       return Response.json({
         login: "my-org",
         type: options.accountType ?? "Organization",
+        name: "My Org",
       });
     if (url.endsWith("/orgs/my-org"))
       return Response.json({ login: "my-org", name: "My Org" });
@@ -113,6 +115,72 @@ function githubFake(options: {
       );
     // models.dev enrichment and anything else: nothing to add.
     return Response.json({});
+  });
+}
+
+/**
+ * One App installed on two organizations of one enterprise. Each
+ * installation's token lists the models its own organization allows.
+ */
+function enterpriseFake(appId: string) {
+  const organizations: Record<
+    string,
+    { id: number; installation: number; models: string[] }
+  > = {
+    "my-org": {
+      id: 99,
+      installation: 555,
+      models: ["claude-sonnet-4", "gpt-4o"],
+    },
+    "other-org": { id: 100, installation: 556, models: ["gpt-4o", "o3"] },
+  };
+  const github = githubFake({ appId });
+  return vi.fn(async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    // GitHub answers with the organization's own spelling.
+    const user = url.match(/\/users\/([^/]+)$/);
+    if (user)
+      return Response.json({
+        login:
+          Object.keys(organizations).find(
+            (login) => login === user[1].toLowerCase(),
+          ) ?? user[1],
+        type: "Organization",
+      });
+    if (url.endsWith("/app/installations"))
+      return Response.json(
+        Object.entries(organizations).map(([login, organization]) => ({
+          id: organization.installation,
+          account: { login, id: organization.id },
+          permissions: { organization_copilot_requests: "read" },
+        })),
+      );
+    const minted = url.match(/\/app\/installations\/(\d+)\/access_tokens$/);
+    if (minted)
+      return Response.json(
+        {
+          token: `ghs_${minted[1]}`,
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        },
+        { status: 201 },
+      );
+    const parsed = URL.canParse(url) ? new URL(url) : null;
+    if (
+      parsed?.host === "api.githubcopilot.com" &&
+      parsed.pathname === "/models"
+    ) {
+      const bearer = new Headers(init?.headers).get("authorization");
+      const organization = Object.values(organizations).find(
+        ({ installation }) => bearer === `Bearer ghs_${installation}`,
+      );
+      return Response.json({
+        data: (organization?.models ?? []).map((id) => ({
+          id,
+          capabilities: { type: "chat" },
+        })),
+      });
+    }
+    return github(input, init);
   });
 }
 
@@ -316,7 +384,11 @@ describe("GitHub Copilot organization subscription setup", () => {
     const ok = await post("/api/github-copilot-app/organization/check", {
       organization: "https://github.com/my-org/",
     });
-    expect(ok.json()).toEqual({ organization: "my-org" });
+    // With the name GitHub shows, which a new plan is named after.
+    expect(ok.json()).toEqual({
+      organization: "my-org",
+      organizationName: "My Org",
+    });
 
     const empty = await post("/api/github-copilot-app/organization/check", {
       organization: "",
@@ -369,7 +441,11 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "My-Org",
     });
     expect(checked.statusCode, checked.body).toBe(200);
-    expect(checked.json()).toEqual({ organization: "My-Org" });
+    // Its name is told only to the App, once one is connected.
+    expect(checked.json()).toEqual({
+      organization: "My-Org",
+      organizationName: null,
+    });
 
     const started = await post("/api/github-copilot-app/manifest", {
       organization: "https://github.com/My-Org",
@@ -679,14 +755,15 @@ describe("GitHub Copilot organization subscription setup", () => {
         "https://github.com/organizations/my-org/settings/apps/my-org-copilot",
     });
 
-    vi.stubGlobal("fetch", githubFake({ appId }));
+    // The same App, installed on another organization, connects its plan.
+    vi.stubGlobal("fetch", enterpriseFake(appId));
     const picked = await post("/api/github-copilot-app/credential", {
       credentialId,
-      organization: "https://github.com/my-org",
+      organization: "https://github.com/other-org",
     });
     expect(picked.json()).toMatchObject({
       status: "installed",
-      organization: "my-org",
+      organization: "other-org",
     });
     const pickedKey = await LlmProviderApiKeyModel.findById(picked.json().id);
     expect(
@@ -723,6 +800,16 @@ describe("GitHub Copilot organization subscription setup", () => {
         String(input).endsWith("/orgs/my-org"),
       );
 
+    // Connected with no name: named as every surface names it, after the
+    // name GitHub tells the App's installation.
+    expect((await LlmProviderApiKeyModel.findById(keyId))?.name).toBe(
+      "GitHub Copilot My Org",
+    );
+    expect(lookups()).toHaveLength(1);
+    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
+      "Bearer ghs_test",
+    );
+
     // The proxy and key resolution read the same list without asking GitHub.
     const resolved = await LlmProviderApiKeyModel.getAvailableKeysForUser(
       organizationId,
@@ -735,7 +822,7 @@ describe("GitHub Copilot organization subscription setup", () => {
       githubOrganization: "my-org",
       githubOrganizationName: null,
     });
-    expect(lookups()).toHaveLength(0);
+    expect(lookups()).toHaveLength(1);
 
     const one = await app.inject({
       method: "GET",
@@ -757,11 +844,8 @@ describe("GitHub Copilot organization subscription setup", () => {
       githubOrganizationName: "My Org",
     });
 
-    // Asked once for both reads, with the plan's installation token.
+    // Both reads use the name read while connecting.
     expect(lookups()).toHaveLength(1);
-    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
-      "Bearer ghs_test",
-    );
   });
 
   test("blocks deleting a GitHub App credential a Copilot plan uses", async () => {
@@ -1193,7 +1277,10 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "my-org",
     });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toEqual({ organization: "my-org" });
+    expect(allowed.json()).toEqual({
+      organization: "my-org",
+      organizationName: "My Org",
+    });
 
     const readOnly = await makeCustomRole(organizationId, {
       permission: { llmProviderApiKey: ["read"] },
@@ -1325,6 +1412,304 @@ describe("GitHub Copilot organization subscription setup", () => {
         (definition) => definition.appId === appId,
       ),
     ).toHaveLength(0);
+  });
+
+  async function storedReference(keyId: string) {
+    const key = await LlmProviderApiKeyModel.findById(keyId);
+    return decodeGithubAppReference(
+      (await getSecretValueForLlmProviderApiKey(key?.secretId ?? "")) as string,
+    );
+  }
+
+  async function planIds() {
+    return (await LlmProviderApiKeyModel.findGithubAppKeyValues(organizationId))
+      .map((plan) => plan.id)
+      .sort();
+  }
+
+  test("connects a plan for each organization of an enterprise, each with the models its organization allows", async () => {
+    vi.stubGlobal("fetch", enterpriseFake(appId));
+    const first = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const credentialId = (await storedReference(first.json().id))?.ref
+      .credentialId;
+
+    // The same App, picked for the enterprise's other organization.
+    const checked = await post("/api/github-copilot-app/organization/check", {
+      organization: "other-org",
+    });
+    expect(checked.statusCode, checked.body).toBe(200);
+    const second = await post("/api/github-copilot-app/credential", {
+      credentialId,
+      organization: "other-org",
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    expect(second.json()).toMatchObject({
+      status: "installed",
+      organization: "other-org",
+    });
+    expect(second.json().id).not.toBe(first.json().id);
+    expect(await storedReference(second.json().id)).toMatchObject({
+      organization: "other-org",
+      installationId: "556",
+      ref: { credentialId },
+    });
+
+    // Each plan lists the models its own installation is served.
+    const models = async (keyId: string) =>
+      (await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(keyId))
+        .map((model) => model.modelId)
+        .sort();
+    expect(await models(first.json().id)).toEqual([
+      "claude-sonnet-4",
+      "gpt-4o",
+    ]);
+    expect(await models(second.json().id)).toEqual(["gpt-4o", "o3"]);
+
+    // Reconnecting a plan on its own organization is not a second plan.
+    const reconnected = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: first.json().id,
+    });
+    expect(reconnected.statusCode, reconnected.body).toBe(200);
+    expect(await planIds()).toEqual([first.json().id, second.json().id].sort());
+  });
+
+  test("refuses a second plan for an organization, at every step and before anything is saved", async () => {
+    vi.stubGlobal("fetch", enterpriseFake(appId));
+    // GitHub registers a new App for my-org before its plan exists.
+    await createAppFromManifest();
+    const first = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const credentialId = (await storedReference(first.json().id))?.ref
+      .credentialId;
+    const other = await post("/api/github-copilot-app/credential", {
+      credentialId,
+      organization: "other-org",
+    });
+    expect(other.statusCode, other.body).toBe(200);
+    const plans = await planIds();
+    const credentials = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
+    const credentialCount = await credentials();
+
+    for (const [url, payload] of [
+      // The wizard's first step, in any spelling of the organization.
+      [
+        "/api/github-copilot-app/organization/check",
+        { organization: "MY-ORG" },
+      ],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, organization: "my-org", privateKey },
+      ],
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId, organization: "my-org" },
+      ],
+      // The App registered earlier, installed now: refused before it is saved.
+      ["/api/github-copilot-app/install", {}],
+      // Moving the other plan onto an organization that has one.
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId, organization: "my-org", replaceKeyId: other.json().id },
+      ],
+    ] as const) {
+      const refused = await post(url, payload);
+      expect(refused.statusCode, `${url} ${refused.body}`).toBe(409);
+      expect(refused.json().error.message).toBe(
+        "my-org already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.",
+      );
+    }
+    expect(await planIds()).toEqual(plans);
+    expect(await credentials()).toBe(credentialCount);
+    expect((await storedReference(other.json().id))?.organization).toBe(
+      "other-org",
+    );
+  });
+
+  test("still reconnects a plan where an older release left two for one organization", async () => {
+    const { keyId, reference } = await connectedApp();
+    const value = encodeGithubAppReference(
+      reference as NonNullable<typeof reference>,
+    );
+    const { secretManager } = await import("@/secrets-manager");
+    const twin = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot (my-org) 2",
+        provider: "github-copilot",
+        secretId: (
+          await secretManager().createSecret({ apiKey: value }, "twin")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      { apiKeyValue: value },
+    );
+    expect(await planIds()).toEqual([keyId, twin.id].sort());
+
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    for (const replaceKeyId of [keyId, twin.id]) {
+      const reconnected = await post("/api/github-copilot-app/existing", {
+        appId,
+        privateKey,
+        replaceKeyId,
+      });
+      expect(reconnected.statusCode, reconnected.body).toBe(200);
+    }
+  });
+
+  test("an install that loses a race for its organization keeps no credential, and the App stays pending", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    await createAppFromManifest();
+    // A connect for my-org that raced this install saved its plan after the
+    // install's check: only the GitHub account's unique constraint sees it.
+    const { secretManager } = await import("@/secrets-manager");
+    await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot My Org",
+        provider: "github-copilot",
+        secretId: (
+          await secretManager().createSecret({ apiKey: "in-flight" }, "raced")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        githubAppAccount: { githubUrl: "https://github.com", login: "my-org" },
+      },
+    );
+    const credentials = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
+    const before = await credentials();
+
+    const refused = await post("/api/github-copilot-app/install");
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(await credentials()).toBe(before);
+    const pending = await app.inject({
+      method: "GET",
+      url: "/api/github-copilot-app/pending",
+    });
+    expect(pending.json()).toMatchObject({ account: "my-org", appId });
+  });
+
+  test("keeps a plan on its organization: reconnecting it cannot move it to another", async () => {
+    vi.stubGlobal("fetch", enterpriseFake(appId));
+    const plan = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(plan.statusCode, plan.body).toBe(200);
+    const keyId = plan.json().id as string;
+    const credentialId = (await storedReference(keyId))?.ref.credentialId;
+
+    for (const [url, payload] of [
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId, organization: "other-org", replaceKeyId: keyId },
+      ],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, privateKey, organization: "other-org", replaceKeyId: keyId },
+      ],
+    ] as const) {
+      const moved = await post(url, payload);
+      expect(moved.statusCode, `${url} ${moved.body}`).toBe(400);
+      expect(moved.json().error.message).toBe(
+        "This plan is for my-org, not other-org. Connect a plan for other-org instead.",
+      );
+    }
+    expect((await storedReference(keyId))?.organization).toBe("my-org");
+
+    // other-org takes a plan of its own.
+    const other = await post("/api/github-copilot-app/credential", {
+      credentialId,
+      organization: "other-org",
+    });
+    expect(other.statusCode, other.body).toBe(200);
+  });
+
+  test("refuses a plan when a concurrent connect saved one for its organization first, and keeps nothing", async () => {
+    // A connect for my-org that raced this one saved its plan after this one
+    // passed the check: only the GitHub account's unique constraint sees it.
+    const { secretManager } = await import("@/secrets-manager");
+    const raced = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot My Org",
+        provider: "github-copilot",
+        secretId: (
+          await secretManager().createSecret({ apiKey: "in-flight" }, "raced")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      {
+        githubAppAccount: { githubUrl: "https://github.com", login: "my-org" },
+      },
+    );
+    const secrets = async () =>
+      (await db.select().from(schema.secretsTable)).length;
+    const credentials = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
+    const before = {
+      secrets: await secrets(),
+      credentials: await credentials(),
+    };
+
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const refused = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json().error.message).toBe(
+      "my-org already has a GitHub Copilot enterprise plan. Manage that plan instead of connecting another.",
+    );
+    expect(await planIds()).toEqual([]);
+    expect({
+      secrets: await secrets(),
+      credentials: await credentials(),
+    }).toEqual(before);
+
+    // Once that plan is gone, the organization takes a plan again, and the
+    // plan holds its organization for the next connect.
+    await LlmProviderApiKeyModel.delete(raced.id);
+    const connected = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(connected.statusCode, connected.body).toBe(200);
+    const accounts = await db
+      .select({
+        providerApiKeyId: schema.githubAppAccountsTable.providerApiKeyId,
+        githubUrl: schema.githubAppAccountsTable.githubUrl,
+        login: schema.githubAppAccountsTable.login,
+      })
+      .from(schema.githubAppAccountsTable)
+      .where(eq(schema.githubAppAccountsTable.organizationId, organizationId));
+    // Deleting the raced key freed its account; the new plan holds it now.
+    expect(accounts).toEqual([
+      {
+        providerApiKeyId: connected.json().id,
+        githubUrl: "https://github.com",
+        login: "my-org",
+      },
+    ]);
   });
 
   async function setConnection(credentialKey: string) {

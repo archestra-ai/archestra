@@ -18,6 +18,7 @@
     "src/models/app.ts",
     "src/models/conversation-enabled-tool.ts",
     "src/models/conversation.ts",
+    "src/models/cost-export.ts",
     "src/models/environment.ts",
     "src/models/external-mcp-skill-usage-event.ts",
     "src/models/hook-file.ts",

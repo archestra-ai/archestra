@@ -759,6 +759,7 @@ describe("AgentModel", () => {
       expect(fields).toEqual({
         llmApiKeyId: null,
         modelId: null,
+        modelPoolId: null,
         autoRouterId: null,
         runtime: null,
       });

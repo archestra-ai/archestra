@@ -53,6 +53,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
 import CreatedByModel from "./created-by";
 import { LlmProviderApiKeyLabelModel } from "./entity-labels";
+import GithubAppAccountModel from "./github-app-account";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type ResourceAccessFilter,
@@ -170,6 +171,13 @@ class LlmProviderApiKeyModel {
       publishToOrganization?: boolean;
       /** The value being stored, to record its credential kind. */
       apiKeyValue?: string | null;
+      /**
+       * The GitHub account a new key reaches through a GitHub App (the
+       * organization a GitHub Copilot plan bills), recorded in the same
+       * transaction: an account another key has fails the whole create
+       * (`GithubAppAccountModel.isTaken`).
+       */
+      githubAppAccount?: { githubUrl: string; login: string };
     },
   ): Promise<LlmProviderApiKey> {
     return await db.transaction(async (tx) => {
@@ -213,6 +221,17 @@ class LlmProviderApiKeyModel {
         publishToOrganization: options?.publishToOrganization,
       });
       // SPDX-SnippetEnd
+
+      if (options?.githubAppAccount)
+        await GithubAppAccountModel.create({
+          data: {
+            organizationId: apiKey.organizationId,
+            providerApiKeyId: apiKey.id,
+            githubUrl: options.githubAppAccount.githubUrl,
+            login: options.githubAppAccount.login,
+          },
+          transaction: tx,
+        });
 
       return apiKey;
     });

@@ -1,6 +1,7 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -32,7 +33,7 @@ vi.mock("next/image", () => ({
 }));
 
 import { notFound, useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   useAppearanceSettings,
@@ -48,6 +49,7 @@ const server = setupServer(
     HttpResponse.json(providerKeys),
   ),
   http.get(`${API_ORIGIN}/api/model-pools`, () => HttpResponse.json(pools)),
+  http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json([])),
 );
 
 beforeAll(() => {
@@ -100,6 +102,13 @@ function renderPage(query = "") {
 describe("ModelPoolsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "owner" } },
+    } as ReturnType<typeof useSession>);
     providerKeys = [
       { id: "key-0", name: "Z.ai", provider: "zhipuai", userId: null },
     ];
@@ -164,6 +173,77 @@ describe("ModelPoolsPage", () => {
     expect(
       screen.queryByText("Connect your first model provider"),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "github-copilot",
+    "openai",
+    "xai",
+  ])("allows pool creation with an owned %s subscription", async (provider) => {
+    providerKeys = [
+      {
+        id: "subscription-key",
+        name: "Subscription",
+        provider,
+        userId: "owner",
+      },
+    ];
+    renderPage();
+    expect(
+      await screen.findByRole("button", { name: "Create pool" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText("Connect your first model provider"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer another user's subscription as the first pool connection", async () => {
+    providerKeys = [
+      {
+        id: "other-subscription",
+        name: "Subscription",
+        provider: "github-copilot",
+        userId: "other",
+      },
+    ];
+    renderPage();
+    expect(
+      await screen.findByText("Connect your first model provider"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers the owned Copilot connection in the member editor and explains its scope", async () => {
+    providerKeys = [
+      {
+        id: "copilot-owned",
+        name: "My Copilot",
+        provider: "github-copilot",
+        userId: "owner",
+      },
+      {
+        id: "copilot-other",
+        name: "Other Copilot",
+        provider: "github-copilot",
+        userId: "other",
+      },
+    ];
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Create pool" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add member" }),
+    );
+    expect(await within(dialog).findByText("My Copilot")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Personal connections stay private"),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Provider key" }),
+    );
+    expect(screen.queryByText("Other Copilot")).not.toBeInTheDocument();
   });
 
   it("counts a pool with every member off as not healthy", async () => {

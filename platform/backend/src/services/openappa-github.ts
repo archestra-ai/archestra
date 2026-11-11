@@ -7,7 +7,7 @@ type GithubRequest = {
   url: string;
   /** Sent as a bearer token whenever defined, even when empty. */
   token?: string;
-  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH";
+  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: object;
   accept?: "application/vnd.github+json" | "application/vnd.github.raw+json";
   apiVersion?: boolean;

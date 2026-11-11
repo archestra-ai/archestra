@@ -318,7 +318,7 @@ function AddOrder({
       </Button>
       {canAdd ? null : (
         <span className="text-xs text-muted-foreground">
-          No shared provider keys yet.
+          No provider connections yet.
         </span>
       )}
     </div>

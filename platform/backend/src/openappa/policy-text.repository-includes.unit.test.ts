@@ -10,6 +10,7 @@ import {
   serverCatchAllPrefixes,
   serverFilesDeclareAnnotators,
   serverRulesPath,
+  withIncludeEntry,
   withoutRepositoryIncludes,
 } from "./policy-text";
 
@@ -215,7 +216,9 @@ hint = "the root's"
     expect(isRepositoryInclude("mcp/*.toml")).toBe(true);
     expect(isRepositoryInclude("teams/*.toml")).toBe(true);
     expect(isRepositoryInclude("teams/*/rules.toml")).toBe(false);
-    expect(serverRulesPath("mcp", "payments_api")).toBe("mcp/payments_api.toml");
+    expect(serverRulesPath("mcp", "payments_api")).toBe(
+      "mcp/payments_api.toml",
+    );
     expect(serverRulesPath("rules/servers", "payments_api")).toBe(
       "rules/servers/payments_api.toml",
     );
@@ -608,4 +611,36 @@ delta = { audience = ["self"] }
       "payments_api__get_invoice(customer:vip-*)",
     ]);
   });
+});
+
+test("withIncludeEntry adds the entry as its own line in a multi-line list, and through OpenAPPA's editor otherwise", async () => {
+  const multi = `include = [
+  "batteries/archestra/appa.toml",
+  "batteries/claude-code/appa.toml",
+]
+
+[policy]
+version = 2
+`;
+  expect(await withIncludeEntry(multi, "mcp/*.toml")).toBe(`include = [
+  "batteries/archestra/appa.toml",
+  "batteries/claude-code/appa.toml",
+  "mcp/*.toml",
+]
+
+[policy]
+version = 2
+`);
+  // A last entry without its comma gets one; a comment after the list stays.
+  const uncommaed = `include = [\n  "batteries/archestra/appa.toml"\n] # batteries\n[policy]\nversion = 2\n`;
+  expect(await withIncludeEntry(uncommaed, "rules/*.toml")).toBe(
+    `include = [\n  "batteries/archestra/appa.toml",\n  "rules/*.toml",\n] # batteries\n[policy]\nversion = 2\n`,
+  );
+  // One line, or no list: OpenAPPA's editor writes it.
+  const single = `include = ["batteries/archestra/appa.toml"]\n[policy]\nversion = 2\n`;
+  const edited = await withIncludeEntry(single, "mcp/*.toml");
+  expect(edited).toContain('"mcp/*.toml"');
+  expect(
+    await withIncludeEntry("[policy]\nversion = 2\n", "mcp/*.toml"),
+  ).toContain('include = ["mcp/*.toml"]');
 });

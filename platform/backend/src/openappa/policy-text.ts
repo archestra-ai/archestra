@@ -317,6 +317,10 @@ export async function withIncludeEntry(
   root: string,
   entry: string,
 ): Promise<string> {
+  // A multi-line list gets the entry as a line of its own, as a person would
+  // write it; OpenAPPA's editor appends it on the last entry's line.
+  const lined = withIncludeLine(root, entry);
+  if (lined !== null) return lined;
   const native = await import("@archestra/openappa-rs");
   const edited = await native.editOpenappaPolicy(root, [
     { kind: "addInclude", entry },
@@ -324,6 +328,43 @@ export async function withIncludeEntry(
   if (edited.content === undefined || edited.content === null)
     throw new Error(edited.errors.join("\n"));
   return edited.content;
+}
+
+/**
+ * `entry` added as its own line at the end of a multi-line `include` list,
+ * indented like the entry before it, or null when the root has no such list
+ * or the edit did not read back as expected.
+ */
+function withIncludeLine(root: string, entry: string): string | null {
+  const open = /^[ \t]*include[ \t]*=[ \t]*\[[ \t]*(?:#[^\n]*)?\n/m.exec(root);
+  if (!open) return null;
+  const start = open.index + open[0].length;
+  const close = /^[ \t]*\]/m.exec(root.slice(start));
+  if (!close) return null;
+  const body = root.slice(start, start + close.index);
+  const lines = body.split("\n");
+  // The last entry line decides the indent and whether a comma is due.
+  let last = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const text = lines[i]?.trim() ?? "";
+    if (text !== "" && !text.startsWith("#")) {
+      last = i;
+      break;
+    }
+  }
+  const indent =
+    last < 0 ? "  " : (/^[ \t]*/.exec(lines[last] ?? "")?.[0] ?? "");
+  if (last >= 0) {
+    const line = lines[last] as string;
+    const code = line.split("#")[0] as string;
+    if (!/,\s*$/.test(code))
+      lines[last] = line.replace(code, `${code.trimEnd()},`);
+  }
+  lines.splice(last + 1, 0, `${indent}${JSON.stringify(entry)},`);
+  const edited =
+    root.slice(0, start) + lines.join("\n") + root.slice(start + close.index);
+  const include = parsePolicyToml(edited)?.include;
+  return Array.isArray(include) && include.includes(entry) ? edited : null;
 }
 
 /**

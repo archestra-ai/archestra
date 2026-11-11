@@ -823,6 +823,8 @@ describe("GET /api/skills", () => {
 
 describe("GET /api/skills?visibleTo over authenticated HTTP", () => {
   test("matches the target's grants and filters without inheriting the administrator's access", async ({
+    makeAgent,
+    makeCustomRole,
     makeOrganization,
     makeUser,
     makeMember,
@@ -934,6 +936,51 @@ describe("GET /api/skills?visibleTo over authenticated HTTP", () => {
         404,
       );
       expect((await read(`?visibleTo=${target.id}`)).status).toBe(401);
+      const privateAgent = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        authorId: admin.id,
+        access: "personal",
+      });
+      expect(
+        (
+          await read(
+            `?visibleTo=${target.id}&forAgentId=${privateAgent.id}`,
+            adminCookie,
+          )
+        ).status,
+      ).toBe(404);
+      const ownAgent = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        authorId: target.id,
+        access: "personal",
+      });
+      const ownAgentPreview = await read(
+        `?visibleTo=${target.id}&forAgentId=${ownAgent.id}`,
+        adminCookie,
+      );
+      expect(ownAgentPreview.status).toBe(200);
+      expect(ownAgentPreview.body).toEqual(
+        (await read(`?forAgentId=${ownAgent.id}`, targetCookie)).body,
+      );
+      expect(
+        (await read(`?visibleTo=${target.id}&status=deleted`, adminCookie))
+          .status,
+      ).toBe(403);
+      const skillReader = await makeCustomRole(org.id, {
+        permission: { skill: ["read"] },
+      });
+      await MemberModel.updateRole(target.id, org.id, skillReader.role);
+      const gatewayPreview = await read(
+        `?visibleTo=${target.id}&mcpGatewayEnvironment=default`,
+        adminCookie,
+      );
+      expect(gatewayPreview.status).toBe(403);
+      expect(gatewayPreview.body).toEqual(
+        (await read("?mcpGatewayEnvironment=default", targetCookie)).body,
+      );
+      await MemberModel.updateRole(target.id, org.id, MEMBER_ROLE_NAME);
       await TeamModel.removeMember(team.id, target.id);
       const afterRevoke = await read(`?visibleTo=${target.id}`, adminCookie);
       expect(

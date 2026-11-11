@@ -1,6 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { autoModelChoice } from "@/lib/chat/auto-model";
 import { useFeature } from "@/lib/config/config.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
@@ -14,6 +15,7 @@ const {
   pools,
   mutateConversation,
   hiddenProviders,
+  hiddenCopilotPlans,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -71,6 +73,7 @@ const {
     },
   ],
   hiddenProviders: new Set<string>(),
+  hiddenCopilotPlans: new Set<string>(),
   keys: [
     {
       id: "key-org",
@@ -146,6 +149,13 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
     isHidden: (provider: string) => hiddenProviders.has(provider),
+    isKeyHidden: (key: { provider: string; isGithubAppKey?: boolean }) =>
+      hiddenProviders.has(key.provider) ||
+      (key.provider === "github-copilot" &&
+        hiddenCopilotPlans.has(key.isGithubAppKey ? "enterprise" : "personal")),
+    canAddKey: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
   }),
 }));
 
@@ -164,6 +174,7 @@ beforeEach(() => {
   vi.mocked(useFeature).mockReturnValue(true);
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
+  hiddenCopilotPlans.clear();
   navigate.mockClear();
   readiness.splice(0);
   pools.splice(0);
@@ -239,7 +250,7 @@ describe("ChatSetupMenu", () => {
     expect(props.close).toHaveBeenCalledOnce();
   });
 
-  it("offers Auto beside the keys while auto routing is on, and picks it at once", async () => {
+  it("offers each auto router beside the keys while auto routing is on, and picks one at once", async () => {
     const tier = (id: string, displayName: string) => ({
       id,
       provider: "vllm" as const,
@@ -250,35 +261,82 @@ describe("ChatSetupMenu", () => {
       normal: tier("model-plain", "Normal tier"),
       smart: tier("model-smart", "Smart tier"),
     };
+    const supportTiers = {
+      fast: tier("support-fast", "Support fast"),
+      normal: tier("support-plain", "Support normal"),
+      smart: tier("support-smart", "Support smart"),
+    };
     vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
       data: {
         model: tiers.normal,
-        defaultAutoModel: false,
-        autoRouting: { active: true, tiers },
+        defaultAutoRouterId: null,
+        autoRouters: [
+          { id: "router-a", name: "auto", tiers },
+          { id: "router-b", name: "auto:support", tiers: supportTiers },
+        ],
       },
     } as never);
     const user = userEvent.setup();
     const props = renderMenu({ onModelPoolChange: vi.fn() });
 
     await user.click(screen.getByRole("tab", { name: /^Key:/ }));
-    const auto = screen.getByRole("option", { name: /^Auto/ });
-    expect(auto).toHaveTextContent(/Fast tier.*Normal tier.*Smart tier/);
-    await user.click(auto);
+    expect(
+      screen.getByRole("option", { name: /^Auto\s*Fast tier/ }),
+    ).toHaveTextContent(/Fast tier.*Normal tier.*Smart tier/);
+    const support = screen.getByRole("option", { name: /^Auto · support/ });
+    expect(support).toHaveTextContent(
+      /Support fast.*Support normal.*Support smart/,
+    );
+    await user.click(support);
 
-    expect(props.onModelPoolChange).toHaveBeenCalledWith("auto");
+    expect(props.onModelPoolChange).toHaveBeenCalledWith(
+      autoModelChoice("router-b"),
+    );
     expect(props.close).toHaveBeenCalledOnce();
   });
 
-  it("shows Auto in place of the key, with no model tab", () => {
-    renderMenu({ modelPoolId: "auto", onModelPoolChange: vi.fn() });
+  it("shows the picked auto router in place of the key, with no model tab", () => {
+    const tier = (id: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName: id,
+    });
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: {
+        model: null,
+        defaultAutoRouterId: null,
+        autoRouters: [
+          {
+            id: "router-b",
+            name: "auto:support",
+            tiers: { fast: tier("f"), normal: tier("n"), smart: tier("s") },
+          },
+        ],
+      },
+    } as never);
+    renderMenu({
+      modelPoolId: autoModelChoice("router-b"),
+      onModelPoolChange: vi.fn(),
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Model: Auto · support" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.queryByRole("tab", { name: /^Model: (?!Auto)/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Auto in place of the key for a router that is not offered", () => {
+    renderMenu({
+      modelPoolId: autoModelChoice("router-gone"),
+      onModelPoolChange: vi.fn(),
+    });
 
     expect(screen.getByRole("tab", { name: "Model: Auto" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(
-      screen.queryByRole("tab", { name: /^Model: (?!Auto)/ }),
-    ).not.toBeInTheDocument();
   });
 
   it("shows a picked pool in place of the key, with no model tab", () => {
@@ -386,6 +444,46 @@ describe("ChatSetupMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists each GitHub Copilot account by its own plan's switch, and names a plan after its organization", async () => {
+    keys.push(
+      {
+        id: "copilot-plan",
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        scope: "org",
+        userId: null,
+        isGithubAppKey: true,
+        githubOrganization: "acme",
+        githubOrganizationName: "Acme Inc",
+      } as LlmProviderApiKey,
+      {
+        id: "copilot-mine",
+        name: "My Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: "user-1",
+      } as LlmProviderApiKey,
+    );
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(
+      screen.getByRole("option", { name: /GitHub Copilot Acme Inc/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
+    ).toBeInTheDocument();
+    cleanup();
+
+    hiddenCopilotPlans.add("enterprise");
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
+    ).toBeInTheDocument();
+  });
+
   it("lets the footer keep its own Enter key without selecting the highlighted credential", async () => {
     const user = userEvent.setup();
     const props = renderMenu();
@@ -474,8 +572,8 @@ describe("ChatSetupMenu", () => {
     vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
       data: {
         model: tiers.normal,
-        defaultAutoModel: true,
-        autoRouting: { active: true, tiers },
+        defaultAutoRouterId: "router-a",
+        autoRouters: [{ id: "router-a", name: "auto", tiers }],
       },
     } as never);
     const defaultRow = () =>

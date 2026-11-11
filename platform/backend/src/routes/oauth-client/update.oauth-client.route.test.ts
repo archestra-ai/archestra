@@ -8,6 +8,7 @@ import ModelPoolModel from "@/models/model-pool";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { expect, test } from "@/test";
+import { ensureAutoRouter } from "@/test/auto-routing";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import routes from "./oauth-client.routes";
@@ -233,5 +234,53 @@ test("model pools are kept on the client and need permission to change", async (
     ).toBe(400);
   } finally {
     config.llmProxy.modelPoolsEnabled = false;
+  }
+});
+
+test("auto routers are kept on the client and need permission to change", async ({
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  const wasEnabled = config.autoRouting.enabled;
+  config.autoRouting.enabled = true;
+  try {
+    const member = await makeMember(ctx.user.id, ctx.organizationId, {
+      role: "member",
+    });
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+      provider: "openai",
+    });
+    const router = await ensureAutoRouter(ctx.organizationId);
+    const { oauthClient } = await ManagedOauthClientModel.create({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "Router client",
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+    });
+    const update = (payload: Record<string, unknown>) =>
+      ctx.app.inject({
+        method: "PUT",
+        url: `/api/oauth-clients/${oauthClient.id}`,
+        payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
+      });
+
+    expect((await update({ autoRouterIds: [router.id] })).statusCode).toBe(403);
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.id, member.id));
+    const granted = await update({ autoRouterIds: [router.id] });
+    expect(granted.statusCode, granted.body).toBe(200);
+    expect(granted.json().autoRouterIds).toEqual([router.id]);
+    // Omitted on another edit, the routers stay.
+    const renamed = await update({ name: "Renamed router client" });
+    expect(renamed.json().autoRouterIds).toEqual([router.id]);
+    expect(
+      (await update({ autoRouterIds: [crypto.randomUUID()] })).statusCode,
+    ).toBe(400);
+  } finally {
+    config.autoRouting.enabled = wasEnabled;
   }
 });

@@ -276,9 +276,20 @@ export default function LimitsPage() {
     includeRelations: false,
     enabled: access.globalCreate || access.globalRead,
   });
-  const teams =
-    access.globalCreate || access.globalRead ? allTeams : access.teams;
-  const createTeams = access.globalCreate ? allTeams : access.managedTeams;
+  // Limits permission does not imply organization-wide team access. Keep
+  // administered descendants even when the team list only has memberships.
+  const teams = useMemo(
+    () => [
+      ...new Map(
+        [
+          ...access.teams,
+          ...(access.globalCreate || access.globalRead ? allTeams : []),
+        ].map((team) => [team.id, team]),
+      ).values(),
+    ],
+    [access.teams, access.globalCreate, access.globalRead, allTeams],
+  );
+  const createTeams = access.globalCreate ? teams : access.managedTeams;
   const { data: organization } = useOrganization();
   const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits

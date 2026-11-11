@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { formatDate } from "@/lib/utils/date-time";
@@ -295,6 +296,7 @@ function ConversationView({
  * request as received and as forwarded.
  */
 function RequestView({ record }: { record: InteractionRecord }) {
+  const { enterprisePlanName } = useModelProviderCatalog();
   const [forwarded, setForwarded] = useState(false);
   const toolNames = useMemo(
     () =>
@@ -335,7 +337,10 @@ function RequestView({ record }: { record: InteractionRecord }) {
           ))}
           {record.copilotCredentialSource ? (
             <OverviewCell label="GitHub Copilot">
-              {copilotCredentialSourceLabel(record.copilotCredentialSource)}
+              {copilotCredentialSourceLabel(
+                record.copilotCredentialSource,
+                enterprisePlanName,
+              )}
             </OverviewCell>
           ) : null}
           {record.authenticatedAppName ? (

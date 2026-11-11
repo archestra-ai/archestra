@@ -72,6 +72,8 @@ export const CacheKey = {
   NativeUserQuestion: "native-user-question",
   /** Single-card choices and provenance, isolated from older grouped-only decoders. */
   NativeUserQuestionPresentation: "native-question-presentation",
+  /** The LLM session and user behind an MCP tool call the proxy handed a client, for the gateway that runs it */
+  LlmToolCallSession: "llm-tool-call-session",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
   /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
@@ -98,6 +100,8 @@ export const CacheKey = {
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** How many results followed a ruling when its remedy continuation was last delivered. */
+  OpenAppaRemedyContinuationDelivered: "openappa-remedy-continuation-delivered",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */

@@ -317,6 +317,13 @@ export const COPILOT_ENV_HANDLED_MARKER = "ARCHESTRA_COPILOT_ENV_HANDLED";
  * guard entry — its connect is reversed from the Disconnect panel instead.
  */
 export const STARTUP_GUARD_INSTALL = {
+  "grok-build": {
+    scriptRelpath: ".archestra/grok/startup.sh",
+    psScriptRelpath: ".archestra/grok/startup.ps1",
+    skipRelpath: ".archestra/grok/startup.skip",
+    markerStart: "# BEGIN ARCHESTRA MANAGED GROK",
+    markerEnd: "# END ARCHESTRA MANAGED GROK",
+  },
   pi: {
     scriptRelpath: ".archestra/pi/startup.sh",
     psScriptRelpath: ".archestra/pi/startup.ps1",
@@ -525,13 +532,12 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
 
 /**
- * Header marking a chat or agent call that runs on its agent's own selection,
- * with no pool or explicit subagent tier. When that agent inherits the
- * organization default and the call names the default model, the proxy routes
- * the session across the organization's model trio. Like
+ * Header naming the auto router a chat or agent call runs on: its chat's or
+ * agent's own selection, with no pool or explicit subagent tier. The proxy
+ * routes the session across that router's model trio. Like
  * MODEL_POOL_ID_HEADER, it is only honored with the in-process proof.
  */
-export const AUTO_ROUTABLE_HEADER = "X-Archestra-Auto-Routable";
+export const AUTO_ROUTER_ID_HEADER = "X-Archestra-Auto-Router-Id";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

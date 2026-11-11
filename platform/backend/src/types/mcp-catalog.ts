@@ -19,7 +19,11 @@ import {
   CatalogTeamAccessLevelSchema,
   CatalogTeamInputSchema,
 } from "./catalog-team-level";
-import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
+import {
+  type EnterpriseManagedCredentialConfig,
+  EnterpriseManagedCredentialConfigResponseSchema,
+  EnterpriseManagedCredentialConfigSchema,
+} from "./enterprise-managed-credentials";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -162,7 +166,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     authFields: z.array(AuthFieldSchema).nullable(),
     userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
     oauthConfig: OAuthConfigSchema.nullable(),
-    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+    enterpriseManagedConfig:
+      EnterpriseManagedCredentialConfigResponseSchema.nullable(),
     localConfig: LocalConfigSelectSchema.nullable(),
     clonedFrom: z.string().uuid().nullable(),
     // Serialized as a nullable string (not the enum) because the OpenAPI client
@@ -358,9 +363,15 @@ export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 // Export LocalConfig type for reuse in database schema
 export type LocalConfig = z.infer<typeof LocalConfigSelectSchema>;
 
-export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
-export type ListInternalMcpCatalog = z.infer<
-  typeof ListInternalMcpCatalogSchema
+/**
+ * A catalog item as the backend holds it: unlike the API response, its
+ * `enterpriseManagedConfig` may carry the exchange client's secrets.
+ */
+export type InternalMcpCatalog = WithEnterpriseManagedSecrets<
+  z.infer<typeof SelectInternalMcpCatalogSchema>
+>;
+export type ListInternalMcpCatalog = WithEnterpriseManagedSecrets<
+  z.infer<typeof ListInternalMcpCatalogSchema>
 >;
 export type InsertInternalMcpCatalog = z.infer<
   typeof InsertInternalMcpCatalogSchema
@@ -462,3 +473,7 @@ function validateHeaderMappedUserConfig(
     }
   }
 }
+
+type WithEnterpriseManagedSecrets<T> = Omit<T, "enterpriseManagedConfig"> & {
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+};

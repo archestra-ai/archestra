@@ -12,6 +12,7 @@ import {
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
@@ -522,8 +523,19 @@ export function resolveAppEntryRender(params: {
 }
 
 /** A human title for tool cards whose raw name means nothing to the reader. */
-export function getToolCardTitle(toolName: string): string | undefined {
-  return toolName === SELF_FORK_TOOL_NAME ? "Subagent" : undefined;
+export function getToolCardTitle(
+  toolName: string,
+  shortName?: ArchestraToolShortName | null,
+): string | undefined {
+  if (toolName === SELF_FORK_TOOL_NAME) return "Subagent";
+  switch (shortName) {
+    case TOOL_GET_REMEDY_PLANS_SHORT_NAME:
+      return "Checked what's allowed";
+    case TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME:
+      return "Guardrails step";
+    default:
+      return undefined;
+  }
 }
 
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */

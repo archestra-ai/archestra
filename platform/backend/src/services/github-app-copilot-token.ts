@@ -14,9 +14,11 @@ import {
   GITHUB_APP_CREDENTIAL_MARKER,
   getGithubApiBaseUrl,
   getGithubWebOrigin,
+  TimeInMs,
 } from "@archestra/shared";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import { resolveInstallationCredential } from "@/integrations/github/app-auth";
+import logger from "@/logging";
 import { ApiError } from "@/types/api";
 
 export interface GithubAppCredential {
@@ -169,6 +171,63 @@ export function forgetGithubAppReference(reference: {
   );
 }
 
+/**
+ * The name GitHub shows for the organization a plan is installed on
+ * ("Archestra" for the login `archestra-ai`), or null when it has none or
+ * GitHub doesn't say. Read with the plan's App, so an organization of managed
+ * users or on a private Enterprise Server answers too; without a working App
+ * (a plan to reconnect), a public organization still answers anonymously.
+ *
+ * Cached per installation. A caller waits on GitHub a few seconds at most and
+ * then gets null; the lookup goes on and fills the cache for the next read.
+ */
+export async function githubOrganizationDisplayName(params: {
+  value: string | null | undefined;
+  organizationId: string;
+}): Promise<string | null> {
+  const reference = decodeGithubAppReference(params.value);
+  if (!reference || reference.ref.organizationId !== params.organizationId)
+    return null;
+  const cacheKey = [
+    reference.ref.organizationId,
+    reference.ref.credentialId,
+    reference.installationId,
+    reference.organization,
+  ].join(":");
+  const cached = organizationNameCache.get(cacheKey);
+  if (cached) return cached.name;
+  let lookup = organizationNameLookups.get(cacheKey);
+  if (!lookup) {
+    lookup = readOrganizationName({
+      value: params.value,
+      organizationId: params.organizationId,
+      reference,
+    })
+      .then(
+        (name) => {
+          organizationNameCache.set(cacheKey, { name });
+          return name;
+        },
+        (error: unknown) => {
+          // Not worth a warning: the plan shows its login meanwhile.
+          logger.info(
+            { err: error, organization: reference.organization },
+            "[GithubAppCopilot] could not read the organization's name from GitHub",
+          );
+          organizationNameCache.set(
+            cacheKey,
+            { name: null },
+            ORGANIZATION_NAME_RETRY_MS,
+          );
+          return null;
+        },
+      )
+      .finally(() => organizationNameLookups.delete(cacheKey));
+    organizationNameLookups.set(cacheKey, lookup);
+  }
+  return withDeadline(lookup, ORGANIZATION_NAME_WAIT_MS);
+}
+
 /** The web address of a credential's GitHub API base. */
 export function githubWebFromApi(api: string | null | undefined): string {
   return getGithubWebOrigin(api ?? "https://api.github.com");
@@ -316,6 +375,65 @@ export function copilotAppErrorMessage(params: {
 }
 
 // ===== Internal helpers =====
+
+/**
+ * `GET /orgs/{org}`, as the plan's App when it can still sign in, otherwise
+ * anonymously.
+ */
+async function readOrganizationName(params: {
+  value: string | null | undefined;
+  organizationId: string;
+  reference: GithubAppCredentialReference;
+}): Promise<string | null> {
+  const token = await resolveGithubAppCredential(params)
+    .then((credential) => getGithubAppInstallationToken(credential))
+    .catch(() => null);
+  const response = await fetch(
+    `${githubAppApiBase(params.reference)}/orgs/${encodeURIComponent(params.reference.organization)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(ORGANIZATION_NAME_REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
+  const { name } = (await response.json()) as { name?: unknown };
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+/** The promise's value, or null once `ms` pass first. */
+async function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Organization names, per installation. GitHub rarely sees them change. */
+const organizationNameCache = new LRUCacheManager<{ name: string | null }>({
+  maxSize: 1000,
+  defaultTtl: TimeInMs.Hour,
+});
+/** Lookups in flight, so a list of one organization's plans asks GitHub once. */
+const organizationNameLookups = new Map<string, Promise<string | null>>();
+/** A failed lookup is retried after this long. */
+const ORGANIZATION_NAME_RETRY_MS = 5 * TimeInMs.Minute;
+/** The longest a key list waits on GitHub for a name. */
+const ORGANIZATION_NAME_WAIT_MS = 3_000;
+const ORGANIZATION_NAME_REQUEST_TIMEOUT_MS = 15_000;
 
 /** Re-mint an installation token this long before its expiry. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;

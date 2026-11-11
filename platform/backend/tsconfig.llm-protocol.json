@@ -6,6 +6,8 @@
     "tsBuildInfoFile": "./.tsbuild/llm-protocol.tsbuildinfo"
   },
   "files": [
+    "src/routes/mcp-gateway/grok-tool-names.ts",
+    "src/routes/proxy/adapters/grok-native-catalog.ts",
     "src/knowledge-base/embedding-clients/bedrock-models.ts",
     "src/knowledge-base/embedding-clients/cohere-models.ts",
     "src/knowledge-base/embedding-clients/vertex-models.ts",
@@ -17,6 +19,8 @@
     "src/archestra-mcp-server/tool-attestation.ts",
     "src/clients/realtime-audio.ts",
     "src/openappa/child-trajectory-receipt.ts",
+    "src/openappa/child-trajectory-reference-format.ts",
+    "src/openappa/grok-durable-history.ts",
     "src/openappa/compaction-carrier.ts",
     "src/openappa/notice.ts",
     "src/openappa/result-view.ts",

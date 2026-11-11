@@ -471,7 +471,10 @@ shell = [
   { name = "host/archestra/bash", args = { command = "command" } },
   { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
 ]
-read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+read_file = [
+  { name = "host/archestra/read", args = { file_path = "filePath" } },
+  { name = "host/archestra/read_file", args = { file_path = "target_file" } },
+]
 search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
 write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
 edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]

@@ -16,6 +16,7 @@
     "src/routes/chat/heartbeat-stream.ts",
     "src/routes/chat/inject-app-diagnostics.ts",
     "src/routes/chat/inject-skill-activation.ts",
+    "src/routes/chat/normalization/build-model-messages.ts",
     "src/routes/chat/prepare-model-messages.ts",
     "src/routes/chat/read-opened-app-ref.ts",
     "src/routes/chat/routes.ts",

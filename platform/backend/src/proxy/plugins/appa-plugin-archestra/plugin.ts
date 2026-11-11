@@ -64,6 +64,14 @@ import {
 } from "@/openappa/delegation";
 import { recoverDiagnosticTurn } from "@/openappa/diagnostic-recovery";
 import {
+  GrokChildResumeRefusal,
+  grokChildResumeSuffix,
+} from "@/openappa/grok-child-resume";
+import {
+  GROK_OMITTED_TOOL_RESULT,
+  GROK_REJECTED_CHILD_RETURN,
+} from "@/openappa/grok-child-return";
+import {
   askHitlReviewInForm,
   getHitlAskUserArguments,
   getHitlInspectableAskUserArguments,
@@ -110,11 +118,13 @@ import {
   approveSpawnReturn,
   cancelCalls,
   endChild,
+  endChildTurn,
   endTurn,
   enterCapturedGuardrailsActivation,
   evaluateHostedToolCalls,
   evaluateToolCalls,
   loadChildAddresses,
+  loadChildRejections,
   loadChildReturns,
   loadOfferReview,
   notePrompt,
@@ -159,6 +169,7 @@ import {
   appaTurnBoundaries,
   appaWireFamily,
   latestResponsesToolRound,
+  restoreDeferredNativeCalls,
 } from "@/openappa/wire";
 import {
   isReportingToolCall,
@@ -199,6 +210,7 @@ import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
 } from "@/types/openappa-runtime-launch";
+import { asRecord } from "@/utils/as-record";
 import {
   claudeCodeNativeChildIds,
   claudeDesktopReviewQuestion,
@@ -216,6 +228,7 @@ import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectory,
   type AppaClientAdapter,
   type AppaRelayArrival,
@@ -224,6 +237,8 @@ import {
   type AppaSpawnModel,
   type AppaTrustedContext,
   type AskUserArguments,
+  GROK_DEFERRED_TOOLS,
+  type GrokDeferredToolRecovery,
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
@@ -238,6 +253,7 @@ type AppaPluginBinding = {
   threadContinue: boolean;
   /** Limits later hooks to reporting and prevents a second recovery attempt. */
   reportingRecovery?: boolean;
+  reportingRefusal?: string;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -265,6 +281,8 @@ type AppaPluginBinding = {
   requiresQuestionContinuation: boolean;
   /** A remedy notice requires an immediate control-tool call. */
   requiresRemedyContinuation: boolean;
+  /** The ruling that continuation answers, recorded once the guidance goes out. */
+  pendingRemedyContinuation?: RemedyContinuation;
   /** Offers whose first control call requested a native client review. */
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
@@ -412,10 +430,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
-      unattended: isUnattendedRequest({
-        headers: context.headers,
-        agentRuntimeRun: trustedContext.agentRuntimeRun === true,
-      }),
+      unattended:
+        trajectory.adapter?.isUnattended?.(context.headers) === true ||
+        isUnattendedRequest({
+          headers: context.headers,
+          agentRuntimeRun: trustedContext.agentRuntimeRun === true,
+        }),
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
@@ -436,7 +456,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           trajectory.adapter?.nativeConversationId(trajectory.matchContext);
       }
       binding.child = trajectory.child;
-      issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
+      issueChildTrajectoryReceipt(
+        context,
+        binding.session,
+        trajectory.child,
+        binding.adapter?.id === "grok-build",
+      );
     }
     this.bindings.set(context.resources, binding);
     if (!binding.compaction) this.requestShapes.set(context.resources, binding);
@@ -580,6 +605,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (!family) throw withoutReportingRecovery(error);
       if (!recovery) throw error;
       binding.reportingRecovery = true;
+      binding.reportingRefusal =
+        error instanceof Error ? error.message : undefined;
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
         // Any malformed frame left after filtering must fail closed here.
@@ -588,6 +615,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
           codexMailboxReturns: binding.adapter?.id === "codex",
           copilotAgentReports: binding.adapter?.id === "copilot-cli",
+          grokSubagentReturns: binding.adapter?.id === "grok-build",
         }),
         promptOperationId: undefined,
         ...appaTurnBoundaries({ family, body: binding.requestBody }),
@@ -739,6 +767,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isRelayTool?.(result.name, result.namespace) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
           !childReturns.ignored.has(result.id) &&
+          !childReturns.omitted.has(result.id) &&
           !unansweredNotices.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
@@ -778,7 +807,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (launch) return launch.kind === "launched" ? "pending" : "failed";
           return answer.isError ? "failed" : "pending";
         }
-        if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
+        if (
+          !binding.adapter?.isSpawnTool(
+            answer.name,
+            answer.namespace,
+            answer.arguments,
+          )
+        )
           return undefined;
         if (binding.request.restoredNoticeCallIds?.has(answer.id))
           return "pending";
@@ -801,6 +836,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       },
       lineage: binding.child?.lineage,
     });
+    for (const id of childReturns.rejectedSpawns) {
+      const settled = result.toolResultUpdates[id];
+      // Specialize the runtime's generic failure status using the verified
+      // rejection. It reports a retained ChildEnd rejection, not withheld
+      // tool output. Replaying this fixed status must not waive the parent.
+      // An unrecognized dispatch or a policy-denied call retains its ruling.
+      if (
+        settled?.outputSource === "runtime" &&
+        !settled.denied &&
+        !settled.code
+      ) {
+        settled.content = childReturns.updates[id];
+        delete settled.refused;
+      }
+    }
     // Keep the native hard ruling before any metadata/cache lookup can fail.
     // A later generic exception must not release the original client bytes.
     binding.hardBlockSeen ||= Object.values(result.toolResultUpdates).some(
@@ -884,17 +934,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           offers: [],
         };
     }
-    binding.requiresRemedyContinuation = await hasRemedyOfferResult({
+    binding.pendingRemedyContinuation = await hasRemedyOfferResult({
       binding,
+      session: this.governedSession(binding),
+      interactionType: context.interactionType,
       results: toolResults,
       toolResultUpdates: result.toolResultUpdates,
       verifiedNativeQuestionResults,
     });
-    // Authoritative peer reads and remedy receipts are runtime outputs too.
-    // Waive only native refusals, and inspect the whole batch before disabling
-    // enforcement: a soft refusal must never release a sibling hard block.
+    binding.requiresRemedyContinuation =
+      binding.pendingRemedyContinuation !== undefined;
+    // A denied call's receipt is history, not withheld output: waiving it
+    // would disable enforcement just because a client replayed an old block.
+    // Keep those receipts even when a separate result admission is waived.
     const refusedResults = Object.entries(result.toolResultUpdates).filter(
-      ([, value]) => value.refused || value.denied,
+      ([, value]) => value.refused,
     );
     binding.hardBlockSeen ||= refusedResults.some(
       ([, value]) =>
@@ -924,11 +978,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     binding.sessionInitialized = true;
     const waitTool = binding.adapter?.pendingServersTool;
-    // A ruling in the result of the client's wait tool is a denial that tool
-    // carried: the model made another call there, and has to be told so.
+    const searchTool = binding.adapter?.gatewayToolsSearch?.(
+      archestraMcpBranding.serverName,
+    ).name;
+    // A wait or catalog search can carry the ruling on a different call.
+    // Explain that substitution rather than presenting it as a denied search.
     const carriedDenials = new Map(
       toolResults.flatMap((answer) =>
-        answer.name === waitTool &&
+        (answer.name === waitTool || answer.name === searchTool) &&
         !answer.namespace &&
         result.toolResultUpdates[answer.id]?.denied &&
         !binding.request.restoredNoticeCallIds?.has(answer.id)
@@ -945,7 +1002,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return [
             id,
             wait
-              ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
+              ? `[appa] OpenAPPA sent this ${wait.name} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client ${wait.name === searchTool ? "searched for them" : "waited for them"}.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
               : result.content,
           ];
         }),
@@ -1018,6 +1075,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           contract: binding.returnContract,
         });
       }
+      if (binding.adapter?.id === "grok-build" && binding.session.parent_id) {
+        const nativeId = binding.adapter.extractSessionIdentity?.({
+          headers: context.headers,
+          requestBody: binding.requestBody,
+        })?.sessionId;
+        if (nativeId)
+          await OpenAppaSessionModel.retainGrokChildIdentity({
+            organizationId: binding.session.organization_id,
+            callerId: binding.session.caller_id,
+            parentId: binding.session.parent_id,
+            childSessionId: binding.session.session_id,
+            nativeId,
+          });
+      }
       await admitRelayArrivals({
         binding,
         session: this.governedSession(binding),
@@ -1031,6 +1102,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
     if (binding?.compaction) return;
+    if (binding?.adapter?.id === "grok-build" && !binding.reportingRecovery) {
+      insertRequestGuidance({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance:
+          "Grok MCP tools are deferred. Native tools already declared in this request, such as write, are callable directly; search_tool searches MCP tools only. Call native tools by their declared names; do not search for a native tool or use use_tool to invoke it. Use native search_tool to find MCP entry points, then call use_tool with the complete returned tool_name and matching tool_input. Reuse a discovered entry point and its schema from this conversation instead of searching for it again. Copy catalog names unchanged, including their server prefix and encoded characters. A catalog lookup only discovers tools: it does not execute a remedy, declare a child return, or authorize a call. Execute the discovered return-declaration tool before spawning, and wait for its successful result. The gateway's search_tools is a separate search: its toolName results are targets for the gateway's run_tool. Discover that run_tool entry point with native search_tool and call it through use_tool, putting the returned toolName in tool_input.tool_name and its arguments in tool_input.tool_args. Do not pass a search_tools toolName directly as a Grok catalog name. Remedy and approval tools must use their own discovered entry points directly. When a ruling already supplies an offer and plan, use them without another get_remedy_plans call. After authorization, retry the exact native tool and arguments named in the authorization: do not substitute search_replace for write, or use a shell command or another dispatcher.",
+        onContinue: binding.threadContinue ? "skip" : undefined,
+      });
+    }
     insertGovernedGuidance(context, this.requestShapes.get(context.resources));
     if (binding && binding.unreadNativeAnswerOfferIds.length > 0) {
       const offerIds = binding.unreadNativeAnswerOfferIds;
@@ -1074,6 +1154,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
+      const delivered = binding.pendingRemedyContinuation;
+      binding.pendingRemedyContinuation = undefined;
+      if (delivered) {
+        await recordRemedyContinuation({
+          session: this.governedSession(binding),
+          continuation: delivered,
+        });
+      }
     }
     if (binding && binding.nativeHitlRulings.length > 0) {
       const rulings = binding.nativeHitlRulings;
@@ -1151,8 +1239,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     let incomingToolCalls = restoreAuthorizedSpawnRetry({
       calls: context.toolCalls,
       requestBody: binding.requestBody,
-      isSpawn: (name, namespace) =>
-        binding.adapter?.isSpawnTool(name, namespace) === true,
+      isSpawn: (name, namespace, args) =>
+        binding.adapter?.isSpawnTool(name, namespace, args) === true,
     });
     let changed = incomingToolCalls !== context.toolCalls;
     if (binding.reportingRecovery)
@@ -1483,6 +1571,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       );
     }
     const calls = context.toolCalls;
+    const unsupported = calls.find(
+      (call) =>
+        !binding.identity.attestationOf(call.name, call.namespace) &&
+        binding.adapter?.classifyToolName(call.name, call.namespace) ===
+          "local" &&
+        binding.adapter.blockedToolReason?.(call.name, call.arguments),
+    );
+    if (unsupported) {
+      const message =
+        binding.adapter?.blockedToolReason?.(
+          unsupported.name,
+          unsupported.arguments,
+        ) ?? "Unsupported native tool";
+      return {
+        decision: "refuse",
+        refusal: {
+          refusalMessage: message,
+          contentMessage: message,
+          reason: "openappa_unsupported_native_tool",
+          blockedToolName: unsupported.name,
+          blockedToolId: unsupported.id,
+          toolInput: toolInputOf(unsupported.arguments),
+          allToolCallNames: calls.map((call) => call.name),
+        },
+      };
+    }
     const session = this.governedSession(binding);
     const handbackIds = new Set(
       binding.session.parent_id && binding.adapter?.isChildHandbackTool
@@ -1548,6 +1662,26 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
       }
     }
+    if (binding.reportingRecovery && blockedTranscriptCalls.size > 0) {
+      const blocked = calls.find((call) => blockedTranscriptCalls.has(call.id));
+      const message = [
+        binding.reportingRefusal ??
+          "OpenAPPA blocked this conversation. Only reporting tools and their approval flow may run.",
+        "The requested operation did not run. Do not retry ordinary tools in this blocked conversation.",
+      ].join("\n\n");
+      return {
+        decision: "refuse",
+        refusal: {
+          refusalMessage: message,
+          contentMessage: message,
+          reason: "openappa_blocked_conversation",
+          blockedToolName: blocked?.name ?? calls[0].name,
+          blockedToolId: blocked?.id,
+          toolInput: toolInputOf(blocked?.arguments ?? {}),
+          allToolCallNames: calls.map((call) => call.name),
+        },
+      };
+    }
     if (binding.adapter) {
       for (const call of calls) {
         if (blockedTranscriptCalls.has(call.id)) continue;
@@ -1556,7 +1690,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // that reading those bytes is safe.
         if (
           !handbackIds.has(call.id) &&
-          !binding.adapter.isSpawnTool(call.name, call.namespace) &&
+          !binding.adapter.isSpawnTool(
+            call.name,
+            call.namespace,
+            call.arguments,
+          ) &&
           binding.adapter.childTranscriptPaths &&
           referencesChildTranscriptPath({
             arguments: call.arguments,
@@ -1572,7 +1710,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             arguments: call.arguments,
           }),
           rootId,
-          spawn: binding.adapter.isSpawnTool(call.name, call.namespace),
+          spawn: binding.adapter.isSpawnTool(
+            call.name,
+            call.namespace,
+            call.arguments,
+          ),
         });
       }
     }
@@ -1612,8 +1754,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         return isUserQuestionCall(binding, name);
       },
-      isSpawn: (name: string, namespace?: string) =>
-        binding.adapter?.isSpawnTool(name, namespace) === true,
+      isSpawn: (name: string, namespace: string | undefined, args?: unknown) =>
+        binding.adapter?.isSpawnTool(name, namespace, args) === true,
       lineage: binding.child?.lineage,
       supportsDelegation:
         [...runtimeCalls.values()].some((call) => call.spawn) ||
@@ -1770,7 +1912,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         : [],
     );
     binding.hardBlockSeen ||= refusals.some(isHardBlock);
-    if (refusals.length && !binding.hardBlockSeen)
+    if (
+      refusals.length &&
+      !binding.hardBlockSeen &&
+      !calls.some((call) => isChildContinuationCall(binding.adapter, call))
+    )
       await refuseSoftBlock(
         refusals.join("\n"),
         context.toolCalls
@@ -1794,7 +1940,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const waived: WaivedCall[] = [];
     let waiverSuperyell = false;
     // Resolved once for the batch, by the first denial that has no notice tool.
-    let pendingServersTool: Promise<string | undefined> | undefined;
+    let pendingServersTool:
+      | Promise<{ name: string; arguments: string } | undefined>
+      | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const rewritten: { id: string; name: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
@@ -1888,7 +2036,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           pinned && "stamp" in pinned
             ? withAddedArguments(call, pinned.stamp)
             : call;
-        const delegated =
+        let delegated =
           mint && binding.adapter
             ? withDelegationMarker({
                 call: routedCall,
@@ -1896,6 +2044,64 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                 mint,
               })
             : undefined;
+        const resumeArgs = argumentRecordOf(routedCall.arguments);
+        if (
+          binding.adapter?.id === "grok-build" &&
+          routedCall.name === "spawn_subagent" &&
+          resumeArgs?.resume_from
+        ) {
+          try {
+            if (
+              !binding.spawnerNativeId ||
+              typeof resumeArgs.prompt !== "string" ||
+              typeof resumeArgs.resume_from !== "string"
+            )
+              throw new GrokChildResumeRefusal();
+            const appended = await grokChildResumeSuffix({
+              session,
+              callId: call.id,
+              sourceNativeId: resumeArgs.resume_from,
+              spawnerNativeId: binding.spawnerNativeId,
+              prompt: resumeArgs.prompt,
+              runtimeSessionId: binding.runtimeSessionId,
+            });
+            delegated = {
+              call: withAddedArguments(routedCall, {
+                prompt: resumeArgs.prompt + appended,
+              }),
+              annotation: {
+                id: call.id,
+                name: call.name,
+                field: "prompt",
+                appended,
+                continuationCallerId: session.caller_id,
+              },
+            };
+          } catch (error) {
+            await cancelCalls(
+              session,
+              rest.flatMap((each) =>
+                decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+              ),
+              policy,
+            );
+            if (error instanceof GrokChildResumeRefusal) {
+              return {
+                decision: "refuse",
+                refusal: {
+                  refusalMessage: error.message,
+                  contentMessage: error.message,
+                  reason: "openappa_invalid_grok_resume_source",
+                  blockedToolName: call.name,
+                  blockedToolId: call.id,
+                  toolInput: toolInputOf(call.arguments),
+                  allToolCallNames: calls.map((each) => each.name),
+                },
+              };
+            }
+            throw error;
+          }
+        }
         if (
           binding.session.parent_id &&
           binding.adapter &&
@@ -1963,10 +2169,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         if (
           runtimeCalls.has(call.id) ||
           withheldRelayDecisions.has(call.id) ||
-          (binding.adapter && isChildSpawnCall(binding.adapter, call))
+          (binding.adapter &&
+            (isChildSpawnCall(binding.adapter, call) ||
+              isChildContinuationCall(binding.adapter, call)))
         ) {
-          // A runtime call, a withheld relay or a spawn is never waived here:
-          // the runtime releases those itself.
+          // Lifecycle calls still need their host binding. An ordinary-call
+          // waiver must not release a continuation without that binding.
         } else {
           const waiver = waiverFor({
             decision,
@@ -1995,7 +2203,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         const namespace = call.namespace
           ? ` in wire namespace ${JSON.stringify(call.namespace)}`
           : "";
-        clarification = `\n\n[appa] This call already went through the run_tool wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
+        const wrapper =
+          binding.adapter?.id === "grok-build" &&
+          identity.dispatch === "use_tool"
+            ? "native MCP"
+            : "run_tool";
+        clarification = `\n\n[appa] This call already went through the ${wrapper} wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
       }
       // Only a recorded policy denial can establish that no remedy is offered.
       // Local failures and pending reviews retain their own recovery guidance.
@@ -2009,6 +2222,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // nothing. It is passed on as it is, and nothing is held against the
       // client for not carrying those tools.
       const unanswered = decision.unanswered === true;
+      // Raw transcript access is a host boundary, with no policy remedy.
+      // Loading gateway tools cannot change it and must not cause a retry.
+      const transcriptRefusal = blockedTranscriptCalls.has(call.id);
+      const needsRemedyTools = !unanswered && !transcriptRefusal;
       const ruling =
         decision.feedback + clarification + (noPlan ? NO_REMEDY_PLAN_HINT : "");
       if (decision.recorded && clarification) {
@@ -2029,25 +2246,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
       }
       if (!notice) {
-        // The client's own wait tool stands in for the notice tool. The call
-        // keeps its id, the client waits for its MCP servers instead of
-        // running it, and the runtime answers that id's result with its
-        // ruling, so the next request can declare the remedy tools. The wait
-        // tool takes no arguments and its output never reaches the model. A
+        // The client's wait or native catalog search stands in for the notice
+        // tool. The denied call keeps its id, and the runtime answers that
+        // result with its ruling. Grok's transport reads signed catalog
+        // declarations before result restoration; it does not trust tool names
+        // or forward the search's text as the denied command's output. A
         // denial the runtime did not record has no ruling to answer with, so
         // it is refused below.
-        let wait: string | undefined;
-        if (decision.recorded) {
-          pendingServersTool ??= this.pendingServersTool(binding, session);
+        let wait: { name: string; arguments: string } | undefined;
+        if (
+          decision.recorded &&
+          !(binding.adapter?.id === "grok-build" && noPlan)
+        ) {
+          pendingServersTool ??= this.pendingServersTool(
+            binding,
+            session,
+            context.resources,
+          );
           wait = await pendingServersTool;
         }
-        if (wait && call.name !== wait) {
+        if (wait && call.name !== wait.name) {
           blocked.push({
             id: call.id,
             name: call.name,
             reason: decision.feedback,
           });
-          released.push({ id: call.id, name: wait, arguments: "{}" });
+          released.push({ id: call.id, ...wait });
           continue;
         }
         // Clients connect MCP servers in the background, so a session's first
@@ -2060,13 +2284,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         let transient: boolean;
         try {
           transient =
-            !unanswered &&
+            needsRemedyTools &&
             !binding.request.defersTools &&
             binding.request.declaredTools.length > 0 &&
             !(await this.remedyToolsMissingBefore(session));
           // A client that defers tools has not failed to receive remedies: it
           // has not loaded the tools yet.
-          if (!unanswered && !transient && !binding.request.defersTools) {
+          if (needsRemedyTools && !transient && !binding.request.defersTools) {
             await recordOpenAppaClientFailure({
               session,
               toolCallId: call.id,
@@ -2087,7 +2311,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : unanswered
+          : !needsRemedyTools
             ? ruling
             : binding.request.defersTools
               ? noPlan
@@ -2137,7 +2361,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             contentMessage,
             reason: unanswered
               ? "openappa_unanswered_annotation"
-              : "openappa_no_notice_tool",
+              : transcriptRefusal
+                ? "openappa_child_transcript_access"
+                : "openappa_no_notice_tool",
             blockedToolName: identity.name,
             blockedToolId: call.id,
             toolInput: toolInputOf(identity.arguments),
@@ -2301,14 +2527,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!spawnCallId) throw uncorrelatedChild();
     let admitted = context.responseText;
     if (context.responseText === "") {
-      // A turn with no text returns nothing. The runtime reads a child end
-      // with no value as the end of the child: after it, the child can call no
-      // tool and can return nothing. The parent can still send this child a
-      // follow-up, so the turn ends as a turn and the child stays open.
-      await endTurn(
-        this.governedSession(binding),
-        binding.request.turnEndOperationId,
-      );
+      // The recorded return contract decides whether this empty completion
+      // closes the child permanently or leaves it available for follow-ups.
+      await endChildTurn({
+        session: this.governedSession(binding),
+        operationId: binding.request.turnEndOperationId.replace(
+          /^turn_end:/,
+          "child_turn_end:",
+        ),
+        spawnCallId,
+        ...(childNativeId ? { childNativeId } : {}),
+      });
     } else {
       const outcome = await endChild({
         session: this.governedSession(binding),
@@ -2324,7 +2553,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         outcome.decision === "release" ? context.responseText : outcome.content;
       if (!outcome.crossed) {
         await refuseSoftBlock(admitted);
-        return { decision: "replace", responseText: admitted };
+        return {
+          decision: "replace",
+          responseText:
+            binding.adapter?.id === "grok-build" && !outcome.busy
+              ? GROK_REJECTED_CHILD_RETURN
+              : admitted,
+        };
       }
     }
     // A teammate's end reaches its lead as an idle notice, not as the result
@@ -2390,6 +2625,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   async onBeforeModel(context: LlmProxyBeforeModelContext): Promise<void> {
+    const trusted = getTrustedContext(context.resources);
+    // This lookup only locates earlier return instructions. Active admission
+    // validates lineage separately; observation must remain best effort.
+    let session =
+      this.bindings.get(context.resources)?.session ??
+      this.observers.get(context.resources)?.session;
+    if (!session && trusted) {
+      try {
+        session = appaTrajectory({
+          adapters: this.clientAdapters,
+          headers: context.headers,
+          requestBody: context.requestBody,
+          trustedContext: trusted,
+        }).session;
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          "OpenAPPA could not resolve a child return withdrawal",
+        );
+      }
+    }
     await this.withSoftBlockWaiver(
       context,
       "onBeforeModel",
@@ -2403,11 +2659,35 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A waiver above returns early or restores the request. Insertion is
     // idempotent, so the ordinary path is unchanged.
     insertGovernedGuidance(context, this.requestShapes.get(context.resources));
+    if (
+      !trusted?.compaction &&
+      appaWireFamily(context.interactionType) &&
+      (context.resources.get(APPA_WITHDRAWN_CHILD_RETURN) === true ||
+        (session?.parent_id && (await isUnenforcedSession(session))))
+    ) {
+      // Removing today's contract does not remove it from retained reasoning
+      // or a provider-owned thread. Withdraw it on every waived child request.
+      deliverReturnContract({
+        request: context.request,
+        interactionType: context.interactionType,
+        contract:
+          "[appa] Guardrails enforcement is off for this child session. The platform has withdrawn its earlier protected-return instructions, including any requirement to produce an empty final message or withhold the result. Those instructions may remain in earlier reasoning or conversation history; they no longer apply. Complete the assigned task and return its result normally. This is an operator waiver, not a protected or policy-approved return.",
+      });
+    }
   }
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const adapter = this.bindings.get(context.resources)?.adapter;
+    if (
+      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
+    ) {
+      // The generic failure fallback releases original wire calls. A resumed
+      // child must instead retain its host binding, including on policy or
+      // runtime failure, so neither waiver path may release it unchanged.
+      return this.guardedToolCalls(context);
+    }
     return this.withSoftBlockWaiver(
       context,
       "onToolCalls",
@@ -2474,6 +2754,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   async onPrepareToolCalls(
     context: LlmProxyToolCallsContext,
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
+    const adapter = this.bindings.get(context.resources)?.adapter;
+    if (
+      context.toolCalls.some((call) => isChildContinuationCall(adapter, call))
+    ) {
+      // Preparation failures must not erase the binding needed by the later
+      // continuation check and release the original resume unchanged.
+      return this.guardedPrepareToolCalls(context);
+    }
     return this.withSoftBlockWaiver(
       context,
       "onPrepareToolCalls",
@@ -2802,7 +3090,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ],
       this.resolution(binding),
     );
-    if (normalized.isRunToolDispatchTarget) {
+    if (
+      normalized.isRunToolDispatchTarget ||
+      normalized.isNativeDispatchTarget
+    ) {
       // The target has no declaration of its own on this wire: it is neither a
       // free-form custom tool nor namespaced, whatever the wrapper's
       // declaration says.
@@ -2891,25 +3182,37 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   }
 
   /**
-   * The client's own wait tool, when this request declares it and the session
-   * has not waited yet for the gateway remedy tools. Records the wait: a
-   * session whose remedy tools are still missing after it is refused.
+   * The client's declared wait or catalog tool. Grok may recover a lost catalog
+   * once per user turn; without a known turn, retain the session-wide budget.
+   * Other clients keep their one initial wait before a remedyless refusal.
    */
   private async pendingServersTool(
     binding: AppaPluginBinding,
     session: OpenAppaSession,
-  ): Promise<string | undefined> {
-    const name = binding.adapter?.pendingServersTool;
+    resources: Map<PropertyKey, unknown>,
+  ): Promise<{ name: string; arguments: string } | undefined> {
+    const call = binding.adapter?.pendingServersTool
+      ? { name: binding.adapter.pendingServersTool, arguments: "{}" }
+      : binding.request.defersTools
+        ? binding.adapter?.gatewayToolsSearch?.(archestraMcpBranding.serverName)
+        : undefined;
     if (
-      !name ||
+      !call ||
       !binding.request.declaredTools.some(
-        (tool) => tool.name === name && !tool.namespace,
+        (tool) => tool.name === call.name && !tool.namespace,
       )
     )
       return undefined;
+    const grokDeferred = resources.get(GROK_DEFERRED_TOOLS) as
+      | GrokDeferredToolRecovery
+      | undefined;
+    if (binding.adapter?.id === "grok-build" && grokDeferred) {
+      const recovery = grokDeferred.recoverySearch(call);
+      if (recovery !== undefined) return recovery ? call : undefined;
+    }
     return (await seenBefore(CacheKey.OpenAppaRemedyToolsAwaited, session))
       ? undefined
-      : name;
+      : call;
   }
 }
 
@@ -2988,6 +3291,110 @@ function unansweredNoticeKey(params: {
 }): AllowedCacheKey {
   return sessionScopedCacheKey(
     CacheKey.OpenAppaUnansweredAnnotationNotice,
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  );
+}
+
+/** A ruling whose remedy continuation is due, and how much history followed it. */
+type RemedyContinuation = {
+  callId: string;
+  /** Results after the ruling in the request that carried it. */
+  laterResults: number;
+};
+
+/**
+ * Result counts after a ruling at which its continuation was delivered, as
+ * sorted, disjoint, non-adjacent `[first, last]` ranges. A request is only
+ * guided at a count below every guided one (or at a guided one), so replays
+ * of ever shorter histories form one range: the record stays small without
+ * dropping any guided history.
+ */
+type GuidedHistories = Array<[number, number]>;
+
+/**
+ * Records that the history `continuation` describes was told to apply the
+ * ruling's plan. Every guided history is kept, so a replay of any of them is
+ * guided again, and overlapping requests cannot drop each other's record.
+ */
+async function recordRemedyContinuation(params: {
+  session: OpenAppaSession;
+  continuation: RemedyContinuation;
+}): Promise<void> {
+  const key = remedyContinuationDeliveredKey({
+    session: params.session,
+    callId: params.continuation.callId,
+  });
+  const { laterResults } = params.continuation;
+  try {
+    await cacheManager.withLock(key, async (cache) => {
+      const guided = guidedHistories(await cache.get<unknown>(key));
+      if (isGuidedHistory(guided, laterResults)) return;
+      await cache.set(
+        key,
+        withGuidedHistory(guided, laterResults),
+        TimeInMs.Day,
+      );
+    });
+  } catch (err) {
+    // Without the record the next request is guided once more, as before.
+    logger.warn(
+      { err, sessionId: params.session.session_id },
+      "OpenAPPA could not record a delivered remedy continuation",
+    );
+  }
+}
+
+/** Reads a stored record; anything malformed counts as no record. */
+function guidedHistories(value: unknown): GuidedHistories {
+  if (!Array.isArray(value)) return [];
+  const ranges: GuidedHistories = [];
+  for (const range of value) {
+    if (
+      !Array.isArray(range) ||
+      range.length !== 2 ||
+      !Number.isInteger(range[0]) ||
+      !Number.isInteger(range[1]) ||
+      range[0] < 0 ||
+      range[1] < range[0]
+    )
+      return [];
+    ranges.push([range[0], range[1]]);
+  }
+  return ranges.reduce(withGuidedRange, []);
+}
+
+function isGuidedHistory(guided: GuidedHistories, count: number): boolean {
+  return guided.some(([first, last]) => first <= count && count <= last);
+}
+
+function withGuidedHistory(
+  guided: GuidedHistories,
+  count: number,
+): GuidedHistories {
+  return withGuidedRange(guided, [count, count]);
+}
+
+/** Inserts `range`, merging it with ranges it overlaps or touches. */
+function withGuidedRange(
+  guided: GuidedHistories,
+  range: [number, number],
+): GuidedHistories {
+  const merged: GuidedHistories = [];
+  for (const [first, last] of [...guided, range].sort((a, b) => a[0] - b[0])) {
+    const previous = merged.at(-1);
+    if (previous && first <= previous[1] + 1)
+      previous[1] = Math.max(previous[1], last);
+    else merged.push([first, last]);
+  }
+  return merged;
+}
+
+function remedyContinuationDeliveredKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaRemedyContinuationDelivered,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   );
 }
@@ -3182,6 +3589,7 @@ function toolNameResolution(params: {
     canonicalize: (name: string, namespace?: string) =>
       canonicalCallName(params, { name, namespace }),
     looseRunToolDispatch: params.identity.looseRunToolDispatch,
+    nativeDispatch: params.adapter?.nativeDispatch?.bind(params.adapter),
   };
 }
 
@@ -3417,23 +3825,69 @@ async function approveChildReturnCarriers(params: {
   updates: Record<string, string>;
   /** Results of children that ran while enforcement was off, with no crossing. */
   ignored: Set<string>;
+  /** Previously governed results whose bytes the client removed from history. */
+  omitted: Set<string>;
   /** Spawn results that carry no return: the child failed before it returned. */
   failedSpawns: Set<string>;
+  /** Authenticated rejected returns reported as failed foreground dispatches. */
+  rejectedSpawns: Set<string>;
   /** Spawn calls whose child's return arrived in this request. */
   settledSpawns: Set<string>;
 }> {
   const completions = params.binding.request.childReturns?.completions ?? [];
   const adapter = params.binding.adapter;
-  const completionResults = params.results.filter(
+  const nativeResults = params.results.filter(
     (result) =>
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
       adapter?.isChildCompletionResult?.(result) === true,
   );
   const ignored = new Set<string>();
+  const omitted = new Set<string>();
   const failedSpawns = new Set<string>();
+  const rejectedSpawns = new Set<string>();
   const settledSpawns = new Set<string>();
+  const omissionCandidates =
+    adapter?.id === "grok-build"
+      ? nativeResults.filter(
+          (result) => result.content === GROK_OMITTED_TOOL_RESULT,
+        )
+      : [];
+  if (omissionCandidates.length > 0) {
+    const completed = await OpenAppaSessionModel.completedToolResultIds({
+      organizationId: params.binding.session.organization_id,
+      sessionId: params.binding.session.session_id,
+      callerId: params.binding.session.caller_id,
+      parentId: params.binding.session.parent_id,
+      toolCallIds: omissionCandidates.map((result) =>
+        withoutTrajectoryStamp(result.id),
+      ),
+    });
+    for (const result of omissionCandidates) {
+      if (completed.has(withoutTrajectoryStamp(result.id))) {
+        omitted.add(result.id);
+      }
+    }
+    // The fixed placeholder carries no child bytes. Keep it omitted rather
+    // than restoring the old output or submitting a new return to the runtime.
+    // Unknown/pending calls remain in completionResults and fail closed.
+    if (omitted.size > 0)
+      logger.info(
+        { count: omitted.size },
+        "Grok replayed omitted child results with completed receipts",
+      );
+  }
+  const completionResults = nativeResults.filter(
+    (result) => !omitted.has(result.id),
+  );
   if (completions.length === 0 && completionResults.length === 0) {
-    return { updates: {}, ignored, failedSpawns, settledSpawns };
+    return {
+      updates: {},
+      ignored,
+      omitted,
+      failedSpawns,
+      rejectedSpawns,
+      settledSpawns,
+    };
   }
   // Display markers carry no authority. Assistant quotes are stripped from
   // the request but never treated as parent-bound completions.
@@ -3490,6 +3944,8 @@ async function approveChildReturnCarriers(params: {
   // The returns of children that ended with no text, by the result that
   // carries them.
   const emptyByEnvelope = new Map<string, AppaChildReturnCompletion[]>();
+  const rejectedByEnvelope = new Map<string, AppaChildReturnCompletion[]>();
+  let rejections: Awaited<ReturnType<typeof loadChildRejections>> | undefined;
   // A fork carries its source's subagent results, but the runtime retained
   // them under the source session, so the lookup above finds none of them.
   const unrecorded = params.binding.session.fork_of
@@ -3497,11 +3953,13 @@ async function approveChildReturnCarriers(params: {
     : { reason: UNRECORDED_CHILD_RETURN };
   const directSpawnResults = new Set(
     params.results
-      .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
+      .filter((result) =>
+        adapter?.isSpawnTool(result.name, result.namespace, result.arguments),
+      )
       .map((result) => withoutTrajectoryStamp(result.id)),
   );
-  // One wait result can contain several children. Every completed leaf
-  // consumes its own crossing. One genuine return cannot authorize siblings.
+  // One wait result can contain several children. Each distinct child needs
+  // its own crossing. One genuine return cannot authorize siblings.
   const matched: Array<{
     completion: AppaChildReturnCompletion;
     record: AppaChildReturnRecord & { rank: number };
@@ -3565,6 +4023,44 @@ async function approveChildReturnCarriers(params: {
     const envelopeId = completion.envelopeId
       ? withoutTrajectoryStamp(completion.envelopeId)
       : undefined;
+    // A native client can frame a host rejection as a completed child result.
+    // It is not a crossing. Match the exact diagnostic (legacy clients) or
+    // fixed status against a durable rejection with this parent and child.
+    // Never accept a client-supplied failure string on its own.
+    if (
+      candidates.length === 0 &&
+      adapter?.id === "grok-build" &&
+      completion.childNativeId &&
+      envelopeId
+    ) {
+      rejections ??= await loadChildRejections({
+        organizationId: params.binding.session.organization_id,
+        parentSessionId: params.binding.session.session_id,
+      });
+      const rejected = rejections.filter(
+        (record) =>
+          record.childNativeId === completion.childNativeId &&
+          (expectedSpawn === undefined ||
+            withoutTrajectoryStamp(record.spawnCallId) === expectedSpawn) &&
+          (completion.value === GROK_REJECTED_CHILD_RETURN ||
+            completion.value === record.notice),
+      );
+      if (
+        rejected.length > 0 &&
+        rejected.every(
+          (record) =>
+            record.childSessionId === rejected[0].childSessionId &&
+            record.spawnCallId === rejected[0].spawnCallId,
+        )
+      ) {
+        rejectedByEnvelope.set(envelopeId, [
+          ...(rejectedByEnvelope.get(envelopeId) ?? []),
+          completion,
+        ]);
+        settledSpawns.add(withoutTrajectoryStamp(rejected[0].spawnCallId));
+        continue;
+      }
+    }
     if (
       candidates.length === 0 &&
       unenforcedReturn({
@@ -3629,7 +4125,17 @@ async function approveChildReturnCarriers(params: {
       });
     }
     const hit = eligible[0].index;
-    const [record] = available.splice(hit, 1);
+    const record = available[hit];
+    // Grok can notify a completion and later poll it in the same history.
+    // Each occurrence still matches the durable value and lineage above.
+    // A record without the exact native child ID remains single-use, so one
+    // genuine crossing cannot authorize an unnamed or substituted sibling.
+    if (
+      !adapter?.repeatsChildReturns ||
+      completion.childNativeId === undefined ||
+      record.childNativeId !== completion.childNativeId
+    )
+      available.splice(hit, 1);
     const match = { completion, record };
     matched.push(match);
     if (replayKey) replays.set(replayKey, match);
@@ -3717,6 +4223,7 @@ async function approveChildReturnCarriers(params: {
       (byEnvelope.get(withoutTrajectoryStamp(result.id)) ?? []).length === 0 &&
       !ignoredByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
       !emptyByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
+      !rejectedByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
       !unenforcedReturn({ spawnCallId: withoutTrajectoryStamp(result.id) }),
   );
   if (unrecordedResult) {
@@ -3775,15 +4282,43 @@ async function approveChildReturnCarriers(params: {
     const verified = byEnvelope.get(envelopeId) ?? [];
     const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
     const emptyHere = emptyByEnvelope.get(envelopeId) ?? [];
+    const rejectedHere = rejectedByEnvelope.get(envelopeId) ?? [];
+    if (
+      rejectedHere.length > 0 &&
+      verified.length === 0 &&
+      emptyHere.length === 0 &&
+      ignoredHere.length === 0
+    ) {
+      // Failure closes a foreground dispatch without claiming a child value
+      // crossed. A background retrieval receives only the same fixed status.
+      if (directSpawnResults.has(envelopeId)) {
+        failedSpawns.add(result.id);
+        rejectedSpawns.add(result.id);
+      }
+      updates[result.id] = JSON.stringify({
+        status: Object.fromEntries(
+          rejectedHere.map((completion) => [
+            completion.childNativeId,
+            { failed: GROK_REJECTED_CHILD_RETURN },
+          ]),
+        ),
+      });
+      continue;
+    }
     if (
       verified.length === 0 &&
       emptyHere.length === 0 &&
+      rejectedHere.length === 0 &&
       (ignoredHere.length > 0 || unenforcedReturn({ spawnCallId: envelopeId }))
     ) {
       ignored.add(result.id);
       continue;
     }
-    if (verified.length === 0 && emptyHere.length === 0) {
+    if (
+      verified.length === 0 &&
+      emptyHere.length === 0 &&
+      rejectedHere.length === 0
+    ) {
       throw childReturnRefusal({ ...unrecorded, callId: envelopeId });
     }
     if (
@@ -3817,6 +4352,7 @@ async function approveChildReturnCarriers(params: {
     if (
       reportTurns.length > 1 &&
       reportTurns.length === verified.length + emptyHere.length &&
+      rejectedHere.length === 0 &&
       ignoredHere.length === 0
     ) {
       updates[result.id] = reportTurns
@@ -3830,7 +4366,9 @@ async function approveChildReturnCarriers(params: {
     // spawn's own result, or a report of a child that has no id of its own
     // (Copilot CLI's read_agent).
     const lone =
-      verified.length + emptyHere.length === 1 && ignoredHere.length === 0;
+      verified.length + emptyHere.length === 1 &&
+      ignoredHere.length === 0 &&
+      rejectedHere.length === 0;
     const loneChildId = lone
       ? (matched.find(({ record }) => verified.includes(record))?.completion
           .childNativeId ??
@@ -3839,9 +4377,14 @@ async function approveChildReturnCarriers(params: {
       : undefined;
     updates[result.id] =
       lone &&
-      (adapter?.isSpawnTool(result.name, result.namespace) ||
+      (adapter?.isSpawnTool(result.name, result.namespace, result.arguments) ||
         loneChildId === undefined)
-        ? (verified[0]?.value ?? "")
+        ? (adapter?.formatChildReturn?.({
+            childNativeId: loneChildId,
+            value: verified[0]?.value ?? "",
+          }) ??
+          verified[0]?.value ??
+          "")
         : JSON.stringify({
             status: Object.fromEntries([
               ...matched
@@ -3865,10 +4408,21 @@ async function approveChildReturnCarriers(params: {
                     ]
                   : [],
               ),
+              ...rejectedHere.map((completion) => [
+                completion.childNativeId,
+                { failed: GROK_REJECTED_CHILD_RETURN },
+              ]),
             ]),
           });
   }
-  return { updates, ignored, failedSpawns, settledSpawns };
+  return {
+    updates,
+    ignored,
+    omitted,
+    failedSpawns,
+    rejectedSpawns,
+    settledSpawns,
+  };
 }
 
 /** What the model reads for a background child's return its spawn call no longer takes. */
@@ -4248,6 +4802,10 @@ async function admitRelayReports(params: {
   if (!adapter?.admitRelayReport) return;
   const reports = params.results.filter(
     (result) =>
+      // Ingress restored this server-issued ruling under the original call
+      // name. The message never ran, so this is not a native delivery receipt.
+      // Use the verified provenance set, never a client-supplied text prefix.
+      !params.binding.request.restoredNoticeCallIds?.has(result.id) &&
       adapter.isRelayTool?.(result.name, result.namespace) &&
       (!result.isError || adapter.admitsFailedRelayReports) &&
       !adapter.isRelayReceipt?.(result.content),
@@ -4392,6 +4950,7 @@ async function governRelays(params: {
         arguments: adapter.rewriteRelayMessage(
           call.arguments,
           appendPeerMessageMarker(relay.value, sent.messageId),
+          { senderSessionId: session.session_id },
         ),
       },
     });
@@ -4414,6 +4973,65 @@ async function resolveRelayTarget(params: {
   ({ kind: "target" } & RelayTarget) | { kind: "deny"; feedback: string }
 > {
   const { binding, session, relay } = params;
+  if (relay.to.kind === "native-child") {
+    const nativeId = relay.to.id;
+    // Native Grok has one delegation level. Children may message siblings,
+    // but never the root or themselves. Resolve through the persisted owner.
+    const owner = session.parent_id
+      ? await persistedSession(session, session.parent_id)
+      : session;
+    if (!owner || owner.parent_id)
+      return { kind: "deny", feedback: RELAY_UNGOVERNED };
+    // Grok resumes can have a new native ID on the same governed actor. Only
+    // exact retained returns or the exact persisted child identify that actor.
+    const lookup = {
+      organizationId: session.organization_id,
+      parentSessionId: owner.session_id,
+    };
+    const [returns, rejections] = await Promise.all([
+      loadChildReturns(lookup),
+      loadChildRejections(lookup),
+    ]);
+    const completions = [...returns, ...rejections];
+    const ids = new Set(
+      completions
+        .filter((entry) => entry.childNativeId === nativeId)
+        .map((entry) => entry.childSessionId),
+    );
+    const observed = await OpenAppaSessionModel.grokChildIdentity({
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      parentId: owner.session_id,
+      nativeId,
+    });
+    if (observed) ids.add(observed);
+    const exact = await persistedSession(
+      session,
+      `${owner.session_id}:${relay.to.id}`,
+    );
+    if (exact?.parent_id === owner.session_id) ids.add(exact.session_id);
+    if (ids.size !== 1)
+      return {
+        kind: "deny",
+        feedback:
+          "OpenAPPA could not verify this exact Grok child ID in the session's protected family. The message was not sent. Use the full native ID of a protected child in this family.",
+      };
+    const recipient = await persistedSession(session, [...ids][0]);
+    if (
+      !recipient ||
+      recipient.parent_id !== owner.session_id ||
+      recipient.session_id === session.session_id
+    )
+      return { kind: "deny", feedback: RELAY_UNGOVERNED };
+    if (await startedUnenforced(recipient))
+      return { kind: "deny", feedback: RELAY_UNCHECKED };
+    return {
+      kind: "target",
+      recipientSessionId: recipient.session_id,
+      recipientParentId: owner.session_id,
+      recipientNativeId: relay.to.id,
+    };
+  }
   if (relay.to.kind === "lead") {
     if (!session.parent_id || !binding.child) {
       return { kind: "deny", feedback: RELAY_UNGOVERNED };
@@ -4809,6 +5427,7 @@ function resolveArrivalSender(params: {
     arrival.kind,
     arrival.from,
     arrival.sender ?? "",
+    arrival.senderSessionId ?? "",
   ].join("\u0000");
   let resolved = resolvedSenders.get(params.binding);
   if (!resolved) {
@@ -4843,6 +5462,21 @@ async function findArrivalSender(params: {
 }): Promise<string | undefined> {
   const { session, arrival } = params;
   if (arrival.kind === "session" || arrival.from === "") return undefined;
+  if (arrival.senderSessionId) {
+    const sender = await persistedSession(session, arrival.senderSessionId);
+    // This is only an identity hint. Persisted lineage limits it to the
+    // recipient's parent or sibling; the runtime verifies the captured send.
+    if (
+      !sender ||
+      !session.parent_id ||
+      sender.session_id === session.session_id
+    )
+      return undefined;
+    return sender.session_id === session.parent_id ||
+      sender.parent_id === session.parent_id
+      ? sender.session_id
+      : undefined;
+  }
   if (namesParent(arrival)) return session.parent_id;
   const own =
     arrival.sender === "sibling"
@@ -5337,6 +5971,7 @@ function issueChildTrajectoryReceipt(
   context: LlmProxyRequestContext,
   session: OpenAppaSession,
   child: AppaChildTrajectory,
+  compact = false,
 ): void {
   const lineage = child.lineage;
   if (!lineage) return;
@@ -5357,6 +5992,7 @@ function issueChildTrajectoryReceipt(
   context.resources.set(APPA_CHILD_TRAJECTORY_RECEIPT, {
     footer,
     inHistory: lineage.source === "receipt",
+    ...(compact ? { compactSession: session } : {}),
   });
 }
 
@@ -5368,7 +6004,10 @@ function spawnModelOf(params: {
 }): AppaSpawnModel | undefined {
   const { binding, call } = params;
   const adapter = binding.adapter;
-  if (!adapter?.spawnModel || !adapter.isSpawnTool(call.name, call.namespace))
+  if (
+    !adapter?.spawnModel ||
+    !adapter.isSpawnTool(call.name, call.namespace, call.arguments)
+  )
     return undefined;
   const args = argumentRecordOf(call.arguments);
   if (!args) return undefined;
@@ -5404,7 +6043,8 @@ function withDelegationMarker(params: {
   mint: (prompt: string, callId: string) => string | undefined;
 }): { call: ToolCall; annotation: LlmProxyToolCallAnnotation } | undefined {
   const { call } = params;
-  if (!params.adapter.isSpawnTool(call.name, call.namespace)) return undefined;
+  if (!params.adapter.isSpawnTool(call.name, call.namespace, call.arguments))
+    return undefined;
   const args = argumentRecordOf(call.arguments);
   const spawn = args && params.adapter.spawnPromptField(call.name, args);
   if (!args || !spawn) return undefined;
@@ -5448,7 +6088,8 @@ function withDelegationMarker(params: {
  * Tests with sample arguments if actual arguments cannot be parsed.
  */
 function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
-  if (!adapter.isSpawnTool(call.name, call.namespace)) return false;
+  if (!adapter.isSpawnTool(call.name, call.namespace, call.arguments))
+    return false;
   const args = argumentRecordOf(call.arguments);
   if (args && adapter.spawnPromptField(call.name, args)) return true;
   return (
@@ -5457,6 +6098,19 @@ function isChildSpawnCall(adapter: AppaClientAdapter, call: ToolCall): boolean {
       message: "probe",
       items: [{ type: "text", text: "probe" }],
     }) !== undefined
+  );
+}
+
+function isChildContinuationCall(
+  adapter: AppaClientAdapter | undefined,
+  call: ToolCall,
+): boolean {
+  return (
+    adapter?.isChildContinuationTool?.(
+      call.name,
+      call.namespace,
+      call.arguments,
+    ) === true
   );
 }
 
@@ -5530,13 +6184,14 @@ function illegalSpawnFeedback(params: {
 function restoreAuthorizedSpawnRetry(params: {
   calls: readonly ToolCall[];
   requestBody: unknown;
-  isSpawn: (name: string, namespace?: string) => boolean;
+  isSpawn: (name: string, namespace?: string, args?: unknown) => boolean;
 }): readonly ToolCall[] {
   const pending = pendingAuthorizedSpawn(params.requestBody);
   if (!pending) return params.calls;
   let restored = false;
   return params.calls.map((call) => {
-    if (restored || !params.isSpawn(call.name, call.namespace)) return call;
+    if (restored || !params.isSpawn(call.name, call.namespace, call.arguments))
+      return call;
     const args = argumentRecordOf(call.arguments);
     if (
       !args ||
@@ -6174,12 +6829,16 @@ const QUESTION_CONTINUATION_GUIDANCE = [
   "Revisit a rejected decision only after a new user request.",
 ].join(" ");
 
+const GUARDRAILS_USER_LANGUAGE_GUIDANCE =
+  "When you need to tell the user about APPA or guardrails, use plain words. Keep APPA, security terms and internal labels out of your reply as much as you can, and say only what changes for the user.";
+
 const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
   "The ruling above offers a remedy plan for the blocked call.",
   "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
   "Multiple Continue bullets for the same blocked call are mutually exclusive alternatives; call execute_remedy_plan at most once per blocked call with only the single offer_id that fits (when using a return sanitizer or return_schema, call only that sanitizer's offer_id and do not also call the bare return-label offer).",
   "execute_remedy_plan asks the user for approval when the policy requires it.",
+  GUARDRAILS_USER_LANGUAGE_GUIDANCE,
 ].join(" ");
 
 const NATIVE_DELEGATION_GUIDANCE_MARKER =
@@ -6269,6 +6928,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
   "If the latest ruling offers no remedy plan, stop that blocked action and explain the refusal. Do not reuse an earlier offer or repeat a refused remedy call.",
   "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
+  GUARDRAILS_USER_LANGUAGE_GUIDANCE,
 ].join(" ");
 
 function externalRemedyWorkflowGuidance(
@@ -6578,18 +7238,25 @@ async function recordNativeHitlRulings(params: {
       }
       continue;
     }
-    const reading = parse(
-      {
-        content:
-          typeof answer.content === "string"
-            ? answer.content
-            : JSON.stringify(answer.content ?? null),
-        ...(typeof answer.isError === "boolean"
-          ? { isError: answer.isError }
-          : {}),
-      },
-      asked,
-    );
+    const answerResult = {
+      content:
+        typeof answer.content === "string"
+          ? answer.content
+          : JSON.stringify(answer.content ?? null),
+      ...(typeof answer.isError === "boolean"
+        ? { isError: answer.isError }
+        : {}),
+    };
+    const currentReading = parse(answerResult, asked);
+    // A question issued before the heading lost its brand can still be
+    // answered for HITL_QUESTION_TTL_MS after a deploy.
+    const reading =
+      currentReading === "unrecognized"
+        ? parse(answerResult, {
+            ...asked,
+            question: `[OpenAPPA] ${asked.question}`,
+          })
+        : currentReading;
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer
@@ -7311,18 +7978,28 @@ async function reviewQuestionAskedBefore(params: {
   return false;
 }
 
+/**
+ * The ruling the next request must answer with a remedy call, if any: the
+ * latest blocked result with an offer, unless a control call or a user
+ * answer already followed it, or the model already went on after reading
+ * it. Without that last check a declined offer would be put to the model
+ * again on every later request of the turn.
+ */
 async function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
+  session: OpenAppaSession;
+  interactionType: string;
   results: LlmProxyToolResultsContext["toolResults"];
   toolResultUpdates: Awaited<
     ReturnType<typeof processProxyResults>
   >["toolResultUpdates"];
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<boolean> {
+}): Promise<RemedyContinuation | undefined> {
   // Restored notice IDs are client-carried structure, not proof of issuance.
   // The runtime must supply the ruling and this session must own its call.
   const session = params.binding.session;
-  const recorded = await OpenAppaSessionModel.recordedToolCallDecisions({
+  const grok = params.binding.adapter?.id === "grok-build";
+  const recorded = await OpenAppaSessionModel.recordedToolCalls({
     organizationId: session.organization_id,
     sessionId: session.session_id,
     callerId: session.caller_id,
@@ -7330,11 +8007,54 @@ async function hasRemedyOfferResult(params: {
     toolCallIds: params.results.map((result) =>
       withoutTrajectoryStamp(result.id),
     ),
+    includeInput: grok,
   });
+  if (grok) {
+    const originals = new Map<
+      string,
+      { name: string; arguments: Record<string, unknown> }
+    >();
+    for (const [id, receipt] of recorded) {
+      const decision = asRecord(receipt.decision);
+      const input = asRecord(receipt.input);
+      const context = asRecord(input?.context);
+      const name = context?.spelling;
+      const args = asRecord(context?.arguments);
+      // A dispatch receipt describes its target, not its original wrapper.
+      // Restore only directly declared native calls; never manufacture a
+      // gateway wrapper or turn catalog discovery into execution authority.
+      if (
+        decision?.decision === "deny_call" &&
+        typeof name === "string" &&
+        name !== "use_tool" &&
+        name !== "search_tool" &&
+        args &&
+        params.binding.adapter?.classifyToolName(name) === "local" &&
+        params.binding.request.declaredTools.some(
+          (tool) => tool.name === name && tool.namespace === undefined,
+        )
+      )
+        originals.set(id, { name, arguments: args });
+    }
+    const family = appaWireFamily(params.interactionType);
+    if (family && originals.size > 0) {
+      const restored = restoreDeferredNativeCalls({
+        family,
+        body: params.binding.requestBody,
+        carrierName: "search_tool",
+        originals,
+      });
+      if (restored.size > 0)
+        params.binding.request.restoredNoticeCallIds = new Set([
+          ...(params.binding.request.restoredNoticeCallIds ?? []),
+          ...restored,
+        ]);
+    }
+  }
   const blocked = params.results.flatMap((result, index) => {
     const id = withoutTrajectoryStamp(result.id);
     if (!recorded.has(id)) return [];
-    const decision = recorded.get(id);
+    const decision = recorded.get(id)?.decision;
     const offeredRuling =
       isRecord(decision) &&
       decision.decision === "deny_call" &&
@@ -7360,7 +8080,7 @@ async function hasRemedyOfferResult(params: {
       params.toolResultUpdates[result.id] = {
         content: offeredRuling,
         outputSource: "runtime",
-        refused: true,
+        denied: true,
       };
     }
     const approved = params.toolResultUpdates[result.id];
@@ -7387,7 +8107,7 @@ async function hasRemedyOfferResult(params: {
     return [index];
   });
   const latestBlockedResult = blocked.at(-1) ?? -1;
-  if (latestBlockedResult < 0) return false;
+  if (latestBlockedResult < 0) return undefined;
 
   const control = params.binding.request.tools?.control;
   for (
@@ -7400,7 +8120,7 @@ async function hasRemedyOfferResult(params: {
       params.verifiedNativeQuestionResults.has(result) ||
       isUserQuestionResult({ binding: params.binding, answer: result })
     )
-      return false;
+      return undefined;
     if (!control) continue;
     if (
       isSpecialToolMember(
@@ -7414,10 +8134,42 @@ async function hasRemedyOfferResult(params: {
         "control",
       )
     ) {
-      return false;
+      return undefined;
     }
   }
-  return true;
+  const continuation = {
+    callId: withoutTrajectoryStamp(params.results[latestBlockedResult].id),
+    laterResults: params.results.length - 1 - latestBlockedResult,
+  };
+  const guided = guidedHistories(
+    await cacheManager.get<unknown>(
+      remedyContinuationDeliveredKey({
+        session: params.session,
+        callId: continuation.callId,
+      }),
+    ),
+  );
+  if (
+    guided.length > 0 &&
+    !isGuidedHistory(guided, continuation.laterResults) &&
+    continuation.laterResults > guided[0][0]
+  ) {
+    // The model read the guided ruling and went on with other calls: the
+    // plan it declined is not put to it again. A history that was guided
+    // before, or one shorter than any guided one, is guided (again), so a
+    // client retry gets the same request it sent. A new ruling arms the
+    // nudge again.
+    logger.debug(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: continuation.callId,
+        laterResults: continuation.laterResults,
+      },
+      "OpenAPPA remedy continuation already answered; the model went on",
+    );
+    return undefined;
+  }
+  return continuation;
 }
 
 function reviewStatusInstruction(
@@ -7728,7 +8480,8 @@ function requestCarriesInstruction(params: {
   interactionType: string;
   text: string;
 }): boolean {
-  const { request, interactionType, text } = params;
+  const { request, text } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(request)) return false;
   if (interactionType === "openai:responses") {
     return (
@@ -7773,7 +8526,8 @@ function insertRequestGuidance(params: {
   /** A provider-thread continue: the thread already holds this guidance. */
   onContinue?: "skip";
 }): void {
-  const { request, interactionType, guidance } = params;
+  const { request, guidance } = params;
+  const interactionType = appaWireFamily(params.interactionType);
   if (
     interactionType !== "openai:responses" ||
     !isRecord(request) ||
@@ -7816,13 +8570,14 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
+  const interactionType = appaWireFamily(params.interactionType);
   if (!isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
     appendToLastUserTurn(params.request, guidance);
     return;
   }
-  if (params.interactionType === "openai:responses") {
+  if (interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -7861,7 +8616,7 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (params.interactionType === "openai:chatCompletions") {
+  if (interactionType === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
@@ -7880,7 +8635,7 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (params.interactionType === "anthropic:messages") {
+  if (interactionType === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {

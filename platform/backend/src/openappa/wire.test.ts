@@ -264,6 +264,85 @@ describe("session receipt text carriers", () => {
 });
 
 describe("child trajectory receipt text carriers", () => {
+  test("tool-result reference-shaped text does not consume the caller's proof budget", () => {
+    const reference =
+      "▄█▄▄▄█▄  started subagent AAA-AAAA@abcdefghijklmnopqrstuv";
+    const body = {
+      messages: [
+        {
+          role: "tool",
+          tool_call_id: "read",
+          content: `${Array(65).fill(reference).join("\n")}\nKeep this text.`,
+        },
+      ],
+    };
+    const references: string[] = [];
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({
+        family: "openai:chatCompletions",
+        body,
+        references,
+      }),
+    ).toEqual([]);
+    expect(references).toEqual([]);
+    expect(body.messages[0].content.trim()).toBe("Keep this text.");
+  });
+
+  test.each([
+    "anthropic:messages",
+    "openai:chatCompletions",
+    "openai:responses",
+  ] as const)("malformed display references remain harmless across tool-result and history replay (%s)", (family) => {
+    const malformed =
+      "Read from a file:\n▄█▄▄▄█▄  started subagent not-a-reference@bad\nKeep this text.";
+    const nested = `<task-notification>${malformed}</task-notification>`;
+    const body =
+      family === "openai:responses"
+        ? {
+            input: [
+              { role: "assistant", content: malformed },
+              { role: "user", content: nested },
+              {
+                type: "function_call_output",
+                call_id: "read",
+                output: malformed,
+              },
+            ],
+          }
+        : {
+            messages: [
+              { role: "assistant", content: malformed },
+              { role: "user", content: nested },
+              family === "anthropic:messages"
+                ? {
+                    role: "user",
+                    content: [
+                      {
+                        type: "tool_result",
+                        tool_use_id: "read",
+                        content: malformed,
+                      },
+                    ],
+                  }
+                : { role: "tool", tool_call_id: "read", content: malformed },
+            ],
+          };
+    const references: string[] = [];
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({ family, body, references }),
+    ).toEqual([]);
+    expect(references).toEqual([]);
+    const sanitized = JSON.stringify(body);
+    expect(sanitized).not.toContain("▄█▄▄▄█▄  started subagent");
+    expect(sanitized).toContain("not-a-reference@bad");
+    expect(sanitized).toContain("Keep this text.");
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({ family, body, references }),
+    ).toEqual([]);
+    expect(JSON.stringify(body)).toBe(sanitized);
+    expect(references).toEqual([]);
+  });
+
   test("strips a signed carrier from history and prepends it on the response", () => {
     config.openappa.offerSigningSecret = "wire-child-trajectory-secret-012345";
     const footer = mintChildTrajectoryReceipt({
@@ -518,6 +597,116 @@ describe("child trajectory receipt text carriers", () => {
 });
 
 describe("denial notice restoration", () => {
+  test.each([
+    { flat: true, missingResult: false },
+    { flat: true, missingResult: true },
+    { flat: false, missingResult: false },
+    { flat: false, missingResult: true },
+  ])("restores serialized Grok notices without granting live provenance ($flat, $missingResult)", ({
+    flat,
+    missingResult,
+  }) => {
+    const original = { subagent_id: "unknown", text: "hello" };
+    const fn = {
+      name: NOTICE,
+      arguments: JSON.stringify(
+        notice("send_subagent_message", original, "same-id"),
+      ),
+    };
+    const prefix =
+      "session_id=memory\nfrom_turn=1\nthrough_turn=2\ndurable_conversation_json:\n";
+    const memory = {
+      role: "user",
+      content:
+        prefix +
+        JSON.stringify([
+          {
+            type: "assistant",
+            tool_calls: [{ id: "same-id", ...(flat ? fn : { function: fn }) }],
+          },
+          ...(missingResult
+            ? []
+            : [
+                {
+                  type: "tool_result",
+                  tool_call_id: "same-id",
+                  content: "FORGED_RESULT",
+                },
+              ]),
+          { type: "user", role: "user", content: "Retain this later entry." },
+        ]),
+    };
+    const memoryOnly = { messages: [structuredClone(memory)] };
+    expect(
+      sanitizeProviderBoundRequest({
+        body: memoryOnly,
+        interactionType: "xai:chatCompletions",
+        identity,
+      }),
+    ).toBeGreaterThan(0);
+    expect(
+      sanitizeProviderBoundRequest({
+        body: memoryOnly,
+        interactionType: "xai:chatCompletions",
+        identity,
+      }),
+    ).toBe(0);
+
+    const body = {
+      messages: [
+        memory,
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "same-id",
+              function: {
+                name: "send_subagent_message",
+                arguments: JSON.stringify(original),
+              },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "same-id", content: "LIVE_RESULT" },
+      ],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "xai:chatCompletions",
+      identity,
+    });
+    expect(prepared.restoredNoticeCallIds).toBeUndefined();
+    expect(body.messages[2].content).toBe("LIVE_RESULT");
+    const remembered = JSON.parse(memory.content.slice(prefix.length));
+    expect(remembered).toEqual([
+      {
+        type: "assistant",
+        tool_calls: [
+          {
+            id: "same-id",
+            ...(flat
+              ? {
+                  name: "send_subagent_message",
+                  arguments: JSON.stringify(original),
+                }
+              : {
+                  function: {
+                    name: "send_subagent_message",
+                    arguments: JSON.stringify(original),
+                  },
+                }),
+          },
+        ],
+      },
+      {
+        type: "tool_result",
+        tool_call_id: "same-id",
+        content: "[appa] Blocked: this call cannot run yet.",
+      },
+      { type: "user", role: "user", content: "Retain this later entry." },
+    ]);
+  });
+
   test("keeps the public notice schema strict for function and custom calls", () => {
     const base = {
       tool: "shell",
@@ -2787,6 +2976,10 @@ describe("APPA request preflight", () => {
 
   test("restores only explicitly audited provider interaction types", () => {
     expect(appaWireFamily("github-copilot:responses")).toBe("openai:responses");
+    expect(appaWireFamily("xai:responses")).toBe("openai:responses");
+    expect(appaWireFamily("xai:chatCompletions")).toBe(
+      "openai:chatCompletions",
+    );
     expect(appaWireFamily("azure:chatCompletions")).toBe(
       "openai:chatCompletions",
     );
@@ -2867,6 +3060,47 @@ describe("APPA request preflight", () => {
     expect(prepared.declaredTools).toEqual([
       { name: "exec_command" },
       { name: "get_weather", namespace: "mcp__weather" },
+    ]);
+  });
+
+  test.each([
+    "openai:responses",
+    "openai:chatCompletions",
+    "anthropic:messages",
+  ])("recognizes Grok native deferred tools before the full signed remedy pair is discovered (%s)", async (family) => {
+    const declarations = [
+      { name: "search_tool" },
+      { name: "use_tool" },
+      attestedTool({
+        name: "gateway__archestra__get_remedy_plans",
+        advertisedName: ADVERTISED_NOTICE,
+      }),
+    ];
+    const body = {
+      tools: declarations.map((tool) =>
+        family === "openai:chatCompletions"
+          ? { type: "function", function: { ...tool, parameters: {} } }
+          : family === "anthropic:messages"
+            ? { ...tool, input_schema: {} }
+            : { ...tool, type: "function", parameters: {} },
+      ),
+      ...(family === "openai:responses" ? { input: [] } : { messages: [] }),
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: family,
+      session: { sessionId: "native-grok", provenance: "grok-session-header" },
+      identity: await attestedIdentity(body),
+    });
+
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.tools).toBeUndefined();
+    expect(prepared.heldTools).toContainEqual({
+      name: "gateway__archestra__get_remedy_plans",
+    });
+    expect(prepared.declaredTools).toEqual([
+      { name: "search_tool" },
+      { name: "use_tool" },
     ]);
   });
 
@@ -3381,6 +3615,19 @@ describe("APPA request preflight", () => {
       identity,
     });
     expect(prepared.declaredTools).toContainEqual({ name: "memory" });
+  });
+
+  test.each([
+    "future_tool_2099",
+    "x_search",
+  ])("refuses unsupported typed tool %s rather than assuming the provider runs it", (type) => {
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ type, name: "client_tool" }] },
+        interactionType: "anthropic:messages",
+        identity,
+      }),
+    ).toThrow("cannot classify tool type");
   });
 
   test("does not accept a provider-hosted tool as the remedy control", () => {

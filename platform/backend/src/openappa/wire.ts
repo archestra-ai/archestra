@@ -27,6 +27,8 @@ import {
   appendChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
 } from "./child-trajectory-receipt";
+import { stripChildTrajectoryReferences } from "./child-trajectory-reference-format";
+import { parseGrokDurableHistory } from "./grok-durable-history";
 import {
   type NoticeOriginalCall,
   readNotice,
@@ -64,6 +66,7 @@ export type AppaSessionIdentity = {
     | "kilo-hosted-header"
     | "pi-session-header"
     | "kimi-code-cache-key"
+    | "grok-session-header"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -126,6 +129,52 @@ export function restoreAppaNotices(params: {
   isNoticeTool: (name: string, namespace?: string) => boolean;
   /** Merely spelled like it: a malformed notice is someone else's call. */
   mayBeNoticeTool: (name: string) => boolean;
+}): { callIds: ReadonlySet<string>; memoryTexts: number } {
+  let memoryTexts = 0;
+  // Memory jobs serialize earlier tool traffic inside a user text. Restore
+  // those notices too, but never let historical IDs exempt live tool results
+  // from admission (a transcript can reuse a current call ID).
+  for (const site of params.family === "bedrock:converse"
+    ? []
+    : historyTextSites(params.family, params.body)) {
+    const memory = parseGrokDurableHistory(site.get());
+    if (!memory) continue;
+    const flatCalls = new Map<object, Record<string, unknown>>();
+    for (const message of memory.messages) {
+      if (message.role !== "assistant" || !Array.isArray(message.tool_calls))
+        continue;
+      message.tool_calls = message.tool_calls.map((entry) => {
+        const call = asRecord(entry);
+        if (!call || asRecord(call.function)) return entry;
+        const normalized = { id: call.id, function: call };
+        flatCalls.set(normalized, call);
+        return normalized;
+      });
+    }
+    const restored = restoreNoticeCalls({
+      ...params,
+      family: "openai:chatCompletions",
+      body: memory,
+    });
+    if (restored.size === 0) continue;
+    for (const message of memory.messages) {
+      if (!Array.isArray(message.tool_calls)) continue;
+      message.tool_calls = message.tool_calls.map(
+        (entry) => flatCalls.get(entry) ?? entry,
+      );
+    }
+    site.set(memory.serialize());
+    memoryTexts++;
+  }
+  return { callIds: restoreNoticeCalls(params), memoryTexts };
+}
+
+/** Only direct wire calls establish restoration provenance for this request. */
+function restoreNoticeCalls(params: {
+  family: HistoryWire;
+  body: unknown;
+  isNoticeTool: (name: string, namespace?: string) => boolean;
+  mayBeNoticeTool: (name: string) => boolean;
 }): ReadonlySet<string> {
   const restoredCallIds = new Set<string>();
   const calls = toolCallSites({
@@ -157,6 +206,43 @@ export function restoreAppaNotices(params: {
     });
   }
   return restoredCallIds;
+}
+
+/**
+ * A catalog lookup may run in place of a held native call. Its result is the
+ * held call's ruling, so provider history must also name that original call.
+ * The caller supplies only receipts read from this exact runtime session.
+ */
+export function restoreDeferredNativeCalls(params: {
+  family: HistoryWire;
+  body: unknown;
+  carrierName: string;
+  originals: ReadonlyMap<
+    string,
+    { name: string; arguments: Record<string, unknown> }
+  >;
+}): ReadonlySet<string> {
+  const restored = new Set<string>();
+  for (const call of toolCallSites({
+    ...params,
+    match: (name, namespace) =>
+      name === params.carrierName && namespace === undefined,
+  })) {
+    const id = parseTrajectoryStamp(call.id)?.callId ?? call.id;
+    const original = params.originals.get(id);
+    if (
+      call.kind !== "function" ||
+      !original ||
+      !PROVIDER_TOOL_NAME.test(original.name) ||
+      !call.restore(original.name, {
+        kind: "function",
+        arguments: original.arguments,
+      })
+    )
+      continue;
+    restored.add(id);
+  }
+  return restored;
 }
 
 /**
@@ -417,6 +503,14 @@ export function stripSessionReceiptsFromRequest(params: {
 }): string[] {
   const codes: string[] = [];
   for (const site of historyTextSites(params.family, params.body)) {
+    const memory = rewriteGrokMemoryText(
+      site.get(),
+      (text) => stripSessionReceipts(text).text,
+    );
+    if (memory !== undefined) {
+      site.set(memory);
+      continue;
+    }
     const restored = stripSessionReceipts(site.get());
     site.set(restored.text);
     codes.push(...restored.codes);
@@ -470,28 +564,92 @@ export function appendSessionReceiptToResponse(params: {
  * not lineage evidence for the parent.
  */
 export function stripChildTrajectoryReceiptsFromRequest(params: {
+  references?: string[];
   family: AppaWireFamily;
   body: unknown;
 }): AppaChildTrajectoryReceipt[] {
   const receipts: AppaChildTrajectoryReceipt[] = [];
   // A receipt returned by a tool belongs to its callee, never to the caller.
   for (const site of toolResultTextSites(params.family, params.body)) {
-    site.set(stripChildTrajectoryReceipts(site.get()).text);
+    site.set(
+      stripChildTrajectoryReceipts(
+        stripChildTrajectoryReferences(site.get(), {
+          preserveLineBoundaries: true,
+          collectReferences: false,
+        }).text,
+        { preserveLineBoundaries: true },
+      ).text,
+    );
   }
   for (const site of historyTextSites(params.family, params.body)) {
+    const memory = rewriteGrokMemoryText(
+      site.get(),
+      (text) =>
+        stripChildTrajectoryReceipts(
+          stripChildTrajectoryReferences(text, {
+            preserveLineBoundaries: true,
+            collectReferences: false,
+          }).text,
+          { preserveLineBoundaries: true },
+        ).text,
+    );
+    if (memory !== undefined) {
+      site.set(memory);
+      continue;
+    }
     // SDK reminders and summaries can wrap notifications in prose. Strip the
     // nested return's receipts first so only the caller's own context remains.
-    const text = site
-      .get()
-      .replace(
-        /<(task-notification|subagent_notification|teammate-message)\b[^>]*>[\s\S]*?<\/\1>/giu,
-        (envelope) => stripChildTrajectoryReceipts(envelope).text,
-      );
-    const stripped = stripChildTrajectoryReceipts(text);
+    const text = site.get().replace(
+      /<(task-notification|subagent_notification|teammate-message)\b[^>]*>[\s\S]*?<\/\1>/giu,
+      (envelope) =>
+        stripChildTrajectoryReceipts(
+          stripChildTrajectoryReferences(envelope, {
+            preserveLineBoundaries: true,
+            collectReferences: false,
+          }).text,
+          {
+            preserveLineBoundaries: true,
+          },
+        ).text,
+    );
+    const ownText = text.replace(
+      /<system-reminder>\r?\n?(?:Background subagent |While you were idle, \d+ background subagents? completed:)[\s\S]*?<\/system-reminder>/g,
+      (envelope) =>
+        stripChildTrajectoryReceipts(
+          stripChildTrajectoryReferences(envelope, {
+            preserveLineBoundaries: true,
+            collectReferences: false,
+          }).text,
+          { preserveLineBoundaries: true },
+        ).text,
+    );
+    const compact = stripChildTrajectoryReferences(ownText, {
+      preserveLineBoundaries: true,
+    });
+    params.references?.push(...compact.references);
+    const stripped = stripChildTrajectoryReceipts(compact.text, {
+      preserveLineBoundaries: true,
+    });
     site.set(stripped.text);
     receipts.push(...stripped.receipts);
   }
   return receipts;
+}
+
+/** Memory contents describe earlier actors; none establish this request's lineage. */
+function rewriteGrokMemoryText(
+  text: string,
+  rewrite: (value: string) => string,
+): string | undefined {
+  const history = parseGrokDurableHistory(text);
+  if (!history) return undefined;
+  const body = { messages: history.messages };
+  for (const site of [
+    ...historyTextSites("openai:chatCompletions", body),
+    ...toolResultTextSites("openai:chatCompletions", body),
+  ])
+    site.set(rewrite(site.get()));
+  return history.serialize();
 }
 
 /**
@@ -1109,6 +1267,7 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
   "perplexity:chatCompletions": "openai:chatCompletions",
   "vllm:chatCompletions": "openai:chatCompletions",
   "xai:chatCompletions": "openai:chatCompletions",
+  "xai:responses": "openai:responses",
   "zhipuai:chatCompletions": "openai:chatCompletions",
 };
 

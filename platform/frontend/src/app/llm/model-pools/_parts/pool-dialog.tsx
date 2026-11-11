@@ -1,5 +1,6 @@
 "use client";
 
+import { MODEL_POOL_RETRY_DEFAULTS } from "@archestra/shared/model-pool-retries";
 import { Layers, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -25,8 +26,9 @@ import {
   usePoolOptions,
   usePoolProblem,
 } from "./pool-form";
+import { MemberRetryOverrides, RetryFields } from "./retry-fields";
 
-export type PoolDialogSection = "pool" | "connect";
+export type PoolDialogSection = "pool" | "failover" | "connect";
 
 /**
  * Creates a pool, or edits `pool`, with a Connect section beside its settings
@@ -61,6 +63,9 @@ export function PoolDialog({
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   const live = pools.find((row) => row.id === pool?.id) ?? pool;
   const isDirty = form.formState.isDirty;
+  const retries =
+    form.watch("retrySettings")?.numRetries ??
+    MODEL_POOL_RETRY_DEFAULTS.numRetries;
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!pool) {
@@ -98,7 +103,6 @@ export function PoolDialog({
         disabled={disabled}
         savedMembers={live?.members ?? []}
       />
-      <TimeoutFields form={form} disabled={disabled} />
     </>
   );
   const saveButton = (
@@ -120,7 +124,7 @@ export function PoolDialog({
         open
         onOpenChange={onOpenChange}
         title={pool.name}
-        description="Edit the pool's members and timeouts, or see how clients call it."
+        description="Edit the pool's members, what happens when one fails, or see how clients call it."
         sidebarLabel={pool.name}
         sidebarDescription="Model pool"
         sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
@@ -131,6 +135,11 @@ export function PoolDialog({
             id: "pool",
             label: "Pool",
             status: `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
+          },
+          {
+            id: "failover",
+            label: "Failover",
+            status: `${retries} ${retries === 1 ? "retry" : "retries"}`,
           },
           { id: "connect", label: "Connect", status: "Code samples" },
         ]}
@@ -149,6 +158,15 @@ export function PoolDialog({
       >
         <div hidden={activeSection !== "pool"} className="space-y-6">
           {fields}
+        </div>
+        <div hidden={activeSection !== "failover"} className="space-y-6">
+          <TimeoutFields form={form} disabled={disabled} />
+          <RetryFields form={form} disabled={disabled} />
+          <MemberRetryOverrides
+            form={form}
+            options={options}
+            disabled={disabled}
+          />
         </div>
         {activeSection === "connect" && (
           <PoolConnectSection pool={live ?? pool} />

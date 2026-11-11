@@ -156,6 +156,7 @@ describe("Archestra tools under the composed default policy", () => {
           text: "Approve this call?",
           tool: call.name,
           arguments: JSON.stringify(call.args),
+          scope: [],
         },
       }).toolArgs;
     };
@@ -186,6 +187,7 @@ describe("Archestra tools under the composed default policy", () => {
           text: "Approve this call?",
           tool: "mcp/vault/transfer_credential",
           arguments: JSON.stringify(sent),
+          scope: [],
         },
       }).toolArgs,
     ).toEqual(sent);

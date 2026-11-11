@@ -301,6 +301,7 @@ test("uploaded file grants follow the knowledge base it sits in and include OAut
     organizationId: org.id,
     knowledgeBaseId: kb.id,
     fileIds: [file.id],
+    newConnectorEnvironmentId: null,
   });
   expect(indexed.indexed).toBe(1);
 
@@ -449,6 +450,7 @@ test("uploaded file grants follow the knowledge base it sits in and include OAut
     organizationId: org.id,
     knowledgeBaseId: privateTargetKb.id,
     fileIds: [file.id],
+    newConnectorEnvironmentId: null,
   });
   await KbDocumentModel.delete(document.id);
   const [targetConnector] =

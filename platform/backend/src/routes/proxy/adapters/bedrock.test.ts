@@ -1138,10 +1138,9 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
 });
 
 describe("Bedrock sampling-param fallback", () => {
-  function makeDeprecatedTemperatureError(): Error {
+  function makeRejectedTemperatureError(messageText: string): Error {
     const message = JSON.stringify({
-      message:
-        "The model returned the following errors: `temperature` is deprecated for this model.",
+      message: messageText,
     });
     const error = new Error(message) as Error & {
       statusCode: number;
@@ -1159,7 +1158,10 @@ describe("Bedrock sampling-param fallback", () => {
     usage: { inputTokens: 1, outputTokens: 1 },
   };
 
-  test("retries without temperature when the model rejects it, keeping other params", async () => {
+  test.each([
+    "The model returned the following errors: `temperature` is deprecated for this model.",
+    "This model doesn't support the temperature field. Remove temperature and try again.",
+  ])("retries without temperature while keeping other params: %s", async (message) => {
     const request = createConverseRequest({
       inferenceConfig: { temperature: 0.7, topP: 0.9, maxTokens: 100 },
     });
@@ -1168,7 +1170,7 @@ describe("Bedrock sampling-param fallback", () => {
       converse: async (_modelId: string, input: Record<string, unknown>) => {
         seenInferenceConfigs.push(input.inferenceConfig);
         if (seenInferenceConfigs.length === 1) {
-          throw makeDeprecatedTemperatureError();
+          throw makeRejectedTemperatureError(message);
         }
         return okResponse;
       },
@@ -1186,6 +1188,36 @@ describe("Bedrock sampling-param fallback", () => {
     });
     expect(seenInferenceConfigs[1]).toEqual({ topP: 0.9, maxTokens: 100 });
     expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+  });
+
+  test("streaming retries Bedrock's rejected temperature before yielding events", async () => {
+    const request = createConverseRequest({
+      inferenceConfig: { temperature: 0, maxTokens: 100 },
+    });
+    const events = (async function* () {
+      yield { messageStop: { stopReason: "end_turn" } };
+    })();
+    const converseStream = vi
+      .fn()
+      .mockRejectedValueOnce(
+        makeRejectedTemperatureError(
+          "This model doesn't support the temperature field. Remove temperature and try again.",
+        ),
+      )
+      .mockResolvedValue(events);
+    const stream = await bedrockAdapterFactory.executeStream(
+      { converseStream },
+      request,
+    );
+    expect(stream).toBe(events);
+    expect(converseStream).toHaveBeenCalledTimes(2);
+    expect(converseStream.mock.calls[0][1].inferenceConfig).toEqual({
+      temperature: 0,
+      maxTokens: 100,
+    });
+    expect(converseStream.mock.calls[1][1].inferenceConfig).toEqual({
+      maxTokens: 100,
+    });
   });
 
   test("does not retry on unrelated validation errors", async () => {

@@ -337,7 +337,7 @@ async function createAppChatConversation(params: {
     agent: {
       llmApiKeyId: agent.llmApiKeyId ?? null,
       modelId: agent.modelId ?? null,
-      autoModel: agent.autoModel,
+      autoRouterId: agent.autoRouterId,
     },
     organizationId,
     userId,
@@ -368,7 +368,7 @@ async function createAppChatConversation(params: {
         }),
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
-    autoModel: llmSelection.autoModel ?? false,
+    autoRouterId: llmSelection.autoRouterId ?? null,
     // App-opened chats are drafts: the conversations list hides them until the
     // user writes a message (see ConversationModel.findAll), so clicking
     // through apps doesn't pile unused chats into the sidebar.

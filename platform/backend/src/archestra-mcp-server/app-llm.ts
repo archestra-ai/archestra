@@ -5,7 +5,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { APICallError, generateText } from "ai";
 import { z } from "zod";
-import { agentUsesAutoModel } from "@/auto-routing/organization-default";
+import { agentAutoRouterId } from "@/auto-routing/organization-default";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
@@ -130,9 +130,9 @@ async function runAppLlmCompletion(
     // Runtime agent every app shares — without this an app's runtime cost is
     // unattributable, and "what does this app cost to run" has no answer.
     appId,
-    // Routed when the App Runtime agent is on `auto`, itself or through the
-    // organization default.
-    autoRoutable: await agentUsesAutoModel(agent, organizationId),
+    // Routed when the App Runtime agent is on an auto router, itself or
+    // through the organization default.
+    autoRouterId: await agentAutoRouterId(agent, organizationId),
   });
 
   const system = args.jsonMode

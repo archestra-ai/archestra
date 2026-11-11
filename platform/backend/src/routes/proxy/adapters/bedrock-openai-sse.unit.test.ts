@@ -407,3 +407,48 @@ describe("sse encoder — tool-call index tracking", () => {
 
 // biome-ignore lint/suspicious/noExplicitAny: test helper only
 type Loose = any;
+
+describe("Bedrock reasoning SSE", () => {
+  test("returns reasoning deltas separately while retaining text and tool indexes", () => {
+    const enc = createConverseToOpenaiSseEncoder(ctx);
+    expect(
+      parseSseChunks(
+        enc.encodeBedrockEvent({
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { reasoningContent: { text: "[REDACTED]" } },
+          },
+        }),
+      ),
+    ).toMatchObject([
+      { choices: [{ delta: { reasoning_content: "[REDACTED]" } }] },
+    ]);
+    expect(
+      enc.encodeBedrockEvent({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { signature: "opaque-signature" } },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      parseSseChunks(
+        enc.encodeBedrockEvent({
+          contentBlockDelta: { contentBlockIndex: 1, delta: { text: "42" } },
+        }),
+      ),
+    ).toMatchObject([{ choices: [{ delta: { content: "42" } }] }]);
+    expect(
+      parseSseChunks(
+        enc.encodeBedrockEvent({
+          contentBlockStart: {
+            contentBlockIndex: 2,
+            start: { toolUse: { toolUseId: "call-1", name: "lookup" } },
+          },
+        }),
+      ),
+    ).toMatchObject([
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: "call-1" }] } }] },
+    ]);
+  });
+});

@@ -35,7 +35,11 @@ const MODELS = [
 
 const POOLS = [{ value: "pool:fast", name: "fast", description: "Cheap" }];
 
-function renderPicker(value: string) {
+const ROUTERS = [
+  { value: "auto:support", name: "auto:support", description: "a · b · c" },
+];
+
+function renderPicker(value: string, autoRouters?: typeof ROUTERS) {
   const onValueChange = vi.fn();
   const view = render(
     <ProviderGroupedModelSelect
@@ -44,6 +48,7 @@ function renderPicker(value: string) {
       onValueChange={onValueChange}
       models={[...MODELS]}
       pools={POOLS}
+      autoRouters={autoRouters}
       placeholder="Pick a model"
     />,
   );
@@ -77,6 +82,18 @@ describe("ProviderGroupedModelSelect", () => {
       "gemini-2.5-flash",
       "amazon.nova-lite-v1:0",
     ]);
+  });
+
+  it("lists auto routers under their own heading and picks one by name", async () => {
+    const user = userEvent.setup();
+    const { onValueChange } = renderPicker("auto:support", ROUTERS);
+
+    expect(screen.getByRole("combobox")).toHaveTextContent(/^auto:support$/);
+    await user.click(screen.getByRole("combobox"));
+
+    expect(headings().slice(0, 2)).toEqual(["Model pools", "Auto routers"]);
+    await user.click(screen.getByRole("option", { name: /auto:support/ }));
+    expect(onValueChange).toHaveBeenCalledWith("auto:support");
   });
 
   it("shows the model id but emits the full value", async () => {

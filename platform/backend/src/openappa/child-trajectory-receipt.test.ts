@@ -47,6 +47,17 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     ).toBe(true);
   });
 
+  test("keeps the tool envelope's header on its own line when removing a child receipt", () => {
+    const receipt = mintChildTrajectoryReceipt(BINDING);
+    for (const newline of ["\n", "\r\n"]) {
+      const frame = `=== Output ===${newline}${receipt}${newline}${newline}EXACT_VALUE`;
+      expect(
+        stripChildTrajectoryReceipts(frame, { preserveLineBoundaries: true })
+          .text,
+      ).toBe(`=== Output ===${newline}EXACT_VALUE`);
+    }
+  });
+
   test("strips legacy two-line and space-collapsed child trajectory display headers", () => {
     const footer = mintChildTrajectoryReceipt(BINDING);
     if (!footer) throw new Error("expected a child trajectory receipt");

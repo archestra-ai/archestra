@@ -23,6 +23,7 @@ export type ConnectionSetupClientId = z.infer<
  * personal virtual key.
  */
 export const ConnectionSetupProxyAuthSchema = z.enum([
+  "native-session",
   "provider-key",
   "virtual-key",
   "primary-providers",

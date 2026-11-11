@@ -62,6 +62,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import {
+  acceptedScope,
   displayedReview,
   reviewedCallArguments,
   reviewedToolLabel,
@@ -1406,9 +1407,11 @@ const registry = defineArchestraTools([
                 const prepared = await getHitlAskUserArguments({
                   session: reviewSession,
                   offerIds: [remedy.offer_id],
+                  presentation: "form",
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);
+                const accepted = acceptedScope(shown.scope);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1422,6 +1425,9 @@ const registry = defineArchestraTools([
                           : shown.arguments,
                       }
                     : {}),
+                  ...(accepted
+                    ? { reviewedCoverage: accepted }
+                    : { reviewedText: shown.text }),
                 });
                 if (outcome.status === "answered") {
                   const parsed = parseHitlRuling(outcome.result);
@@ -2393,8 +2399,9 @@ function supersededReview(result: CallToolResult): CallToolResult {
 
 /**
  * The runtime's words for an offer that no longer stands. Contract: these are
- * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer` and for a stale
- * offer's decline, as of the pinned revision 0d6c743c. Unlike a `Refuse`, which
+ * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer`, for
+ * `RemedyRefusal::Superseded`, and for a stale offer's decline, as of the
+ * pinned revision 69404d2a. Unlike a `Refuse`, which
  * carries a typed class at this pin, a remedy outcome carries no class, so
  * these texts are matched; re-check them when the pin moves.
  */
@@ -2402,4 +2409,5 @@ const RETIRED_OFFER_TEXTS = [
   "this offer no longer stands; re-propose the call",
   "this offer no longer applies; re-propose the call",
   "no live offer with this id exists",
+  "changed after this offer was made, so the offer no longer applies",
 ];

@@ -1,1 +1,0 @@
-ALTER TABLE "openappa_github_sync" ADD COLUMN "self_service_directory" text DEFAULT 'mcp' NOT NULL;

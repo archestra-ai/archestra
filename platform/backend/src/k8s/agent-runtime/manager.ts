@@ -268,6 +268,7 @@ class AgentRuntimeManager {
     await this.applyNetworkPolicy(
       buildAgentRuntimePlatformEgressPolicy({
         spec: withOwner,
+        clusterDnsIps,
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
@@ -1837,6 +1838,7 @@ class AgentRuntimeManager {
     await this.applyNetworkPolicy(
       buildAgentRuntimePlatformEgressPolicy({
         spec,
+        clusterDnsIps,
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],

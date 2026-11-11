@@ -17,11 +17,14 @@ import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
+import { grokToolName } from "@/routes/mcp-gateway/grok-tool-names";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
 import { openappaActor } from "./actor";
+import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import { OpenappaRootOnlyError } from "./failure";
 import { asRecord, parsePolicyToml, toolEntries } from "./policy-text";
@@ -190,6 +193,76 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
+  test("reporting recovery drops standalone return declarations while retaining offer-bound approval calls", () => {
+    const resolution = {
+      looseRunToolDispatch: false,
+      canonicalize: (name: string) => name,
+    };
+    const declaration = {
+      type: "function_call",
+      name: "archestra__execute_remedy_plan",
+      call_id: "declare-return",
+      arguments: JSON.stringify({
+        label: { trust: "suspicious", audience: ["self"] },
+      }),
+    };
+    const approval = {
+      ...declaration,
+      call_id: "approve-report",
+      arguments:
+        '{"offer_id":"synthetic-report-offer","plan":"Submit for approval"}',
+    };
+    const result = (call_id: string, output: string) => ({
+      type: "function_call_output",
+      call_id,
+      output,
+    });
+    const body = {
+      input: [
+        { role: "user", content: "Test background children" },
+        declaration,
+        result(declaration.call_id, "Declared. Spawn the child now."),
+        approval,
+        result(approval.call_id, "Approval required"),
+      ],
+      tools: [
+        { type: "function", name: "archestra__execute_remedy_plan" },
+        { type: "function", name: "archestra__yell" },
+        { type: "function", name: "spawn_subagent" },
+      ],
+    };
+    const isAllowedCall = (
+      call: Parameters<typeof isReportingToolCall>[0]["call"],
+    ) => isReportingToolCall({ call, resolution });
+    const recovery = recoverDiagnosticTurn({
+      body,
+      family: "openai:responses",
+      refusal: "Invalid child result",
+      tools: reportingToolSpellings({
+        identity: resolution,
+        declarations: body.tools,
+      }),
+      isAllowedCall,
+    });
+    expect(recovery?.resultIds).toEqual(new Set([approval.call_id]));
+    expect(JSON.stringify(body)).not.toContain("Spawn the child now");
+    expect(body.input).toContainEqual(approval);
+    expect(isAllowedCall(declaration)).toBe(false);
+    for (const tool_args of [
+      { label: {} },
+      { offer_id: "" },
+      { offer_id: "   " },
+      { offer_id: "synthetic-report-offer", plan: "Submit for approval" },
+    ]) {
+      expect(
+        isAllowedCall({
+          name: "archestra__run_tool",
+          arguments: { tool_name: "archestra__execute_remedy_plan", tool_args },
+        }),
+      ).toBe(Boolean(tool_args.offer_id?.trim()));
+    }
+  });
+
   test("reporting recovery recognizes trusted dispatch targets, not foreign lookalikes or unrelated wrapped operations", () => {
     const resolution = {
       looseRunToolDispatch: false,
@@ -386,6 +459,54 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test.each([
+    "probe__read_note",
+    "gateway__archestra__execute_remedy_plan",
+    "gateway__archestra__ask_user",
+  ])("Grok evaluates the dispatched target %s and cannot borrow control or approval authority", async (target) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "Target is not allowed",
+      }),
+    );
+    const adapter = new AppaGrokAdapter();
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "dispatch",
+          name: "use_tool",
+          arguments: { tool_name: target, tool_input: { path: "private.txt" } },
+        },
+      ],
+      {
+        canonicalize: (name) => name,
+        nativeDispatch: adapter.nativeDispatch.bind(adapter),
+        control: { name: "archestra__execute_remedy_plan" },
+      },
+    );
+    expect(decisions).toEqual([
+      {
+        kind: "deny",
+        feedback: "Target is not allowed",
+        offers: undefined,
+        recorded: true,
+      },
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        operation_id: "call:dispatch",
+        tool: `unverified.${grokToolName(target)}`,
+        arguments: { path: "private.txt" },
+        dispatch: "use_tool",
+      }),
+    );
+  });
+
   test("a turn that began while enabled finishes after the switch turns off", async () => {
     // The proxy read the switch when this request began. Turning it off
     // mid-request must not fail the turn it already governs.
@@ -474,6 +595,40 @@ describe("APPA feature boundary", () => {
         },
       }),
     );
+  });
+
+  test("refuses a call that spells one argument two ways with different values before ruling on it", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "split",
+          name: "Read",
+          arguments: {
+            file_path: "/repo/README.md",
+            path: "/home/u/.ssh/id_rsa",
+          },
+        },
+        {
+          id: "echo",
+          name: "Read",
+          arguments: { path: "C:\\repo\\.env", file_path: "C:/repo/.env" },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    expect(decisions[0]).toMatchObject({ kind: "deny", unanswered: true });
+    expect(decisions[1]).toEqual({ kind: "allow" });
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:echo"]);
   });
 
   test("forwards signed child lineage on session_start from processProxyResults and startRuntimeChild", async () => {
@@ -3243,7 +3398,7 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates.pending.outputSource).toBe("runtime");
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
   });
-  test("handles unreleased tool denials returning deny_call with approved_output (chat bug reproduction)", async () => {
+  test("retains an unexecuted call denial without classifying it as withheld output", async () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
@@ -3275,7 +3430,6 @@ describe("APPA feature boundary", () => {
       content:
         "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
-      refused: true,
       denied: true,
     });
   });

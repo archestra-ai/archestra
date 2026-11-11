@@ -188,6 +188,53 @@ describe("normalizeIdentityProviderFormValues", () => {
     );
   });
 
+  it("drops an Entra Agent ID section left without a blueprint client ID", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        oidcConfig: {
+          ...makeOidcFormValues().oidcConfig!,
+          enterpriseManagedCredentials: {
+            entraAgentId: {
+              blueprintClientId: "  ",
+              certificateThumbprint: "",
+              requireAgentIdentity: false,
+            },
+          },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.enterpriseManagedCredentials).toBeUndefined();
+  });
+
+  it("keeps a configured Entra Agent ID section, trimmed and without blank fields", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        issuer: "https://login.microsoftonline.com/tenant-id/v2.0",
+        providerId: "EntraID",
+        oidcConfig: {
+          ...makeOidcFormValues().oidcConfig!,
+          enterpriseManagedCredentials: {
+            entraAgentId: {
+              blueprintClientId: " blueprint-id ",
+              clientSecret: "",
+              certificateThumbprint: " abc ",
+              requireAgentIdentity: true,
+            },
+          },
+        },
+      }),
+    );
+
+    expect(
+      normalized.oidcConfig?.enterpriseManagedCredentials?.entraAgentId,
+    ).toEqual({
+      blueprintClientId: "blueprint-id",
+      certificateThumbprint: "abc",
+      requireAgentIdentity: true,
+    });
+  });
+
   it("does not create enterprise-managed defaults when the section is unused", () => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({

@@ -63,6 +63,9 @@ type ChatMcpElicitationStreamData = {
   kind?: ChatMcpElicitationKind;
   reviewedTool?: string;
   reviewedArguments?: string;
+  reviewedCoverage?: string[];
+  /** The review text, when its scope is unknown and the card must show it. */
+  reviewedText?: string;
 };
 
 /** Why the backend stopped waiting for a question's answer. */
@@ -108,6 +111,8 @@ export type ChatMcpElicitationBridge = {
     kind?: ChatMcpElicitationKind;
     reviewedTool?: string;
     reviewedArguments?: string;
+    reviewedCoverage?: string[];
+    reviewedText?: string;
   }) => Promise<ArchestraElicitationOutcome>;
 };
 
@@ -148,6 +153,8 @@ export function createChatMcpElicitationBridge({
     kind?: ChatMcpElicitationKind;
     reviewedTool?: string;
     reviewedArguments?: string;
+    reviewedCoverage?: string[];
+    reviewedText?: string;
     signal: AbortSignal | undefined;
   }): Promise<ElicitResult> {
     const streamWriter = writer;
@@ -188,6 +195,8 @@ export function createChatMcpElicitationBridge({
           kind: req.kind,
           reviewedTool: req.reviewedTool,
           reviewedArguments: req.reviewedArguments,
+          reviewedCoverage: req.reviewedCoverage,
+          reviewedText: req.reviewedText,
         } satisfies ChatMcpElicitationStreamData,
       });
 
@@ -275,6 +284,8 @@ export function createChatMcpElicitationBridge({
       kind,
       reviewedTool,
       reviewedArguments,
+      reviewedCoverage,
+      reviewedText,
     }) {
       if (!writer) {
         return { status: "no_viewer" };
@@ -290,6 +301,8 @@ export function createChatMcpElicitationBridge({
           kind,
           reviewedTool,
           reviewedArguments,
+          reviewedCoverage,
+          reviewedText,
           signal: abortSignal,
         });
         return { status: "answered", result };

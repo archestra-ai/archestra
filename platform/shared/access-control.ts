@@ -724,8 +724,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmProxy]: {
     llmProxy: ["update"],
   },
-  [RouteId.GetAutoRoutingSettings]: { llmProxy: ["read"] },
-  [RouteId.UpdateAutoRoutingSettings]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRoutingState]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRoutingState]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRouters]: { llmProxy: ["read"] },
+  // Names only, for whoever assigns routers to a virtual key.
+  [RouteId.GetAvailableAutoRouters]: { llmProviderApiKey: ["read"] },
+  [RouteId.CreateAutoRouter]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRouter]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRouter]: { llmProxy: ["update"] },
+  [RouteId.DeleteAutoRouter]: { llmProxy: ["update"] },
   [RouteId.GetAutoRoutingPlans]: { llmProxy: ["read"] },
   [RouteId.GetAutoRoutingPlan]: { llmProxy: ["read"] },
   [RouteId.ReplanAutoRouting]: { llmProxy: ["update"] },
@@ -1123,6 +1130,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // only obtains the caller's own OAuth credential for a new personal xAI
   // (SuperGrok subscription) key.
   [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiNativeMetadataWithDefaultAgent]: {},
+  [RouteId.XaiNativeMetadataWithAgent]: {},
+  [RouteId.XaiNativePrivacyWithDefaultAgent]: {},
+  [RouteId.XaiNativePrivacyWithAgent]: {},
   [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {},
   [RouteId.UpdateLlmProviderApiKey]: {},

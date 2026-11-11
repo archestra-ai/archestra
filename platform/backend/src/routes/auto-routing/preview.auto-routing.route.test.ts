@@ -1,9 +1,10 @@
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  autoRouterId,
   configureAutoRouting,
   makeScorerVersion,
   publishFittedPlan,
@@ -27,7 +28,7 @@ const SMART_ANSWERS = {
   usage: { input_tokens: 420, output_tokens: 6, cost: 0.0001 },
 };
 
-describe("POST /api/auto-routing/preview", () => {
+describe("POST /api/auto-routing/routers/:id/preview", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   const server = useMswServer();
   let jevStates: unknown[];
@@ -48,12 +49,14 @@ describe("POST /api/auto-routing/preview", () => {
     });
   });
 
-  const preview = (payload: Record<string, unknown>) =>
+  const preview = async (payload: Record<string, unknown>) =>
     ctx.app.inject({
       method: "POST",
-      url: "/api/auto-routing/preview",
+      url: `/api/auto-routing/routers/${await autoRouterId(ctx.organizationId)}/preview`,
       payload,
     });
+  const findRouter = async () =>
+    AutoRouterModel.find(await autoRouterId(ctx.organizationId));
 
   test("scores the text and decides with the active plan, storing nothing", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
@@ -61,7 +64,7 @@ describe("POST /api/auto-routing/preview", () => {
       organizationId: ctx.organizationId,
       trio,
     });
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await findRouter();
 
     const response = await preview({ text: "Refactor the billing module" });
 
@@ -82,9 +85,7 @@ describe("POST /api/auto-routing/preview", () => {
     expect(jevStates).toEqual([{ prompt: "Refactor the billing module" }]);
     expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
     expect(await db.$count(schema.routingUsageTable)).toBe(0);
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(await findRouter()).toEqual(before);
   });
 
   test("a plan fitted for another scorer version reports a cold start", async () => {
@@ -214,7 +215,7 @@ describe("POST /api/auto-routing/preview", () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await publishFittedPlan({ organizationId: ctx.organizationId, trio });
     const repriced = await configureAutoRouting(ctx.organizationId);
-    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const before = await findRouter();
 
     const response = await preview({ text: "Fix a typo" });
 
@@ -223,9 +224,7 @@ describe("POST /api/auto-routing/preview", () => {
       reason: "plan_stale",
       chosen: { tier: "normal", model: { id: repriced[1].id } },
     });
-    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
-      before,
-    );
+    expect(await findRouter()).toEqual(before);
   });
 
   test("rejects text over the cap without calling the scorer", async () => {

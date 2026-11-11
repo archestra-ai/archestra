@@ -16,6 +16,9 @@ test("maps native client provenance, and nothing else, to a client", () => {
   );
   expect(nativeSetupClientFromProvenance("codex-turn-metadata")).toBe("codex");
   expect(nativeSetupClientFromProvenance("pi-session-header")).toBe("pi");
+  expect(nativeSetupClientFromProvenance("grok-session-header")).toBe(
+    "grok-build",
+  );
   expect(nativeSetupClientFromProvenance("kilo-session-header")).toBe("kilo");
   expect(nativeSetupClientFromProvenance("kilo-hosted-header")).toBe("kilo");
   for (const provenance of [

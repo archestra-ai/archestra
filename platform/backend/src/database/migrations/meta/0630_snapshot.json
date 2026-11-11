@@ -1,6 +1,6 @@
 {
-  "id": "c1b89a4e-d8b5-4158-a440-67664562efc3",
-  "prevId": "e06e361a-c27a-4922-802d-2ab501790419",
+  "id": "65233909-ac1a-4e5d-ac5e-a4751a1250c0",
+  "prevId": "e167aab6-40c5-4f86-91a2-24e6ab2f0d2b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4668,54 +4668,20 @@
           "primaryKey": false,
           "notNull": false
         },
-        "auto_model": {
-          "name": "auto_model",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "auto_routing_enabled": {
-          "name": "auto_routing_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "auto_routing_budget_usd_per_day": {
-          "name": "auto_routing_budget_usd_per_day",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_routing_budget_preset": {
-          "name": "auto_routing_budget_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_routing_scorer_version_id": {
-          "name": "auto_routing_scorer_version_id",
+        "auto_router_id": {
+          "name": "auto_router_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "auto_routing_generation": {
-          "name": "auto_routing_generation",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "auto_routing_planned_generation": {
-          "name": "auto_routing_planned_generation",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "identity_provider_id": {
           "name": "identity_provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entra_agent_identity_id": {
+          "name": "entra_agent_identity_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -5360,17 +5326,17 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "agents_auto_routing_scorer_version_id_routing_scorer_versions_id_fk": {
-          "name": "agents_auto_routing_scorer_version_id_routing_scorer_versions_id_fk",
+        "agents_auto_router_id_auto_routers_id_fk": {
+          "name": "agents_auto_router_id_auto_routers_id_fk",
           "tableFrom": "agents",
-          "tableTo": "routing_scorer_versions",
+          "tableTo": "auto_routers",
           "columnsFrom": [
-            "auto_routing_scorer_version_id"
+            "auto_router_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "agents_identity_provider_id_identity_provider_id_fk": {
@@ -7227,13 +7193,271 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.auto_router_virtual_api_keys": {
+      "name": "auto_router_virtual_api_keys",
+      "schema": "",
+      "columns": {
+        "router_id": {
+          "name": "router_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "virtual_api_key_id": {
+          "name": "virtual_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "auto_router_virtual_api_keys_virtual_api_key_id_idx": {
+          "name": "auto_router_virtual_api_keys_virtual_api_key_id_idx",
+          "columns": [
+            {
+              "expression": "virtual_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auto_router_virtual_api_keys_router_id_auto_routers_id_fk": {
+          "name": "auto_router_virtual_api_keys_router_id_auto_routers_id_fk",
+          "tableFrom": "auto_router_virtual_api_keys",
+          "tableTo": "auto_routers",
+          "columnsFrom": [
+            "router_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "auto_router_virtual_api_keys_virtual_api_key_id_virtual_api_keys_id_fk": {
+          "name": "auto_router_virtual_api_keys_virtual_api_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "auto_router_virtual_api_keys",
+          "tableTo": "virtual_api_keys",
+          "columnsFrom": [
+            "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "auto_router_virtual_api_keys_pk": {
+          "name": "auto_router_virtual_api_keys_pk",
+          "columns": [
+            "router_id",
+            "virtual_api_key_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.auto_routers": {
+      "name": "auto_routers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "budget_usd_per_day": {
+          "name": "budget_usd_per_day",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_preset": {
+          "name": "budget_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scorer_api_key_id": {
+          "name": "scorer_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scorer_model": {
+          "name": "scorer_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scorer_version_id": {
+          "name": "scorer_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "planned_generation": {
+          "name": "planned_generation",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "uses_past_sessions": {
+          "name": "uses_past_sessions",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "auto_routers_org_name_uidx": {
+          "name": "auto_routers_org_name_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "auto_routers_one_past_sessions_per_org_uidx": {
+          "name": "auto_routers_one_past_sessions_per_org_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"auto_routers\".\"uses_past_sessions\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auto_routers_organization_id_organization_id_fk": {
+          "name": "auto_routers_organization_id_organization_id_fk",
+          "tableFrom": "auto_routers",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "auto_routers_scorer_api_key_id_chat_api_keys_id_fk": {
+          "name": "auto_routers_scorer_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "auto_routers",
+          "tableTo": "chat_api_keys",
+          "columnsFrom": [
+            "scorer_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "auto_routers_scorer_version_id_routing_scorer_versions_id_fk": {
+          "name": "auto_routers_scorer_version_id_routing_scorer_versions_id_fk",
+          "tableFrom": "auto_routers",
+          "tableTo": "routing_scorer_versions",
+          "columnsFrom": [
+            "scorer_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.auto_routing_tiers": {
       "name": "auto_routing_tiers",
       "schema": "",
       "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
+        "router_id": {
+          "name": "router_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -7256,14 +7480,45 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "auto_routing_tiers_provider_api_key_id_idx": {
+          "name": "auto_routing_tiers_provider_api_key_id_idx",
+          "columns": [
+            {
+              "expression": "provider_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "auto_routing_tiers_model_id_idx": {
+          "name": "auto_routing_tiers_model_id_idx",
+          "columns": [
+            {
+              "expression": "model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "auto_routing_tiers_organization_id_organization_id_fk": {
-          "name": "auto_routing_tiers_organization_id_organization_id_fk",
+        "auto_routing_tiers_router_id_auto_routers_id_fk": {
+          "name": "auto_routing_tiers_router_id_auto_routers_id_fk",
           "tableFrom": "auto_routing_tiers",
-          "tableTo": "organization",
+          "tableTo": "auto_routers",
           "columnsFrom": [
-            "organization_id"
+            "router_id"
           ],
           "columnsTo": [
             "id"
@@ -7299,10 +7554,10 @@
         }
       },
       "compositePrimaryKeys": {
-        "auto_routing_tiers_organization_id_tier_pk": {
-          "name": "auto_routing_tiers_organization_id_tier_pk",
+        "auto_routing_tiers_router_id_tier_pk": {
+          "name": "auto_routing_tiers_router_id_tier_pk",
           "columns": [
-            "organization_id",
+            "router_id",
             "tier"
           ]
         }
@@ -9643,12 +9898,11 @@
           "primaryKey": false,
           "notNull": false
         },
-        "auto_model": {
-          "name": "auto_model",
-          "type": "boolean",
+        "auto_router_id": {
+          "name": "auto_router_id",
+          "type": "uuid",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "thinking_effort": {
           "name": "thinking_effort",
@@ -9883,6 +10137,19 @@
           "tableTo": "model_pools",
           "columnsFrom": [
             "model_pool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "conversations_auto_router_id_auto_routers_id_fk": {
+          "name": "conversations_auto_router_id_auto_routers_id_fk",
+          "tableFrom": "conversations",
+          "tableTo": "auto_routers",
+          "columnsFrom": [
+            "auto_router_id"
           ],
           "columnsTo": [
             "id"
@@ -19090,6 +19357,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "credential_client_id": {
+          "name": "credential_client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credential_client_type": {
+          "name": "credential_client_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "duration_ms": {
           "name": "duration_ms",
           "type": "integer",
@@ -22054,8 +22333,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_auto_model": {
-          "name": "default_auto_model",
+        "default_auto_router_id": {
+          "name": "default_auto_router_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_routing_enabled": {
+          "name": "auto_routing_enabled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -24672,6 +24957,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "router_id": {
+          "name": "router_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "session_key": {
           "name": "session_key",
           "type": "text",
@@ -24778,11 +25069,11 @@
         }
       },
       "indexes": {
-        "routing_decisions_org_session_segment_uidx": {
-          "name": "routing_decisions_org_session_segment_uidx",
+        "routing_decisions_router_session_segment_uidx": {
+          "name": "routing_decisions_router_session_segment_uidx",
           "columns": [
             {
-              "expression": "organization_id",
+              "expression": "router_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -24805,6 +25096,27 @@
           "method": "btree",
           "with": {}
         },
+        "routing_decisions_org_session_idx": {
+          "name": "routing_decisions_org_session_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "routing_decisions_created_at_idx": {
           "name": "routing_decisions_created_at_idx",
           "columns": [
@@ -24820,15 +25132,9 @@
           "method": "btree",
           "with": {}
         },
-        "routing_decisions_org_plan_idx": {
-          "name": "routing_decisions_org_plan_idx",
+        "routing_decisions_plan_idx": {
+          "name": "routing_decisions_plan_idx",
           "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "plan_id",
               "isExpression": false,
@@ -24864,6 +25170,19 @@
           "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "routing_decisions_router_id_auto_routers_id_fk": {
+          "name": "routing_decisions_router_id_auto_routers_id_fk",
+          "tableFrom": "routing_decisions",
+          "tableTo": "auto_routers",
+          "columnsFrom": [
+            "router_id"
           ],
           "columnsTo": [
             "id"
@@ -25310,6 +25629,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "router_id": {
+          "name": "router_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -25397,11 +25722,11 @@
         }
       },
       "indexes": {
-        "routing_plans_one_active_per_org_uidx": {
-          "name": "routing_plans_one_active_per_org_uidx",
+        "routing_plans_one_active_per_router_uidx": {
+          "name": "routing_plans_one_active_per_router_uidx",
           "columns": [
             {
-              "expression": "organization_id",
+              "expression": "router_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -25413,17 +25738,32 @@
           "method": "btree",
           "with": {}
         },
-        "routing_plans_org_created_at_idx": {
-          "name": "routing_plans_org_created_at_idx",
+        "routing_plans_router_created_at_idx": {
+          "name": "routing_plans_router_created_at_idx",
           "columns": [
             {
-              "expression": "organization_id",
+              "expression": "router_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "routing_plans_organization_id_idx": {
+          "name": "routing_plans_organization_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -25442,6 +25782,19 @@
           "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "routing_plans_router_id_auto_routers_id_fk": {
+          "name": "routing_plans_router_id_auto_routers_id_fk",
+          "tableFrom": "routing_plans",
+          "tableTo": "auto_routers",
+          "columnsFrom": [
+            "router_id"
           ],
           "columnsTo": [
             "id"
@@ -30201,7 +30554,7 @@
           "name": "tasks_auto_routing_fit_single_flight_idx",
           "columns": [
             {
-              "expression": "(\"payload\" ->> 'organizationId')",
+              "expression": "(\"payload\" ->> 'routerId')",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -34748,20 +35101,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "self_service": {
-          "name": "self_service",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "self_service_directory": {
-          "name": "self_service_directory",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'mcp'"
         },
         "last_synced_at": {
           "name": "last_synced_at",

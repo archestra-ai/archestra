@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { NetworkPolicyFields } from "@/components/network-policy-fields";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -27,10 +28,14 @@ export function AgentNetworkPolicyField({
   value,
   onChange,
   disabled,
+  label = "Policy",
+  description,
 }: {
   value: NetworkPolicy | null;
   onChange: (value: NetworkPolicy | null) => void;
   disabled: boolean;
+  label?: string;
+  description?: string;
 }) {
   const { data: canUpdateEnvironments } = useHasPermissions({
     environment: ["update"],
@@ -68,7 +73,8 @@ export function AgentNetworkPolicyField({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="agent-network-policy-source">Policy</Label>
+        <Label htmlFor="agent-network-policy-source">{label}</Label>
+        {description && <FieldDescription>{description}</FieldDescription>}
         <Select
           value={value ? "custom" : "inherit"}
           onValueChange={(next) =>

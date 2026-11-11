@@ -81,7 +81,11 @@ export function CreateLlmProviderApiKeyDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
-  const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
+  // Providers a person may add a key for: GitHub Copilot also needs its
+  // personal subscriptions on, since a key made here is a personal sign-in.
+  const visibleProviderIdsKey = providerCatalog.visibleIds
+    .filter(providerCatalog.canAddKey)
+    .join(",");
   const allowedProviderIdsKey = allowedProviders?.join(",") ?? null;
   const availableProviders = useMemo(() => {
     const visibleProviders = visibleProviderIdsKey

@@ -14,7 +14,7 @@ import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel, {
   selectionKey,
@@ -56,8 +56,8 @@ export interface ConversationLlmSelection {
   chatApiKeyId: string | null;
   selectedModel: string;
   selectedProvider: SupportedProvider;
-  /** The selection is `auto`: the normal tier, routed per session by the proxy. */
-  autoModel?: boolean;
+  /** The selection is this auto router: its normal tier, routed per session by the proxy. */
+  autoRouterId?: string;
 }
 
 /**
@@ -73,8 +73,8 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-    /** Set to `auto`; read only with `allowAutoModel`. */
-    autoModel?: boolean;
+    /** The auto router it is set to; read only with `allowAutoModel`. */
+    autoRouterId?: string | null;
   };
   organizationId: string;
   userId: string;
@@ -82,18 +82,18 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   explicitModelId?: string | null;
   /** The API key the user explicitly picked, alongside `explicitModelId`. */
   explicitApiKeyId?: string | null;
-  /** The user explicitly picked `auto`. */
-  explicitAutoModel?: boolean;
+  /** The auto router the user explicitly picked. */
+  explicitAutoRouterId?: string | null;
   /**
    * The caller runs a chat or an agent that auto routing may serve: the agent
-   * set to `auto`, or following an `auto` organization default, resolves to
-   * the normal tier. Never set for Agent Runtime agents.
+   * set to an auto router, or following an organization default that is one,
+   * resolves to the router's normal tier. Never set for Agent Runtime agents.
    */
   allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
 
-  if (params.allowAutoModel || params.explicitAutoModel) {
+  if (params.allowAutoModel || params.explicitAutoRouterId) {
     const auto = await autoSelectionFor(params);
     if (auto) return auto;
   }
@@ -185,16 +185,20 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }
 
 /**
- * What a chat or run on `auto` names: the normal tier's model on its key. The
- * proxy routes each session from there, and runs it on this model while auto
- * routing is off. Null when the deployment has no auto routing or the
- * organization has no normal tier.
+ * What a chat or run on an auto router names: its normal tier's model on its
+ * key. The proxy routes each session from there, and runs it on this model
+ * while auto routing is off. Null when the deployment has no auto routing,
+ * the router is not the organization's, or it has no normal tier.
  */
 export async function resolveAutoModelSelection(
   organizationId: string,
+  routerId: string,
 ): Promise<ConversationLlmSelection | null> {
   if (!config.autoRouting.enabled) return null;
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const settings = await AutoRouterModel.findInOrganization(
+    organizationId,
+    routerId,
+  );
   if (!settings?.normalModelId || !settings.normalApiKeyId) return null;
   const model = await ModelModel.findById(settings.normalModelId);
   if (!model) return null;
@@ -203,34 +207,35 @@ export async function resolveAutoModelSelection(
     chatApiKeyId: settings.normalApiKeyId,
     selectedModel: model.modelId,
     selectedProvider: model.provider,
-    autoModel: true,
+    autoRouterId: settings.id,
   };
 }
 
-/** The `auto` selection when the pick, the agent or the organization default is `auto`. */
+/** The auto router selection when the pick, the agent or the organization default is a router. */
 async function autoSelectionFor(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-    autoModel?: boolean;
+    autoRouterId?: string | null;
   };
   organizationId: string;
   explicitModelId?: string | null;
-  explicitAutoModel?: boolean;
+  explicitAutoRouterId?: string | null;
   allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection | null> {
   const { agent } = params;
-  const wantsAuto =
-    params.explicitAutoModel ||
-    (params.allowAutoModel &&
-      !params.explicitModelId &&
-      (agent.autoModel ||
-        (agent.llmApiKeyId === null &&
-          agent.modelId === null &&
-          ((await OrganizationModel.getById(params.organizationId))
-            ?.defaultAutoModel ??
-            false))));
-  return wantsAuto ? resolveAutoModelSelection(params.organizationId) : null;
+  const followed = async () =>
+    !params.allowAutoModel || params.explicitModelId
+      ? null
+      : (agent.autoRouterId ??
+        (agent.llmApiKeyId === null && agent.modelId === null
+          ? ((await OrganizationModel.getById(params.organizationId))
+              ?.defaultAutoRouterId ?? null)
+          : null));
+  const routerId = params.explicitAutoRouterId ?? (await followed());
+  return routerId
+    ? resolveAutoModelSelection(params.organizationId, routerId)
+    : null;
 }
 
 /**
@@ -244,7 +249,7 @@ export async function resolveForkParentSelection(params: {
   agent: {
     llmApiKeyId: string | null;
     modelId: string | null;
-    autoModel?: boolean;
+    autoRouterId?: string | null;
   };
   organizationId: string;
   userId: string;

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentIdenticon } from "./hue-avatar";
@@ -31,6 +32,7 @@ export function AgentCell({
   session: LogSession;
   agent: AgentOption | undefined;
 }) {
+  const { enterprisePlanName } = useModelProviderCatalog();
   const isKnowledge = isKnowledgeSource(session.source);
   const isDeleted =
     !agent &&
@@ -83,7 +85,9 @@ export function AgentCell({
         {(session.copilotCredentialSources ?? []).length > 0 && (
           <div className="truncate text-xs leading-4 text-muted-foreground">
             {(session.copilotCredentialSources ?? [])
-              .map(copilotCredentialSourceLabel)
+              .map((source) =>
+                copilotCredentialSourceLabel(source, enterprisePlanName),
+              )
               .join(", ")}
           </div>
         )}

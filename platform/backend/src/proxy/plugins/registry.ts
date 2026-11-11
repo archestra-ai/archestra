@@ -2,8 +2,16 @@ import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  stripChildTrajectoryReceipts,
+  verifyChildTrajectoryReceipt,
+} from "@/openappa/child-trajectory-receipt";
+import { resolveChildTrajectoryReferences } from "@/openappa/child-trajectory-reference";
+import { stripChildTrajectoryReferences } from "@/openappa/child-trajectory-reference-format";
+import {
+  collectDelegationMarkers,
   isDelegationMarkerItem,
   isDelegationMarkerLine,
+  verifyDelegatedPrompt,
 } from "@/openappa/delegation";
 import {
   RUNTIME_TOOL_PROOF_ARGUMENT,
@@ -95,6 +103,8 @@ export type LlmProxyToolCallAnnotation = {
   name: string;
   field: string;
   appended: string | Record<string, unknown>;
+  /** Caller scope for resolving a retained continuation proof. */
+  continuationCallerId?: string;
 };
 
 /** A signed execution proof added after the host approved the original arguments. */
@@ -437,11 +447,12 @@ export class LlmProxyPluginRegistry {
           !annotation ||
           original.name !== call.name ||
           original.namespace !== call.namespace ||
-          !appendsOnlyMarker({
+          !(await appendsOnlyMarker({
             before: original.arguments,
             after: canonicalJson(call.arguments),
             annotation,
-          })
+            organizationId: context.organizationId,
+          }))
         ) {
           throw new Error(
             `Finalizer ${plugin.id} rewrote a call it did not report as blocked: ${call.id}`,
@@ -734,11 +745,12 @@ export function getLlmProxyPluginRegistry(): LlmProxyPluginRegistry {
  * Returns true if `after` differs from `before` only by the appended delegation marker.
  * Compares canonical JSON representations to prevent unverified mutations.
  */
-function appendsOnlyMarker(params: {
+async function appendsOnlyMarker(params: {
   before: string;
   after: string;
   annotation: LlmProxyToolCallAnnotation;
-}): boolean {
+  organizationId: string;
+}): Promise<boolean> {
   const before = argumentRecord(params.before);
   const after = argumentRecord(params.after);
   if (!before || !after) return false;
@@ -760,7 +772,16 @@ function appendsOnlyMarker(params: {
       typeof was === "string" &&
       was.trim().length > 0 &&
       appended.startsWith("\n\n") &&
-      isDelegationMarkerLine(appended.slice(2)) &&
+      (isDelegationMarkerLine(appended.slice(2)) ||
+        (params.annotation.name === "spawn_subagent" &&
+          field === "prompt" &&
+          typeof before.resume_from === "string" &&
+          (await isContinuationSuffix(
+            appended,
+            was,
+            params.organizationId,
+            params.annotation.continuationCallerId,
+          )))) &&
       now === was + appended
     );
   }
@@ -769,6 +790,60 @@ function appendsOnlyMarker(params: {
     was.length > 0 &&
     isDelegationMarkerItem(appended) &&
     canonicalJson(now) === canonicalJson([...was, appended])
+  );
+}
+
+/** Resume may append only a signed actor binding and its matching prompt proof. */
+async function isContinuationSuffix(
+  suffix: string,
+  prompt: string,
+  organizationId: string,
+  callerId?: string,
+): Promise<boolean> {
+  const compact = stripChildTrajectoryReferences(suffix);
+  const stripped = stripChildTrajectoryReceipts(compact.text);
+  if (compact.references.length) {
+    if (compact.references.length !== 1 || stripped.receipts.length !== 0)
+      return false;
+    try {
+      stripped.receipts.push(
+        ...(await resolveChildTrajectoryReferences({
+          organizationId,
+          callerId,
+          references: compact.references,
+        })),
+      );
+    } catch {
+      return false;
+    }
+  }
+  const [receipt] = stripped.receipts;
+  if (
+    stripped.receipts.length !== 1 ||
+    !receipt ||
+    !isDelegationMarkerLine(stripped.text.slice(2)) ||
+    !verifyChildTrajectoryReceipt({
+      receipt,
+      organizationId,
+      callerId: receipt.callerId,
+      spawnerNativeId: receipt.spawnerNativeId,
+    })
+  )
+    return false;
+  const [marker] = collectDelegationMarkers({
+    family: "openai:responses",
+    body: { input: prompt + stripped.text },
+  });
+  return (
+    marker !== undefined &&
+    marker.parentId === receipt.parentId &&
+    marker.spawnCallId === receipt.spawnCallId &&
+    !!verifyDelegatedPrompt({
+      marker,
+      organizationId,
+      callerId: receipt.callerId,
+      spawnerNativeId: receipt.spawnerNativeId,
+    })
   );
 }
 

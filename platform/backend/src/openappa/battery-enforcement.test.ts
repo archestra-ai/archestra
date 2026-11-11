@@ -19,6 +19,7 @@ import {
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import ToolModel from "@/models/tool";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import memberRoutes from "@/routes/member";
 import {
   deleteRuntimeCredentialConnection,
@@ -408,12 +409,46 @@ requires = { audience = { contains = ["self"] } }
     expect(composed.lastError).toBeNull();
 
     const probe = "host/archestra/publish_probe {}\nexpect allow\n";
+    const grok = new AppaGrokAdapter();
+    const grokCall = (name: string, args: Record<string, unknown>) =>
+      `host/archestra/${grok.normalizeLocalToolName(name)} {\n${Object.entries(
+        args,
+      )
+        .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
+        .join("")}}\nexpect allow\n`;
     const scenarios = {
       "probe-alone": probe,
       // Claude Code's Read, under the battery's credential rule.
       "read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n${probe}`,
       "note-after-read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\nhost/archestra/note_to_self {}\nexpect allow\n`,
       "read-readme": `host/archestra/Read {\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      "grok-read-env": `host/archestra/read_file {\n  target_file: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      "grok-read-readme": `host/archestra/read_file {\n  target_file: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      "grok-shell-credentials": `${grokCall("run_terminal_command", { command: "cat ~/.aws/credentials", description: "Read synthetic credentials" })}${probe}`,
+      "grok-shell-push": grokCall("run_terminal_command", {
+        command: "git push origin main",
+        description: "Push synthetic repository",
+      }),
+      "grok-write-protected": grokCall("write", {
+        file_path: "/repo/.mcp.json",
+        content: "{}",
+      }),
+      "grok-write-ordinary": grokCall("write", {
+        file_path: "/repo/note.txt",
+        content: "synthetic",
+      }),
+      "grok-edit-protected": grokCall("search_replace", {
+        file_path: "/repo/.mcp.json",
+        old_string: "old",
+        new_string: "new",
+      }),
+      "grok-edit-ordinary": grokCall("search_replace", {
+        file_path: "/repo/note.txt",
+        old_string: "old",
+        new_string: "new",
+      }),
+      "grok-grep-credentials": `${grokCall("grep", { pattern: "synthetic", path: "/repo/.env" })}${probe}`,
+      "grok-grep-ordinary": `${grokCall("grep", { pattern: "synthetic", path: "/repo/src" })}${probe}`,
       // Codex's shell spells the command `cmd`.
       "codex-credentials": `host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
       "codex-git-push": `host/archestra/exec_command {\n  cmd: "git push origin main"\n}\nexpect allow\n`,
@@ -461,6 +496,16 @@ requires = { audience = { contains = ["self"] } }
       "read-env": ["allow", "authority human-approval"],
       "note-after-read-env": ["allow", "allow"],
       "read-readme": ["allow", "allow"],
+      "grok-read-env": ["allow", "authority human-approval"],
+      "grok-read-readme": ["allow", "allow"],
+      "grok-shell-credentials": ["allow", "authority human-approval"],
+      "grok-shell-push": ["claude-code.bash-repository-requirements"],
+      "grok-write-protected": ["authority human-approval"],
+      "grok-write-ordinary": ["allow"],
+      "grok-edit-protected": ["authority human-approval"],
+      "grok-edit-ordinary": ["allow"],
+      "grok-grep-credentials": ["allow", "authority human-approval"],
+      "grok-grep-ordinary": ["allow", "allow"],
       "codex-credentials": ["allow", "authority human-approval"],
       "codex-git-push": ["claude-code.bash-repository-requirements"],
       "opencode-read-env": ["allow", "authority human-approval"],

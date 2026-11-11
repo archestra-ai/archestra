@@ -19,6 +19,20 @@ import {
 import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
 
+export function detectGrokClientId(
+  headers: Record<string, string | string[] | undefined>,
+): "grok-build" | undefined {
+  const identifier = getHeaderValue(headers, "x-grok-client-identifier");
+  const userAgent = getHeaderValue(headers, "user-agent");
+  return identifier === "grok-shell" ||
+    identifier === "grok-pager" ||
+    /^(?:grok-pager\/[^\s]+\s+)?grok-shell\/[^\s]+(?:\s|$)/i.test(
+      userAgent ?? "",
+    )
+    ? "grok-build"
+    : undefined;
+}
+
 /**
  * Client-app auto-discovery.
  *

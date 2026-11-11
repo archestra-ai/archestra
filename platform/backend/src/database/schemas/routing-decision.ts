@@ -17,11 +17,12 @@ import type {
   RoutingDecisionFeatures,
   RoutingDecisionReason,
 } from "@/types/auto-routing";
+import autoRoutersTable from "./auto-router";
 import modelsTable from "./model";
 import organizationsTable from "./organization";
 import routingScorerVersionsTable from "./routing-scorer-version";
 
-/** One sticky auto-routing decision per session (segment 0 until mid-session switching exists). */
+/** One sticky decision per session of an auto router (segment 0 until mid-session switching exists). */
 const routingDecisionsTable = pgTable(
   "routing_decisions",
   {
@@ -29,6 +30,9 @@ const routingDecisionsTable = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    routerId: uuid("router_id")
+      .notNull()
+      .references(() => autoRoutersTable.id, { onDelete: "cascade" }),
     sessionKey: text("session_key").notNull(),
     segment: integer("segment").notNull().default(0),
     tierIndex: smallint("tier_index").notNull(),
@@ -57,16 +61,18 @@ const routingDecisionsTable = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("routing_decisions_org_session_segment_uidx").on(
-      table.organizationId,
+    uniqueIndex("routing_decisions_router_session_segment_uidx").on(
+      table.routerId,
       table.sessionKey,
       table.segment,
     ),
-    index("routing_decisions_created_at_idx").on(table.createdAt),
-    index("routing_decisions_org_plan_idx").on(
+    // Past sessions are checked against live ones by organization.
+    index("routing_decisions_org_session_idx").on(
       table.organizationId,
-      table.planId,
+      table.sessionKey,
     ),
+    index("routing_decisions_created_at_idx").on(table.createdAt),
+    index("routing_decisions_plan_idx").on(table.planId),
     // Deleting a model deletes its decisions through the foreign key; without
     // this each deleted model reads the whole table.
     index("routing_decisions_model_id_idx").on(table.modelId),

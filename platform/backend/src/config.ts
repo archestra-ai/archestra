@@ -28,7 +28,6 @@ import {
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
-  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -50,6 +49,7 @@ import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-ba
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
+import { parseLogContentMode as parseApplicationLogContentMode } from "@/logging/content-mode";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -768,14 +768,9 @@ export const parseLogFormat = (
 export const parseLogContentMode = (
   envValue?: string | undefined,
 ): LogContentMode => {
-  const value = envValue?.toLowerCase().trim();
-  if (!value) return "full";
-  const parsed = LogContentModeSchema.safeParse(value);
-  if (parsed.success) return parsed.data;
-  logger.warn(
-    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
-  );
-  return "metadata_only";
+  return parseApplicationLogContentMode(envValue, () => {
+    logger.warn("Invalid ARCHESTRA_LOGS_CONTENT_MODE, storing metadata only");
+  });
 };
 
 /** @public — exported for testability */

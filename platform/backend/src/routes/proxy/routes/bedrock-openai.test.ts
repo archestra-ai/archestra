@@ -119,6 +119,92 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
       { role: "user", content: [{ text: "hi" }] },
     ]);
   });
+  test("carries Nova reasoning across the real request and response routes", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const captured: Record<string, unknown>[] = [];
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          converse: async (modelId: string, req: Record<string, unknown>) => {
+            captured.push({ modelId, ...req });
+            return {
+              $metadata: { requestId: "req_1" },
+              output: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      reasoningContent: {
+                        reasoningText: { text: "[REDACTED]" },
+                      },
+                    },
+                    { text: "Hello from Bedrock" },
+                  ],
+                },
+              },
+              stopReason: "end_turn",
+              usage: { inputTokens: 12, outputTokens: 3 },
+            };
+          },
+          converseStream: async () => asyncIterable([]),
+        }) as never,
+    );
+
+    const app = createFastifyApp();
+    await app.register(bedrockOpenaiProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-openai-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
+      payload: {
+        model: "us.amazon.nova-2-lite-v1:0",
+        reasoning_effort: "medium",
+        messages: [
+          { role: "system", content: "be brief" },
+          { role: "user", content: "hi" },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+
+    // OpenAI-shape response
+    expect(body.object).toBe("chat.completion");
+    expect(body.model).toBe("us.amazon.nova-2-lite-v1:0");
+    expect(body.choices).toHaveLength(1);
+    expect(body.choices[0].finish_reason).toBe("stop");
+    expect(body.choices[0].message.role).toBe("assistant");
+    expect(body.choices[0].message.content).toBe("Hello from Bedrock");
+    expect(body.choices[0].message.reasoning_content).toBe("[REDACTED]");
+    expect(body.usage).toEqual({
+      prompt_tokens: 12,
+      completion_tokens: 3,
+      total_tokens: 15,
+    });
+
+    // Bedrock client was called with a Converse-shape body (translation happened)
+    expect(captured).toHaveLength(1);
+    expect(captured[0].modelId).toBe("us.amazon.nova-2-lite-v1:0");
+    expect(captured[0].additionalModelRequestFields).toEqual({
+      reasoningConfig: { type: "enabled", maxReasoningEffort: "medium" },
+    });
+    expect(captured[0].system).toEqual([{ text: "be brief" }]);
+    expect(captured[0].messages).toEqual([
+      { role: "user", content: [{ text: "hi" }] },
+    ]);
+  });
 
   test("assistant tool_calls + tool results translate correctly", async ({
     makeAgent,

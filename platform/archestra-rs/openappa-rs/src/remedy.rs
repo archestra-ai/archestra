@@ -18,7 +18,9 @@ use crate::{
     session::session_actor,
 };
 use appa_eventlog::encryption::StorageCipher;
-use appa_runtime::api::{ExecuteRemedyPlanArgs, RemedyOutcome, RemedyPresentation, RemedyRefusal};
+use appa_runtime::api::{
+    ExecuteRemedyPlanArgs, NoAnswerClass, RemedyOutcome, RemedyPresentation, RemedyRefusal,
+};
 use appa_runtime_api::ProposedCall;
 use napi_derive::napi;
 use serde::Serialize;
@@ -119,6 +121,10 @@ pub struct OfferReviewOutput {
     /// JSONB, so key order and spacing can differ from the proposal; the
     /// values cannot.
     pub arguments: Option<String>,
+    /// The review's coverage items as JSON text. Absent means unknown (a
+    /// review stored before the runtime typed it, or one that joins several
+    /// authorities), so show `text`; `[]` means the ruling accepts nothing else.
+    pub scope: Option<String>,
 }
 
 /// Reads an offer's original refusal from authenticated, host-scoped journal
@@ -176,6 +182,7 @@ pub async fn load_offer_review(
             let row = client.query_opt(
                 &format!(
                     "SELECT entry->>'text' AS text, \
+                     (entry->'scope')::text AS scope, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
                      COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
                      FROM openappa_operations o \
@@ -197,6 +204,7 @@ pub async fn load_offer_review(
                     session_id,
                     tool: row.get("tool"),
                     arguments: row.get("arguments"),
+                    scope: row.get("scope"),
                 }));
             }
             let opened = sealed::read(
@@ -238,6 +246,7 @@ fn review_in(
             text: review["text"].as_str().unwrap_or_default().to_owned(),
             tool: source["tool"].as_str().map(str::to_owned),
             arguments: source.get("arguments").map(Value::to_string),
+            scope: review.get("scope").map(Value::to_string),
         })
     })
 }
@@ -421,6 +430,8 @@ pub(crate) struct RemedyAct<'a> {
     pub(crate) owner: &'a OfferOwner,
     pub(crate) offer_id: &'a str,
     pub(crate) ruling: Option<RulingInput>,
+    /// The control tool as the client was presented it.
+    pub(crate) control_tool: &'a str,
 }
 
 pub(crate) fn render_remedy_outcome(
@@ -453,6 +464,16 @@ pub(crate) fn render_remedy_outcome(
                 "OpenAPPA remedy interrupted: {detail}"
             )));
         }
+        // Nothing was applied and the offer stands, so the model learns how to go on rather
+        // than the turn ending on a runtime failure.
+        RemedyOutcome::Refused {
+            reason: RemedyRefusal::Unanswered { annotator, class },
+        } => (
+            OutputSource::Runtime,
+            None,
+            true,
+            render_unanswered(&annotator, class, act.control_tool),
+        ),
         RemedyOutcome::Refused {
             reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
         } => {
@@ -465,7 +486,7 @@ pub(crate) fn render_remedy_outcome(
             OutputSource::Runtime,
             unknown_control_reason(&reason),
             true,
-            reason.detail().to_owned(),
+            reason.detail().into_owned(),
         ),
     };
     serde_json::to_value(HostMcpResult {
@@ -534,24 +555,48 @@ fn denied_block(feedback: &str) -> &str {
     }
 }
 
+/// Built from the typed class: the runtime's own text may change wording or grow detail.
+fn render_unanswered(annotator: &str, class: NoAnswerClass, control_tool: &str) -> String {
+    let next = match class.is_transient() {
+        true => format!("Call the {control_tool} tool again with the same offer id."),
+        false => format!(
+            "A retry will not help until an administrator checks the configuration of `{annotator}`."
+        ),
+    };
+    format!(
+        "[appa] Not applied: the policy check `{annotator}` gave no answer ({class}). Nothing changed and the offer still stands. {next}"
+    )
+}
+
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
-        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
+        // A superseded offer was a live one gone stale, reported before as an unknown offer.
+        RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer | RemedyRefusal::Superseded => {
+            Some("unknown_control_call")
+        }
         // Its text says how to declare at the spawn's block instead.
         RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::AttemptReused
+        | RemedyRefusal::UnidentifiedDeclaration
+        | RemedyRefusal::AmbiguousReplay
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
+        | RemedyRefusal::Unanswered { .. }
         | RemedyRefusal::Runtime { .. } => None,
     }
 }
+
+/// A plan that only declares a subagent's return covers none of the call's other gaps, so
+/// the runtime authorizes it and the retry can still be refused.
+const RECHECKED: &str = "The call is checked again and can still be blocked for another reason; then follow that block. ";
 
 fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferOwner>) -> String {
     // A call made through the dispatch tool is retried through it: the client
     // may hold no tool by the target's own name.
     if let Some(dispatch) = owner.and_then(|owner| owner.dispatch.as_deref()) {
         return format!(
-            "[appa] {status}. Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
+            "[appa] {status}. {RECHECKED}Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
             Value::String(spelled_tool(&call.tool)),
             retry_arguments(call)
         );
@@ -564,7 +609,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // The user may have accepted the plan through ask_user, so the text does
     // not credit the model with the choice.
     format!(
-        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. {RECHECKED}Call the {tool} tool again with exactly these arguments: {}",
         retry_arguments(call)
     )
 }
@@ -905,7 +950,8 @@ mod typed_tests {
         let (prefix, arguments) = hint.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
             prefix,
-            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+            "[appa] Authorized. The call is checked again and can still be blocked for another reason; \
+             then follow that block. Call the my_gateway_archestra__run_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -1105,6 +1151,7 @@ mod typed_tests {
                 owner: &owner,
                 offer_id: "offer-1",
                 ruling: None,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap();
@@ -1113,8 +1160,8 @@ mod typed_tests {
         assert_eq!(
             prefix,
             "[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, \
-             the session keeps its current label and calls that need the plan stay blocked. Call the client_tool tool \
-             again with "
+             the session keeps its current label and calls that need the plan stay blocked. The call is checked again \
+             and can still be blocked for another reason; then follow that block. Call the client_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -1149,7 +1196,8 @@ mod typed_tests {
             .expect("hint names the arguments");
         assert_eq!(
             prefix,
-            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+            "[appa] Authorized. The call is checked again and can still be blocked for another reason; \
+             then follow that block. Call the my_gateway_archestra__run_tool tool again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -1210,6 +1258,7 @@ mod remedy_tests {
                 owner,
                 offer_id: QUOTED,
                 ruling,
+                control_tool: "archestra__execute_remedy_plan",
             },
         )
         .unwrap()
@@ -1379,6 +1428,28 @@ mod stored_approved_output_tests {
         assert_eq!(
             stored_approved_output(&long, &decision("another text")),
             long
+        );
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::review_in;
+    use serde_json::json;
+
+    #[test]
+    fn a_review_stored_before_typed_scope_leaves_it_unknown() {
+        let input = json!({ "context": { "tool": "send_email", "arguments": {} } });
+        let old = json!({ "review": [{ "offer_id": "o1", "text": "approve?" }] });
+        let typed = json!({ "review": [{
+            "offer_id": "o2", "text": "approve?", "authority": "operator", "scope": [],
+        }] });
+        let receipts = [(input.clone(), old), (input, typed)];
+
+        assert_eq!(review_in(receipts.clone(), "o1", "s").unwrap().scope, None);
+        assert_eq!(
+            review_in(receipts, "o2", "s").unwrap().scope.as_deref(),
+            Some("[]")
         );
     }
 }

@@ -26,7 +26,7 @@ import {
   indexReadinessByAgent,
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
-import { AUTO_MODEL_CHOICE } from "@/lib/chat/auto-model";
+import { autoModelChoice, autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { useFeature } from "@/lib/config/config.query";
@@ -250,7 +250,8 @@ export function useChatSetupOptions(params: {
       allKeys.filter(
         (k) =>
           providerSupportsChat(k.provider) &&
-          !catalog.isHidden(k.provider) &&
+          // A GitHub Copilot key follows its own plan's switch.
+          !catalog.isKeyHidden(k) &&
           (!isPersonalSubscription(k) || k.userId === userId),
       ),
     [allKeys, catalog, userId],
@@ -273,16 +274,18 @@ export function useChatSetupOptions(params: {
   const { data: pools = [] } = useAvailableModelPools({
     enabled: !!params.onModelPoolChange,
   });
-  // ---- auto: picked in place of a key like a pool, while auto routing is on
+  // ---- auto routers: picked in place of a key like a pool, while auto routing is on
   const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
   const organizationDefault = useOrganizationDefaultModel({
     enabled: !!params.onModelPoolChange && autoRoutingEnabled,
   });
-  const autoSelected = params.modelPoolId === AUTO_MODEL_CHOICE;
-  const auto =
-    organizationDefault.auto && activeAgent?.runtime == null
-      ? organizationDefault.auto
-      : null;
+  const selectedAutoRouterId = autoRouterIdOfChoice(params.modelPoolId);
+  const autoSelected = selectedAutoRouterId !== null;
+  const autoRouters =
+    activeAgent?.runtime == null ? organizationDefault.autoRouters : [];
+  const selectedAutoRouter = organizationDefault.autoRouters.find(
+    (router) => router.id === selectedAutoRouterId,
+  );
   const activePool =
     params.modelPoolId && !autoSelected
       ? pools.find((pool) => pool.id === params.modelPoolId)
@@ -341,7 +344,7 @@ export function useChatSetupOptions(params: {
     modelsLoading,
     activeModel,
     modelName:
-      (autoSelected ? "Auto" : undefined) ??
+      (autoSelected ? (selectedAutoRouter?.label ?? "Auto") : undefined) ??
       activePool?.name ??
       activeModel?.displayName ??
       params.fallbackModelName ??
@@ -356,11 +359,14 @@ export function useChatSetupOptions(params: {
     selectPool: (id: string) => {
       if (id !== params.modelPoolId) params.onModelPoolChange?.(id);
     },
-    // auto
-    auto,
+    // auto routers
+    autoRouters,
     autoSelected,
-    selectAuto: () => {
-      if (!autoSelected) params.onModelPoolChange?.(AUTO_MODEL_CHOICE);
+    selectedAutoRouterId,
+    selectAutoRouter: (id: string) => {
+      if (id !== selectedAutoRouterId) {
+        params.onModelPoolChange?.(autoModelChoice(id));
+      }
     },
     // credentials
     keys,

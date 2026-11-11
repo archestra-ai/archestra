@@ -2,6 +2,10 @@
 
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
+  githubOrganizationLabel,
+  organizationSubscriptionName,
+} from "@/lib/organization-subscription";
+import {
   SubscriptionCard,
   SubscriptionCardsSection,
 } from "./subscription-provider-cards";
@@ -13,6 +17,7 @@ import {
  * organization, with the same states and actions.
  */
 export function OrganizationSubscriptionCards({
+  name,
   credentials,
   isLoading,
   onConnect,
@@ -21,6 +26,8 @@ export function OrganizationSubscriptionCards({
   onDisconnect,
   disconnectBlockedReason,
 }: {
+  /** The plan's name, as set under Settings → LLM → Model providers. */
+  name: string;
   /** The organization's GitHub Copilot keys (GitHub App credentials). */
   credentials: LlmProviderApiKeyResponse[];
   isLoading: boolean;
@@ -43,7 +50,7 @@ export function OrganizationSubscriptionCards({
         <SubscriptionCard
           kind="github-copilot"
           provider="github-copilot"
-          name="GitHub Copilot"
+          name={name}
           description="Connect your enterprise GitHub Copilot plan."
           isLoading={isLoading}
           status="not-connected"
@@ -56,11 +63,11 @@ export function OrganizationSubscriptionCards({
             key={credential.id}
             kind="github-copilot"
             provider="github-copilot"
-            name="GitHub Copilot"
+            name={organizationSubscriptionName(credential, name)}
             description={
               credential.requiresReauthentication
                 ? "GitHub refused the App. Its installation or private key changed. Reconnect it to use this plan."
-                : `Your organization's Copilot plan is linked through a GitHub App. Usage is billed to ${credential.githubOrganization ?? "the organization"}.`
+                : `Your organization's Copilot plan is linked through a GitHub App. Usage is billed to ${githubOrganizationLabel(credential) ?? "the organization"}.`
             }
             isLoading={isLoading}
             status={

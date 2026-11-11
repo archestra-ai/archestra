@@ -222,10 +222,30 @@ const {
     } => ({ data: [], isPending: false, isError: false }),
   ),
   useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
-  useOrganizationDefaultModelMock: vi.fn(() => ({
-    model: null,
-    label: null,
-  })),
+  useOrganizationDefaultModelMock: vi.fn(
+    (): {
+      model: null;
+      label: string | null;
+      autoRoutedTiers: null;
+      autoRouters: Array<{
+        id: string;
+        name: string;
+        label: string;
+        description: string;
+        tiers: Record<
+          "fast" | "normal" | "smart",
+          { id: string; provider: "anthropic"; displayName: string }
+        >;
+      }>;
+      defaultAutoRouterId: string | null;
+    } => ({
+      model: null,
+      label: null,
+      autoRoutedTiers: null,
+      autoRouters: [],
+      defaultAutoRouterId: null,
+    }),
+  ),
   useAgentDelegationsMock: vi.fn(
     (): { data: unknown[]; isSuccess: boolean } => ({
       data: [],
@@ -744,16 +764,40 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
     onAddApiKey,
     onSelectKey,
+    onSelectOrganizationDefault,
     providerFilter,
+    autoRouters = [],
   }: {
     onAddApiKey?: () => void;
     onSelectKey: (keyId: string) => void;
+    onSelectOrganizationDefault?: () => void;
     providerFilter?: (provider: SupportedProvider) => boolean;
+    autoRouters?: Array<{
+      id: string;
+      label: string;
+      selected: boolean;
+      onSelect: () => void;
+    }>;
   }) => (
     <>
       <button type="button" onClick={() => onSelectKey("key-1")}>
         Pick API key
       </button>
+      {autoRouters.map((router) => (
+        <button
+          key={router.id}
+          type="button"
+          aria-pressed={router.selected}
+          onClick={router.onSelect}
+        >
+          {`Pick ${router.label}`}
+        </button>
+      ))}
+      {autoRouters.length > 0 && onSelectOrganizationDefault && (
+        <button type="button" onClick={onSelectOrganizationDefault}>
+          Pick organization default
+        </button>
+      )}
       {onAddApiKey && (
         <button type="button" onClick={onAddApiKey}>
           Add provider key
@@ -1186,8 +1230,9 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
-  autoModel: false,
+  autoRouterId: null,
   identityProviderId: null,
+  entraAgentIdentityId: null,
   environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
@@ -2902,6 +2947,143 @@ describe("AgentForm save payload and failure handling", () => {
     useOrganizationDefaultModelMock.mockReturnValue({
       model: null,
       label: null,
+      autoRoutedTiers: null,
+      autoRouters: [],
+      defaultAutoRouterId: null,
+    });
+  });
+
+  describe("auto routers", () => {
+    const routerTiers = (prefix: string) => ({
+      fast: {
+        id: `${prefix}-fast`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Haiku`,
+      },
+      normal: {
+        id: `${prefix}-normal`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Sonnet`,
+      },
+      smart: {
+        id: `${prefix}-smart`,
+        provider: "anthropic" as const,
+        displayName: `${prefix} Opus`,
+      },
+    });
+    const routerA = {
+      id: "router-a",
+      name: "auto",
+      label: "Auto",
+      description: "A Haiku, A Sonnet, A Opus",
+      tiers: routerTiers("A"),
+    };
+    const routerB = {
+      id: "router-b",
+      name: "auto:support",
+      label: "Auto · support",
+      description: "B Haiku, B Sonnet, B Opus",
+      tiers: routerTiers("B"),
+    };
+    const offerRouters = (routers: (typeof routerA)[]) =>
+      useOrganizationDefaultModelMock.mockReturnValue({
+        model: null,
+        label: null,
+        autoRoutedTiers: null,
+        autoRouters: routers,
+        defaultAutoRouterId: null,
+      });
+    const renderOnRouter = (autoRouterId: string | null) =>
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={{ ...baseAgent, autoRouterId }}
+          sections={["configuration"]}
+        />,
+      );
+
+    it("offers one option per router and saves the picked router's id", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter(null);
+
+      expect(
+        await screen.findByRole("button", { name: "Pick Auto" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      await user.click(
+        screen.getByRole("button", { name: "Pick Auto · support" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Pick Auto · support" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // The model control names that router, not the first one.
+      expect(
+        screen.getByRole("button", { name: /Auto · support.*3 models/ }),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({
+        autoRouterId: "router-b",
+        llmApiKeyId: null,
+        modelId: null,
+        modelPoolId: null,
+      });
+    });
+
+    it("moves an agent from one router to another", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter("router-b");
+
+      expect(
+        await screen.findByRole("button", { name: "Pick Auto · support" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByRole("button", { name: "Pick Auto" }));
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({ autoRouterId: "router-a" });
+    });
+
+    it("clears the router when the agent goes back to the organization default", async () => {
+      offerRouters([routerA, routerB]);
+      const user = userEvent.setup();
+      renderOnRouter("router-a");
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Pick organization default",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+      expect(savedBody()).toMatchObject({ autoRouterId: null });
+    });
+
+    it("clears the router when a provider key is picked", async () => {
+      offerRouters([routerA]);
+      const user = userEvent.setup();
+      renderOnRouter("router-a");
+
+      await user.click(
+        await screen.findByRole("button", { name: "Pick API key" }),
+      );
+      expect(screen.getByRole("button", { name: "Pick Auto" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+
+    it("keeps a saved router selected, as Auto, once it is no longer offered", async () => {
+      offerRouters([routerA]);
+      renderOnRouter("router-gone");
+
+      const options = await screen.findAllByRole("button", {
+        name: "Pick Auto",
+      });
+      expect(
+        options.map((option) => option.getAttribute("aria-pressed")),
+      ).toEqual(["false", "true"]);
     });
   });
 
@@ -3669,6 +3851,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
+      autoRouters: [],
       label: "Google · Gemini 2.5 Pro",
       model: {
         dbId: "gemini-default",
@@ -4245,7 +4428,7 @@ describe("AgentForm save payload and failure handling", () => {
     // description should mention that regardless.
     renderAdvanced();
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4268,7 +4451,7 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4286,7 +4469,7 @@ describe("AgentForm save payload and failure handling", () => {
 
     // No runtime picked yet for this to-be-created agent, and the org-wide
     // agentRuntime feature is enabled — neither changes the description.
-    await screen.findByText("Environment");
+    await screen.findByRole("heading", { name: "Environment" });
     expect(
       screen.getByText(
         "The environment for this agent's sandbox (runtime and network egress) and the tools and knowledge sources it can use.",
@@ -4626,6 +4809,7 @@ describe("AgentForm save payload and failure handling", () => {
         isFree: false,
       },
       label: "OpenAI · GPT-5.6 Luna",
+      autoRouters: [],
     } as never);
     const user = userEvent.setup();
     const claude = getAgentCatalogTemplates(TEST_CATALOG_IMAGES).find(

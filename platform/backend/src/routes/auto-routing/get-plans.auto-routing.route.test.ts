@@ -4,7 +4,9 @@ import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  autoRouterId,
   configureAutoRouting,
+  ensureAutoRouter,
   plannedDecision,
   publishFittedPlan,
 } from "@/test/auto-routing";
@@ -12,13 +14,13 @@ import { useRouteTestApp } from "@/test/route-test-app";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import autoRoutingRoutes from "./auto-routing.routes";
 
-describe("GET /api/auto-routing/plans", () => {
+describe("GET /api/auto-routing/routers/:id/plans", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
   });
 
-  test("lists the organization's fits newest first with the sessions each routed", async ({
+  test("lists the router's fits newest first with the sessions each routed", async ({
     makeOrganization,
   }) => {
     const trio = await configureAutoRouting(ctx.organizationId);
@@ -34,6 +36,7 @@ describe("GET /api/auto-routing/plans", () => {
       await RoutingDecisionModel.insertOrGet({
         ...plannedDecision({
           organizationId: ctx.organizationId,
+          routerId: first.routerId,
           sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
           modelId: trio[0].id,
           scorerVersionId: second.scorerVersionId,
@@ -46,13 +49,20 @@ describe("GET /api/auto-routing/plans", () => {
       organizationId: other.id,
       trio: await configureAutoRouting(other.id),
     });
+    // Another router of the same organization has fits of its own.
+    const sibling = await ensureAutoRouter(ctx.organizationId, "auto:sibling");
+    await publishFittedPlan({
+      organizationId: ctx.organizationId,
+      routerId: sibling.id,
+      trio,
+    });
     const scorerVersion = (
-      await RoutingPlanModel.findRecord(ctx.organizationId, second.id)
+      await RoutingPlanModel.findRecord(first.routerId, second.id)
     )?.scorerVersion;
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/auto-routing/plans",
+      url: `/api/auto-routing/routers/${first.routerId}/plans`,
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -83,6 +93,7 @@ describe("GET /api/auto-routing/plans", () => {
   test("honours the limit", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await publishFittedPlan({ organizationId: ctx.organizationId, trio });
+    const routerId = await autoRouterId(ctx.organizationId);
     const newest = await publishFittedPlan({
       organizationId: ctx.organizationId,
       trio,
@@ -90,7 +101,7 @@ describe("GET /api/auto-routing/plans", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/auto-routing/plans?limit=1",
+      url: `/api/auto-routing/routers/${routerId}/plans?limit=1`,
     });
 
     expect(response.statusCode, response.body).toBe(200);

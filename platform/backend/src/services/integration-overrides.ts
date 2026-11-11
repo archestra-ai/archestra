@@ -2,7 +2,10 @@ import {
   builtInProviderLabel,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
+  type CopilotPlan,
+  copilotPlanTurnedOffMessage,
   integrationLabel,
+  isCopilotPlanHidden,
   isIntegrationHidden,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
@@ -34,6 +37,27 @@ export async function assertModelProviderAllowed(params: {
       params.provider,
       builtInProviderLabel(params.provider),
     )} is turned off for this organization. Ask an administrator to re-enable it under Settings → LLM → Model providers.`,
+  );
+}
+
+/**
+ * Rejects setting up one GitHub Copilot plan when GitHub Copilot is off, or
+ * when an admin turned off just this plan. Keys that exist keep working.
+ */
+export async function assertCopilotPlanAllowed(params: {
+  organizationId: string;
+  plan: CopilotPlan;
+}): Promise<void> {
+  await assertModelProviderAllowed({
+    organizationId: params.organizationId,
+    provider: "github-copilot",
+  });
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(params.organizationId);
+  if (!isCopilotPlanHidden(modelProviderOverrides, params.plan)) return;
+  throw new ApiError(
+    400,
+    copilotPlanTurnedOffMessage(modelProviderOverrides, params.plan),
   );
 }
 

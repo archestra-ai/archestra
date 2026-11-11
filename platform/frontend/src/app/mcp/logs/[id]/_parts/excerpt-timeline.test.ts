@@ -81,6 +81,8 @@ function toolCall(id: string, endOffsetMs: number): SessionToolCall {
     llmToolCallId: null,
     authMethod: "oauth",
     oauthClientId: null,
+    credentialClientId: null,
+    credentialClientType: "identity_provider",
     source: "api",
     durationMs: 500,
     createdAt: new Date(BASE + endOffsetMs).toISOString(),

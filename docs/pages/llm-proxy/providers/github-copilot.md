@@ -2,7 +2,7 @@
 title: GitHub Copilot
 description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,6 +38,8 @@ To connect a plan, your Archestra account needs permission to create provider ke
 
 On **Model Providers**, connect **GitHub Copilot** under **Enterprise plans**. Create a new GitHub App or connect using existing App credentials. The App requires the **Copilot Requests (Read-only)** permission on your GitHub organization (see [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access)). Install it on the organization, including one in an Enterprise Managed Users enterprise. An installation on the enterprise cannot make Copilot requests.
 
+A connected plan is named after its GitHub organization, as GitHub shows the organization's name: **GitHub Copilot Acme Inc** for an organization named Acme Inc. Without a name on GitHub, the organization's login is used.
+
 Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Unified Model API](/docs/llm-proxy/unified-model) as `github-copilot:<model-id>`):
 
 ```bash
@@ -51,3 +53,11 @@ curl "https://<archestra-host>/v1/github-copilot/chat/completions" \
 ```
 
 <span id="manage-or-reconnect-a-plan"></span><span id="proxy-endpoint"></span><span id="limits"></span>
+
+## Offer Only One Way to Connect
+
+Keep Copilot billing on the organization's plan, or on each person's own seat. Go to **Settings → LLM → Model providers**. GitHub Copilot has one card for **Personal subscription** and one for **Enterprise plan**. Switch off **Available** on the card you do not offer.
+
+- Each card's switch decides only its own plan. The other plan stays on.
+- The plan you switch off leaves **Model Providers**, the chat menu and **Connect**. Nobody can set it up again, and Connect does not prepare a new setup with an account of that plan.
+- Connections that already exist keep working, and you can still delete them.

@@ -7,7 +7,10 @@
  * @see https://docs.x.ai/docs/api-reference
  */
 import type OpenAIProvider from "openai";
-import type { ResponseCreateParams } from "openai/resources/responses/responses";
+import type {
+  Response,
+  ResponseCreateParams,
+} from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as XaiAPI from "./api";
 import * as XaiMessages from "./messages";
@@ -32,6 +35,7 @@ namespace Xai {
     // The Responses surface, typed off the OpenAI Responses SDK type it is
     // served from.
     export type ResponsesRequest = ResponseCreateParams & { model: string };
+    export type ResponsesResponse = Response;
 
     export type FinishReason = z.infer<typeof XaiAPI.FinishReasonSchema>;
     export type Message = z.infer<typeof XaiMessages.MessageParamSchema>;

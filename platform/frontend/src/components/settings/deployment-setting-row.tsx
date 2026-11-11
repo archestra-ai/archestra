@@ -31,16 +31,67 @@ export function DeploymentSettingRow<T extends string>(props: {
   options: { value: T; label: string; description?: string }[];
   /** The environment variable that sets this setting, while one does. */
   environmentVariable?: string;
+  /**
+   * Inside a card: the control sits on the title's line at every width, with
+   * no padding of its own, and the variable's note runs under the text.
+   */
+  compact?: boolean;
   onChange: (value: T) => void;
 }) {
   const noteId = `${props.title.replaceAll(" ", "-").toLowerCase()}-env-note`;
+  const note = props.environmentVariable ? (
+    <div className="space-y-1 text-xs leading-4 text-muted-foreground">
+      <p className={props.compact ? undefined : "lg:whitespace-nowrap"}>
+        <span>Set with </span>
+        <code className="font-mono">
+          {/* Wrap a long name only after an underscore. */}
+          {props.environmentVariable.split("_").map((part, index) => (
+            <span key={part}>
+              {index > 0 ? (
+                <>
+                  _<wbr />
+                </>
+              ) : null}
+              {part}
+            </span>
+          ))}
+          <span>={props.value}</span>
+        </code>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <UnstyledButton
+              aria-label={`${props.title} environment values`}
+              className="ml-1 inline-flex align-middle"
+            >
+              <Info className="size-3.5" />
+            </UnstyledButton>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-sm space-y-2" align="end">
+            {props.options.map((option) => (
+              <div key={option.value}>
+                <code className="font-mono">{option.value}</code>
+                <span> — {option.label}.</span>
+                {option.description ? (
+                  <p className="mt-1">{option.description}</p>
+                ) : null}
+              </div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      </p>
+      <p id={noteId}>Unset the environment variable to edit this setting.</p>
+    </div>
+  ) : null;
   return (
     <div
       className={cn(
-        "grid gap-3 p-4 lg:items-center lg:gap-8",
-        props.environmentVariable
-          ? "lg:grid-cols-[minmax(0,1fr)_max-content]"
-          : "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]",
+        props.compact
+          ? "flex items-start justify-between gap-6"
+          : "grid gap-3 p-4 lg:items-center lg:gap-8",
+        !props.compact &&
+          (props.environmentVariable
+            ? "lg:grid-cols-[minmax(0,1fr)_max-content]"
+            : "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]"),
       )}
     >
       <div className="min-w-0 space-y-1">
@@ -48,9 +99,14 @@ export function DeploymentSettingRow<T extends string>(props: {
         <div className="text-sm leading-5 text-muted-foreground">
           {props.description}
         </div>
+        {props.compact ? note : null}
       </div>
       {props.value ? (
-        <div className="min-w-0 space-y-1.5">
+        <div
+          className={cn(
+            props.compact ? "w-28 shrink-0" : "min-w-0 space-y-1.5",
+          )}
+        >
           <Select
             value={props.value}
             disabled={props.disabled || props.environmentVariable !== undefined}
@@ -62,6 +118,7 @@ export function DeploymentSettingRow<T extends string>(props: {
             <SelectTrigger
               aria-label={props.title}
               aria-describedby={props.environmentVariable ? noteId : undefined}
+              size={props.compact ? "sm" : undefined}
               className="w-full"
             >
               <SelectValue />
@@ -78,51 +135,7 @@ export function DeploymentSettingRow<T extends string>(props: {
               ))}
             </SelectContent>
           </Select>
-          {props.environmentVariable ? (
-            <div className="space-y-1 text-xs leading-4 text-muted-foreground">
-              <p className="lg:whitespace-nowrap">
-                <span>Set with </span>
-                <code className="font-mono">
-                  {/* Wrap a long name only after an underscore. */}
-                  {props.environmentVariable.split("_").map((part, index) => (
-                    <span key={part}>
-                      {index > 0 ? (
-                        <>
-                          _<wbr />
-                        </>
-                      ) : null}
-                      {part}
-                    </span>
-                  ))}
-                  <span>={props.value}</span>
-                </code>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <UnstyledButton
-                      aria-label={`${props.title} environment values`}
-                      className="ml-1 inline-flex align-middle"
-                    >
-                      <Info className="size-3.5" />
-                    </UnstyledButton>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-sm space-y-2" align="end">
-                    {props.options.map((option) => (
-                      <div key={option.value}>
-                        <code className="font-mono">{option.value}</code>
-                        <span> — {option.label}.</span>
-                        {option.description ? (
-                          <p className="mt-1">{option.description}</p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </TooltipContent>
-                </Tooltip>
-              </p>
-              <p id={noteId}>
-                Unset the environment variable to edit this setting.
-              </p>
-            </div>
-          ) : null}
+          {props.compact ? null : note}
         </div>
       ) : (
         <Skeleton className="h-9 w-full" />

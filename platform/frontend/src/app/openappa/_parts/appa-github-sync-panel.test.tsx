@@ -144,17 +144,11 @@ test("shows the repository protection kept for server rules files, with bypass e
     ),
   );
   show();
-  expect(await screen.findByText("Repository protection")).toBeVisible();
-  // In the deployment's own name.
+  // In the deployment's own name, one sentence, with the ruleset linked.
   expect(
-    screen.getByText("Acme AI restores the missing rules at the next sync"),
+    await screen.findByText(/Acme AI sets the Self-service branch protection/),
   ).toBeVisible();
-  expect(
-    screen.getByText(
-      "2 bypass entries on GitHub can merge without these rules.",
-    ),
-  ).toBeVisible();
-  expect(screen.getByRole("link", { name: "View ruleset" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
   );
@@ -221,10 +215,14 @@ test("says when pull requests wait on a policy check the GitHub App cannot post"
   show();
   expect(
     await screen.findByText(
-      "Pull requests wait on a Guardrails Policy Admission check the GitHub App cannot post",
+      /holds pull requests until the GitHub App can post the check/,
     ),
   ).toBeVisible();
-  expect(screen.getByText(/Checks \(read and write\)/)).toBeVisible();
+  // The reason sits in the permissions notice, not in the sentence.
+  expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/rules/5",
+  );
 });
 
 test("turns self-service on for a GitHub App source, which brings the repository protection, and off again", async () => {
@@ -267,7 +265,7 @@ test("turns self-service on for a GitHub App source, which brings the repository
   expect(selector).toHaveTextContent("Off");
   expect(selector).toBeEnabled();
   // Off: no protection to show, and nothing is read for it.
-  expect(screen.queryByText("Repository protection")).toBeNull();
+  expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
   expect(protection).not.toHaveBeenCalled();
 
   fireEvent.click(selector);
@@ -277,8 +275,10 @@ test("turns self-service on for a GitHub App source, which brings the repository
   expect(toast.success).toHaveBeenCalledWith(
     "Self-service turned on. Server editors can change their servers' rules.",
   );
-  expect(await screen.findByText("Repository protection")).toBeVisible();
-  expect(screen.getByRole("link", { name: "View ruleset" })).toHaveAttribute(
+  expect(
+    await screen.findByText(/Self-service branch protection/),
+  ).toHaveTextContent("The Self-service branch protection ruleset is on.");
+  expect(screen.getByRole("link", { name: "ruleset" })).toHaveAttribute(
     "href",
     "https://github.com/example/policies/rules/5",
   );
@@ -288,7 +288,7 @@ test("turns self-service on for a GitHub App source, which brings the repository
   await waitFor(() => expect(selector).toHaveTextContent("Off"));
   expect(actions).toHaveLength(2);
   await waitFor(() =>
-    expect(screen.queryByText("Repository protection")).toBeNull(),
+    expect(screen.queryByText(/Self-service branch protection/)).toBeNull(),
   );
 });
 
@@ -331,7 +331,9 @@ test("locks self-service while the environment variable sets it, naming the vari
     screen.getByRole("button", { name: "Self-service environment values" }),
   ).toBeEnabled();
   // In force: the protection shows all the same.
-  expect(await screen.findByText("Repository protection")).toBeVisible();
+  expect(
+    await screen.findByText(/sets the Self-service branch protection/),
+  ).toBeVisible();
 });
 
 test("self-service needs a GitHub App: a source without one shows the switch off and locked", async () => {
@@ -353,7 +355,7 @@ test("self-service needs a GitHub App: a source without one shows the switch off
     "href",
     expect.stringContaining("git-sync#let-each-servers-team-own-its-rules"),
   );
-  expect(screen.queryByText("Repository protection")).toBeNull();
+  expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

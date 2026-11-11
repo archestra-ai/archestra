@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -57,7 +57,6 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
 import {
   GITHUB_WINDOW,
@@ -281,9 +280,6 @@ export function AppaGithubSyncPanel() {
                     canManage={canManage === true}
                   />
                 )}
-                {connected &&
-                  !source.setupPullRequestNumber &&
-                  selfService.enabled && <RepositoryProtection />}
               </GitSourceCard>
             ) : null}
           </div>
@@ -336,13 +332,6 @@ type Protection = NonNullable<
   archestraApiTypes.GetAppaRepositoryProtectionResponses["200"]
 >;
 
-type ProtectionView = {
-  status: string;
-  tone: "ok" | "pending" | "problem" | "off";
-  link?: { href: string; label: string };
-  detail?: string;
-};
-
 /**
  * The repository's protection for server rules files: the branch ruleset
  * Archestra keeps in line at each sync.
@@ -365,8 +354,9 @@ function SelfServiceRow({
   const eligible = !!source.githubAppConfigId;
   return (
     <GitSourceNotice>
-      <div className="rounded-md border">
+      <div className="space-y-2">
         <DeploymentSettingRow
+          compact
           title="Self-service"
           description={
             <>
@@ -390,6 +380,7 @@ function SelfServiceRow({
             })
           }
         />
+        {selfService.enabled ? <RepositoryProtection /> : null}
       </div>
     </GitSourceNotice>
   );
@@ -422,111 +413,65 @@ function RepositoryProtection() {
   const missing = (data.app?.permissions ?? []).filter(
     (permission) => !permission.granted,
   );
-  const rows: Array<{ label: string; view: ProtectionView }> = [
-    {
-      label: "Branch rules",
-      view: branchRulesView(data.branchRules, appName, data.checkName),
-    },
-  ];
   return (
-    <GitSourceNotice>
-      <div className="space-y-2 rounded-md border p-3 text-sm">
-        <p className="font-medium">Repository protection</p>
-        <dl className="space-y-2">
-          {rows.map(({ label, view }) => (
-            <div key={label} className="flex flex-wrap gap-x-3 gap-y-1">
-              <dt className="w-28 shrink-0 text-muted-foreground">{label}</dt>
-              <dd className="min-w-0 flex-1 space-y-1">
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      view.tone === "ok" && "bg-emerald-500",
-                      view.tone === "pending" && "bg-amber-500",
-                      view.tone === "problem" && "bg-destructive",
-                      view.tone === "off" && "bg-muted-foreground/40",
-                    )}
-                  />
-                  <span>{view.status}</span>
-                  {view.link && (
-                    <a
-                      href={view.link.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-                    >
-                      <span>{view.link.label}</span>
-                      <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                  )}
+    <>
+      <p className="text-sm text-muted-foreground">
+        {protectionSentence(data.branchRules, appName)}
+      </p>
+      {data.app && missing.length > 0 && (
+        <InlineNotice variant="warning">
+          <AlertTriangle className="size-4 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1 space-y-2">
+            <InlineNoticeText>
+              The GitHub App lacks{" "}
+              {missing.map((permission, index) => (
+                <span key={permission.name}>
+                  {index > 0 && (index === missing.length - 1 ? " and " : ", ")}
+                  <strong>{APP_PERMISSION_LABELS[permission.name]}</strong> (
+                  {APP_PERMISSION_PURPOSES[permission.name]})
                 </span>
-                {view.detail && (
-                  <p className="text-muted-foreground">{view.detail}</p>
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        {data.app && missing.length > 0 && (
-          <InlineNotice variant="warning">
-            <AlertTriangle className="size-4 shrink-0" aria-hidden />
-            <div className="min-w-0 flex-1 space-y-2">
-              <InlineNoticeText>
-                The GitHub App lacks{" "}
-                {missing.map((permission, index) => (
-                  <span key={permission.name}>
-                    {index > 0 &&
-                      (index === missing.length - 1 ? " and " : ", ")}
-                    <strong>{APP_PERMISSION_LABELS[permission.name]}</strong> (
-                    {APP_PERMISSION_PURPOSES[permission.name]})
-                  </span>
-                ))}
-                . Grant {missing.length === 1 ? "it" : "them"} on the App, as
-                read and write, then accept the change on the installation.
-              </InlineNoticeText>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  type="button"
-                  onClick={() => {
-                    openGithubWindow(
-                      data.app?.settingsUrl ?? "",
-                      GITHUB_WINDOW,
-                    );
-                  }}
+              ))}
+              . Grant {missing.length === 1 ? "it" : "them"} on the App, as read
+              and write, then accept the change on the installation.
+            </InlineNoticeText>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => {
+                  openGithubWindow(data.app?.settingsUrl ?? "", GITHUB_WINDOW);
+                }}
+              >
+                Update App permissions
+                <ExternalLink className="size-3" aria-hidden />
+              </Button>
+              {data.app.installationUrl && (
+                <a
+                  href={data.app.installationUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
                 >
-                  Update App permissions
+                  <span>Accept on the installation</span>
                   <ExternalLink className="size-3" aria-hidden />
-                </Button>
-                {data.app.installationUrl && (
-                  <a
-                    href={data.app.installationUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline"
-                  >
-                    <span>Accept on the installation</span>
-                    <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                )}
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                  disabled={isFetching}
-                  onClick={() => {
-                    void refetch();
-                  }}
-                >
-                  Check again
-                </Button>
-              </div>
+                </a>
+              )}
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                disabled={isFetching}
+                onClick={() => {
+                  void refetch();
+                }}
+              >
+                Check again
+              </Button>
             </div>
-          </InlineNotice>
-        )}
-      </div>
-    </GitSourceNotice>
+          </div>
+        </InlineNotice>
+      )}
+    </>
   );
 }
 
@@ -544,72 +489,61 @@ const APP_PERMISSION_PURPOSES = {
   administration: "keeps the branch rules",
 } as const;
 
-function branchRulesView(
+/**
+ * One sentence on the ruleset: on, with a link to it, or why not yet. The
+ * check the App cannot post comes first, since a rule that requires it holds
+ * every pull request.
+ */
+function protectionSentence(
   rules: Protection["branchRules"],
   appName: string,
-  checkName: string,
-): ProtectionView {
-  const link = rules.url
-    ? { href: rules.url, label: "View ruleset" }
-    : undefined;
-  // Kept as an administrator added them on GitHub; each one skips the rules.
-  const bypass = rules.bypassActors
-    ? rules.bypassActors === 1
-      ? "One bypass entry on GitHub can merge without these rules."
-      : `${rules.bypassActors} bypass entries on GitHub can merge without these rules.`
-    : undefined;
-  // The check the App cannot post: a rule that requires it holds every pull
-  // request, so that comes first; without the rule, merges go on without it.
-  const detail = [rules.detail, bypass].filter(Boolean).join(" ") || undefined;
+): ReactNode {
+  const ruleset = rules.url ? (
+    <a
+      href={rules.url}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/80"
+    >
+      ruleset
+    </a>
+  ) : (
+    <span>ruleset</span>
+  );
   if (rules.checkRule === "unposted")
-    return {
-      status: `Pull requests wait on a ${checkName} check the GitHub App cannot post`,
-      tone: "problem",
-      link,
-      detail,
-    };
+    return (
+      <>
+        The Self-service branch protection {ruleset} holds pull requests until
+        the GitHub App can post the check.
+      </>
+    );
   switch (rules.state) {
     case "active":
-      return {
-        status: `Merges need the ${checkName} check, skipped when no policy file changed; nothing else about the branch is changed`,
-        tone: "ok",
-        link,
-        detail,
-      };
+      return <>The Self-service branch protection {ruleset} is on.</>;
     case "incomplete":
-      return {
-        status: `${appName} restores the missing rules at the next sync`,
-        tone: "pending",
-        link,
-        detail,
-      };
     case "missing":
-      return {
-        status: `${appName} creates the ruleset at the next sync`,
-        tone: "pending",
-      };
+      return (
+        <>
+          {appName} sets the Self-service branch protection {ruleset} up at the
+          next sync.
+        </>
+      );
     case "needs_permission":
-      // An App created before Archestra kept rulesets: an opt-in, not a fault.
-      return {
-        status: "Off until the GitHub App has the Administration permission",
-        tone: "off",
-        detail: rules.detail,
-      };
-    case "unavailable":
-      return {
-        status: "Not available for this repository",
-        tone: "problem",
-        detail: rules.detail,
-      };
+      return (
+        <>
+          The Self-service branch protection ruleset waits for the GitHub
+          App&apos;s Administration permission.
+        </>
+      );
     default:
-      return {
-        status: "Could not check",
-        tone: "problem",
-        detail: rules.detail,
-      };
+      return (
+        <>
+          The Self-service branch protection ruleset could not be checked
+          {rules.detail ? <span>: {rules.detail}</span> : <span>.</span>}
+        </>
+      );
   }
 }
-
 export function OpenAppaSourceForm({
   source,
   onOpenChange,

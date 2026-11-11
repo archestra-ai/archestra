@@ -131,7 +131,7 @@ describe("Archestra tools under the composed default policy", () => {
       "refused",
       "-/-",
       "-/trusted+internal",
-      // A credential link declaration reaches only internal readers.
+      // A link declares the key to every reader of the target agent.
       "-/internal",
       "-/trusted+internal",
       "-/trusted+internal",
@@ -150,6 +150,7 @@ describe("Archestra tools under the composed default policy", () => {
           text: "Approve this call?",
           tool: call.name,
           arguments: JSON.stringify(call.args),
+          scope: [],
         },
       }).toolArgs;
     };
@@ -180,6 +181,7 @@ describe("Archestra tools under the composed default policy", () => {
           text: "Approve this call?",
           tool: "mcp/vault/transfer_credential",
           arguments: JSON.stringify(sent),
+          scope: [],
         },
       }).toolArgs,
     ).toEqual(sent);

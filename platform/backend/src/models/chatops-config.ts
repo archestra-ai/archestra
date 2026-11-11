@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
-import { schema, withDbTransaction } from "@/database";
+import { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -145,7 +145,10 @@ class ChatOpsConfigModel {
   }
 
   async saveSlackConfig(value: SlackDbConfig): Promise<void> {
-    await this.saveConfig(SLACK_SECRET_NAME, value as unknown as SecretValue);
+    await this.saveSlackDiscoveryConfig(
+      SLACK_SECRET_NAME,
+      value as unknown as SecretValue,
+    );
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
   }
 
@@ -159,6 +162,49 @@ class ChatOpsConfigModel {
       connectionMode: bot.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
       appLevelToken: bot.appLevelToken ?? "",
     }));
+  }
+
+  /** Fence publication against settings saves, including first-time bot insertion. */
+  async getSlackDiscoveryConfigs(tx: Transaction): Promise<{
+    main: SlackDbConfig | null;
+    bots: SlackAgentBotConfig[];
+  }> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"slack-discovery-config"}, 0))`,
+    );
+    const rows = await tx
+      .select()
+      .from(schema.secretsTable)
+      .where(
+        inArray(schema.secretsTable.name, [
+          SLACK_SECRET_NAME,
+          SLACK_AGENT_BOTS_SECRET_NAME,
+        ]),
+      );
+    const values = new Map(
+      rows.map((row) => {
+        if (row.isVault)
+          throw new Error(
+            "Slack discovery requires database-stored configuration",
+          );
+        return [
+          row.name,
+          isEncryptedSecret(row.secret)
+            ? decryptSecretValue(row.secret)
+            : row.secret,
+        ];
+      }),
+    );
+    const main = values.get(SLACK_SECRET_NAME) as unknown as
+      | SlackDbConfig
+      | undefined;
+    const bots = values.get(SLACK_AGENT_BOTS_SECRET_NAME) as unknown as
+      | { bots?: SlackAgentBotConfig[] }
+      | undefined;
+    return {
+      main: main ? normalizeSlackConfig(main) : null,
+      bots: bots?.bots ?? [],
+    };
   }
 
   /** Add or replace the bot pinned to `bot.agentId`. */
@@ -283,8 +329,23 @@ class ChatOpsConfigModel {
     };
   }
 
+  private async saveSlackDiscoveryConfig(
+    name: string,
+    value: SecretValue,
+  ): Promise<void> {
+    await withDbTransaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${"slack-discovery-config"}, 0))`,
+      );
+      const row = await SecretModel.findByName(name, tx);
+      if (row) await SecretModel.update(row.id, { secret: value }, tx);
+      else
+        await SecretModel.create({ name, secret: value, isVault: false }, tx);
+    });
+  }
+
   private async saveSlackAgentBots(bots: SlackAgentBotConfig[]): Promise<void> {
-    await this.saveConfig(SLACK_AGENT_BOTS_SECRET_NAME, {
+    await this.saveSlackDiscoveryConfig(SLACK_AGENT_BOTS_SECRET_NAME, {
       bots,
     } as unknown as SecretValue);
   }
@@ -299,7 +360,13 @@ class ChatOpsConfigModel {
     const secretRow = await SecretModel.findByName(secretName);
     if (!secretRow) return null;
 
-    const secret = await secretManager().getSecret(secretRow.id);
+    // Slack configuration is fenced across replicas; a process-local secret
+    // cache must not resurrect the configuration from before a settings save.
+    const secret = await secretManager().getSecret(secretRow.id, {
+      skipCache:
+        secretName === SLACK_SECRET_NAME ||
+        secretName === SLACK_AGENT_BOTS_SECRET_NAME,
+    });
     if (!secret?.secret) return null;
 
     return {

@@ -32,7 +32,8 @@ The next release after `1.4.0-beta.13` uses temporary `release-as: 1.4.0-rc.14` 
 Changing only `prerelease-type` does not replace an existing beta suffix in Release Please.
 Keep the manifest and published beta versions unchanged until the generated RC release PR updates them.
 After `1.4.0-rc.14` publishes, remove only `release-as` so rolling releases continue at `1.4.0-rc.15`.
-RCs publish after successful builds and move only `archestra/platform:latest`. Neither release channel uses a GitHub environment or a separate deployment approval.
+RCs publish after successful builds once a second Engineering member (not whoever merged or started it) approves it in archestra-ai/release-publisher's `stable-release` environment, and move only `archestra/platform:latest`. Stable releases wait for the same approval. The release run waits up to 6 hours; when nobody approves in time, re-run its failed jobs to send a new request.
+Until that release is published, the required **Previous Release Published** check fails the next release PR on the same line (`main` for RCs, `release/X.Y` for its patches), and a comment on the PR names the draft it waits for. The check re-runs on its own once the release is published, or once its draft is deleted to abandon the version.
 
 ```mermaid
 gitGraph
@@ -66,7 +67,7 @@ manifest.
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.14`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
-3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the RC release.
+3. [ ] Merge the PR, get a second Engineering member to approve the publisher run (`stable-release`) within 6 hours, and confirm the **Release Please** workflow publishes the RC release.
 
 ## Ship A Stable Fix
 

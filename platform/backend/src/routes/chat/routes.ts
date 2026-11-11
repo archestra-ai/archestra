@@ -174,6 +174,7 @@ import { ConversationFilesResponseSchema } from "@/types/conversation-file";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
+  resolveAutoModelSelection,
   resolveConversationLlmSelectionForAgent,
   resolveConversationModel,
 } from "@/utils/llm-resolution";
@@ -628,6 +629,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
+      // Auto is a live selection, not the normal tier snapshot saved when
+      // the conversation began. Refresh only this turn's view, including its
+      // provider, before attachment gating and wire/client selection.
+      const autoSelection = conversation.autoRouterId
+        ? await resolveAutoModelSelection(
+            organizationId,
+            conversation.autoRouterId,
+          )
+        : null;
+      if (autoSelection) {
+        conversation.modelId = autoSelection.modelId;
+        conversation.chatApiKeyId = autoSelection.chatApiKeyId;
+      }
+
       // A shared agent may be configured to refuse callers who cannot reach one
       // of the MCP servers its tools come from, rather than letting them find
       // out mid-turn when such a tool errors. The picker greys these agents out,
@@ -701,6 +716,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           policy: {
             ingestibleMimeTypes: getModelReadableMimeTypes(
               attachmentModelRow?.inputModalities ?? null,
+              attachmentModelRow?.provider,
             ),
             sandboxAvailable: await isSkillSandboxAvailableForAgent({
               userId: user.id,
@@ -1340,8 +1356,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
+                    providerKeySelection: autoSelection?.chatApiKeyId
+                      ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                      : undefined,
                     modelPoolId: conversation.modelPoolId,
-                    autoRoutable: !conversation.modelPoolId,
+                    autoRouterId: autoSelection?.autoRouterId ?? null,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1580,8 +1599,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
+                          providerKeySelection: autoSelection?.chatApiKeyId
+                            ? { providerApiKeyId: autoSelection.chatApiKeyId }
+                            : undefined,
                           modelPoolId: conversation.modelPoolId,
-                          autoRoutable: !conversation.modelPoolId,
+                          autoRouterId: autoSelection?.autoRouterId ?? null,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -3095,6 +3117,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           modelPoolId: true,
+          autoRouterId: true,
           projectId: true,
           encryptedChat: true,
           thinkingEffort: true,
@@ -3105,6 +3128,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             modelPoolId: true,
+            autoRouterId: true,
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
@@ -3120,6 +3144,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId,
           chatApiKeyId,
           modelPoolId,
+          autoRouterId,
           projectId,
           encryptedChat,
           thinkingEffort,
@@ -3191,11 +3216,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             selectedModel: null,
           }
         : await resolveConversationLlmSelectionForAgent({
-            agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+            agent: {
+              llmApiKeyId: agent.llmApiKeyId,
+              modelId: agent.modelId,
+              autoRouterId: agent.autoRouterId,
+            },
             organizationId,
             userId: user.id,
             explicitModelId: modelId,
             explicitApiKeyId: chatApiKeyId,
+            explicitAutoRouterId: autoRouterId,
+            allowAutoModel: agent.runtime === null,
           });
 
       logger.info(
@@ -3241,6 +3272,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           modelPoolId: modelPoolId ?? null,
+          autoRouterId:
+            ("autoRouterId" in llmSelection && llmSelection.autoRouterId) ||
+            null,
           projectId: projectId ?? null,
           thinkingEffort,
         }),
@@ -3312,7 +3346,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // this request switches agents, not the one being left.
       // Picking a pool stores one of its members as the conversation's key
       // and model; picking a key or model, or another agent, leaves the pool.
-      if (body.modelPoolId) {
+      // Picking an auto router stores its normal tier the same way, and
+      // leaves the pool; picking anything else leaves the router.
+      if (body.autoRouterId) {
+        const auto = await resolveAutoModelSelection(
+          organizationId,
+          body.autoRouterId,
+        );
+        if (!auto) {
+          throw new ApiError(400, "This auto router is not set up.");
+        }
+        body.modelId = auto.modelId;
+        body.chatApiKeyId = auto.chatApiKeyId;
+        body.modelPoolId = null;
+      } else if (body.modelPoolId) {
         const pooled = await resolveChatModelPool({
           organizationId,
           userId: user.id,
@@ -3328,12 +3375,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         body.modelPoolId = null;
       }
+      // Any explicit pool, `null` included, leaves the auto router: the menu
+      // leaves a pool, and a router, by picking the key it already runs on.
+      if (
+        body.autoRouterId === undefined &&
+        (body.modelPoolId !== undefined ||
+          body.modelId !== undefined ||
+          body.chatApiKeyId !== undefined ||
+          nextAgent)
+      ) {
+        body.autoRouterId = null;
+      }
 
       const effectiveAgentLlmApiKeyId = nextAgent
         ? nextAgent.llmApiKeyId
         : currentConversation.agent?.llmApiKeyId;
       if (
         !body.modelPoolId &&
+        !body.autoRouterId &&
         body.chatApiKeyId &&
         body.chatApiKeyId !== effectiveAgentLlmApiKeyId
       ) {
@@ -3347,6 +3406,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         nextAgent &&
         !body.modelPoolId &&
+        !body.autoRouterId &&
         body.modelId === undefined &&
         body.chatApiKeyId === undefined
       ) {
@@ -3354,13 +3414,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agent: {
             llmApiKeyId: nextAgent.llmApiKeyId ?? null,
             modelId: nextAgent.modelId ?? null,
+            autoRouterId: nextAgent.autoRouterId,
           },
           organizationId,
           userId: user.id,
+          allowAutoModel: nextAgent.runtime === null,
         });
 
         body.modelId = llmSelection.modelId;
         body.chatApiKeyId = llmSelection.chatApiKeyId;
+        body.autoRouterId = llmSelection.autoRouterId ?? null;
         // The new agent's pool comes with its model.
         if (
           nextAgent.modelPoolId &&

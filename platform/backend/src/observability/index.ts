@@ -28,6 +28,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.sandbox.initializeSandboxMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();
   metrics.taskQueue.initializeTaskQueueMetrics();
+  metrics.toolSearchText.initializeToolSearchTextMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.limit.initializeLimitMetrics();
   metrics.openappa.initializeOpenappaMetrics();

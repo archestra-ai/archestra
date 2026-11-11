@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-09
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -51,6 +51,42 @@ The controller does not install a container isolation runtime. Check image archi
 ## Storage and Placement
 
 Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS) to your storage class and [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) to compatible Linux nodes. For zonal disks, use `WaitForFirstConsumer` and matching node zones. Node-local storage cannot preserve files after node loss.
+
+To keep runs off the node's kernel, use a [sandboxed runtime](#sandboxed-runtime).
+
+## Sandboxed Runtime
+
+A run executes code an agent wrote, so give it a kernel of its own. With a sandboxed runtime, each run gets a user-space kernel (gVisor) or a lightweight VM (Kata Containers) instead of sharing the node's kernel, so an escape from the container does not reach the node. Use one in production.
+
+Archestra does not install the runtime. Set it up in the cluster, then point Archestra at its RuntimeClass:
+
+:::tabs
+@tab AWS
+EKS has no managed sandbox. Install [gVisor](https://gvisor.dev/docs/user_guide/containerd/quick_start/) or [Kata Containers](https://github.com/kata-containers/kata-containers/tree/main/docs/install) on a dedicated node group, and create a RuntimeClass for its handler, such as `runsc` for gVisor. Taint the node group and set the RuntimeClass's `scheduling` so runs land only on those nodes.
+@tab Google Cloud
+Create a [GKE Sandbox](https://cloud.google.com/kubernetes-engine/docs/how-to/sandbox-pods) node pool with `gcloud container node-pools create <pool> --cluster=<cluster> --sandbox=type=gvisor`. GKE creates the `gvisor` RuntimeClass, taints the pool, and adds the matching toleration to every pod that uses it. Autopilot clusters support `gvisor` with no node pool.
+@tab Azure
+Add an AKS [Pod Sandboxing](https://learn.microsoft.com/en-us/azure/aks/use-pod-sandboxing) node pool with `az aks nodepool add --os-sku AzureLinux --workload-runtime KataVmIsolation`. It needs a VM size with nested virtualization. Use the `kata-vm-isolation` RuntimeClass.
+:::
+
+Then set [`ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME):
+
+```yaml
+archestra:
+  env:
+    ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: gvisor
+```
+
+New runs then start on the sandboxed runtime. To check, list the runtime pods in their namespace. Each shows its RuntimeClass. With gVisor, `kubectl exec <pod> -- uname -r` also reports a different kernel version than the node's:
+
+```bash
+kubectl get pods -n <namespace> -l archestra.io/agent-workspace \
+  -o custom-columns=NAME:.metadata.name,RUNTIME:.spec.runtimeClassName
+```
+
+- Archestra does not check that the RuntimeClass exists. A misspelled name stops Kubernetes from creating the run's pod, and the run never starts.
+- With [`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR) set, give the sandbox nodes that label too.
+- [Privileged runs](#privileged-containers) ignore the RuntimeClass and share the node's kernel. Keep [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED) off unless runs need Docker.
 
 ## EKS With Fargate
 
@@ -100,7 +136,7 @@ Archestra maintains the configured pool replica count. An HPA targeting these po
 
 Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
 
-After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
+Privileged runs ignore the [sandboxed runtime](#sandboxed-runtime). After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 
 <!-- SPDX-SnippetBegin -->
 <!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
@@ -121,7 +157,7 @@ Upgrading Archestra moves every agent made from a catalog template onto the new 
 - **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
 - **A turn already running** keeps its image until it ends.
 
-A custom image, or a maintained image pinned by digest, runs exactly as saved.
+A custom image, or a maintained image you pinned by digest alone (`…/agent-codex@sha256:…`, no tag), runs exactly as saved.
 
 ## Troubleshooting
 

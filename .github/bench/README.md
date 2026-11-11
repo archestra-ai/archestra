@@ -50,24 +50,30 @@ gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
   --member="domain:archestra.ai" --role="roles/storage.objectViewer"
 ```
 
-### 2. GitHub secrets
+### 2. Secret Manager secrets
 
-All three are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
+The workflow reads three secrets from GCP Secret Manager in `friendly-path-465518-r6` as the
+service account in the `CI_BENCHMARK_SECRETS_SERVICE_ACCOUNT` repository variable
+(`ci-archestra-benchmark@friendly-path-465518-r6.iam.gserviceaccount.com`). It needs
+`roles/secretmanager.secretAccessor` on each secret and a Workload Identity binding for this
+repository. Each run syncs the values into the `archestra-bench-secrets` k8s secret, where the pod
+reads them:
 
-- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `ai-labs/lanes.toml`).
-- `OPENROUTER_API_KEY` — the key for every `provider = "openrouter"` lane in
-  `ai-labs/lanes.toml` (their default `api_key_env`).
-- `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
-  the Slack post.
+- `ci-benchmark-zai-api-key` → `ZAI_API_KEY`, the glm lane key (`api_key_env = ZAI_API_KEY` in
+  `ai-labs/lanes.toml`).
+- `ci-benchmark-openrouter-api-key` → `OPENROUTER_API_KEY`, the key for every
+  `provider = "openrouter"` lane in `ai-labs/lanes.toml` (their default `api_key_env`).
+- `ci-benchmark-slack-webhook-url` → `SLACK_BENCH_WEBHOOK_URL`, the Slack incoming webhook for the
+  summary message. The secret must exist; if its value is empty, the pod skips the Slack post.
 
 These cover every lane in the default `BENCH_LANES` roster, defined once in `benchmark.yml` as the
 fallback both the scheduled run and an empty `workflow_dispatch` selection inherit. The `kimi` lane
 is not in that roster and its `KIMI_API_KEY` is not synced — add both if you ever put it on the CI
 roster, and mind that a dispatch selecting a lane whose key is not synced fails env seeding.
 
-The WIF auth and GKE creds reuse the existing
+After reading the secrets, the job authenticates again with the existing
 `DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME` /
-`DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER` secrets.
+`DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER` variables for GAR and GKE access.
 
 ## GCS layout
 

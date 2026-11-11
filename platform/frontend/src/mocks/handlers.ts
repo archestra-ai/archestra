@@ -695,6 +695,11 @@ export const handlers: HttpHandler[] = [
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
   ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
+  // The agent settings page checks which runtime agents run on the default.
+  ...getJson("/api/organization/agent-settings/default-model-dependents", {
+    agents: [],
+    hiddenBlockingCount: 0,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",
@@ -825,6 +830,13 @@ export const handlers: HttpHandler[] = [
     forks: [],
     forksTruncated: false,
   }),
+  // No handoff to Agent Runtime, and no auto-routing decision, by default.
+  ...getJson("/api/llm-proxy-logs/sessions/:sessionId/handoffs", {
+    handedTo: [],
+    handedFrom: null,
+    moves: [],
+  }),
+  ...getJson("/api/llm-proxy-logs/:logId/auto-routing", { decision: null }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting

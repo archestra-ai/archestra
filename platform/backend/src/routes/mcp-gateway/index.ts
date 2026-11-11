@@ -12,7 +12,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
-
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { RequestLookups } from "@/auth/request-lookups";
 import { requestScope } from "@/auth/request-scope";
@@ -35,6 +34,7 @@ import {
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { llmToolCallSessions } from "@/services/llm-tool-call-sessions";
 import {
   McpGatewayAuthenticationBusyError,
   McpGatewayRateLimiter,
@@ -461,6 +461,9 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      grokToolNames:
+        /^grok-cli\//i.test(String(request.headers["user-agent"] ?? "")) ||
+        request.headers["x-archestra-agent-id"] === "grok-build",
       openappaSession,
       currentToolCallId,
       agentId: profileId,
@@ -1432,8 +1435,18 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
-      const llmSessionId = gatewayLlmSessionId(request);
       const llmToolCallId = gatewayLlmToolCallId(request.body);
+      // Claude Code names the call's tool_use id but not its session; the
+      // proxy recorded which session that call came from.
+      const llmSessionId =
+        gatewayLlmSessionId(request) ??
+        (llmToolCallId
+          ? await llmToolCallSessions.resolve({
+              organizationId: tokenAuth.organizationId,
+              userId: tokenAuth.userId,
+              toolCallId: llmToolCallId,
+            })
+          : undefined);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,

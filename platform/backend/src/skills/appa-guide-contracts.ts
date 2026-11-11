@@ -36,7 +36,7 @@ export const APPA_CONTRACTS_PARTS = [
   {
     slug: "annotators",
     summary:
-      "annotators: inputs, context providers, permits, and hints, and the recorders that store what a released call publishes for a later annotation. Read before adding or changing an annotator or a recorder.",
+      "annotators (inputs, context providers, permits, and hints) and recorders (the label a released call publishes). Read before adding or changing an annotator or a recorder.",
     headings: ["## Annotators", "## Recorders"],
   },
   {

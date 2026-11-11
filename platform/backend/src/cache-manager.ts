@@ -3,7 +3,8 @@ import KeyvPostgres from "@keyv/postgres";
 import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
-import db from "@/database";
+import db, { type Transaction } from "@/database";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 import CacheEntryModel from "@/models/cache-entry";
 
@@ -41,6 +42,8 @@ export const CacheKey = {
   GitHubActionsTokenJti: "github-actions-token-jti",
   /** GitHub Actions token exchange requests, before verifying the OIDC token. */
   GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
+  /** Workload identity token exchange requests, before verifying the OIDC token. */
+  WorkloadIdentityTokenRateLimit: "workload-identity-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
@@ -67,6 +70,8 @@ export const CacheKey = {
   NativeUserQuestion: "native-user-question",
   /** Single-card choices and provenance, isolated from older grouped-only decoders. */
   NativeUserQuestionPresentation: "native-question-presentation",
+  /** The LLM session and user behind an MCP tool call the proxy handed a client, for the gateway that runs it */
+  LlmToolCallSession: "llm-tool-call-session",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
   /** Sessions the proxy admitted as unattended, for the gateway's Break the glass review waiver */
@@ -93,12 +98,16 @@ export const CacheKey = {
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** How many results followed a ruling when its remedy continuation was last delivered. */
+  OpenAppaRemedyContinuationDelivered: "openappa-remedy-continuation-delivered",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
+  /** Admission and failure cooldown, not cleared by manual freshness refresh. */
+  ChannelDiscoveryLease: "channel-scan-lease",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
@@ -107,12 +116,10 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** First native conversation to present a verified setup reference */
   ConnectionSetupConversation: "connection-setup-conversation",
-  /** Archestra VAF Add On package proxy rate limiting per IP */
+  /** Archestra VAF Add On package and script rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
   MfilesVafAddOnReleasePin: "mfiles-vaf-add-on-release-pin",
-  /** Latest CI-built add-on artifact for the dev source-ref override */
-  MfilesVafAddOnCiArtifact: "mfiles-vaf-add-on-ci-artifact",
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
@@ -142,6 +149,8 @@ export const CacheKey = {
   TeamsFileSignIn: "teams-file-sign-in",
   /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
   TeamsFileSignInState: "teams-file-sign-in-state",
+  /** Page URL of an MS Teams channel's files folder, learned from a sender's sign-in */
+  TeamsChannelFilesFolder: "teams-channel-files-folder",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",
@@ -499,7 +508,7 @@ class CacheManager {
   /** All participants must use the same scope and this transaction's cache methods. */
   async withLock<T>(
     scope: AllowedCacheKey,
-    callback: (cache: TransactionalCache) => Promise<T>,
+    callback: (cache: TransactionalCache, tx: Transaction) => Promise<T>,
   ): Promise<T> {
     const keyv = this.keyv;
     if (!keyv) throw new Error("CacheManager: Not started");
@@ -507,7 +516,7 @@ class CacheManager {
     if (keyv.opts.store instanceof KeyvPostgres) {
       await keyv.opts.store.query("SELECT 1");
     }
-    return CacheEntryModel.withLock(scope, async (entries) => {
+    return CacheEntryModel.withLock(scope, async (entries, tx) => {
       const decode = async <V>(
         raw: string | undefined,
       ): Promise<V | undefined> => {
@@ -527,27 +536,30 @@ class CacheManager {
         }
         return values;
       };
-      return callback({
-        get: async <V>(key: AllowedCacheKey) =>
-          decode<V>(await entries.get(`keyv:${key}`)),
-        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
-          const lifetime = ttl ?? this.defaultTtl;
-          const payload = await keyv.serializeData({
-            value,
-            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
-          });
-          await entries.set(
-            `keyv:${key}`,
-            typeof payload === "string" ? payload : JSON.stringify(payload),
-          );
-          return value;
+      return callback(
+        {
+          get: async <V>(key: AllowedCacheKey) =>
+            decode<V>(await entries.get(`keyv:${key}`)),
+          set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+            const lifetime = ttl ?? this.defaultTtl;
+            const payload = await keyv.serializeData({
+              value,
+              expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+            });
+            await entries.set(
+              `keyv:${key}`,
+              typeof payload === "string" ? payload : JSON.stringify(payload),
+            );
+            return value;
+          },
+          delete: async (key: AllowedCacheKey) =>
+            (await entries.take([`keyv:${key}`])).length > 0,
+          getAndDelete: async <V>(key: AllowedCacheKey) =>
+            (await take<V>([key]))[0]?.value,
+          getAndDeleteMany: take,
         },
-        delete: async (key: AllowedCacheKey) =>
-          (await entries.take([`keyv:${key}`])).length > 0,
-        getAndDelete: async <V>(key: AllowedCacheKey) =>
-          (await take<V>([key]))[0]?.value,
-        getAndDeleteMany: take,
-      });
+        tx,
+      );
     });
   }
 
@@ -720,8 +732,17 @@ export const cacheManager = new CacheManager();
 // === Internal helpers
 
 function createPostgresStore(): KeyvStoreAdapter {
+  const pgPoolOptions = buildPgConnectionConfig(
+    config.database.url,
+    { max: 10 },
+    {
+      iamAuthEnabled: config.database.iamAuthEnabled,
+      awsRegion: config.database.awsRegion || undefined,
+    },
+  );
   return new KeyvPostgres({
-    uri: config.database.url,
+    ...pgPoolOptions,
+    uri: config.database.iamAuthEnabled ? undefined : config.database.url,
     table: "keyv_cache",
     max: 10,
     /**

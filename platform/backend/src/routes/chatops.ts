@@ -3224,7 +3224,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // If the provider can discover channels eagerly, do it now
       const provider = chatOpsManager.getChatOpsProvider(providerType);
       const workspaceId = provider?.getWorkspaceId();
-      if (provider && workspaceId) {
+      if (providerType === "slack") {
+        // Slack discovery includes agent bots even without a connected router.
+        await chatOpsManager.discoverSlackChannels(null);
+      } else if (provider && workspaceId) {
         await chatOpsManager.discoverChannels({
           provider,
           context: null,

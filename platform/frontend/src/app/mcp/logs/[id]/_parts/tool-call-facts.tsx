@@ -100,6 +100,26 @@ export function ToolCallFacts({
         {authMethod ? <FactSub>via {authMethod}</FactSub> : null}
       </Fact>
 
+      {call.credentialClientId ? (
+        <Fact label="Token issued to">
+          <FactValue>
+            {
+              CREDENTIAL_CLIENT_LABEL[
+                call.credentialClientType ?? "identity_provider"
+              ]
+            }
+          </FactValue>
+          <FactSub>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="truncate font-mono">
+                {call.credentialClientId}
+              </span>
+              <CopyButton text={call.credentialClientId} size={12} />
+            </span>
+          </FactSub>
+        </Fact>
+      ) : null}
+
       {executedAs ? (
         <Fact label="Called as">
           <span className="flex min-h-5 items-center">
@@ -117,6 +137,16 @@ export function ToolCallFacts({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/** Who the call's exchanged enterprise credential was issued to. */
+const CREDENTIAL_CLIENT_LABEL: Record<
+  NonNullable<McpToolCallRecord["credentialClientType"]>,
+  string
+> = {
+  entra_agent_identity: "Entra agent identity",
+  mcp_server: "MCP server's client",
+  identity_provider: "Identity provider's client",
+};
 
 function LinksRow({ call }: { call: McpToolCallRecord }) {
   const { sessionId, gone } = useLinkedSession(call);

@@ -41,7 +41,7 @@ describe("archestra annotator", () => {
   let organizationId: string;
   let agentId: string;
   let useDefaultModel: (params: {
-    provider: "openai" | "openrouter";
+    provider: "openai" | "openrouter" | "kimi-code";
     modelId: string;
     organizationId?: string;
     /** Leave the organization default alone; only create the key and model. */
@@ -224,6 +224,39 @@ describe("archestra annotator", () => {
     expect(viaPicked.map(({ body }) => body.model)).toEqual([
       "anthropic/claude-sonnet-5",
     ]);
+  });
+
+  test.each([
+    { model: "k3.1-pro", effort: "low" },
+    { model: "k3.1-pro-highspeed", effort: "low" },
+    { model: "kimi-for-coding", effort: "low" },
+    { model: "kimi-for-coding-highspeed", effort: undefined },
+  ])("uses supported Kimi annotation effort through structured and tagged calls ($model)", async ({
+    model,
+    effort,
+  }) => {
+    await useDefaultModel({ provider: "kimi-code", modelId: model });
+    const sent = answerAt(
+      `/v1/kimi-code/${agentId}/chat/completions`,
+      (body) =>
+        "response_format" in body
+          ? HttpResponse.json(
+              { error: { message: "Structured output is unsupported." } },
+              { status: 400 },
+            )
+          : completion('<annotation>{"rank":"trusted"}</annotation>'),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ rank: "trusted" });
+    expect(sent).toHaveLength(2);
+    for (const { body } of sent) {
+      expect(body.model).toBe(model);
+      expect(body.reasoning_effort).toBe(effort);
+      expect(body).not.toHaveProperty("thinking");
+    }
   });
 
   test("falls back to a tagged answer for a model that refuses the format, and stops asking it", async () => {

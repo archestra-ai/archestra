@@ -2,10 +2,13 @@
 
 import {
   DocsPage,
+  getAgentRuntimeDefaultModelCompatibility,
   getDocsUrl,
+  isClaudeCodeRuntimeCommand,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   providerSupportsChat,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -44,16 +47,20 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useDefaultModelRuntimeDependents,
   useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { DefaultModelBlockedBadge } from "./_parts/default-model-blocked-badge";
+import type { RuntimeAgent } from "./_parts/runtime-agent";
 import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
 import {
   type AgentSettingsState,
@@ -79,6 +86,9 @@ export default function AgentSettingsPage() {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [tiers, setTiers] = useState<ModelTierSelection>(EMPTY_MODEL_TIERS);
+  const [defaultAutoRouterId, setDefaultAutoRouterId] = useState<string | null>(
+    null,
+  );
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState(true);
   const [playwrightEnabled, setPlaywrightEnabled] = useState(true);
@@ -89,6 +99,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId: "",
     defaultModel: "",
     tiers: EMPTY_MODEL_TIERS,
+    defaultAutoRouterId: null,
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
@@ -130,6 +141,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setTiers(state.tiers);
+    setDefaultAutoRouterId(state.defaultAutoRouterId);
     setDefaultAgentId(state.defaultAgentId);
     const savedFileUploads = organization.allowChatFileUploads ?? true;
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
@@ -151,6 +163,7 @@ export default function AgentSettingsPage() {
     selectedApiKeyId,
     defaultModel,
     tiers,
+    defaultAutoRouterId,
     defaultAgentId,
   };
 
@@ -189,22 +202,91 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setTiers(saved.tiers);
+    setDefaultAutoRouterId(saved.defaultAutoRouterId);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
   };
 
+  // Agent Runtime agents with no model of their own run on this default, so
+  // a model their runtime can't serve would break them. Check every option
+  // up front, with the same rule the server applies on save.
+  const { data: runtimeDependents, isPlaceholderData: dependentsLoading } =
+    useDefaultModelRuntimeDependents({ modelId: defaultModel || null });
+  // Agents the viewer can't read: the server counts them for the selected
+  // model only, and never says more.
+  const hiddenBlockingCount = dependentsLoading
+    ? 0
+    : (runtimeDependents?.hiddenBlockingCount ?? 0);
+  const blockedBy = useCallback(
+    (model: {
+      provider: SupportedProvider;
+      id: string;
+      capabilities?: { supportedEndpoints?: string[] | null };
+    }) => {
+      const reasonFor = (agent: RuntimeAgent) => {
+        const result = getAgentRuntimeDefaultModelCompatibility({
+          ...agent,
+          provider: model.provider,
+          modelId: model.id,
+          supportedEndpoints: model.capabilities?.supportedEndpoints,
+        });
+        return result.compatible ? null : result.message;
+      };
+      const agents = (runtimeDependents?.agents ?? []).filter(
+        (agent) => reasonFor(agent) !== null,
+      );
+      return {
+        agents,
+        reason: agents[0] ? reasonFor(agents[0]) : null,
+        // Only agents the viewer can read say anything about their runtime.
+        allClaudeCode:
+          agents.length > 0 &&
+          agents.every((agent) =>
+            isClaudeCodeRuntimeCommand(agent.runtimeCommand?.[0]),
+          ),
+      };
+    },
+    [runtimeDependents],
+  );
+
   const modelItems = useMemo(() => {
     if (!allModels || isPlaceholderData) return [];
-    return allModels.map((model) => ({
-      value: model.dbId,
-      model: model.displayName ?? model.id,
-      modelId: model.id,
-      provider: model.provider,
-      isFree: model.isFree,
-      isBest: model.isBest,
-    }));
-  }, [allModels, isPlaceholderData]);
+    return allModels.map((model) => {
+      const blocking = blockedBy(model).agents.length;
+      return {
+        value: model.dbId,
+        model: model.displayName ?? model.id,
+        modelId: model.id,
+        provider: model.provider,
+        isFree: model.isFree,
+        isBest: model.isBest,
+        description:
+          blocking > 0
+            ? `Can't run ${blocking} Agent Runtime ${blocking === 1 ? "agent" : "agents"}`
+            : undefined,
+      };
+    });
+  }, [allModels, isPlaceholderData, blockedBy]);
+
+  const selectedModel = useMemo(
+    () =>
+      isPlaceholderData
+        ? undefined
+        : allModels?.find((model) => model.dbId === defaultModel),
+    [allModels, defaultModel, isPlaceholderData],
+  );
+  const blocked = selectedModel ? blockedBy(selectedModel) : null;
+
+  const organizationDefaultModel = useOrganizationDefaultModel();
+  // Undefined while the chosen router is no longer offered (auto routing
+  // off, or a tier missing); it then reads as the plain "Auto".
+  const defaultAutoRouter = organizationDefaultModel.autoRouters.find(
+    (router) => router.id === defaultAutoRouterId,
+  );
+  const defaultAutoRouterLabel = defaultAutoRouter?.label ?? "Auto";
+  const defaultModelName =
+    modelItems.find((item) => item.value === defaultModel)?.model ?? null;
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -222,6 +304,7 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId("");
     setDefaultModel("");
     setTiers(EMPTY_MODEL_TIERS);
+    setDefaultAutoRouterId(null);
   }, []);
 
   const isSaving =
@@ -273,36 +356,87 @@ export default function AgentSettingsPage() {
                     open={apiKeySelectorOpen}
                     onOpenChange={setApiKeySelectorOpen}
                     onSelectKey={(value) => {
-                      setSelectedApiKeyId(value);
-                      setDefaultModel("");
+                      setDefaultAutoRouterId(null);
+                      // Back from Auto to the key it kept: the model stays.
+                      if (value !== selectedApiKeyId) {
+                        setSelectedApiKeyId(value);
+                        setDefaultModel("");
+                      }
                       setApiKeySelectorOpen(false);
                     }}
+                    autoRouters={[
+                      ...organizationDefaultModel.autoRouters,
+                      // A saved router that is no longer offered stays listed
+                      // as the selection, so it can be seen and changed.
+                      ...(defaultAutoRouterId && !defaultAutoRouter
+                        ? [
+                            {
+                              id: defaultAutoRouterId,
+                              label: "Auto",
+                              description: undefined,
+                            },
+                          ]
+                        : []),
+                    ].map((router) => ({
+                      id: router.id,
+                      label: router.label,
+                      description: router.description,
+                      selected: router.id === defaultAutoRouterId,
+                      onSelect: () => {
+                        setDefaultAutoRouterId(router.id);
+                        setApiKeySelectorOpen(false);
+                      },
+                    }))}
                     triggerVariant="select"
                     triggerClassName="w-full"
                     popoverClassName="w-80"
                     emptyTriggerLabel="Select provider key..."
                   />
-                  <LlmModelSearchableSelect
-                    value={defaultModel}
-                    onValueChange={setDefaultModel}
-                    options={modelItems}
-                    freeFilterable={canFilterFreeModels}
-                    placeholder={
-                      !selectedApiKeyId
-                        ? "Select provider key first..."
-                        : modelsPending
-                          ? "Loading models..."
-                          : "Select model..."
-                    }
-                    className="w-full"
-                    disabled={
-                      isSaving ||
-                      !hasPermission ||
-                      modelsPending ||
-                      !selectedApiKeyId
-                    }
-                  />
-                  {selectedApiKey && defaultModel && (
+                  {defaultAutoRouterId ? (
+                    <p className="text-xs text-muted-foreground">
+                      <span>
+                        {defaultModelName
+                          ? `New chats and agents on the default use ${defaultAutoRouterLabel}. Built-in agents keep running on ${defaultModelName}.`
+                          : `New chats and agents on the default use ${defaultAutoRouterLabel}. Built-in agents have no default model yet: pick a key and model, then choose ${defaultAutoRouterLabel} again.`}
+                      </span>
+                    </p>
+                  ) : (
+                    <LlmModelSearchableSelect
+                      value={defaultModel}
+                      onValueChange={setDefaultModel}
+                      options={modelItems}
+                      freeFilterable={canFilterFreeModels}
+                      placeholder={
+                        !selectedApiKeyId
+                          ? "Select provider key first..."
+                          : modelsPending
+                            ? "Loading models..."
+                            : "Select model..."
+                      }
+                      className="w-full"
+                      disabled={
+                        isSaving ||
+                        !hasPermission ||
+                        modelsPending ||
+                        !selectedApiKeyId
+                      }
+                    />
+                  )}
+                  {selectedModel && (
+                    <DefaultModelBlockedBadge
+                      agents={blocked?.agents ?? []}
+                      hiddenCount={hiddenBlockingCount}
+                      reason={
+                        blocked?.allClaudeCode
+                          ? "Claude Code runs only Anthropic models, or Claude on Bedrock or Vertex."
+                          : (blocked?.reason ??
+                            "Their Agent Runtime can't use this model.")
+                      }
+                      allClaudeCode={blocked?.allClaudeCode ?? false}
+                      modelName={selectedModel.displayName ?? selectedModel.id}
+                    />
+                  )}
+                  {!defaultAutoRouterId && selectedApiKey && defaultModel && (
                     <ModelTierPickers
                       value={tiers}
                       onChange={setTiers}
@@ -326,7 +460,9 @@ export default function AgentSettingsPage() {
                     disabled={
                       isSaving ||
                       !hasPermission ||
-                      (!selectedApiKeyId && !defaultModel)
+                      (!selectedApiKeyId &&
+                        !defaultModel &&
+                        !defaultAutoRouterId)
                     }
                   >
                     Reset
@@ -439,7 +575,11 @@ export default function AgentSettingsPage() {
 
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
-        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
+        disabledSave={
+          (selectedApiKeyId !== "" && defaultModel === "") ||
+          (changes.hasModelChanges &&
+            (blocked?.agents.length ?? 0) + hiddenBlockingCount > 0)
+        }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}

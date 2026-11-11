@@ -8,6 +8,11 @@ archestra:
   # pod: 544 total, with 56 slots left for reserved connections and other users.
   database:
     connectionBudget: 550
+    # Cloud SQL instance from infra gcp/gke/cloudsql.tf. The pods log in as
+    # the archestra-staging-platform service account; no password exists.
+    cloudSqlProxy:
+      enabled: true
+      instanceConnectionName: friendly-path-465518-r6:us-central1:archestra-staging-pg
 
   # Staging's measured CPU use is below the chart's production-sized requests.
   # Keep scheduling room for rolling-update surge pods; no CPU limit prevents
@@ -89,6 +94,63 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://a2a-webhook-wkjbuewj5a-uc.a.run.app/staging/api/webhooks/incoming-email"
+    # Identifiers and endpoints, not credentials.
+    ARCHESTRA_AUTH_ADMIN_EMAIL: "joey@archestra.ai"
+    ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://grafana-alloy.archestra.svc.cluster.local:4318/v1/traces"
+    # Export audit events as OTLP logs, on their own endpoint and only there,
+    # to the audit collector that writes them to the organization's security
+    # log archive. Alloy does not carry them.
+    # (archestra-ai/infra: gcp/gke/apps/observability/audit-collector.tf).
+    ARCHESTRA_AUDIT_LOG_OTEL_ENABLED: "true"
+    ARCHESTRA_AUDIT_LOG_OTEL_ENDPOINT: "http://audit-collector.observability.svc.cluster.local:4318"
+    # The security archive's alerts name who acted.
+    ARCHESTRA_AUDIT_LOG_OTEL_INCLUDE_ACTOR_IDENTITY: "true"
+    # Labels this installation's records environment=staging in the archive.
+    OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=staging"
+    ARCHESTRA_SENTRY_BACKEND_DSN: "https://33391b7f4919317c107830148766998a@o4509825927479296.ingest.de.sentry.io/4510381680689232"
+    ARCHESTRA_SENTRY_FRONTEND_DSN: "https://5ff9bac572fb23e3620c066cbc93ce34@o4509825927479296.ingest.de.sentry.io/4510381678461008"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_TENANT_ID: "e6ec2dea-2205-4e2f-afb6-f83e5f588f40"
+    ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID: "8d184f86-d6a1-4fd6-8783-b2f4931be17b"
+    ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID: "35f1f67b-6082-458a-be3e-b82a96585ebc"
+    ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID: "e6ec2dea-2205-4e2f-afb6-f83e5f588f40"
+
+  # Every credential, including the session, encryption and offer-signing
+  # keys the chart would otherwise generate, comes from the archestra-platform-runtime Secret
+  # that archestra-ai/infra syncs from GCP Secret Manager (gcp/gke/apps/
+  # runtime-secrets, one key per env var). These entries replace the chart's
+  # generated values. Never also set these names under env: an env entry,
+  # even "", would replace the synced value.
+  envFromSecrets:
+    - name: ARCHESTRA_AUTH_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AUTH_SECRET
+    - name: ARCHESTRA_AUTH_SESSION_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS
+    - name: ARCHESTRA_CONTENT_ENCRYPTION_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_CONTENT_ENCRYPTION_SECRET
+    - name: ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS
+    - name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    - name: ARCHESTRA_AUTH_ADMIN_PASSWORD
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AUTH_ADMIN_PASSWORD
+    - name: ARCHESTRA_METRICS_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_METRICS_SECRET
+    - name: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
+      secretName: archestra-platform-runtime
+      secretKey: ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET
 
   diagnostics:
     enabled: true
@@ -117,6 +179,17 @@ archestra:
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:
+      # MCP server pods, Agent Runtime sessions and code-runtime Dagger engines
+      # run here, away from the platform pods and the content-encryption Secret
+      # in `archestra`. archestra-ai/infra (gcp/gke/mcp-namespace.tf) creates
+      # the namespace, its Pod Security labels and the CI deployer's RBAC;
+      # apply that before this deploys, or the chart's RoleBindings there fail.
+      # Objects started in `archestra` before the move are not cleaned up by
+      # the platform; they are cleaned up by hand after the rollout.
+      namespace: archestra-mcp
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: archestra-staging-platform@friendly-path-465518-r6.iam.gserviceaccount.com
       rbac:
         # Namespaces backing deployment environments the platform may deploy
         # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
@@ -192,7 +265,8 @@ postgresql:
   # depends on the GKE node lifecycle — replacing a node used to take the only
   # database pod down with it, which is what kept staging dying at random.
   #
-  # The connection string is injected by the deploy workflow from the
-  # ARCHESTRA_STAGING_DATABASE_URL repo secret, so it is not in this file.
-  # The chart hard-fails if external_database_url is set while this is true.
+  # The pods reach it through the Cloud SQL Auth Proxy sidecar
+  # (archestra.database.cloudSqlProxy), which encrypts the connection and logs
+  # in with IAM. The URL names the IAM database user and holds no secret.
   enabled: false
+  external_database_url: "postgresql://archestra-staging-platform%40friendly-path-465518-r6.iam@127.0.0.1:5432/archestra_dev?sslmode=disable"

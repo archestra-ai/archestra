@@ -57,8 +57,14 @@ export const RouteId = {
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetLlmProxy: "getLlmProxy",
   UpdateLlmProxy: "updateLlmProxy",
-  GetAutoRoutingSettings: "getAutoRoutingSettings",
-  UpdateAutoRoutingSettings: "updateAutoRoutingSettings",
+  GetAutoRoutingState: "getAutoRoutingState",
+  UpdateAutoRoutingState: "updateAutoRoutingState",
+  GetAutoRouters: "getAutoRouters",
+  GetAvailableAutoRouters: "getAvailableAutoRouters",
+  CreateAutoRouter: "createAutoRouter",
+  GetAutoRouter: "getAutoRouter",
+  UpdateAutoRouter: "updateAutoRouter",
+  DeleteAutoRouter: "deleteAutoRouter",
   GetAutoRoutingPlans: "getAutoRoutingPlans",
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
@@ -278,6 +284,7 @@ export const RouteId = {
   GetLlmProxyLogAutoRouting: "getLlmProxyLogAutoRouting",
   GetLlmProxyLogSessions: "getLlmProxyLogSessions",
   GetLlmProxyLogSessionLineage: "getLlmProxyLogSessionLineage",
+  GetLlmProxyLogSessionHandoffs: "getLlmProxyLogSessionHandoffs",
   GetLlmProxyLogExternalAgentIds: "getLlmProxyLogExternalAgentIds",
   GetLlmProxyLogUserIds: "getLlmProxyLogUserIds",
 
@@ -373,6 +380,12 @@ export const RouteId = {
   // Proxy Routes - xAI
   XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
   XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+  XaiListModelsWithDefaultAgent: "xaiListModelsWithDefaultAgent",
+  XaiListModelsWithAgent: "xaiListModelsWithAgent",
+  XaiNativeMetadataWithDefaultAgent: "xaiNativeMetadataWithDefaultAgent",
+  XaiNativeMetadataWithAgent: "xaiNativeMetadataWithAgent",
+  XaiNativePrivacyWithDefaultAgent: "xaiNativePrivacyWithDefaultAgent",
+  XaiNativePrivacyWithAgent: "xaiNativePrivacyWithAgent",
   // Proxy Routes - xAI Responses (served over xAI's chat completions)
   XaiResponsesWithDefaultAgent: "xaiResponsesWithDefaultAgent",
   XaiResponsesWithAgent: "xaiResponsesWithAgent",
@@ -597,6 +610,15 @@ export const RouteId = {
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
+  GetServiceAccountFederatedCredentials:
+    "getServiceAccountFederatedCredentials",
+  CreateServiceAccountFederatedCredential:
+    "createServiceAccountFederatedCredential",
+  UpdateServiceAccountFederatedCredential:
+    "updateServiceAccountFederatedCredential",
+  DeleteServiceAccountFederatedCredential:
+    "deleteServiceAccountFederatedCredential",
+  ExchangeWorkloadIdentityToken: "exchangeWorkloadIdentityToken",
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
@@ -747,6 +769,7 @@ export const RouteId = {
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
   GetAgentRuntimeTiers: "getAgentRuntimeTiers",
+  GetDefaultModelRuntimeDependents: "getDefaultModelRuntimeDependents",
 
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",

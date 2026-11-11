@@ -57,6 +57,14 @@ export interface ChildAddressRecord {
   value: string
 }
 
+export interface ChildRejectionRecord {
+  childSessionId: string
+  spawnCallId: string
+  childNativeId: string
+  /** Host diagnostic, never an admitted child value. */
+  notice: string
+}
+
 export interface ChildReturnLookup {
   /** Narrow the authority lookup to one registered child when known. */
   childSessionId?: string
@@ -237,6 +245,12 @@ export declare function listPeerMessages(input: string, policy: DispatchPolicy):
 export declare function loadChildAddresses(organizationId: string, childSessionId: string): Promise<Array<ChildAddressRecord>>
 
 /**
+ * Reads completed ChildEnd rejections separately from admitted returns.
+ * Only the recorded diagnostic leaves storage; rejected child output never does.
+ */
+export declare function loadChildRejections(organizationId: string, parentSessionId: string): Promise<Array<ChildRejectionRecord>>
+
+/**
  * Loads the child returns a parent's family durably crossed, from the
  * retained ChildEnd and admitted ChildReturn operations in PostgreSQL. This
  * is the authority the parent side verifies an arriving completion against;
@@ -262,6 +276,12 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+  /**
+   * The review's coverage items as JSON text. Absent means unknown (a
+   * review stored before the runtime typed it, or one that joins several
+   * authorities), so show `text`; `[]` means the ruling accepts nothing else.
+   */
+  scope?: string
 }
 
 /**
@@ -373,11 +393,3 @@ export interface TokenEnvReader {
  * Validation defers secret lookup and opens no store or network connection.
  */
 export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
-
-/**
- * Validates a root document that declares no battery: [`compose_openappa_policy`]
- * with nothing to resolve. A root whose `include` list names a battery does not
- * validate this way — the entry resolves to nothing — so a caller holding
- * declarations composes instead.
- */
-export declare function validateOpenappaPolicy(content: string): Promise<Array<string>>

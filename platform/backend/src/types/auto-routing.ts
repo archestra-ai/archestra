@@ -75,7 +75,7 @@ export type RouterDocument = z.infer<typeof RouterDocumentSchema>;
 export const RoutingScorerSpecSchema = z.record(z.string(), z.unknown());
 export type RoutingScorerSpec = z.infer<typeof RoutingScorerSpecSchema>;
 
-/** Identity of a sticky routing decision within its organization. */
+/** Identity of a sticky routing decision within its auto router. */
 export const RoutingSessionKeySchema = z
   .string()
   .min(1)
@@ -127,36 +127,86 @@ export const SelectRoutingPlanSchema = createSelectSchema(
 );
 export type RoutingPlan = z.infer<typeof SelectRoutingPlanSchema>;
 
-/** The tiers auto routing chooses between: the organization's default model trio. */
+/**
+ * A budget Archestra derives on every fit from the current usage, by how
+ * much of it each tier serves (`BUDGET_PRESET_TIER_SHARE`).
+ */
+export const AutoRoutingBudgetPresetSchema = z.enum([
+  "cost_efficient",
+  "balanced",
+  "intelligence",
+]);
+export type AutoRoutingBudgetPreset = z.infer<
+  typeof AutoRoutingBudgetPresetSchema
+>;
+
+/** The model of each tier auto routing chooses between, and the key it runs on. */
 const AutoRoutingTrioSchema = z.object({
   fastModelId: z.string().uuid().nullable(),
   normalModelId: z.string().uuid().nullable(),
   smartModelId: z.string().uuid().nullable(),
+  fastApiKeyId: z.string().uuid().nullable(),
+  normalApiKeyId: z.string().uuid().nullable(),
+  smartApiKeyId: z.string().uuid().nullable(),
 });
 export type AutoRoutingTrio = z.infer<typeof AutoRoutingTrioSchema>;
 
+/** A tier as it is set: a model and an organization-wide key serving it. */
+export const AutoRoutingTierSettingSchema = z.object({
+  modelId: z.string().uuid(),
+  providerApiKeyId: z.string().uuid(),
+});
+export type AutoRoutingTierSetting = z.infer<
+  typeof AutoRoutingTierSettingSchema
+>;
+
 /**
- * Auto-routing settings of an organization, stored on its LLM Proxy row. The
- * tiers are read from the organization's default model trio.
+ * An auto router: a row of `auto_routers` with its tiers (rows of
+ * `auto_routing_tiers`) and its organization's auto routing switch.
  */
-export const AutoRoutingSettingsSchema = AutoRoutingTrioSchema.extend({
+export const AutoRouterSchema = AutoRoutingTrioSchema.extend({
+  id: z.string().uuid(),
+  organizationId: z.string(),
+  /** The model name clients request: `auto`, or `auto:<name>`. */
+  name: z.string(),
+  /** The organization's switch: off, every router's sessions run on its normal tier. */
   enabled: z.boolean(),
+  /** The custom budget; a fit uses it only while `budgetPreset` is null. */
   budgetUsdPerDay: z.string().nullable(),
+  budgetPreset: AutoRoutingBudgetPresetSchema.nullable(),
+  /** The decision model's key; null is the organization's primary key of the default decisions provider. */
+  scorerApiKeyId: z.string().uuid().nullable(),
+  scorerModel: z.string(),
   scorerVersionId: z.string().uuid().nullable(),
   /** Bumped by every write of plan-relevant state; a fit publishes only at the generation it read. */
   generation: z.number().int(),
   /** Generation of the last fit outcome; behind `generation` means a fit is due. */
   plannedGeneration: z.number().int(),
+  /** The router also learns from the organization's scored past sessions. */
+  usesPastSessions: z.boolean(),
 });
-export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
+export type AutoRouter = z.infer<typeof AutoRouterSchema>;
 
-export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.pick({
-  enabled: true,
+const AutoRouterTiersSchema = z.object({
+  fast: AutoRoutingTierSettingSchema,
+  normal: AutoRoutingTierSettingSchema,
+  smart: AutoRoutingTierSettingSchema,
+});
+
+export const UpdateAutoRouterSchema = AutoRouterSchema.pick({
+  name: true,
   budgetUsdPerDay: true,
-}).partial();
-export type UpdateAutoRoutingSettings = z.infer<
-  typeof UpdateAutoRoutingSettingsSchema
->;
+  budgetPreset: true,
+  scorerApiKeyId: true,
+  scorerModel: true,
+})
+  .extend({ tiers: AutoRouterTiersSchema })
+  .partial();
+export type UpdateAutoRouter = z.infer<typeof UpdateAutoRouterSchema>;
+
+/** A new router: its name and decision model, with whatever else is set. */
+export type InsertAutoRouter = UpdateAutoRouter &
+  Pick<AutoRouter, "name" | "scorerModel">;
 
 /** What a fit produced. Only `active` replaces the serving plan; `cold_start` retires it. */
 export type RoutingFitOutcome =
@@ -176,12 +226,14 @@ export type RoutingFitOutcome =
 /** A finished fit and the inputs it read, offered to the publisher. */
 export type RoutingFit = {
   organizationId: string;
+  routerId: string;
   trigger: RoutingPlanTrigger;
-  /** `AutoRoutingSettings.generation` when the fit read its inputs. */
+  /** `AutoRouter.generation` when the fit read its inputs. */
   generation: number;
   inputWatermark: Date;
   tiersFingerprint: RouterDocument;
-  budgetUsdPerDay: string;
+  /** Null when a budget preset resolved no budget: the fit failed or was a cold start. */
+  budgetUsdPerDay: string | null;
   scorerVersionId: string;
   coreVersion: string;
   planFormatVersion: number;

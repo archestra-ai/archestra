@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
@@ -11,14 +12,22 @@ import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import ToolModel from "@/models/tool";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { coverageVisibility } from "@/openappa/coverage";
 import {
   addedGrants,
   bundledEntry,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import {
+  classifyRuleTarget,
+  type RuleTarget,
+  ruleTargetWarning,
+  touchedRuleNames,
+} from "@/openappa/rule-targets";
 import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -172,6 +181,8 @@ export const guardrailsPolicyService = {
     params: {
       organizationId: string;
       previous?: string;
+      /** Whose readable catalogs the added tool rules are checked against; unchecked without one. */
+      userId?: string;
       /** Both documents already resolved, when the caller resolved them itself. */
       resolved?: { submitted: PolicyResolution; previous: PolicyResolution };
     },
@@ -218,7 +229,48 @@ export const guardrailsPolicyService = {
         warnings.push(...deployed.warnings);
       }
     }
+    if (errors.length === 0 && params.userId)
+      for (const target of await this.touchedRuleTargets({
+        organizationId,
+        userId: params.userId,
+        content,
+        previous,
+      })) {
+        const warning = ruleTargetWarning(target);
+        if (warning) warnings.push(warning);
+      }
     return { valid: errors.length === 0, errors, warnings };
+  },
+
+  /**
+   * What the root rules `content` adds or changes against `previous` point at,
+   * checked against the MCP tools of the catalogs the caller can read, so the
+   * answer never reveals a tool the caller could not otherwise see.
+   */
+  async touchedRuleTargets(params: {
+    organizationId: string;
+    userId: string;
+    content: string;
+    previous: string;
+  }): Promise<RuleTarget[]> {
+    const names = touchedRuleNames(params.content, params.previous);
+    if (names.length === 0) return [];
+    const { visibleCatalogIds } = await coverageVisibility(
+      params.userId,
+      params.organizationId,
+    );
+    const { tools } = await ToolModel.findCoverageInventory(
+      params.organizationId,
+      { includeAppCatalogs: true, catalogIds: visibleCatalogIds },
+    );
+    // Built-in tools exist in code even when a feature flag keeps one unseeded.
+    const inventory = new Set([
+      ...tools.map((tool) => tool.name),
+      ...ARCHESTRA_TOOL_SHORT_NAMES.map((name) =>
+        archestraMcpBranding.getToolName(name),
+      ),
+    ]);
+    return names.map((name) => classifyRuleTarget(name, inventory));
   },
 
   /**
@@ -258,6 +310,7 @@ export const guardrailsPolicyService = {
     });
     const validation = await this.validate(content, {
       organizationId,
+      userId,
       previous: latest.content,
       resolved,
     });
@@ -290,7 +343,7 @@ export const guardrailsPolicyService = {
         );
       }
     }
-    return saved;
+    return { ...saved, warnings: validation.warnings };
   },
 };
 
@@ -396,7 +449,10 @@ shell = [
   { name = "host/archestra/bash", args = { command = "command" } },
   { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
 ]
-read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+read_file = [
+  { name = "host/archestra/read", args = { file_path = "filePath" } },
+  { name = "host/archestra/read_file", args = { file_path = "target_file" } },
+]
 search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
 write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
 edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]

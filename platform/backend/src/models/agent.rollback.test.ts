@@ -756,7 +756,12 @@ describe("AgentModel", () => {
         true,
       );
       expect(fields).not.toBeNull();
-      expect(fields).toEqual({ llmApiKeyId: null, modelId: null });
+      expect(fields).toEqual({
+        llmApiKeyId: null,
+        modelId: null,
+        autoRouterId: null,
+        runtime: null,
+      });
     });
 
     test("findLlmSelectionFieldsById returns selection fields for a user in an assigned team", async ({

@@ -16,10 +16,19 @@ use napi_derive::napi;
 use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
-use super::{
-    DispatchPolicy, Failure, SessionKey, Sql, State, canonical_tool, failure, held_elsewhere,
-    initialized, invalid_input, invariant, lease, lease_lost, panicked, read_completed_operation,
-    receipt_failure, recorded_call, required, session_actor, sql_failure, storage,
+use crate::{
+    Sql, State,
+    admin_api::DispatchPolicy,
+    errors::{
+        Failure, failure, held_elsewhere, invalid_input, invariant, lease_lost, panicked,
+        receipt_failure, sql_failure, storage,
+    },
+    initialized,
+    input::required,
+    lease,
+    operations::{canonical_tool, read_completed_operation},
+    remedy::recorded_call,
+    session::{SessionKey, session_actor},
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -269,21 +278,38 @@ async fn admit(
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
-    let notices = list_notices(state, pg, input, actor).await?;
     let structured = input.structured.unwrap_or(false);
     let message_id = blank_as_none(input.message_id.as_deref());
+    let sender_id = blank_as_none(input.sender_session_id.as_deref());
     let digest = match admit_digest(input.value.as_deref(), input.digest.as_deref()) {
         DigestCheck::Absent => None,
         DigestCheck::Value(digest) => Some(digest),
         DigestCheck::Unverified => return Ok(unverified()),
     };
-    let Some(picked) = pick_admit(
-        &notices,
-        message_id,
-        blank_as_none(input.sender_session_id.as_deref()),
-        digest.as_deref(),
-        structured,
-    ) else {
+    // A direct delivery leaves the unread inbox. Its explicit proof still
+    // needs admission on every history replay (including memory jobs). Let
+    // the runtime check the retained row, recipient, digest and live label;
+    // inbox discovery is only for arrivals without a complete explicit proof.
+    let notices;
+    let candidate = if let (Some(message_id), Some(sender_session_id), Some(digest)) =
+        (message_id, sender_id, digest.as_deref())
+    {
+        Some(AdmitCandidate {
+            message_id,
+            sender_session_id,
+            digest,
+        })
+    } else {
+        notices = list_notices(state, pg, input, actor).await?;
+        pick_admit(
+            &notices,
+            message_id,
+            sender_id,
+            digest.as_deref(),
+            structured,
+        )
+    };
+    let Some(picked) = candidate else {
         return Ok(unverified());
     };
     let id = match EmbeddedPeerId::parse(picked.message_id) {
@@ -519,8 +545,8 @@ async fn read(
             Ok(decision)
         }
         HookDecision::DenyCall { .. } | HookDecision::Block { .. } => {
-            let mut decision = super::with_presentation_offers(
-                super::wire(&outcome.decision)?,
+            let mut decision = crate::remedy::with_presentation_offers(
+                crate::session::wire(&outcome.decision)?,
                 outcome.presentation.as_ref(),
             )?;
             decision["peer_read_denied"] = Value::Bool(true);
@@ -730,12 +756,12 @@ fn read_result(text: &str, is_error: bool) -> Value {
 
 pub(super) fn forged_read_result(
     pg: &crate::Sql<'_>,
-    input: &super::Input,
+    input: &crate::input::Input,
     call_id: &str,
 ) -> napi::Result<Option<Value>> {
-    let operation = super::operation_key(
+    let operation = crate::session::operation_key(
         input,
-        super::session_binding(input),
+        crate::session::session_binding(input),
         format!("call:{call_id}"),
     );
     let Some(released) = read_completed_operation(pg, &operation)? else {
@@ -745,7 +771,7 @@ pub(super) fn forged_read_result(
         return Ok(None);
     };
     if is_peer_read_tool(&call.tool) {
-        let key = super::processed_result_key(input, call_id.to_owned());
+        let key = crate::session::processed_result_key(input, call_id.to_owned());
         if let Some(done) = completed_decision(pg, &key)?
             && (admitted_read(&done) || denial_receipt(&done))
         {
@@ -754,7 +780,7 @@ pub(super) fn forged_read_result(
         return Ok(Some(withheld_peer_read()));
     }
     if is_peer_list_tool(&call.tool) {
-        let key = super::processed_result_key(input, call_id.to_owned());
+        let key = crate::session::processed_result_key(input, call_id.to_owned());
         if let Some(done) = completed_decision(pg, &key)?
             && done.get("peer_list").and_then(Value::as_bool) == Some(true)
         {

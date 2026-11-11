@@ -5,6 +5,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import AutoRouterModel from "@/models/auto-router";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
@@ -38,6 +39,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -183,6 +185,7 @@ export const AUDIT_DECISIONS = {
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
   modelPoolsTable: { audited: true, model: ModelPoolModel },
+  autoRoutersTable: { audited: true, model: AutoRouterModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
@@ -888,6 +891,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child: pool × provider key; parent (model pool) audited",
   },
+  autoRouterVirtualApiKeysTable: {
+    audited: false,
+    reason: "join: auto router × virtual key; parent (virtual key) audited",
+  },
   modelPoolVirtualApiKeysTable: {
     audited: false,
     reason: "join: pool × virtual key; parent (model pool) audited",
@@ -925,7 +932,7 @@ export const AUDIT_DECISIONS = {
   chatopsMsTeamsUserConnectionsTable: {
     audited: false,
     reason:
-      "a Teams user's own sign-in for reading their group-chat files, created and removed only by that user from Teams; tokens live in the secrets manager",
+      "a Teams user's own sign-in for reading the files they share with the bot, created and removed only by that user from Teams; tokens live in the secrets manager",
   },
   chatopsUserAdmissionsTable: {
     audited: false,
@@ -980,6 +987,10 @@ export const AUDIT_DECISIONS = {
   serviceAccountsTable: {
     audited: true,
     model: ServiceAccountModel,
+  },
+  serviceAccountFederatedCredentialsTable: {
+    audited: true,
+    model: ServiceAccountFederatedCredentialModel,
   },
   serviceAccountTokensTable: {
     audited: false,
@@ -1130,10 +1141,6 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
-  orgTrioPendingNormalTierTable: {
-    audited: false,
-    reason: "migration-written normal tiers the startup check consumes once",
-  },
   interactionUserActivityTable: {
     audited: false,
     reason: "derived log user activity counts",
@@ -1162,6 +1169,22 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "internal backfill progress marker",
   },
+  llmUsageHourlyTable: {
+    audited: false,
+    reason: "derived hourly totals of interactions for cost statistics",
+  },
+  llmUsageDailyTable: {
+    audited: false,
+    reason: "derived daily totals of interactions for cost statistics",
+  },
+  llmUsageRollupStateTable: {
+    audited: false,
+    reason: "internal rollup progress marker",
+  },
+  llmUsageRollupDirtyTable: {
+    audited: false,
+    reason: "internal queue of rollup hours to recompute",
+  },
   interactionBillingTable: {
     audited: false,
     reason: "content-free idempotent billing receipts",
@@ -1177,6 +1200,10 @@ export const AUDIT_DECISIONS = {
   routingUsageTable: {
     audited: false,
     reason: "auto-routing usage written with each interaction",
+  },
+  autoRoutingTiersTable: {
+    audited: false,
+    reason: "child of an auto router; parent audited",
   },
   routingPlansTable: {
     audited: false,
@@ -1202,6 +1229,10 @@ export const AUDIT_DECISIONS = {
   routingHistoryScoresTable: {
     audited: false,
     reason: "worker-written scorer readings of past sessions",
+  },
+  toolSearchTextsTable: {
+    audited: false,
+    reason: "worker-written search vocabulary derived from tool definitions",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

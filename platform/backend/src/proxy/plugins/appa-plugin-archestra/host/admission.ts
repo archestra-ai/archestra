@@ -7,6 +7,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
+import { resolveChildTrajectoryReferences } from "@/openappa/child-trajectory-reference";
 import { forkedSession } from "@/openappa/lineage";
 import {
   APPA_PARENT_HEADER,
@@ -22,7 +23,10 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import { stampedSessions } from "@/openappa/trajectory-stamp";
-import { isUnenforcedSession, startedUnenforced } from "@/openappa/unenforced";
+import {
+  isUnenforcedSession,
+  unenforcedSessionReason,
+} from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
@@ -37,7 +41,10 @@ import {
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
-import type { AppaTrustedContext } from "@/proxy/plugins/appa-plugin-archestra/types";
+import type {
+  AppaClientAdapter,
+  AppaTrustedContext,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
 import { withCallerScope } from "@/proxy/plugins/appa-plugin-archestra/utils";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -138,8 +145,12 @@ export async function admitOpenappaRequest(
     const principal = params.principal;
     // The proxy's platform credential and Chat ownership checks remain mandatory.
     // Expired/missing APPA lineage is an integration refusal, not platform auth.
+    // A server or storage failure says nothing about the session, so only a
+    // client-side (4xx) refusal can be waived.
     if (
       !(error instanceof ApiError) ||
+      error.statusCode < 400 ||
+      error.statusCode >= 500 ||
       error.statusCode === 401 ||
       error.message.startsWith("OpenAPPA Chat session") ||
       !params.deployment.active
@@ -424,6 +435,16 @@ async function governedAdmission(params: {
       "OpenAPPA does not recognize this client, so Guardrails blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
     );
   }
+  if (appaActive && ingress.childTrajectoryReferences?.length) {
+    ingress.childTrajectoryReceipts = [
+      ...(ingress.childTrajectoryReceipts ?? []),
+      ...(await resolveChildTrajectoryReferences({
+        organizationId: agent.organizationId,
+        callerId,
+        references: ingress.childTrajectoryReferences,
+      })),
+    ];
+  }
   // The facts that bind a child trajectory. Read without preparing the
   // request for enforcement, which changes the body and refuses tool
   // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
@@ -509,17 +530,6 @@ async function governedAdmission(params: {
             secret: config.openappa.offerSigningSecret,
           })
         : [];
-    // `forkedSession` identifies a single lineage head across stamps and text envelopes.
-    const traced = traceable ? [...stamped, ...receiptSessions] : [];
-    const forkOf =
-      traced.length > 0 && callerId && identity.sessionId
-        ? await forkedSession({
-            organizationId: agent.organizationId,
-            sessionId: identity.sessionId,
-            traced,
-            scope: (session) => scopedSessionId(callerId, session),
-          })
-        : undefined;
     fillAppaSessionHeaders(headers, identity);
     let session = sessionFromHeaders({
       headers,
@@ -556,8 +566,6 @@ async function governedAdmission(params: {
         400,
         "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
       );
-    if (forkOf && callerId)
-      session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
     if (callerId && session.session_id === `${callerId}@${agent.id}`) {
       // Every conversation of this credential on this agent now shares one
       // root: a turn ending in one releases the offers of the others.
@@ -578,7 +586,27 @@ async function governedAdmission(params: {
         ...facts,
       },
     });
-    if (await startedUnenforced(trajectory.session)) {
+    // A verified child can replay its parent's receipts and its own native
+    // history before the bare native ID has ever governed a root session.
+    // Resolve the signed child binding first: ordinary fork tracing applies
+    // only to requests that did not bind to a child trajectory.
+    const traced =
+      traceable && !trajectory.child ? [...stamped, ...receiptSessions] : [];
+    const forkOf =
+      traced.length > 0 && callerId && identity.sessionId
+        ? await forkedSession({
+            organizationId: agent.organizationId,
+            sessionId: identity.sessionId,
+            traced,
+            scope: (session) => scopedSessionId(callerId, session),
+          })
+        : undefined;
+    if (forkOf && callerId) {
+      session = { ...session, fork_of: scopedSessionId(callerId, forkOf) };
+      trajectory.session = session;
+    }
+    const unenforcedReason = await unenforcedSessionReason(trajectory.session);
+    if (unenforcedReason) {
       // The session started while enforcement was off, or a person
       // superyelled it. OpenAPPA never governs it: the request goes on as
       // if enforcement were off.
@@ -586,7 +614,26 @@ async function governedAdmission(params: {
         { sessionId: session.session_id },
         "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
       );
-      return { kind: "ungoverned" };
+      const withdrawnChildReturn =
+        trajectory.session.parent_id && !ingress.clientCompaction
+          ? { withdrawnChildReturn: true as const }
+          : {};
+      // A child that inherited its waiver never had a governed shape to keep.
+      const ranGoverned =
+        unenforcedReason === "superyell" &&
+        (await OpenAppaSessionModel.find({
+          organizationId: trajectory.session.organization_id,
+          sessionId: trajectory.session.session_id,
+        })) !== null;
+      return ranGoverned
+        ? {
+            kind: "waived",
+            identity,
+            adapter: trajectory.adapter,
+            facts,
+            ...withdrawnChildReturn,
+          }
+        : { kind: "ungoverned", ...withdrawnChildReturn };
     }
     // A side review, such as a Codex auto-review, copies the history of the
     // session it reviews into a thread of its own. When that session is out
@@ -686,7 +733,20 @@ async function governedAdmission(params: {
 // ===
 
 export type OpenappaAdmission =
-  | { kind: "ungoverned" }
+  | {
+      kind: "ungoverned";
+      /** Verified waived child, whose earlier return instructions no longer apply. */
+      withdrawnChildReturn?: true;
+    }
+  /** Out of OpenAPPA for good, and keeps the request shape it had while governed. */
+  | {
+      kind: "waived";
+      identity: AppaSessionIdentity;
+      adapter: AppaClientAdapter | undefined;
+      facts: AdmissionFacts;
+      /** Earlier return instructions must be withdrawn even without a binding. */
+      withdrawnChildReturn?: true;
+    }
   /** Enforcement is off; OpenAPPA records the session for when it turns on. */
   | { kind: "observed"; trustedContext: AppaTrustedContext }
   | {
@@ -805,9 +865,7 @@ function observedAppaSession(params: {
   } catch (error) {
     // Enforcement is off, so the request goes on either way. A request
     // without a usable session id is expected; anything else is not.
-    const details = {
-      error: error instanceof Error ? error.message : String(error),
-    };
+    const details = { err: error };
     if (error instanceof ApiError)
       logger.debug(
         details,

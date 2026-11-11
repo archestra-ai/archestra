@@ -136,7 +136,7 @@ export function LlmProviderApiKeySelector({
       ),
     [fetchedAvailableKeys, session?.user.id],
   );
-  // A subscription whose provider the admins turned off is not connectable:
+  // A subscription the admins turned off is not connectable:
   // the sign-in dialog refuses a hidden provider, so offering it here would
   // only lead to a dead end. An already-connected credential keeps its entry
   // below — existing keys go on working when a provider is switched off.
@@ -145,7 +145,7 @@ export function LlmProviderApiKeySelector({
     () =>
       SUBSCRIPTION_CONNECT_OPTIONS.filter(
         (option) =>
-          !providerCatalog.isHidden(option.provider) &&
+          providerCatalog.canAddKey(option.provider) &&
           !availableKeys.some((key) => subscriptionMatchesKey(option, key)),
       ),
     [availableKeys, providerCatalog],

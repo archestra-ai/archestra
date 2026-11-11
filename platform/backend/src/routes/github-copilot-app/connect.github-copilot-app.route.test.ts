@@ -50,6 +50,8 @@ function githubFake(options: {
         login: "my-org",
         type: options.accountType ?? "Organization",
       });
+    if (url.endsWith("/orgs/my-org"))
+      return Response.json({ login: "my-org", name: "My Org" });
     if (url.includes("/app-manifests/"))
       return Response.json({
         id: Number(options.appId),
@@ -713,6 +715,55 @@ describe("GitHub Copilot organization subscription setup", () => {
     ).not.toBeNull();
   });
 
+  test("names a plan after the name GitHub shows for its organization, asked as the App", async () => {
+    const { keyId } = await connectedApp();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const lookups = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/orgs/my-org"),
+      );
+
+    // The proxy and key resolution read the same list without asking GitHub.
+    const resolved = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      organizationId,
+      user.id,
+      [],
+      "github-copilot",
+    );
+    expect(resolved.find((key) => key.id === keyId)).toMatchObject({
+      isGithubAppKey: true,
+      githubOrganization: "my-org",
+      githubOrganizationName: null,
+    });
+    expect(lookups()).toHaveLength(0);
+
+    const one = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+    });
+    expect(one.statusCode, one.body).toBe(200);
+    expect(one.json()).toMatchObject({
+      githubOrganization: "my-org",
+      githubOrganizationName: "My Org",
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+    expect(
+      (list.json() as Array<{ id: string }>).find((key) => key.id === keyId),
+    ).toMatchObject({
+      githubOrganization: "my-org",
+      githubOrganizationName: "My Org",
+    });
+
+    // Asked once for both reads, with the plan's installation token.
+    expect(lookups()).toHaveLength(1);
+    expect(new Headers(lookups()[0]?.[1]?.headers).get("Authorization")).toBe(
+      "Bearer ghs_test",
+    );
+  });
+
   test("blocks deleting a GitHub App credential a Copilot plan uses", async () => {
     const { reference } = await connectedApp();
     const definition = await RuntimeCredentialDefinitionModel.findById({
@@ -726,7 +777,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     });
     expect(usage.resources).toContainEqual({
       id: expect.any(String),
-      name: "GitHub Copilot for my-org",
+      name: "GitHub Copilot My Org",
       kind: "copilot",
     });
     const { deleteRuntimeCredentialDefinition } = await import(
@@ -1065,6 +1116,50 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
+  test("refuses every setup step once enterprise plans are off, and keeps personal sign-ins working", async () => {
+    const { keyId, reference } = await connectedApp();
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: {
+        "github-copilot": { plans: { enterprise: { hidden: true } } },
+      },
+    });
+
+    for (const [url, payload] of [
+      ["/api/github-copilot-app/manifest", { organization: "my-org" }],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, privateKey, replaceKeyId: keyId },
+      ],
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId: reference?.ref.credentialId, replaceKeyId: keyId },
+      ],
+    ] as const) {
+      const response = await post(url, payload);
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json().error.message, url).toContain(
+        "enterprise plans are turned off",
+      );
+    }
+
+    // The connected plan is frozen like any key whose plan is off…
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { name: "Renamed plan" },
+    });
+    expect(rename.statusCode).toBe(400);
+    // …and a person's own Copilot sign-in is not refused by the plan switch.
+    // (This file's GitHub fake does not serve Copilot, so the key check
+    // itself fails later; the success path is in llm-provider-api-keys.test.)
+    const personal = await post("/api/llm-provider-api-keys", {
+      name: "My Copilot",
+      provider: "github-copilot",
+      apiKey: "gho_personal",
+    });
+    expect(personal.json().error?.message ?? "").not.toContain("turned off");
+  });
+
   test("takes only a GitHub over https", async () => {
     for (const url of [
       "/api/github-copilot-app/organization/check",
@@ -1085,6 +1180,9 @@ describe("GitHub Copilot organization subscription setup", () => {
     makeMember,
     makeUser,
   }) => {
+    // The check looks the organization up on GitHub; answer it here, not on
+    // the real api.github.com.
+    vi.stubGlobal("fetch", githubFake({ appId }));
     // Someone who may only reuse a connected App still passes the first step.
     const keysOnly = await makeCustomRole(organizationId, {
       permission: { llmProviderApiKey: ["create"], credential: ["read"] },

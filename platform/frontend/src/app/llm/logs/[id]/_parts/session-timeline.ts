@@ -380,6 +380,7 @@ const AUXILIARY_SOURCES = new Set<InteractionSource>([
   "knowledge:ocr",
   "app:llm_complete",
   "app:recording_enhancement",
+  "tool_search_text:generation",
 ]);
 
 /** "Called Grep, Read" for a tool step, or the reply's first line. */

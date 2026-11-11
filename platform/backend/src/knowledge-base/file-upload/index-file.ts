@@ -31,6 +31,7 @@ import { ApiError } from "@/types";
 async function resolveUploadConnector(params: {
   knowledgeBaseId: string;
   organizationId: string;
+  newConnectorEnvironmentId: string | null;
 }): Promise<string> {
   const [existing] = await db
     .select({ connectorId: schema.kbUploadConnectorsTable.connectorId })
@@ -49,6 +50,7 @@ async function resolveUploadConnector(params: {
       .insert(schema.knowledgeBaseConnectorsTable)
       .values({
         organizationId: params.organizationId,
+        environmentId: params.newConnectorEnvironmentId,
         name: "Uploaded files",
         connectorType: "file_upload",
         schedule: "",
@@ -111,6 +113,8 @@ export async function indexFilesIntoKnowledgeBase(params: {
   fileIds: string[];
   knowledgeBaseId: string;
   organizationId: string;
+  /** Permission-checked landing default; ignored when the connector exists. */
+  newConnectorEnvironmentId: string | null;
 }): Promise<{
   indexed: number;
   failures: { fileId: string; error: string }[];
@@ -118,6 +122,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
   const connectorId = await resolveUploadConnector({
     knowledgeBaseId: params.knowledgeBaseId,
     organizationId: params.organizationId,
+    newConnectorEnvironmentId: params.newConnectorEnvironmentId,
   });
 
   // Loaded once for its `ftsLanguage`: the keyword half of retrieval stems

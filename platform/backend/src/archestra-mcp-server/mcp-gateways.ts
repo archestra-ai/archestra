@@ -70,6 +70,7 @@ const EditMcpGatewayToolArgsSchema = z
     ),
     accessAllTools: CreateBaseToolArgsSchema.shape.accessAllTools,
     accessAllSubagents: CreateBaseToolArgsSchema.shape.accessAllSubagents,
+    subagentLoadBalancing: CreateBaseToolArgsSchema.shape.subagentLoadBalancing,
     knowledgeBaseIds: UpdateAgentSchemaBase.shape.knowledgeBaseIds
       .describe(
         "Replace the MCP gateway's assigned knowledge bases with this set.",

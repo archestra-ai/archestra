@@ -50,11 +50,18 @@ jobs:
     name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    # Build every architecture on native Blacksmith runners in parallel.
-    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    # Build every architecture on native runners in parallel.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm-32core' || 'ubuntu-24.04-16core' }}
+    # Only merge groups reach this job (release-image-policy.py). The
+    # merge-queue-build environment admits gh-readonly-queue/main/* and
+    # gh-readonly-queue/release/*/* refs and holds the Sentry build secret.
+    environment:
+      name: merge-queue-build
+      deployment: false # A secrets and branch gate; nothing is deployed.
     timeout-minutes: 45
     permissions:
       contents: read
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
@@ -78,7 +85,6 @@ jobs:
       - name: Build candidate locally
         uses: $/.github/actions/build-docker-image
         with:
-          builder-cache-key: ${{ format('{0}-release-scan-{1}-{2}-v1', github.repository, matrix.image, matrix.arch) }}
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
@@ -90,8 +96,9 @@ jobs:
           version: ${{ steps.inputs.outputs.version }}
           previous-image: ${{ steps.inputs.outputs.previous-image }}
           require-previous-assets: "true"
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Publication promotes these exact bytes, so release candidates keep
+          # the Sentry build secret (see ../release-image-security.md). It comes
+          # from the merge-queue-build environment; pull requests never run this.
           sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
           cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
       - name: Seal candidate bytes for scanning
@@ -104,14 +111,17 @@ jobs:
       - name: Verify candidate bytes
         id: image
         run: python3 .github/scripts/release-candidate.py verify
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
       - name: Scan exact candidate bytes
         id: scan
         uses: $/.github/actions/scan-docker-image
         with:
           image: ${{ steps.image.outputs.reference }}
           platform: linux/${{ matrix.arch }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
       - name: Record successful scan
         env:
@@ -212,6 +222,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout scan policy and image sources.
+      id-token: write # Docker Hub OIDC pull login for Docker Scout.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -219,17 +230,21 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: archestra
+          dockerhub-oidc-connection-id: ${{ vars.DOCKERHUB_OIDC_CONNECTION_ID }}
+
       - name: Scan exact full and slim Platform image bytes
         uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
 
   handoff-fixture:
     name: Build non-publishing handoff fixture
     if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     permissions:
       contents: read
     steps:

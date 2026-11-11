@@ -510,6 +510,97 @@ describe("LimitsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    "read",
+    "create",
+  ] as const)("keeps descendant team names when a parent admin also has global Limits %s permission", (globalAction) => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data:
+            Object.keys(permissions).length === 0 ||
+            permissions.llmLimit?.includes(globalAction),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const parent = {
+      id: "team-parent",
+      name: "Department",
+      myRole: "admin",
+      descendantTeams: [
+        { id: "team-child", name: "Design" },
+        { id: "team-grandchild", name: "Research" },
+      ],
+    };
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [parent],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    // Limits permission does not grant organization-wide team access:
+    // this metadata request only returns direct memberships.
+    vi.mocked(useTeams).mockReturnValue({
+      data: [{ id: parent.id, name: parent.name }],
+    } as unknown as ReturnType<typeof useTeams>);
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          ...limitRow({ id: "parent-limit", limitValue: 900 }),
+          entityType: "team",
+          entityId: parent.id,
+        },
+        {
+          ...limitRow({ id: "child-limit", limitValue: 300 }),
+          entityType: "team",
+          entityId: "team-child",
+        },
+        {
+          ...limitRow({ id: "grandchild-limit", limitValue: 100 }),
+          entityType: "team",
+          entityId: "team-grandchild",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    expect(screen.getByTestId("data-table-row-parent-limit")).toHaveTextContent(
+      "Department",
+    );
+    expect(screen.getByTestId("data-table-row-child-limit")).toHaveTextContent(
+      "Design",
+    );
+    expect(
+      screen.getByTestId("data-table-row-grandchild-limit"),
+    ).toHaveTextContent("Research");
+    expect(screen.queryByText("Unknown team")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("data-table-row-parent-limit")).getByRole(
+        "button",
+        { name: /Edit limit/ },
+      ),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      within(screen.getByTestId("data-table-row-child-limit")).getByRole(
+        "button",
+        { name: /Edit limit/ },
+      ),
+    ).not.toHaveAttribute("aria-disabled");
+
+    // The same names must remain available when assigning a new child limit,
+    // including when the viewer also has global create permission.
+    render(mockSetCostsAction.mock.calls.at(-1)?.[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Add Limit" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Limit scope" }));
+    fireEvent.click(screen.getByRole("option", { name: /^Team/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "" }));
+    expect(screen.getByRole("option", { name: /Design/ })).toBeVisible();
+    expect(screen.getByRole("option", { name: /Research/ })).toBeVisible();
+    expect(
+      screen.queryAllByRole("option", { name: /Department/ }),
+    ).toHaveLength(globalAction === "create" ? 1 : 0);
+  });
+
   it("shows a model carried from Costs even when it is absent from the provider catalog", () => {
     mockDataTableSearchParams.mockReturnValue(
       new URLSearchParams({ units: "tokens", model: "vendor/retired-model" }),

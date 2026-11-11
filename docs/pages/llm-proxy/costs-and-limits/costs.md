@@ -43,7 +43,7 @@ Below the headline cards, use the cost explorer to break down usage by any dimen
 2. Choose **by** to group rows by **Credential** (virtual key, OAuth client, or other sign-in), **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
 3. Optionally choose **split by** to break each row down by a second dimension. **Team**, **Agent**, **Person**, **Credential**, **Provider**, and **Model** split by each other, so you can see who uses each agent, or which models each team used and what they cost. The **Tokens by agent and person** and **Spend by team and model** presets open two of these.
 
-Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export CSV** to download the current table, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
+Switch between **Summary** (ranked totals, share of total, and period-over-period trend) and **Pivot** (a heat-shaded matrix with time buckets or split values as columns). Click any row to isolate it in the chart, click **Export** to download the current table as CSV, JSON, or Parquet, or click **Show ... limits** in the toolbar to jump to [Limits](/docs/llm-proxy/costs-and-limits/limits) filtered to the selected scope or row.
 
 ## Group Proxy Costs by Label
 

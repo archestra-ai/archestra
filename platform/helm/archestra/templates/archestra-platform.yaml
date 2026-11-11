@@ -5,6 +5,16 @@ Validation: Ensure postgresql.enabled=false when using external database
 {{- fail "Configuration error: When postgresql.external_database_url is set, you must also set postgresql.enabled=false to prevent deploying an unused PostgreSQL instance." }}
 {{- end }}
 {{/*
+Validation: Ensure postgresql.enabled=false and OIDC roleArn when using RDS IAM authentication
+*/}}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- if and $iamAuth.enabled .Values.postgresql.enabled }}
+{{- fail "Configuration error: When archestra.database.iamAuth.enabled is true, you must set postgresql.enabled=false and configure an external RDS/Aurora PostgreSQL database." }}
+{{- end }}
+{{- if and $iamAuth.injectWebIdentityTokenVolume (not $iamAuth.roleArn) (not (hasKey .Values.archestra.env "AWS_ROLE_ARN")) }}
+{{- fail "Configuration error: When archestra.database.iamAuth.injectWebIdentityTokenVolume is true, you must set archestra.database.iamAuth.roleArn (or archestra.env.AWS_ROLE_ARN)." }}
+{{- end }}
+{{/*
 Validation: Ensure diagnostics storage supports concurrent pod mounts
 */}}
 {{- $usesChartManagedDiagnosticsClaim := and .Values.archestra.diagnostics.enabled (not .Values.archestra.diagnostics.existingClaimName) }}
@@ -122,13 +132,23 @@ spec:
         {{- with .Values.archestra.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.archestra.podAnnotations }}
+      {{- $authSecretChecksum := include "archestra-platform.authSecretChecksum" . }}
+      {{- if or .Values.archestra.podAnnotations $authSecretChecksum }}
       annotations:
+        {{- with .Values.archestra.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $authSecretChecksum }}
+        checksum/auth-secret: {{ . }}
+        {{- end }}
       {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- with .Values.archestra.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
@@ -137,6 +157,7 @@ spec:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           {{- include "archestra-platform.vaultSecretsCommand" (.Values.archestra.initContainers.vaultSecrets.entrypoint | default "/docker-entrypoint.sh") | nindent 10 }}
           {{- end }}

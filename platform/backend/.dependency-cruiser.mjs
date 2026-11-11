@@ -1,10 +1,11 @@
 /**
  * Keep the database-free test project free of runtime database imports. The
- * one models module allowed is models/ports.ts: it has no runtime imports, and
- * the check still follows its imports, so a database import through it fails.
+ * only database/models modules allowed are database/rds-iam.ts and
+ * models/ports.ts: neither imports the database or config, and the check still
+ * follows their imports, so a database import through them fails.
  */
 const forbiddenRuntimeModules =
-  "^src/(config\\.ts$|database/|models/(?!ports\\.ts$)|server\\.ts$|test/(index|fixtures|setup|global-setup|route-test-app)\\.ts$)";
+  "^src/(config\\.ts$|database/(?!rds-iam\\.ts$)|models/(?!ports\\.ts$)|server\\.ts$|test/(index|fixtures|setup|global-setup|route-test-app)\\.ts$)";
 
 export default {
   forbidden: [

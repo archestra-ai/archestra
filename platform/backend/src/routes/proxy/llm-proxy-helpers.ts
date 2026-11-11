@@ -126,8 +126,12 @@ export function normalizeToolCallsForPolicy(
   toolCallName: string;
   toolCallArgs: string;
   isRunToolDispatchTarget?: boolean;
+  isNativeDispatchTarget?: boolean;
 }> {
   return toolCalls.map((tc) => {
+    const nativeDispatch = resolution.nativeDispatch?.(tc);
+    if (nativeDispatch)
+      return { ...nativeDispatch, isNativeDispatchTarget: true };
     let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
@@ -905,12 +909,27 @@ export function upstreamErrorMessage(
  */
 export function poolFailoverReason(
   error: unknown,
+  provider?: SupportedProvider,
 ): { reason: string; status: number; retryAfterMs?: number } | undefined {
   if (error instanceof ObservedProviderUsageError) return undefined;
   if (error instanceof ApiError || isClientAbortError(error)) return undefined;
   const status =
     explicitHttpStatus(error) ?? classifyTransientUpstreamError(error);
   if (status === undefined) return undefined;
+  // Credit exhaustion is not a transient rate limit. Match structured quota
+  // codes and Anthropic's specific balance refusal, never arbitrary 400 text.
+  const payload = asRecord(asRecord(error)?.error);
+  const detail = asRecord(payload?.error) ?? payload;
+  const codes = [detail?.code, detail?.type, asRecord(error)?.code];
+  const creditExhausted =
+    status === 402 ||
+    (status === 429 && codes.includes("insufficient_quota")) ||
+    (status === 400 &&
+      provider === "anthropic" &&
+      typeof detail?.message === "string" &&
+      /^your credit balance is too low\b/i.test(detail.message.trim()));
+  if (creditExhausted)
+    return { reason: `credit_exhausted (${status})`, status };
   const failsOver =
     status === 401 ||
     status === 403 ||

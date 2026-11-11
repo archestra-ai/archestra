@@ -12,7 +12,7 @@ const INITIAL_PURGE_RETRY_MS = 5 * 60 * 1000;
 const MAX_PURGE_RETRY_MS = 60 * 60 * 1000;
 
 /**
- * Enqueues a fit for every organization whose plan is due — settings changed
+ * Enqueues a fit for every auto router whose plan is due — settings changed
  * since its last fit outcome, or no outcome for a day — resumes a backfill
  * whose worker died, and purges expired routing history once a day per
  * process. Failed purges back off independently of the minute dispatch tick.
@@ -30,7 +30,7 @@ export class AutoRoutingDispatcher {
   async dispatch(now: Date = new Date()): Promise<void> {
     await this.purgeDaily(now);
     if (!config.autoRouting.enabled) return;
-    const due = await AutoRoutingDispatchModel.findDueOrganizations(
+    const due = await AutoRoutingDispatchModel.findDueRouters(
       new Date(now.getTime() - DAY_MS),
     );
     if (await RoutingBackfillModel.hasClaimable()) {

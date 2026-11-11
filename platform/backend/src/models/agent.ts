@@ -1566,50 +1566,72 @@ class AgentModel {
   }
 
   /**
-   * Runtime Agents without an explicit model/key pair inherit the
-   * organization's effective default model. This narrow query supports
-   * validating a proposed default without loading each Agent's relations.
+   * Runtime Agents that run on the organization's default model: those with
+   * no model/key pair of their own, or a pair that resolution skips (half of
+   * it missing, or the model no longer linked to the key). This narrow query
+   * supports validating a proposed default without loading relations.
    */
   static async findRuntimeAgentsInheritingOrganizationDefault(
     organizationId: string,
-  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime">>> {
+  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime" | "agentType">>> {
+    const agents = schema.agentsTable;
+    const links = schema.llmProviderApiKeyModelsTable;
     return db
       .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        runtime: schema.agentsTable.runtime,
+        id: agents.id,
+        name: agents.name,
+        runtime: agents.runtime,
+        agentType: agents.agentType,
+      })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.organizationId, organizationId),
+          isNotNull(agents.runtime),
+          notDeleted(agents),
+          or(
+            isNull(agents.llmApiKeyId),
+            isNull(agents.modelId),
+            notExists(
+              db
+                .select({ id: links.id })
+                .from(links)
+                .where(
+                  and(
+                    eq(links.apiKeyId, agents.llmApiKeyId),
+                    eq(links.modelId, agents.modelId),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      );
+  }
+
+  /** How many agents are set to each auto router themselves (not through the organization default), by router id. */
+  static async countOnAutoRouters(
+    organizationId: string,
+  ): Promise<Map<string, number>> {
+    const rows = await db
+      .select({
+        routerId: schema.agentsTable.autoRouterId,
+        total: count(),
       })
       .from(schema.agentsTable)
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          isNull(schema.agentsTable.llmApiKeyId),
-          isNull(schema.agentsTable.modelId),
-          isNotNull(schema.agentsTable.runtime),
-          notDeleted(schema.agentsTable),
-        ),
-      );
-  }
-
-  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
-  static async countFollowingOrganizationRouting(
-    organizationId: string,
-  ): Promise<number> {
-    const [row] = await db
-      .select({ total: count() })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "agent"),
-          isNull(schema.agentsTable.llmApiKeyId),
-          isNull(schema.agentsTable.modelId),
-          isNull(schema.agentsTable.modelPoolId),
+          isNotNull(schema.agentsTable.autoRouterId),
           isNull(schema.agentsTable.runtime),
           notDeleted(schema.agentsTable),
         ),
-      );
-    return row?.total ?? 0;
+      )
+      .groupBy(schema.agentsTable.autoRouterId);
+    return new Map(
+      rows.flatMap((row) =>
+        row.routerId ? [[row.routerId, row.total] as const] : [],
+      ),
+    );
   }
 
   static async findRuntimeTargets(organizationId: string) {
@@ -1619,7 +1641,10 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
-          isNotNull(schema.agentsTable.runtime),
+          or(
+            isNotNull(schema.agentsTable.runtime),
+            sql`(${schema.agentsTable.subagentLoadBalancing}->>'enabled')::boolean IS TRUE`,
+          ),
           notDeleted(schema.agentsTable),
         ),
       );
@@ -3179,6 +3204,37 @@ class AgentModel {
     return result ?? null;
   }
 
+  /** The Microsoft Entra agent identity the agent acts as, if it is bound to one. */
+  static async findEntraAgentIdentityId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ entraAgentIdentityId: schema.agentsTable.entraAgentIdentityId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.entraAgentIdentityId ?? null;
+  }
+
+  /** The agent bound to a Microsoft Entra agent identity, if any. */
+  static async findIdByEntraAgentIdentityId(params: {
+    organizationId: string;
+    entraAgentIdentityId: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          sql`lower(${schema.agentsTable.entraAgentIdentityId}) = ${params.entraAgentIdentityId.toLowerCase()}`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return result?.id ?? null;
+  }
+
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })
@@ -4069,7 +4125,12 @@ class AgentModel {
     id: string,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
+  ): Promise<{
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouterId: string | null;
+    runtime: Agent["runtime"];
+  } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
       return null;
     }
@@ -4078,6 +4139,8 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        autoRouterId: schema.agentsTable.autoRouterId,
+        runtime: schema.agentsTable.runtime,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -5759,6 +5822,7 @@ class AgentModel {
       identityProviderId: row.identityProviderId ?? null,
       // Names only: the App's key, repositories and workflow refs.
       githubActionsAccess: row.githubActionsAccess ?? null,
+      entraAgentIdentityId: row.entraAgentIdentityId ?? null,
       subagentLoadBalancing: row.subagentLoadBalancing ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
@@ -6759,6 +6823,7 @@ const CHAT_ROSTER_COLUMNS = {
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
   modelPoolId: schema.agentsTable.modelPoolId,
+  autoRouterId: schema.agentsTable.autoRouterId,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

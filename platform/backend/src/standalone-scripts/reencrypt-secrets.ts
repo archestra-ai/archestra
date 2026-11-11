@@ -9,9 +9,10 @@
  * every DB-encrypted `secret` row must be decrypted under the previous key and
  * re-encrypted under the new one, or it becomes unreadable.
  *
- * This runs as a one-shot before the app (the Helm pre-upgrade migration Job,
- * chained after `drizzle-kit migrate`). It is idempotent and a no-op when the
- * key is unchanged, so it is safe to run on every deploy.
+ * The server runs the same re-encryption on startup (secrets-manager/
+ * encryption-key-guard.ts); the Helm migration Job does not run this script.
+ * Run it by hand to re-encrypt or check stored secrets ahead of a restart. It
+ * is idempotent and a no-op when the key is unchanged.
  *
  *   new  = HKDF(ARCHESTRA_SECRETS_ENCRYPTION_SECRET ?? ARCHESTRA_AUTH_SECRET)
  *   prev = HKDF(ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS ?? ARCHESTRA_AUTH_SECRET)
@@ -26,6 +27,7 @@
 // Binds the ports of the layers below before any other module loads.
 import "@/server/composition";
 import config from "@/config";
+import db, { initializeDatabase } from "@/database";
 import { assertPortsBound } from "@/models/ports";
 import { reencryptStoredSecrets } from "@/secrets-manager/reencrypt";
 
@@ -49,25 +51,30 @@ async function main(): Promise<void> {
     return;
   }
 
-  const result = await reencryptStoredSecrets({ previousSecret, nextSecret });
+  await initializeDatabase();
+  try {
+    const result = await reencryptStoredSecrets({ previousSecret, nextSecret });
 
-  if (result.status === "noop") {
+    if (result.status === "noop") {
+      console.log(
+        "[reencrypt-secrets] encryption secret unchanged — nothing to re-encrypt.",
+      );
+      return;
+    }
+
     console.log(
-      "[reencrypt-secrets] encryption secret unchanged — nothing to re-encrypt.",
+      `[reencrypt-secrets] done: reencrypted=${result.reencrypted} ` +
+        `alreadyNew=${result.alreadyNew} notEncrypted=${result.notEncrypted} ` +
+        `unreadable=${result.unreadable} total=${result.total}`,
     );
-    return;
-  }
-
-  console.log(
-    `[reencrypt-secrets] done: reencrypted=${result.reencrypted} ` +
-      `alreadyNew=${result.alreadyNew} notEncrypted=${result.notEncrypted} ` +
-      `unreadable=${result.unreadable} total=${result.total}`,
-  );
-  if (result.unreadable > 0) {
-    console.warn(
-      `[reencrypt-secrets] WARNING: ${result.unreadable} secret(s) could not be ` +
-        "decrypted with the previous key and must be re-entered.",
-    );
+    if (result.unreadable > 0) {
+      console.warn(
+        `[reencrypt-secrets] WARNING: ${result.unreadable} secret(s) could not be ` +
+          "decrypted with the previous key and must be re-entered.",
+      );
+    }
+  } finally {
+    await db.$client.end();
   }
 }
 

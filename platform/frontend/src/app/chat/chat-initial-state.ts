@@ -2,6 +2,7 @@ import {
   BUILT_IN_AGENT_IDS,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
+import { autoRouterIdOfChoice } from "@/lib/chat/auto-model";
 import {
   resolveInitialModel,
   resolveModelForAgent,
@@ -46,6 +47,8 @@ export type CreateConversationInput = {
   chatApiKeyId?: string | null;
   /** A model pool picked in place of the key and model. */
   modelPoolId?: string | null;
+  /** An auto router picked in place of the key and model. */
+  autoRouterId?: string;
   title?: string;
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
@@ -230,6 +233,16 @@ export function buildCreateConversationInput(params: {
     return null;
   }
 
+  const autoRouterId = autoRouterIdOfChoice(params.modelPoolId);
+  if (autoRouterId) {
+    return {
+      agentId: params.agentId,
+      autoRouterId,
+      title: params.title,
+      projectId: params.projectId ?? undefined,
+      thinkingEffort: params.thinkingEffort,
+    };
+  }
   return {
     agentId: params.agentId,
     modelId: params.modelId || undefined,

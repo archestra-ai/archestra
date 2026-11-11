@@ -20,6 +20,10 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
+import {
+  resolveNativeDatabaseConnectionString,
+  withNativeStorageRetry,
+} from "@/database/rds-iam";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
@@ -56,17 +60,25 @@ import {
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { toolEntries } from "@/openappa/policy-text";
+import {
+  parseReviewScope,
+  type ReviewScopeItem,
+} from "@/openappa/review-scope";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
-import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
+import type {
+  ToolNameCanonicalizer,
+  ToolNameResolution,
+} from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type { OpenAppaSession } from "@/types/openappa-session";
+import { argumentSpellingConflict } from "./command-normalization";
 import { policyArguments, previewAppToolTarget } from "./policy-arguments";
 import { policyView } from "./result-view";
 import {
@@ -216,16 +228,23 @@ type ProcessedToolResult = {
   content: string;
   diagnostic?: string;
   outputSource: OutputSource;
-  /** A native refusal, distinct from a successful authoritative replacement. */
-  refused?: true;
   reason?: RuntimeReason;
   code?: string;
-  /** The runtime denied this call, so `content` is its ruling, not an output. */
-  denied?: true;
   /** Current denial metadata; omitted offers are unknown, not an empty list. */
   offers?: string[];
   review?: Array<{ offer_id: string; text: string }>;
-};
+} & (
+  | {
+      /** The call never ran; retain its ruling as history, never waive its result. */
+      denied: true;
+      refused?: never;
+    }
+  | {
+      denied?: never;
+      /** A result admission refused actual output, not a prior call's ruling. */
+      refused?: true;
+    }
+);
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
   | {
@@ -273,16 +292,18 @@ export async function getOpenappaStatus(params: {
     const status = await retryWhilePolicyMoved({
       run: async () => {
         const policy = await effectivePolicy(params.organizationId);
-        return withOpenappaContentEncryption(
-          params.organizationId,
-          params.sessionId,
-          (encryption) =>
-            module.getOpenappaStatus(
-              params.organizationId,
-              params.sessionId,
-              policy,
-              encryption,
-            ),
+        return withNativeStorageRetry(() =>
+          withOpenappaContentEncryption(
+            params.organizationId,
+            params.sessionId,
+            (encryption) =>
+              module.getOpenappaStatus(
+                params.organizationId,
+                params.sessionId,
+                policy,
+                encryption,
+              ),
+          ),
         );
       },
     });
@@ -542,7 +563,15 @@ async function binding() {
   openappaDeclarations.publishBridgeToken();
   native ??= (async () => {
     const module = await import("@archestra/openappa-rs");
-    const url = new URL(getDatabaseConnectionString());
+    const url = new URL(
+      await resolveNativeDatabaseConnectionString(
+        getDatabaseConnectionString(),
+        {
+          iamAuthEnabled: config.database.iamAuthEnabled,
+          awsRegion: config.database.awsRegion || undefined,
+        },
+      ),
+    );
     // pg ignores Prisma's legacy schema parameter; rust-postgres rejects it.
     url.searchParams.delete("schema");
     await module.initializeOpenappa(
@@ -931,17 +960,24 @@ export async function startRuntimeChild(params: {
 }
 
 /** Refreshes a registered child's inherited label before new bytes arrive. */
-export async function addressRuntimeChild(params: {
-  session: OpenAppaSession;
-  childSessionId: string;
-  operationId: string;
-}): Promise<void> {
-  const decision = await dispatch(params.session, {
-    event: "child_address",
-    operation_id: params.operationId,
-    spawned_id: params.childSessionId,
-    output: "",
-  });
+export async function addressRuntimeChild(
+  params: {
+    session: OpenAppaSession;
+    childSessionId: string;
+    operationId: string;
+  },
+  policy?: DispatchPolicy,
+): Promise<void> {
+  const decision = await dispatch(
+    params.session,
+    {
+      event: "child_address",
+      operation_id: params.operationId,
+      spawned_id: params.childSessionId,
+      output: "",
+    },
+    policy,
+  );
   if (
     decision.decision !== "ack" &&
     !(await waiveSoftBlock(
@@ -1021,6 +1057,20 @@ async function approveToolResult(params: {
   const reason =
     "reason" in decision && decision.reason ? decision.reason : undefined;
   const code = "code" in decision && decision.code ? decision.code : undefined;
+  if (decision.decision === "deny_call") {
+    // ToolResult replays a denied/cancelled call's authoritative receipt.
+    // There are no executed bytes to release. A new attempt is evaluated by
+    // ToolCall, where the operator's current waiver setting applies.
+    return {
+      content,
+      outputSource,
+      ...(reason ? { reason } : {}),
+      ...(code ? { code } : {}),
+      denied: true,
+      offers: decision.offers?.map((offer) => offer.offer_id),
+      review: decision.review,
+    };
+  }
   // Old native receipts for fabricated/unknown offers remain authoritative
   // errors, not evidence of a soft policy refusal that can disable a session.
   const unknownControl =
@@ -1031,8 +1081,7 @@ async function approveToolResult(params: {
     content,
     outputSource,
     ...((!unknownControl || isHardBlock(content)) &&
-    (decision.decision === "deny_call" ||
-      decision.decision === "block" ||
+    (decision.decision === "block" ||
       decision.decision === "refuse" ||
       decision.decision === "replace_output" ||
       (decision.decision === "mcp_result" && decision.result?.isError === true))
@@ -1040,13 +1089,6 @@ async function approveToolResult(params: {
       : {}),
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call"
-      ? {
-          denied: true as const,
-          offers: decision.offers?.map((offer) => offer.offer_id),
-          review: decision.review,
-        }
-      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -1214,7 +1256,15 @@ export async function processProxyResults(params: {
             callerId: params.session.caller_id,
             toolCallId: result.id,
           });
-        } catch {
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              sessionId: params.session.session_id,
+              toolCallId: result.id,
+            },
+            "OpenAPPA could not read the retained peer message receipt",
+          );
           retained = null;
         }
         if (!retained) {
@@ -1349,6 +1399,7 @@ export async function evaluateToolCalls(
   }>,
   options: {
     canonicalize: ToolNameCanonicalizer;
+    nativeDispatch?: ToolNameResolution["nativeDispatch"];
     isUserQuestion?: (name: string, namespace?: string) => boolean;
     /** Compat only: recognize a `run_tool` wrapper behind any client label. */
     looseRunToolDispatch?: boolean;
@@ -1359,7 +1410,7 @@ export async function evaluateToolCalls(
     notice?: DeclaredToolSpelling;
     noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
-    isSpawn?: (name: string, namespace?: string) => boolean;
+    isSpawn?: (name: string, namespace?: string, args?: unknown) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
     spawnCallIds?: ReadonlySet<string>;
     /** Whether this client can carry child-return declarations. */
@@ -1394,6 +1445,7 @@ export async function evaluateToolCalls(
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
     canonicalize: options.canonicalize,
+    nativeDispatch: options.nativeDispatch,
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
   const admitted: string[] = [];
@@ -1445,11 +1497,23 @@ export async function evaluateToolCalls(
       ) {
         return { kind: "allow" as const };
       }
+      const conflict = argumentSpellingConflict(
+        target.toolCallName,
+        JSON.parse(target.toolCallArgs),
+      );
+      // Like an unanswered annotator, a refusal no remedy can lift: the
+      // notice says how to correct the call.
+      if (conflict)
+        return {
+          kind: "deny" as const,
+          feedback: conflict,
+          unanswered: true as const,
+        };
       // The target is already canonical, so it is read, not re-canonicalized.
       const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
         options.spawnCallIds?.has(call.id) === true ||
-        options.isSpawn?.(call.name, call.namespace) === true;
+        options.isSpawn?.(call.name, call.namespace, call.arguments) === true;
       // An agent__<slug> spawn starts a subagent like the host's own Agent
       // tool, so it is ruled as one unless the policy rules it by name. The
       // model keeps its own spelling.
@@ -1476,7 +1540,9 @@ export async function evaluateToolCalls(
         operation_id: `call:${call.id}`,
         tool,
         ...(spelling ? { spelling } : {}),
-        ...(target.isRunToolDispatchTarget ? { dispatch: call.name } : {}),
+        ...(target.isRunToolDispatchTarget || target.isNativeDispatchTarget
+          ? { dispatch: call.name }
+          : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1775,6 +1841,24 @@ export async function endTurn(
   operationId: string,
 ): Promise<void> {
   await dispatch(session, { event: "turn_end", operation_id: operationId });
+}
+
+/** Finish an empty child reply under the runtime's recorded return contract. */
+export async function endChildTurn(params: {
+  session: OpenAppaSession;
+  operationId: string;
+  spawnCallId: string;
+  childNativeId?: string;
+}): Promise<void> {
+  const decision = await dispatch(params.session, {
+    event: "child_turn_end",
+    operation_id: params.operationId,
+    spawn_call_id: params.spawnCallId,
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
+  });
+  if (decision.decision !== "ack") {
+    throw openappaFailure(new Error(decisionMessage(decision)));
+  }
 }
 
 /**
@@ -2178,10 +2262,12 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = await module.loadChildReturns(
-      params.organizationId,
-      params.parentSessionId,
-      lookup,
+    const records = await withNativeStorageRetry(() =>
+      module.loadChildReturns(
+        params.organizationId,
+        params.parentSessionId,
+        lookup,
+      ),
     );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
@@ -2195,6 +2281,22 @@ export async function loadChildReturns(params: {
       { err: error, parentSessionId: params.parentSessionId },
       "OpenAPPA could not load child returns",
     );
+    throw openappaFailure(error);
+  }
+}
+
+/** Rejections are host status, not child crossings; never pass them to approveSpawnReturn. */
+export async function loadChildRejections(params: {
+  organizationId: string;
+  parentSessionId: string;
+}) {
+  try {
+    const module = await binding();
+    return await module.loadChildRejections(
+      params.organizationId,
+      params.parentSessionId,
+    );
+  } catch (error) {
     throw openappaFailure(error);
   }
 }
@@ -2213,9 +2315,8 @@ export async function loadChildAddresses(params: {
 }): Promise<Array<{ parentSessionId: string; value: string }>> {
   try {
     const module = await binding();
-    return await module.loadChildAddresses(
-      params.organizationId,
-      params.childSessionId,
+    return await withNativeStorageRetry(() =>
+      module.loadChildAddresses(params.organizationId, params.childSessionId),
     );
   } catch (error) {
     logger.warn(
@@ -2355,15 +2456,17 @@ export async function listPeerMessages(params: {
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
-      module.listPeerMessages(
-        JSON.stringify({
-          ...peerActor(params.session),
-          ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-          tool: archestraMcpBranding.getToolName(
-            TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
-          ),
-        }),
-        policy,
+      withNativeStorageRetry(() =>
+        module.listPeerMessages(
+          JSON.stringify({
+            ...peerActor(params.session),
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            tool: archestraMcpBranding.getToolName(
+              TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+            ),
+          }),
+          policy,
+        ),
       ),
     z.object({ notices: z.array(PeerNoticeWireSchema) }),
   );
@@ -2508,6 +2611,11 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /**
+   * What approving accepts. Unknown for a review stored before the runtime
+   * typed it, or one that joins several authorities: show `text` instead.
+   */
+  scope?: ReviewScopeItem[];
 } | null> {
   try {
     if (
@@ -2516,24 +2624,28 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.loadOfferReview(
-          params.organizationId,
-          params.sessionId,
-          params.offerId,
-          encryption,
-        ),
+    const result = await withNativeStorageRetry(() =>
+      withOpenappaContentEncryption(
+        params.organizationId,
+        params.sessionId,
+        (encryption) =>
+          module.loadOfferReview(
+            params.organizationId,
+            params.sessionId,
+            params.offerId,
+            encryption,
+          ),
+      ),
     );
     if (!result) return null;
+    const scope = parseReviewScope(result.scope);
     return {
       offer_id: result.offerId,
       text: result.text,
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...(scope ? { scope } : {}),
     };
   } catch (error) {
     logger.warn(

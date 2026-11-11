@@ -179,7 +179,23 @@ class OpenAppaArchestraAnnotator {
       budget === undefined || sanitizer
         ? budget
         : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
-    const call = { model, system, request, maxOutputTokens, abortSignal };
+    // These Kimi Code families always reason. Keep short classifications at
+    // their supported low effort rather than the high/max default, which can
+    // consume the runtime's entire consult deadline before returning JSON.
+    // The older kimi-for-coding-highspeed model has no adjustable effort.
+    const providerOptions =
+      selection.provider === "kimi-code" &&
+      /^(?:k3(?:[.-]|$)|kimi-for-coding$)/.test(selection.modelName)
+        ? { "kimi-code": { reasoningEffort: "low" } }
+        : undefined;
+    const call = {
+      model,
+      system,
+      request,
+      maxOutputTokens,
+      abortSignal,
+      providerOptions,
+    };
     const formatKey = JSON.stringify([
       selection.provider,
       selection.modelName,
@@ -341,6 +357,7 @@ type AnnotationCall = {
   request: ArchestraAnnotationRequest;
   maxOutputTokens: number | undefined;
   abortSignal: AbortSignal;
+  providerOptions: Parameters<typeof generateText>[0]["providerOptions"];
 };
 
 /**
@@ -382,6 +399,7 @@ async function structuredAnswer(
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
       abortSignal: call.abortSignal,
+      providerOptions: call.providerOptions,
     });
     if (!isPlainObject(output)) return { kind: "unparsed" };
     formatStrikes.delete(call.formatKey);
@@ -409,6 +427,7 @@ async function taggedAnswer(
     prompt: call.request.input,
     maxOutputTokens: call.maxOutputTokens,
     abortSignal: call.abortSignal,
+    providerOptions: call.providerOptions,
   });
   return text === null ? null : parseObject(text);
 }

@@ -29,26 +29,16 @@ name: Build M-Files VAF Add On
 #
 # The Windows runner is expensive, so every automatic trigger is filtered to
 # the add-on's own sources: a pull request that touches them builds (a broken
-# add-on can then never reach main), and so does a push to main (which keeps a
-# successful main run available for deployments that point
-# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main` — the backend
-# resolves the package from the newest successful run of THIS workflow on that
-# branch). Documentation-only edits under the add-on directory are excluded;
-# they cannot change the package.
+# add-on can then never reach main), and so does a push to main (which
+# publishes the release). Documentation-only edits under the add-on directory
+# are excluded; they cannot change the package.
 #
-# To build a branch whose add-on sources are unchanged — testing a connector
-# change against a proxied CI package on a dev stack, say — dispatch it
-# explicitly: `gh workflow run build-m-files-vaf-add-on.yml --ref <branch>`.
-# Dispatching on `main` also re-attempts the release publish, which is
-# idempotent — the recovery command when a publish attempt failed.
-#
-# A run's `.mfappx` is downloadable from its Artifacts (zip-wrapped — GitHub
-# always archives artifacts; only release assets carry the raw file), and
-# artifacts expire on the repository's retention schedule, so a long stretch
-# with no add-on change eventually leaves the source-ref override with nothing
-# to resolve; it then falls back to building from source, and a dispatch
-# refreshes it. Released deployments do not depend on any of this: they serve
-# the package compiled into their platform image.
+# Dispatching on `main` re-attempts the release publish, which is idempotent —
+# the recovery command when a publish attempt failed. A run's `.mfappx` is
+# also downloadable from its Artifacts (zip-wrapped — GitHub always archives
+# artifacts; only release assets carry the raw file). Released deployments do
+# not depend on any of this: they serve the package compiled into their
+# platform image.
 
 # The two path lists are duplicated on purpose: GitHub Actions does not
 # support YAML anchors, so they must be kept in sync by hand.

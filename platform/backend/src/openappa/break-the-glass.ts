@@ -128,7 +128,9 @@ export function isUnattendedRequest(params: {
  * when it handles a denied batch with Human approval waived in unattended
  * sessions, the only mode in which the gateway reads it, so the note is
  * current when a review follows that batch. A lost note costs one review
- * that waits for a person, as it did before.
+ * that waits for a person, as it did before. A note that cannot be withdrawn
+ * would let the platform answer reviews with a person present, so the
+ * withdrawal falls back to overwriting it and throws when both fail.
  */
 export async function rememberUnattendedSession(
   session: OpenAppaSession,
@@ -137,19 +139,38 @@ export async function rememberUnattendedSession(
   const key = unattendedSessionKey(session);
   // A session sends many requests; one write per process every few minutes
   // keeps the day-long note fresh. An attended request always withdraws the
-  // note: another replica may have written it since this process last did,
-  // and a stale note would let the platform answer reviews with a person present.
-  if (unattended && noted.get(key) === true) return;
+  // note: another replica may have written it since this process last did.
+  if (!unattended) {
+    await withdrawUnattendedNote(key, session);
+    noted.set(key, false);
+    return;
+  }
+  if (noted.get(key) === true) return;
   try {
-    if (unattended) await cacheManager.set<true>(key, true, TimeInMs.Day);
-    else await cacheManager.delete(key);
-    noted.set(key, unattended);
+    await cacheManager.set<true>(key, true, TimeInMs.Day);
+    noted.set(key, true);
   } catch (error) {
     logger.warn(
       { err: error, sessionId: session.session_id },
       "OpenAPPA could not note the session as unattended",
     );
   }
+}
+
+async function withdrawUnattendedNote(
+  key: AllowedCacheKey,
+  session: OpenAppaSession,
+): Promise<void> {
+  try {
+    await cacheManager.delete(key, { throwOnError: true });
+    return;
+  } catch (error) {
+    logger.warn(
+      { err: error, sessionId: session.session_id },
+      "OpenAPPA could not withdraw the unattended note, so it overwrites it",
+    );
+  }
+  await cacheManager.set<false>(key, false, TimeInMs.Day);
 }
 
 /** Whether the gateway reads the unattended note under these settings. */
@@ -166,7 +187,7 @@ export async function isUnattendedSession(
 ): Promise<boolean> {
   try {
     return (
-      (await cacheManager.get<true>(unattendedSessionKey(session))) === true
+      (await cacheManager.get<boolean>(unattendedSessionKey(session))) === true
     );
   } catch (error) {
     logger.warn(

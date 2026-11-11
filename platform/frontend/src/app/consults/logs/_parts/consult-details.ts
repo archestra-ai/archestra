@@ -17,6 +17,8 @@ export type ConsultToolCall = { name: string; arguments: unknown };
 export type ConsultView = {
   consult: ExternalConsult;
   toolCall: ConsultToolCall | null;
+  /** What an authority was asked to approve; empty for any other consult. */
+  requirements: unknown[];
   diagnostics: ConsultDiagnostics;
   rawResponse: string | null;
 };
@@ -25,6 +27,7 @@ export function toConsultView(consult: ExternalConsult): ConsultView {
   return {
     consult,
     toolCall: toolCallOf(consult.request),
+    requirements: requirementsOf(consult.request),
     diagnostics: decodeDiagnostics(consult.diagnostics),
     rawResponse: consult.rawResponse ? base64ToText(consult.rawResponse) : null,
   };
@@ -85,15 +88,39 @@ const DiagnosticsLineSchema = z.object({
 });
 
 // An annotation consult carries the proposed call as `artifact.args`.
-const ToolCallRequestSchema = z.object({
+const AnnotationRequestSchema = z.object({
   artifact: z.object({
     args: z.object({ name: z.string(), arguments: z.unknown() }),
   }),
 });
 
+// An authority consult carries the call it rules on as `artifact.tool` and
+// `artifact.arguments`, beside the requirements it was asked to approve.
+const AuthorityRequestSchema = z.object({
+  artifact: z.object({
+    tool: z.string(),
+    arguments: z.unknown(),
+    requirements: z.array(z.unknown()),
+  }),
+});
+
 function toolCallOf(request: unknown): ConsultToolCall | null {
-  const parsed = ToolCallRequestSchema.safeParse(request);
-  return parsed.success ? parsed.data.artifact.args : null;
+  const annotation = AnnotationRequestSchema.safeParse(request);
+  if (annotation.success) {
+    return annotation.data.artifact.args;
+  }
+  const authority = AuthorityRequestSchema.safeParse(request);
+  return authority.success
+    ? {
+        name: authority.data.artifact.tool,
+        arguments: authority.data.artifact.arguments,
+      }
+    : null;
+}
+
+function requirementsOf(request: unknown): unknown[] {
+  const authority = AuthorityRequestSchema.safeParse(request);
+  return authority.success ? authority.data.artifact.requirements : [];
 }
 
 function base64ToText(base64: string): string {

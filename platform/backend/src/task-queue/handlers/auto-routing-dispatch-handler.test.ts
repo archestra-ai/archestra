@@ -2,17 +2,18 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AgentModel } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRouterModel from "@/models/auto-router";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
   activeFit,
+  ensureAutoRouter,
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
-  setOrganizationTrio,
+  setAutoRoutingEnabled,
+  setAutoRoutingTiers,
 } from "@/test/auto-routing";
 import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import { AutoRoutingDispatcher } from "./auto-routing-dispatch-handler";
@@ -26,35 +27,35 @@ describe("auto routing dispatcher", () => {
     autoRoutingDispatcher = new AutoRoutingDispatcher(() => 0);
   });
 
-  test("enqueues a fit for an organization changed since its last fit", async ({
+  test("enqueues a fit for a router changed since its last fit", async ({
     makeOrganization,
   }) => {
-    const organizationId = await configuredOrganization(makeOrganization);
-    await fitAtCurrentGeneration(organizationId);
-    await AutoRoutingSettingsModel.update(organizationId, {
-      budgetUsdPerDay: "50.00",
-    });
+    const { routerId } = await configuredOrganization(makeOrganization);
+    await fitAtCurrentGeneration(routerId);
+    await AutoRouterModel.update(routerId, { budgetUsdPerDay: "50.00" });
 
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(organizationId)).toBe(1);
+    expect(await queuedFits(routerId)).toBe(1);
   });
 
   test("enqueues a fit when a fit for a superseded scorer version lost at the current generation", async ({
     makeOrganization,
   }) => {
-    const organizationId = await configuredOrganization(makeOrganization);
+    const { organizationId, routerId } =
+      await configuredOrganization(makeOrganization);
     const superseded = await makeScorerVersion();
     // The fit ran for `superseded` but read the generation another worker's activation produced.
-    await AutoRoutingSettingsModel.activateScorerVersion(
-      organizationId,
+    await AutoRouterModel.activateScorerVersion(
+      routerId,
       (await makeScorerVersion()).id,
     );
-    const settings = await AutoRoutingSettingsModel.find(organizationId);
-    if (!settings) throw new Error("organization has no LLM Proxy");
+    const settings = await AutoRouterModel.find(routerId);
+    if (!settings) throw new Error("auto router does not exist");
     const published = await RoutingPlanModel.publish(
       activeFit({
         organizationId,
+        routerId,
         scorerVersionId: superseded.id,
         generation: settings.generation,
         inputWatermark: new Date(),
@@ -64,18 +65,18 @@ describe("auto routing dispatcher", () => {
 
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(organizationId)).toBe(1);
+    expect(await queuedFits(routerId)).toBe(1);
   });
 
-  test("enqueues a fit for an organization never fitted or last fitted over a day ago", async ({
+  test("enqueues a fit for a router never fitted or last fitted over a day ago", async ({
     makeOrganization,
   }) => {
     const unfitted = await configuredOrganization(makeOrganization);
-    await fitAtCurrentGeneration(unfitted);
+    await fitAtCurrentGeneration(unfitted.routerId);
     // Clean by generation, but no outcome on record.
     await db.delete(schema.routingPlansTable);
     const stale = await configuredOrganization(makeOrganization);
-    const plan = await fitAtCurrentGeneration(stale);
+    const plan = await fitAtCurrentGeneration(stale.routerId);
     await db
       .update(schema.routingPlansTable)
       .set({ createdAt: new Date(Date.now() - DAY_MS - 60_000) })
@@ -83,53 +84,67 @@ describe("auto routing dispatcher", () => {
 
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(unfitted)).toBe(1);
-    expect(await queuedFits(stale)).toBe(1);
+    expect(await queuedFits(unfitted.routerId)).toBe(1);
+    expect(await queuedFits(stale.routerId)).toBe(1);
   });
 
-  test("leaves clean, disabled and unconfigured organizations alone", async ({
+  test("leaves clean routers and routers of disabled or unconfigured organizations alone", async ({
     makeOrganization,
   }) => {
     const clean = await configuredOrganization(makeOrganization);
-    await fitAtCurrentGeneration(clean);
+    await fitAtCurrentGeneration(clean.routerId);
     const disabled = await configuredOrganization(makeOrganization);
-    await AutoRoutingSettingsModel.update(disabled, { enabled: false });
+    await setAutoRoutingEnabled(disabled.organizationId, false);
     const noBudget = await configuredOrganization(makeOrganization);
-    await AutoRoutingSettingsModel.update(noBudget, { budgetUsdPerDay: null });
+    await AutoRouterModel.update(noBudget.routerId, { budgetUsdPerDay: null });
 
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(clean)).toBe(0);
-    expect(await queuedFits(disabled)).toBe(0);
-    expect(await queuedFits(noBudget)).toBe(0);
+    expect(await queuedFits(clean.routerId)).toBe(0);
+    expect(await queuedFits(disabled.routerId)).toBe(0);
+    expect(await queuedFits(noBudget.routerId)).toBe(0);
   });
 
   test("enqueues nothing while the feature is off", async ({
     makeOrganization,
   }) => {
-    const organizationId = await configuredOrganization(makeOrganization);
+    const { routerId } = await configuredOrganization(makeOrganization);
     config.autoRouting.enabled = false;
 
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(organizationId)).toBe(0);
+    expect(await queuedFits(routerId)).toBe(0);
   });
 
-  test("keeps one queued fit per organization across dispatches", async ({
+  test("keeps one queued fit per router across dispatches", async ({
     makeOrganization,
   }) => {
-    const organizationId = await configuredOrganization(makeOrganization);
+    const { routerId } = await configuredOrganization(makeOrganization);
 
     await autoRoutingDispatcher.dispatch();
     await autoRoutingDispatcher.dispatch();
 
-    expect(await queuedFits(organizationId)).toBe(1);
+    expect(await queuedFits(routerId)).toBe(1);
+  });
+
+  test("fits each router of an organization on its own", async ({
+    makeOrganization,
+  }) => {
+    const first = await configuredOrganization(makeOrganization);
+    const second = await configuredRouter(first.organizationId, "auto:second");
+    await fitAtCurrentGeneration(first.routerId);
+
+    await autoRoutingDispatcher.dispatch();
+
+    expect(await queuedFits(first.routerId)).toBe(0);
+    expect(await queuedFits(second)).toBe(1);
   });
 
   test("purges expired routing history at most once a day", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    const routerId = (await ensureAutoRouter(organizationId)).id;
     const model = await makeRoutingModel();
     const scorer = await makeScorerVersion();
     // Later than any purge another test triggered in this process.
@@ -138,6 +153,7 @@ describe("auto routing dispatcher", () => {
       const { decision } = await RoutingDecisionModel.insertOrGet(
         plannedDecision({
           organizationId,
+          routerId,
           sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
           modelId: model.id,
           scorerVersionId: scorer.id,
@@ -164,7 +180,8 @@ describe("auto routing dispatcher", () => {
   test("backs off canceled cleanup while continuing to enqueue due fits", async ({
     makeOrganization,
   }) => {
-    const organizationId = await configuredOrganization(makeOrganization);
+    const { organizationId, routerId } =
+      await configuredOrganization(makeOrganization);
     // PostgreSQL sequences retain increments when the canceled statement rolls back.
     await db.execute(sql`create sequence cleanup_attempts`);
     await db.execute(sql`create function cancel_cleanup() returns trigger language plpgsql as $$
@@ -192,7 +209,7 @@ describe("auto routing dispatcher", () => {
       // The canceled attempt outlasts the initial five-minute retry delay.
       elapsed = 6 * 60_000;
       await pending;
-      expect(await queuedFits(organizationId)).toBe(1);
+      expect(await queuedFits(routerId)).toBe(1);
       expect(await attempts()).toBe(1);
       // Retries wait 5, 10, 20, 40, then at most 60 minutes.
       for (const [index, minute] of [5, 15, 35, 75, 135, 195].entries()) {
@@ -210,6 +227,7 @@ describe("auto routing dispatcher", () => {
         const { decision } = await RoutingDecisionModel.insertOrGet(
           plannedDecision({
             organizationId,
+            routerId,
             sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
             modelId: model.id,
             scorerVersionId: scorer.id,
@@ -256,34 +274,41 @@ describe("auto routing dispatcher", () => {
 
 async function configuredOrganization(
   makeOrganization: () => Promise<{ id: string }>,
-): Promise<string> {
+): Promise<{ organizationId: string; routerId: string }> {
   const organizationId = (await makeOrganization()).id;
-  await AgentModel.getOrgLlmProxy(organizationId);
+  await setAutoRoutingEnabled(organizationId, true);
+  return {
+    organizationId,
+    routerId: await configuredRouter(organizationId, "auto"),
+  };
+}
+
+/** A router named `name` with all three tiers and a budget. */
+async function configuredRouter(
+  organizationId: string,
+  name: string,
+): Promise<string> {
+  const router = await ensureAutoRouter(organizationId, name);
   const [fast, normal, smart] = [
     await makeRoutingModel(),
     await makeRoutingModel(),
     await makeRoutingModel(),
   ];
-  await setOrganizationTrio(organizationId, { fast, normal, smart });
-  await AutoRoutingSettingsModel.update(organizationId, {
-    enabled: true,
-    budgetUsdPerDay: "25.00",
-  });
-  return organizationId;
+  await setAutoRoutingTiers(organizationId, { fast, normal, smart }, router.id);
+  await AutoRouterModel.update(router.id, { budgetUsdPerDay: "25.00" });
+  return router.id;
 }
 
-/** Records a fit outcome at the current generation, leaving the organization clean. */
-async function fitAtCurrentGeneration(organizationId: string) {
+/** Records a fit outcome at the current generation, leaving the router clean. */
+async function fitAtCurrentGeneration(routerId: string) {
   const scorer = await makeScorerVersion();
-  await AutoRoutingSettingsModel.activateScorerVersion(
-    organizationId,
-    scorer.id,
-  );
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings) throw new Error("organization has no LLM Proxy");
+  await AutoRouterModel.activateScorerVersion(routerId, scorer.id);
+  const settings = await AutoRouterModel.find(routerId);
+  if (!settings) throw new Error("auto router does not exist");
   const result = await RoutingPlanModel.publish(
     activeFit({
-      organizationId,
+      organizationId: settings.organizationId,
+      routerId,
       scorerVersionId: scorer.id,
       generation: settings.generation,
       inputWatermark: new Date(),
@@ -293,7 +318,7 @@ async function fitAtCurrentGeneration(organizationId: string) {
   return result.plan;
 }
 
-async function queuedFits(organizationId: string): Promise<number> {
+async function queuedFits(routerId: string): Promise<number> {
   const rows = await db
     .select({ payload: schema.tasksTable.payload })
     .from(schema.tasksTable)
@@ -303,8 +328,7 @@ async function queuedFits(organizationId: string): Promise<number> {
         eq(schema.tasksTable.status, "pending"),
       ),
     );
-  return rows.filter((row) => row.payload.organizationId === organizationId)
-    .length;
+  return rows.filter((row) => row.payload.routerId === routerId).length;
 }
 
 async function decisionCount(organizationId: string): Promise<number> {

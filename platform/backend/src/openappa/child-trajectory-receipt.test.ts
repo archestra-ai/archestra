@@ -47,6 +47,17 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     ).toBe(true);
   });
 
+  test("keeps the tool envelope's header on its own line when removing a child receipt", () => {
+    const receipt = mintChildTrajectoryReceipt(BINDING);
+    for (const newline of ["\n", "\r\n"]) {
+      const frame = `=== Output ===${newline}${receipt}${newline}${newline}EXACT_VALUE`;
+      expect(
+        stripChildTrajectoryReceipts(frame, { preserveLineBoundaries: true })
+          .text,
+      ).toBe(`=== Output ===${newline}EXACT_VALUE`);
+    }
+  });
+
   test("strips legacy two-line and space-collapsed child trajectory display headers", () => {
     const footer = mintChildTrajectoryReceipt(BINDING);
     if (!footer) throw new Error("expected a child trajectory receipt");
@@ -256,6 +267,7 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
       callerId: BINDING.callerId,
       spawnerNativeId: BINDING.spawnerNativeId,
     };
+    expect(early).not.toHaveProperty("childNativeId");
     // Ownership verification does not claim an unknown native identity.
     expect(verifyChildTrajectoryReceipt({ ...scope, receipt: early })).toBe(
       true,
@@ -284,33 +296,6 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         ...scope,
         receipt: early,
         childNativeId: BINDING.childNativeId,
-      }),
-    ).toBe(false);
-  });
-
-  test("signs marker-only bindings without attesting to a later native child id", () => {
-    const footer = mintChildTrajectoryReceipt({
-      ...BINDING,
-      childNativeId: undefined,
-    });
-    const [receipt] = stripChildTrajectoryReceipts(footer ?? "").receipts;
-
-    expect(receipt).not.toHaveProperty("childNativeId");
-    expect(
-      verifyChildTrajectoryReceipt({
-        receipt,
-        organizationId: BINDING.organizationId,
-        callerId: BINDING.callerId,
-        spawnerNativeId: BINDING.spawnerNativeId,
-      }),
-    ).toBe(true);
-    expect(
-      verifyChildTrajectoryReceipt({
-        receipt,
-        organizationId: BINDING.organizationId,
-        callerId: BINDING.callerId,
-        spawnerNativeId: BINDING.spawnerNativeId,
-        childNativeId: "later-native-id",
       }),
     ).toBe(false);
   });

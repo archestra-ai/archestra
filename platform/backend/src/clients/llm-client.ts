@@ -14,7 +14,7 @@ import {
   APP_ID_HEADER,
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
-  AUTO_ROUTABLE_HEADER,
+  AUTO_ROUTER_ID_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
@@ -46,7 +46,10 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  isServiceAccountUserId,
+  serviceAccountIdFromUserId,
+} from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -97,6 +100,7 @@ import {
   defaultMaxOutputTokens,
   resolveModelOutputBudget,
 } from "@/utils/llm-resolution";
+import type { ProviderKeySelection } from "@/utils/provider-key-mappings";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -240,8 +244,8 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
   modelPoolId?: string | null;
-  /** The call may be auto routed; see AUTO_ROUTABLE_HEADER. */
-  autoRoutable?: boolean;
+  /** The auto router the call runs on; see AUTO_ROUTER_ID_HEADER. */
+  autoRouterId?: string | null;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -282,7 +286,9 @@ export function createLLMModel(params: {
   // tells OpenAPPA to skip enforcement, so only its own calls send it.
   const clientHeaders: Record<string, string> = params.internalCall
     ? guardrailCallHeader()
-    : internalCallHeader();
+    : internalCallHeader(
+        userId ? (serviceAccountIdFromUserId(userId) ?? undefined) : undefined,
+      );
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -321,8 +327,8 @@ export function createLLMModel(params: {
   if (params.modelPoolId) {
     clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
   }
-  if (params.autoRoutable) {
-    clientHeaders[AUTO_ROUTABLE_HEADER] = "true";
+  if (params.autoRouterId) {
+    clientHeaders[AUTO_ROUTER_ID_HEADER] = params.autoRouterId;
   }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
@@ -376,10 +382,12 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  /** Explicit current selection, checked against the acting user's usable keys. */
+  providerKeySelection?: ProviderKeySelection;
   /** The conversation's model pool; its turns go to the pool's members. */
   modelPoolId?: string | null;
   /** No pool or explicit tier: the call may be auto routed. */
-  autoRoutable?: boolean;
+  autoRouterId?: string | null;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -435,6 +443,7 @@ export async function createLLMModelForAgent(params: {
     conversationId,
     agentLlmApiKeyId,
     modelName,
+    selection: params.providerKeySelection,
   });
 
   // Check if Gemini with Vertex AI (doesn't require API key)
@@ -540,7 +549,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     chatApiKeyId,
     modelPoolId: params.modelPoolId,
-    autoRoutable: params.autoRoutable,
+    autoRouterId: params.autoRouterId,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     unattended: params.unattended,

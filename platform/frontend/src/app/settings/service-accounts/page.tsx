@@ -10,12 +10,11 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import { openRowOnPlainClick } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -25,11 +24,8 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { FormDialog } from "@/components/form-dialog";
-import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -38,16 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { FieldDescription } from "@/components/ui/field-description";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import {
@@ -72,7 +59,6 @@ import {
   type ServiceAccount,
   useBulkDeleteServiceAccounts,
   useBulkSetServiceAccountsDisabled,
-  useCreateServiceAccount,
   useDeleteServiceAccount,
   useServiceAccounts,
 } from "@/lib/service-account.query";
@@ -84,22 +70,7 @@ import {
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
-import { ServiceAccountDialog } from "./_parts/service-account-dialog";
-import { ServiceAccountTeamSelect } from "./_parts/service-account-team-select";
-
-type ServiceAccountFormValues = {
-  name: string;
-  icon: string | null;
-  role: string;
-  teamId: string | null;
-};
-
-const DEFAULT_FORM_VALUES: ServiceAccountFormValues = {
-  name: "",
-  icon: null,
-  role: "member",
-  teamId: null,
-};
+import { CreateServiceAccountDialog } from "./_parts/create-service-account-dialog";
 
 const ALL = "all";
 
@@ -117,8 +88,10 @@ const STATUS_FILTERS: AccountHealth[] = [
 ];
 
 export default function ServiceAccountsSettingsPage() {
+  const router = useRouter();
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
   const { data: scopedGrants } = useScopedCapabilities();
@@ -142,18 +115,11 @@ export default function ServiceAccountsSettingsPage() {
     isLoadingError: isServiceAccountsLoadError,
     refetch: refetchServiceAccounts,
   } = useServiceAccounts({ labels: labelsFilter });
-  const createMutation = useCreateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteServiceAccounts();
   const bulkSetDisabled = useBulkSetServiceAccountsDisabled();
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [accountToEdit, setAccountToEdit] = useState<ServiceAccount | null>(
-    null,
-  );
-  const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
-  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
     null,
   );
@@ -166,20 +132,13 @@ export default function ServiceAccountsSettingsPage() {
     statusFilter !== ALL ||
     Boolean(labelsFilter);
 
-  const form = useForm<ServiceAccountFormValues>({
-    defaultValues: DEFAULT_FORM_VALUES,
-  });
-
   useEffect(() => {
     setActionButton(
       <div className="flex items-center gap-2">
         <PermissionButton
           permissions={{ serviceAccount: ["create"] }}
           size="sm"
-          onClick={() => {
-            form.reset(DEFAULT_FORM_VALUES);
-            setIsCreateDialogOpen(true);
-          }}
+          onClick={() => setIsCreateOpen(true)}
         >
           <Plus className="h-4 w-4" />
           Create service account
@@ -189,7 +148,7 @@ export default function ServiceAccountsSettingsPage() {
     );
 
     return () => setActionButton(null);
-  }, [form, setActionButton]);
+  }, [setActionButton]);
 
   const clearFilters = useCallback(
     () =>
@@ -257,7 +216,10 @@ export default function ServiceAccountsSettingsPage() {
                 {
                   icon: <Pencil className="h-4 w-4" />,
                   label: "Edit service account",
-                  onClick: () => setAccountToEdit(account),
+                  onClick: () =>
+                    router.push(
+                      `/settings/service-accounts/${account.id}/edit`,
+                    ),
                 },
                 {
                   icon: account.disabled ? (
@@ -289,7 +251,7 @@ export default function ServiceAccountsSettingsPage() {
         ]}
       />
     ),
-    [canOnAccount, setDisabled],
+    [canOnAccount, setDisabled, router],
   );
 
   // `DataTable` sets the table's `minWidth` to the sum of these sizes, so the
@@ -312,7 +274,7 @@ export default function ServiceAccountsSettingsPage() {
             name={row.original.name}
             icon={<AgentIcon icon={row.original.icon} size={20} />}
             labels={row.original.labels}
-            onClick={() => setAccountToEdit(row.original)}
+            href={`/settings/service-accounts/${row.original.id}`}
           />
         ),
       },
@@ -346,7 +308,7 @@ export default function ServiceAccountsSettingsPage() {
       // narrower column than a top-level page, and an eighth column pushed
       // Actions off-screen. For a machine identity "last used" is the
       // operational question; the creation date is archival and still shown on
-      // the account dialog.
+      // the account's page.
     ];
 
     if (!hasAnyRowActions) {
@@ -364,32 +326,6 @@ export default function ServiceAccountsSettingsPage() {
       },
     ];
   }, [hasAnyRowActions, renderRowActions]);
-
-  const closeDialog = () => {
-    setIsCreateDialogOpen(false);
-    createMutation.reset();
-    form.reset(DEFAULT_FORM_VALUES);
-    setNewLabels([]);
-  };
-
-  const handleSubmit = form.handleSubmit(async (values) => {
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? newLabels;
-    const account = await createMutation
-      .mutateAsync({
-        name: values.name.trim(),
-        icon: values.icon,
-        role: values.role,
-        ...(values.teamId ? { teamId: values.teamId } : {}),
-        labels: finalLabels,
-      })
-      // The dialog shows the failure: a notice for a refused role, a toast
-      // for anything else.
-      .catch(() => null);
-    if (!account) return;
-
-    closeDialog();
-    setAccountToEdit(account);
-  });
 
   const handleDelete = async () => {
     if (!accountToDelete) return;
@@ -566,11 +502,11 @@ export default function ServiceAccountsSettingsPage() {
                   onRowSelectionChange={setRowSelection}
                   onPageRowIdsChange={onPageRowIdsChange}
                   hideSelectedCount
-                  onRowClick={(account, event) => {
-                    const target = event.target as HTMLElement;
-                    if (target.closest("button")) return;
-                    setAccountToEdit(account);
-                  }}
+                  onRowClick={(account, event) =>
+                    openRowOnPlainClick(event, () =>
+                      router.push(`/settings/service-accounts/${account.id}`),
+                    )
+                  }
                   emptyIcon={Bot}
                   emptyMessage="No service accounts yet"
                   emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
@@ -623,91 +559,6 @@ export default function ServiceAccountsSettingsPage() {
         />
       )}
 
-      <FormDialog
-        open={isCreateDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) closeDialog();
-        }}
-        title="Create service account"
-        size="small"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleSubmit}
-        >
-          <DialogBody className="space-y-4">
-            <IdentityFields
-              icon={form.watch("icon")}
-              onIconChange={(icon) =>
-                form.setValue("icon", icon, { shouldDirty: true })
-              }
-              showLogos
-              label={<Label htmlFor="service-account-name">Display name</Label>}
-            >
-              <Input
-                id="service-account-name"
-                {...form.register("name", { required: true })}
-                placeholder="Automation service account"
-              />
-              <FieldDescription>
-                The display name for this service account.
-              </FieldDescription>
-            </IdentityFields>
-            <div className="space-y-2">
-              <Label htmlFor="service-account-role">Roles</Label>
-              <RoleSelect
-                multiple
-                id="service-account-role"
-                value={form.watch("role")}
-                onValueChange={(role) => {
-                  form.setValue("role", role);
-                  createMutation.reset();
-                }}
-                placeholder="Select a role"
-                className="w-full"
-              />
-              <FieldDescription>
-                Roles set allowed actions for API requests. Permissions
-                determine which objects this account can reach.
-              </FieldDescription>
-            </div>
-            <RoleAssignmentBlockedNotice
-              error={createMutation.error}
-              name={formatRoleName(form.watch("role"))}
-            />
-            <ServiceAccountTeamSelect
-              id="service-account-team"
-              value={form.watch("teamId")}
-              onChange={(teamId) => form.setValue("teamId", teamId)}
-            />
-            <AdvancedLabelsSection
-              collapsible
-              ref={labelsRef}
-              labels={newLabels}
-              onLabelsChange={setNewLabels}
-            />
-          </DialogBody>
-          <DialogStickyFooter className="mt-0">
-            <Button type="button" variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              Create
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
-
-      {accountToEdit && (
-        <ServiceAccountDialog
-          key={accountToEdit.id}
-          account={accountToEdit}
-          onOpenChange={(open) => {
-            if (!open) setAccountToEdit(null);
-          }}
-        />
-      )}
-
       <DeleteConfirmDialog
         open={!!accountToDelete}
         onOpenChange={(open) => {
@@ -717,6 +568,11 @@ export default function ServiceAccountsSettingsPage() {
         description="Deleting a service account immediately invalidates all of its API keys. To stop it reversibly, disable it instead."
         isPending={deleteMutation.isPending}
         onConfirm={handleDelete}
+      />
+
+      <CreateServiceAccountDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
       />
     </div>
   );

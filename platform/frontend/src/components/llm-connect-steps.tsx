@@ -28,9 +28,11 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
+import { KeyAutoRouters } from "@/components/credential-billing/key-auto-routers";
 import { poolAnswers } from "@/components/credential-billing/model-pool-access";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { IdentityProviderSelect } from "@/components/identity-provider-select";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
@@ -50,13 +52,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   RequestExample,
@@ -68,6 +63,7 @@ import type {
 } from "@/components/virtual-key-request-example";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
+import { useAutoRouters } from "@/lib/auto-routing.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -121,7 +117,10 @@ export function LlmConnectSteps({
    * keys that can call it, no key created here, and the request asks for it.
    */
   pool?: ModelPool;
-  /** Offer auto routing's `auto` model in the request example. */
+  /**
+   * Show the auto routers the picked virtual key can call under its key step,
+   * and list the routers the credential can call among the request's models.
+   */
   offerAutoModel?: boolean;
 }) {
   const providerCatalog = useModelProviderCatalog({ fresh: true });
@@ -204,15 +203,39 @@ export function LlmConnectSteps({
     offersPools && takesPools(client)
       ? pools.filter((candidate) => client.modelPoolIds.includes(candidate.id))
       : [];
-  // A credential with a pool added still fits the Unified Model API when it
-  // maps no provider key here, such as one on current and future providers.
+  // Auto routers are asked for by name on the Unified Model API too, and
+  // answer on their own provider keys.
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled") === true;
+  const offersRouters =
+    offerAutoModel &&
+    autoRoutingEnabled &&
+    (auth === "standard" || auth === "oauth") &&
+    isRouter &&
+    !pool;
+  const { data: routers = [] } = useAutoRouters({ enabled: offersRouters });
+  const hasRouter = (key: { id: string }) =>
+    offersRouters &&
+    routers.some((router) => router.virtualApiKeyIds.includes(key.id));
+  const clientHasRouter = (client: LlmOauthClient) =>
+    offersRouters &&
+    takesPools(client) &&
+    routers.some((router) => client.autoRouterIds.includes(router.id));
+  // A credential with a pool or auto router added still fits the Unified
+  // Model API when it maps no provider key here, such as one on current and
+  // future providers.
   const keyOptions = (virtualKeys?.data ?? []).filter((key) =>
     pool
       ? callsPool(key, pool)
-      : auth === "passthrough" || reaches(key) || poolsOf(key).length > 0,
+      : auth === "passthrough" ||
+        reaches(key) ||
+        poolsOf(key).length > 0 ||
+        hasRouter(key),
   );
   const clientOptions = oauthClients.filter(
-    (client) => reaches(client) || clientPoolsOf(client).length > 0,
+    (client) =>
+      reaches(client) ||
+      clientPoolsOf(client).length > 0 ||
+      clientHasRouter(client),
   );
   const credentialSummary = (
     credential: { providerApiKeys: ProviderApiKeyMappings },
@@ -320,8 +343,16 @@ export function LlmConnectSteps({
             clientPoolsOf(client).some(poolAnswers),
           )
         : false;
+  // Likewise an auto router answers on its tiers' own keys.
+  const hasRouterGrant =
+    auth === "standard"
+      ? keyOptions.some(hasRouter)
+      : auth === "oauth" && clientOptions.some(clientHasRouter);
   const hasProviderKey =
-    !!pool || targetProviderKeys.length > 0 || hasUsablePoolGrant;
+    !!pool ||
+    targetProviderKeys.length > 0 ||
+    hasUsablePoolGrant ||
+    hasRouterGrant;
   const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
   // A new key starts with the primary key of each provider this target
   // serves; the create dialog shows and changes them.
@@ -413,6 +444,22 @@ export function LlmConnectSteps({
       <KeyPools key={pickedClient.id} pools={pickedPools} noun="client" />
     ) : null);
 
+  // Only a client calling as the app takes auto routers, like pools.
+  const routerClient =
+    pickedClient && takesPools(pickedClient) ? pickedClient : undefined;
+  const routerSection =
+    offersRouters &&
+    hasProviderKey &&
+    (pickedKey ? (
+      <KeyAutoRouters key={pickedKey.id} virtualApiKeyId={pickedKey.id} />
+    ) : routerClient ? (
+      <KeyAutoRouters
+        key={routerClient.id}
+        routerIds={routerClient.autoRouterIds}
+        noun="client"
+      />
+    ) : null);
+
   let credentialSteps: RailRow[];
   let credential: RequestCredential;
   let credentialEnvVar: string;
@@ -458,10 +505,11 @@ export function LlmConnectSteps({
             onChange={pickKey}
           />
         ),
-        children: (keyField || poolSection) && (
+        children: (keyField || poolSection || routerSection) && (
           <div className="space-y-4">
             {keyField}
             {poolSection}
+            {routerSection}
           </div>
         ),
       },
@@ -548,7 +596,7 @@ export function LlmConnectSteps({
             onChange={pickKey}
           />
         ),
-        children: (picked?.oauth || poolSection) && (
+        children: (picked?.oauth || poolSection || routerSection) && (
           <div className="space-y-4">
             {picked?.oauth && (
               <OauthTokenRequest
@@ -557,6 +605,7 @@ export function LlmConnectSteps({
               />
             )}
             {poolSection}
+            {routerSection}
           </div>
         ),
       },
@@ -609,6 +658,8 @@ export function LlmConnectSteps({
       initialModel={pickedModel}
       onModelChange={setPickedModel}
       offerAutoModel={offerAutoModel && isRouter && !pool}
+      virtualApiKeyId={pickedKey?.id}
+      grantedRouterIds={routerClient?.autoRouterIds}
     />
   );
 
@@ -1001,7 +1052,7 @@ function KeyField({
  * feature — `useIdentityProviders` stays disabled without it, so only the setup
  * link shows.
  */
-const NONE_VALUE = "__none__";
+const _NONE_VALUE = "__none__";
 
 function useIdentityProviderStep(): {
   configured: boolean;
@@ -1030,27 +1081,17 @@ function useIdentityProviderStep(): {
           <Label htmlFor={selectId} className="sr-only">
             Identity provider
           </Label>
-          <Select
-            value={idpId ?? NONE_VALUE}
+          <IdentityProviderSelect
+            id={selectId}
+            identityProviders={identityProviders ?? []}
+            value={idpId ?? null}
             disabled={updateProxy.isPending}
-            onValueChange={(value) =>
-              updateProxy.mutate({
-                identityProviderId: value === NONE_VALUE ? null : value,
-              })
+            onChange={(next) =>
+              updateProxy.mutate({ identityProviderId: next })
             }
-          >
-            <SelectTrigger id={selectId} className="w-64">
-              <SelectValue placeholder="No identity provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>No identity provider</SelectItem>
-              {identityProviders?.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            noneLabel="No identity provider"
+            className="w-72"
+          />
         </>
       ) : (
         <Button asChild size="sm">

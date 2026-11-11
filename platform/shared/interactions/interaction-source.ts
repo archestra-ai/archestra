@@ -41,6 +41,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:ocr",
   "app:llm_complete",
   "app:recording_enhancement",
+  "tool_search_text:generation",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -109,6 +110,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:ocr": { label: "Knowledge - OCR" },
   "app:llm_complete": { label: "App LLM Completion" },
   "app:recording_enhancement": { label: "App Recording Enhancement" },
+  "tool_search_text:generation": { label: "Tool Search Text Generation" },
 };
 
 /**

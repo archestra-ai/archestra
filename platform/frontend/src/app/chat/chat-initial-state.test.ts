@@ -2,6 +2,7 @@
 
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
+import { autoModelChoice } from "@/lib/chat/auto-model";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -335,6 +336,17 @@ describe("resolvePreferredModelForProvider", () => {
 });
 
 describe("buildCreateConversationInput", () => {
+  test("sends the picked auto router in place of the key and model", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "uuid-gpt",
+        chatApiKeyId: "key-1",
+        modelPoolId: autoModelChoice("router-b"),
+      }),
+    ).toEqual({ agentId: "agent-1", autoRouterId: "router-b" });
+  });
+
   test("builds the payload from the selected initial chat state", () => {
     expect(
       buildCreateConversationInput({

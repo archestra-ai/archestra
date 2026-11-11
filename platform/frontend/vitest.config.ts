@@ -72,9 +72,17 @@ export default defineConfig({
         __dirname,
         "../shared/connection-setup.ts",
       ),
+      "@archestra/shared/error-reporting": path.resolve(
+        __dirname,
+        "../shared/error-reporting.ts",
+      ),
       "@archestra/shared/interactions/client": path.resolve(
         __dirname,
         "../shared/interactions/client.ts",
+      ),
+      "@archestra/shared/model-pool-retries": path.resolve(
+        __dirname,
+        "../shared/model-pool-retries.ts",
       ),
       "@archestra/shared/model-price": path.resolve(
         __dirname,

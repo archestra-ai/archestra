@@ -498,10 +498,17 @@ exports[`skill and sandbox tool text > archestra__edit_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 {
-  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call load_skill with a skill name to load its full instructions.",
+  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Pass \`query\` to search them by task or keyword. Call load_skill with a skill name to load its full instructions.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "properties": {},
+    "properties": {
+      "query": {
+        "description": "Words describing the task or the skill. Returns the best matches with their full descriptions. Required when the catalog is too large to list. The exact value "*" returns the entire catalog and can be very long, so use it only when search has not found the skill.",
+        "maxLength": 1000,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
     "type": "object",
   },
   "name": "archestra__list_skills",
@@ -511,7 +518,7 @@ exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 
 exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 {
-  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available. Call load_skill with just a name to load the skill's instructions and its bundled-file list; load it before attempting the task it covers. Call it with a name and a path from that list to read one bundled file.",
+  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Use list_skills to discover what is available. Call load_skill with just a name to load the skill's instructions and its bundled-file list; load it before attempting the task it covers. Call it with a name and a path from that list to read one bundled file.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {

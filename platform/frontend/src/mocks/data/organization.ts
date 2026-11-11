@@ -9,6 +9,8 @@ export function makeOrganization(
     id: "test-org",
     name: "Test Org",
     slug: "test-org",
+    defaultAutoRouterId: null,
+    autoRoutingEnabled: false,
     analyticsInstanceId: "00000000-0000-4000-8000-000000000001",
     logo: null,
     logoDark: null,
@@ -106,9 +108,9 @@ export function makeOrganization(
 
 export const organizationSeed = makeOrganization();
 
-/** The seeded organization has no default model, so nothing is auto routed. */
+/** The seeded organization has no default model and no auto router that routes. */
 export const organizationDefaultModelSeed: archestraApiTypes.GetOrganizationDefaultModelResponses["200"] =
-  { model: null, autoRouting: { active: false } };
+  { model: null, defaultAutoRouterId: null, autoRouters: [] };
 
 type AppearanceSettings =
   archestraApiTypes.GetAppearanceSettingsResponses["200"];

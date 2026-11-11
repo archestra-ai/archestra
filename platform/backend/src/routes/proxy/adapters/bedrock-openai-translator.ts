@@ -111,6 +111,7 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
 
   const inferenceConfig = buildInferenceConfig(loose);
   const toolConfig = buildToolConfig(loose);
+  const reasoningFields = buildReasoningFields(req);
 
   const converseBody: BedrockRequest = {
     modelId: req.model,
@@ -120,6 +121,9 @@ export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
   if (system.length > 0) converseBody.system = system;
   if (inferenceConfig) converseBody.inferenceConfig = inferenceConfig;
   if (toolConfig) converseBody.toolConfig = toolConfig;
+  if (reasoningFields) {
+    converseBody.additionalModelRequestFields = reasoningFields;
+  }
 
   const openaiContext: OpenaiContext = {
     chatcmplId: newChatcmplId(),
@@ -141,6 +145,7 @@ export function converseResponseToOpenai(
 ): OpenAiResponse {
   const blocks = resp.output?.message?.content ?? [];
   let text = "";
+  let reasoning = "";
   const toolCalls: Array<{
     id: string;
     type: "function";
@@ -150,6 +155,8 @@ export function converseResponseToOpenai(
   for (const b of blocks as Loose[]) {
     if (b && typeof b === "object" && typeof b.text === "string") {
       text += b.text;
+    } else if (typeof b?.reasoningContent?.reasoningText?.text === "string") {
+      reasoning += b.reasoningContent.reasoningText.text;
     } else if (b?.toolUse) {
       toolCalls.push({
         id: String(b.toolUse.toolUseId ?? ""),
@@ -186,6 +193,7 @@ export function converseResponseToOpenai(
         message: {
           role: "assistant",
           content: text || null,
+          ...(reasoning ? { reasoning_content: reasoning } : {}),
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
       },
@@ -365,6 +373,11 @@ export function createConverseToOpenaiSseEncoder(
       const delta = e.contentBlockDelta.delta;
       if (typeof delta?.text === "string") {
         return sse(envelope({ content: delta.text }));
+      }
+      if (typeof delta?.reasoningContent?.text === "string") {
+        return sse(
+          envelope({ reasoning_content: delta.reasoningContent.text }),
+        );
       }
       if (delta?.toolUse && typeof delta.toolUse.input === "string") {
         const blockIdx = e.contentBlockDelta.contentBlockIndex;
@@ -753,7 +766,10 @@ function buildInferenceConfig(loose: Loose): BedrockRequest["inferenceConfig"] {
   if (typeof loose.temperature === "number")
     cfg.temperature = loose.temperature;
   if (typeof loose.top_p === "number") cfg.topP = loose.top_p;
-  if (typeof loose.max_tokens === "number") cfg.maxTokens = loose.max_tokens;
+  // Newer clients send max_completion_tokens and omit max_tokens. Same
+  // precedence as the Gemini translator: the completion cap wins.
+  const maxTokens = loose.max_completion_tokens ?? loose.max_tokens;
+  if (typeof maxTokens === "number") cfg.maxTokens = maxTokens;
   if (typeof loose.stop === "string") cfg.stopSequences = [loose.stop];
   else if (Array.isArray(loose.stop))
     cfg.stopSequences = loose.stop.map(String);
@@ -813,4 +829,44 @@ function buildToolConfig(
   }
 
   return cfg;
+}
+
+/** Reject unverified dialects rather than silently dropping a caller's effort. */
+function buildReasoningFields(req: OpenAiRequest) {
+  const effort = req.reasoning_effort;
+  if (effort == null || effort === "none") return undefined;
+  // Limit mapping to the verified Nova dialect. Claude tool continuations
+  // require signed history that reasoning_content alone cannot preserve.
+  if (
+    !/^(?:(?:us|eu|apac|jp|global)\.)?amazon\.nova-2-lite-v1(?::\d+)?$/.test(
+      req.model,
+    )
+  ) {
+    throw new ApiError(
+      400,
+      "reasoning_effort is not supported for this Bedrock model. Use the native Converse endpoint for model-specific reasoning parameters.",
+    );
+  }
+  if (effort !== "low" && effort !== "medium" && effort !== "high") {
+    throw new ApiError(
+      400,
+      "Bedrock reasoning_effort must be low, medium, or high for this model.",
+    );
+  }
+  if (effort === "high") {
+    const incompatible = [
+      req.max_completion_tokens != null || req.max_tokens != null
+        ? "max_completion_tokens/max_tokens"
+        : null,
+      req.temperature != null ? "temperature" : null,
+      (req as Loose).top_p != null ? "top_p" : null,
+    ].filter(Boolean);
+    if (incompatible.length > 0) {
+      throw new ApiError(
+        400,
+        `Nova high reasoning requires ${incompatible.join(", ")} to be unset. Remove these parameters or choose low/medium reasoning_effort.`,
+      );
+    }
+  }
+  return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } };
 }

@@ -14,6 +14,7 @@ import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { isVertexAiEnabled } from "@/clients/gemini-vertex-ai";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
+import AutoRouterModel from "@/models/auto-router";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel, {
   selectionKey,
@@ -55,6 +56,8 @@ export interface ConversationLlmSelection {
   chatApiKeyId: string | null;
   selectedModel: string;
   selectedProvider: SupportedProvider;
+  /** The selection is this auto router: its normal tier, routed per session by the proxy. */
+  autoRouterId?: string;
 }
 
 /**
@@ -67,15 +70,33 @@ export interface ConversationLlmSelection {
  * default trio of the first provider with an environment key, or Vertex AI.
  */
 export async function resolveConversationLlmSelectionForAgent(params: {
-  agent: { llmApiKeyId: string | null; modelId: string | null };
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    /** The auto router it is set to; read only with `allowAutoModel`. */
+    autoRouterId?: string | null;
+  };
   organizationId: string;
   userId: string;
   /** The model the user explicitly picked (highest priority). */
   explicitModelId?: string | null;
   /** The API key the user explicitly picked, alongside `explicitModelId`. */
   explicitApiKeyId?: string | null;
+  /** The auto router the user explicitly picked. */
+  explicitAutoRouterId?: string | null;
+  /**
+   * The caller runs a chat or an agent that auto routing may serve: the agent
+   * set to an auto router, or following an organization default that is one,
+   * resolves to the router's normal tier. Never set for Agent Runtime agents.
+   */
+  allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
+
+  if (params.allowAutoModel || params.explicitAutoRouterId) {
+    const auto = await autoSelectionFor(params);
+    if (auto) return auto;
+  }
 
   // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
   // its credential is resolved per-user at request time, so an explicit pick is
@@ -164,6 +185,60 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }
 
 /**
+ * What a chat or run on an auto router names: its normal tier's model on its
+ * key. The proxy routes each session from there, and runs it on this model
+ * while auto routing is off. Null when the deployment has no auto routing,
+ * the router is not the organization's, or it has no normal tier.
+ */
+export async function resolveAutoModelSelection(
+  organizationId: string,
+  routerId: string,
+): Promise<ConversationLlmSelection | null> {
+  if (!config.autoRouting.enabled) return null;
+  const settings = await AutoRouterModel.findInOrganization(
+    organizationId,
+    routerId,
+  );
+  if (!settings?.normalModelId || !settings.normalApiKeyId) return null;
+  const model = await ModelModel.findById(settings.normalModelId);
+  if (!model) return null;
+  return {
+    modelId: model.id,
+    chatApiKeyId: settings.normalApiKeyId,
+    selectedModel: model.modelId,
+    selectedProvider: model.provider,
+    autoRouterId: settings.id,
+  };
+}
+
+/** The auto router selection when the pick, the agent or the organization default is a router. */
+async function autoSelectionFor(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouterId?: string | null;
+  };
+  organizationId: string;
+  explicitModelId?: string | null;
+  explicitAutoRouterId?: string | null;
+  allowAutoModel?: boolean;
+}): Promise<ConversationLlmSelection | null> {
+  const { agent } = params;
+  const followed = async () =>
+    !params.allowAutoModel || params.explicitModelId
+      ? null
+      : (agent.autoRouterId ??
+        (agent.llmApiKeyId === null && agent.modelId === null
+          ? ((await OrganizationModel.getById(params.organizationId))
+              ?.defaultAutoRouterId ?? null)
+          : null));
+  const routerId = params.explicitAutoRouterId ?? (await followed());
+  return routerId
+    ? resolveAutoModelSelection(params.organizationId, routerId)
+    : null;
+}
+
+/**
  * The selection a fork starts from: its parent's model, else the agent's own
  * configuration. The fork runs on the returned key as its agent key, which
  * skips the per-user access check, so the parent's key is kept only while the
@@ -171,10 +246,16 @@ export async function resolveConversationLlmSelectionForAgent(params: {
  * a key for the model the way its parent's turn does.
  */
 export async function resolveForkParentSelection(params: {
-  agent: { llmApiKeyId: string | null; modelId: string | null };
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouterId?: string | null;
+  };
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
+  /** See `resolveConversationLlmSelectionForAgent`. */
+  allowAutoModel?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId, parentLlm } = params;
   const model = parentLlm?.modelId
@@ -185,6 +266,7 @@ export async function resolveForkParentSelection(params: {
       agent,
       organizationId,
       userId,
+      allowAutoModel: params.allowAutoModel,
     });
   }
   return {

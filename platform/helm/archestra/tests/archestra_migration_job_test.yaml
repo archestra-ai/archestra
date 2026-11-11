@@ -365,3 +365,229 @@ tests:
           path: spec.template.spec.volumes
       - notExists:
           path: spec.template.spec.containers[0].volumeMounts
+
+  - it: passes RDS IAM authentication settings from archestra.database.iamAuth to the migration Job
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+
+  - it: forwards RDS IAM and TLS environment variables from archestra.env to the migration Job
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+        ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "true"
+        ARCHESTRA_DATABASE_AWS_REGION: eu-west-1
+        AWS_REGION: eu-west-1
+        NODE_EXTRA_CA_CERTS: /etc/ssl/db/rds-ca.pem
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: /etc/ssl/db/rds-ca.pem
+
+  - it: mounts projected OIDC token volume and sets AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE on migration Job when injectWebIdentityTokenVolume is true
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.roleArn: arn:aws:iam::123456789012:role/non-eks-rds-role
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ROLE_ARN
+            value: arn:aws:iam::123456789012:role/non-eks-rds-role
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_WEB_IDENTITY_TOKEN_FILE
+            value: /var/run/secrets/aws-iam-token/serviceaccount/token
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: aws-iam-token
+            mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: aws-iam-token
+            projected:
+              defaultMode: 420
+              sources:
+                - serviceAccountToken:
+                    audience: sts.amazonaws.com
+                    expirationSeconds: 3600
+                    path: token
+
+  - it: forwards non-AWS cluster IAM env vars and references AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN from hook Secret
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.database.iamAuth.enabled: true
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+        AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+        AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+        AWS_SESSION_TOKEN: IQoJb3JpZ2luX2VjEJr//////////wEaCXVzLWVhc3QtMSJHMEUCIQD
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            value: AKIAIOSFODNN7EXAMPLE
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: aws-secret-access-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SESSION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: aws-session-token
+
+  - it: lets migrationJob.envFromSecrets and migrationJob.envWithValueFrom override shared IAM settings from archestra.env and archestra.database.iamAuth
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-central-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+        AWS_REGION: eu-west-1
+        AWS_SECRET_ACCESS_KEY: shared-secret-key
+      archestra.migrationJob.envFromSecrets:
+        - name: AWS_REGION
+          secretName: migration-aws-creds
+          secretKey: region
+        - name: AWS_SECRET_ACCESS_KEY
+          secretName: migration-aws-creds
+          secretKey: secret-access-key
+      archestra.migrationJob.envWithValueFrom:
+        - name: ARCHESTRA_DATABASE_AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: migration-aws-creds
+              key: db-region
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: region
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: secret-access-key
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: aws-secret-access-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            valueFrom:
+              secretKeyRef:
+                name: migration-aws-creds
+                key: db-region
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+
+  - it: mounts no Kubernetes API token, since migrations only reach PostgreSQL
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: mounts the token for the Vault Kubernetes login
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: lets an operator override the migration token mount
+    set:
+      archestra.migrationJob.automountServiceAccountToken: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: keeps the AWS web identity token when the API token is not mounted
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://app@db.example.com:5432/archestra
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.injectWebIdentityTokenVolume: true
+      archestra.database.iamAuth.roleArn: arn:aws:iam::123456789012:role/archestra-db
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: aws-iam-token
+            mountPath: /var/run/secrets/aws-iam-token/serviceaccount
+            readOnly: true

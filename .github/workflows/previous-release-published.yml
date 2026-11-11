@@ -1,0 +1,75 @@
+name: Previous Release Published
+
+# A merged release PR leaves a draft release that waits for its approval in
+# release-publisher. This required check holds the next release PR on the same
+# line (main: X.Y.0-rc.N; release/X.Y: X.Y.Z) until that release is published,
+# and keeps one comment on the PR that says why. Every other PR passes at once.
+# The logic is the organization's shared action
+# (archestra-ai/.github actions/previous-release-published); every repository
+# that requires the check uses this same caller.
+#
+# The check runs on the PR's head commit, so a release published later re-runs
+# the PR's failed run instead (recheck): release-finalize.yml dispatches it
+# after each publish (its GITHUB_TOKEN publish starts no `release` event), the
+# `release` event covers releases published by hand, and the schedule covers
+# the rest, such as a deleted draft.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+  # Required checks must also report on the merge queue's merge-group commit.
+  merge_group:
+  release:
+    types:
+      - published
+  schedule:
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    name: Previous Release Published
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: previous-release-published-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}
+      cancel-in-progress: true
+    permissions:
+      contents: write # List draft releases (push access only).
+      pull-requests: write # Read the PR and keep its one comment.
+      actions: read # Link each draft's Release Please run.
+    steps:
+      - name: Check the previous release is published
+        uses: archestra-ai/.github/actions/previous-release-published@7e43fad157e03b830f4b31b95dc9363780c76edc # v1.25.0
+        with:
+          tag-prefix: platform-v
+          release-branches: "true"
+          release-workflow: release-please.yml
+
+  recheck:
+    name: Re-check open release PRs
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' && github.repository == 'archestra-ai/archestra' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: previous-release-published-recheck
+      cancel-in-progress: false
+    permissions:
+      contents: write # List draft releases (push access only).
+      pull-requests: read # List the open release PRs.
+      actions: write # Re-run a release PR's failed check once it is clear.
+    steps:
+      - name: Re-run checks that are now clear
+        uses: archestra-ai/.github/actions/previous-release-published@7e43fad157e03b830f4b31b95dc9363780c76edc # v1.25.0
+        with:
+          mode: recheck
+          tag-prefix: platform-v
+          release-branches: "true"
+          release-workflow: release-please.yml

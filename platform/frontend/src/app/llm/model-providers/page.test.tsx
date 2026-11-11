@@ -623,6 +623,76 @@ describe("ApiKeysPage", () => {
     expect(screen.queryByText("Enterprise plans")).toBeNull();
   });
 
+  it("drops only the personal GitHub Copilot card when personal subscriptions are off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { personal: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(personalCards().queryByText("GitHub Copilot")).toBeNull();
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
+    expect(screen.getByText("Enterprise plans")).toBeInTheDocument();
+  });
+
+  it("drops only the enterprise plans when they are off, keeping the personal card", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { enterprise: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(screen.queryByText("Enterprise plans")).toBeNull();
+    expect(personalCards().getByText("GitHub Copilot")).toBeInTheDocument();
+  });
+
+  it("moves a connected enterprise plan into the table once enterprise plans are off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: {
+          "github-copilot": { plans: { enterprise: { hidden: true } } },
+        },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "copilot-plan-key",
+          name: "Org Copilot plan",
+          provider: "github-copilot",
+          scope: "org",
+          isGithubAppKey: true,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    // No card stands for it now, so the table keeps it deletable.
+    expect(screen.getByText("Org Copilot plan")).toBeInTheDocument();
+  });
+
   it("keeps a turned-off provider's connected subscription key in the table", () => {
     // The card is withdrawn with the provider, so the key it stood for has to
     // fall back to a table row — otherwise an admin can no longer see or

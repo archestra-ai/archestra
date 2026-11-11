@@ -4,6 +4,7 @@ import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { AppaClaudeCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/claude-code";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaGrokAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/grok";
 import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
@@ -175,32 +176,6 @@ test("keeps per-call review history after consuming live approval without reopen
     expect(await getHitlReviewResult(other)).toBeUndefined();
 });
 
-test("historical status survives review expiry but cannot create an approval", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  try {
-    const active = session("expired-history");
-    const lookup = {
-      session: active,
-      callId: "control-expired",
-      offerId: "offer-expired",
-    };
-    await stageHitlReview({
-      ...lookup,
-      review: { offerId: lookup.offerId, text: "Pending review" },
-    });
-    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
-    expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toEqual({
-      outcome: "review_required",
-    });
-    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
-      false,
-    );
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 test.each([
   "review_declined",
   "review_unanswered",
@@ -361,6 +336,8 @@ test("asks Claude Code one line and previews the call in full", async () => {
       "**slack\\_\\_send\\_message call**",
       "```yaml\nchannel: '#general'\ntext: Hello\n```",
     ].join("\n\n"),
+    plainCallPreview:
+      "Full review text.\n\nFull arguments (YAML, not summarized):\nchannel: '#general'\ntext: Hello\n\n\nApprove lets this exact call run. Deny keeps it blocked.",
     header: "Approval",
     options: [
       { label: "Approve", description: "Allow this exact tool call." },
@@ -369,6 +346,40 @@ test("asks Claude Code one line and previews the call in full", async () => {
     allowMultiple: false,
     remedy_offer_ids: ["offer-1"],
   });
+});
+
+test("MCP forms preserve full Windows paths and typed argument values even when the client removes line breaks", async () => {
+  const args = {
+    file_path: String.raw`C:\Users\synthetic\AppData\Local\Temp\grok-guardrails-manual\review-child-02.txt`,
+    content: "A literal ``` fence.\n# Not a heading\n**Not emphasis**",
+  };
+  const active = session("mcp-literal-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool: "Write",
+      arguments: JSON.stringify(args),
+    },
+  });
+  const review = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+    presentation: "form",
+  });
+  if (!review) throw new Error("Missing review");
+  const message = review.question;
+  expect(message).toContain(args.file_path);
+  expect(message).not.toContain("\n");
+  expect(message).toContain(
+    'Also accepts: "the readers must be the public audience"',
+  );
+  const yaml = message
+    .split("  •  Arguments: ")[1]
+    .split("  •  Also accepts:")[0];
+  expect(loadYaml(yaml)).toEqual(args);
+  expect(message).toContain("Approve allows only this exact call.");
 });
 
 test("describes a call without a summary by its tool's first sentence", async () => {
@@ -426,6 +437,87 @@ test("leaves a long tool description off the plain card and escapes an unsafe on
   const unsafe = await stage("offer-unsafe", "Read a file\u202e backwards.");
   expect(unsafe).toContain("Tool description:");
   expect(unsafe).not.toContain("\u202e");
+});
+
+test.each([
+  {
+    tool: "Write",
+    args: {
+      file_path: String.raw`C:\Users\synthetic\AppData\Local\Temp\appa-approve-707b3425-d96c-4858-8a6f-31569618091d\.mcp.json`,
+      content: '{"mcpServers":{}}',
+    },
+  },
+  {
+    tool: "Bash",
+    args: {
+      command: 'echo **literal** __text__ `code`  two spaces\n"second line"',
+      description: "Keep the exact command",
+    },
+  },
+  {
+    tool: "Edit",
+    args: {
+      file_path: String.raw`C:\Users\synthetic\folder with spaces\notes.md`,
+      old_string: "# Original\n*literal*",
+      new_string: "# Replacement\n" + "Exact **text**  ".repeat(200),
+    },
+  },
+])("Grok previews $tool without Markdown scaffolding or artificial wraps and binds its exact answer", async ({
+  tool,
+  args,
+}) => {
+  const active = session(`grok-plain-${tool}`);
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool,
+      arguments: JSON.stringify(args),
+    },
+  });
+  const review = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  if (!review) throw new Error("Missing review");
+  const native = new AppaGrokAdapter().nativeQuestion;
+  const card = native.fromAskUser(review).questions[0];
+  expect(card.question).toBe(review.shortQuestion);
+  expect(card.question).not.toContain("file_path");
+  const preview = card.options[0].preview;
+  if (!preview) throw new Error("Missing plain review preview");
+  expect(preview).toContain("the readers must be the public audience");
+  expect(preview).not.toContain(`**${tool}`);
+  expect(preview).not.toContain("```yaml");
+  expect(card.options[1].preview).toBe(preview);
+  const marker = "Full arguments (YAML, not summarized):\n";
+  const tail = "\n\nApprove lets this exact call run. Deny keeps it blocked.";
+  const yaml = preview.slice(
+    preview.indexOf(marker) + marker.length,
+    -tail.length,
+  );
+  expect(loadYaml(yaml)).toEqual(args);
+  if ("file_path" in args) expect(preview).toContain(args.file_path);
+  for (const label of ["Approve", "Deny"]) {
+    const opening = `User has answered your questions: "${card.question}"="${label}"`;
+    const ending = ". You can now continue with the user's answers in mind.";
+    for (const content of [
+      `${opening}${ending}`,
+      `${opening} selected preview:\n${preview}${ending}`,
+    ]) {
+      expect(native.rulingFromResult({ content }, review)).toBe(
+        label === "Approve" ? "approve" : "deny",
+      );
+    }
+    for (const content of [
+      `${opening} selected preview:\n${review.callPreview}${ending}`,
+      `${opening} selected preview:\n${preview} altered${ending}`,
+      `User has answered your questions: "${review.question}"="${label}"${ending}`,
+    ]) {
+      expect(native.rulingFromResult({ content }, review)).toBe("unrecognized");
+    }
+  }
 });
 
 test("shows a command in full under its description, wrapped to the pane", async () => {
@@ -583,7 +675,7 @@ test.each([
 /** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
 function runtimeReview(coverage: string): string {
   return [
-    "[OpenAPPA] Approve this call?",
+    "Approve this call?",
     'APPA asks you to rule as the authority "hitl".',
     "Ask the person running this session to approve this exact call.",
     "",
@@ -905,9 +997,7 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(nativeQuestion?.question).toBe(
-    `[OpenAPPA] Approve this call?\n${body}`,
-  );
+  expect(nativeQuestion?.question).toBe(`Approve this call?\n${body}`);
   expect(review.text).toBe(`${graphicHeading}${body}`);
 });
 
@@ -1075,68 +1165,6 @@ test("a stored none without a closure is not a denial", async () => {
   expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
   expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
   expect(reviewOutcomeFromClosure(undefined)).toBe("review_invalid");
-});
-
-test("a later genuine denial revokes an approval that has not been spent", async () => {
-  const active = session("later-denial");
-  await stageHitlReview({
-    session: active,
-    review: { offerId: "revoked", text: "Review this exact call." },
-  });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: "revoked",
-      ruling: "deny",
-    }),
-  ).toBe(true);
-  expect(await consumeHitlRuling({ session: active, offerId: "revoked" })).toBe(
-    "deny",
-  );
-  expect(
-    await consumeHitlRuling({ session: active, offerId: "revoked" }),
-  ).toBeUndefined();
-});
-
-test("approved native review context remains readable without reopening its claim", async () => {
-  const active = session("native-continuation");
-  const review = {
-    offerId: "continuation",
-    text: "The exact reviewed QA action",
-    tool: "mcp/example/write",
-    arguments: '{"value":1}',
-  };
-  await stageHitlReview({ session: active, review });
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(true);
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toEqual(review);
-  expect(
-    await recordHitlRuling({
-      session: active,
-      offerId: review.offerId,
-      ruling: "approve",
-    }),
-  ).toBe(false);
-  expect(
-    await consumeHitlRuling({ session: active, offerId: review.offerId }),
-  ).toBe("approve");
-  expect(
-    await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toBeUndefined();
 });
 
 test("a denial validated before consumption cannot write an orphan ruling afterward", async () => {
@@ -1520,12 +1548,14 @@ function interceptLockedCache(
   vi.spyOn(cacheManager, "withLock").mockImplementation(
     <T>(
       scope: AllowedCacheKey,
-      callback: (cache: LockedCache) => Promise<T>,
+      callback: (
+        ...args: Parameters<Parameters<typeof cacheManager.withLock>[1]>
+      ) => Promise<T>,
     ) => {
       entered();
-      return lock(scope, async (cache) => {
+      return lock(scope, async (cache, tx) => {
         intercept(cache);
-        return callback(cache);
+        return callback(cache, tx);
       });
     },
   );

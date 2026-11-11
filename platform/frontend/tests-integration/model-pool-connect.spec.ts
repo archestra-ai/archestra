@@ -54,6 +54,7 @@ const pool: ModelPool = {
   streamTimeoutSeconds: null,
   timeoutSeconds: null,
   cooldownSeconds: null,
+  retrySettings: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   virtualApiKeyIds: ["vk-listed"],
@@ -68,6 +69,7 @@ const pool: ModelPool = {
       priority: 0,
       weight: 1,
       enabled: true,
+      retrySettings: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       benchedUntil: null,
       benchReason: null,
@@ -82,6 +84,7 @@ const pool: ModelPool = {
       priority: 1,
       weight: 1,
       enabled: true,
+      retrySettings: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       benchedUntil: null,
       benchReason: null,
@@ -140,6 +143,7 @@ function oauthClient(overrides: Partial<OauthClient>): OauthClient {
     allowedGatewayIds: [],
     includeFutureProviders: false,
     modelPoolIds: [],
+    autoRouterIds: [],
     ...overrides,
   };
 }
@@ -355,7 +359,8 @@ test.describe("LLM Proxy pool discovery", () => {
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4o", exact: true }),
     ).toHaveCount(0);
   });
 
@@ -432,10 +437,12 @@ test.describe("LLM Proxy pool discovery", () => {
       page.getByRole("option").filter({ hasText: POOL_NAME }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4.1" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4.1", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option").filter({ hasText: "openai:gpt-4o" }),
+      // Rows sit under their provider heading and show only the model id.
+      page.getByRole("option", { name: "gpt-4o", exact: true }),
     ).toHaveCount(0);
   });
 

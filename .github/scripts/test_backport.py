@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +22,8 @@ class FakeGitHubBackporter(backport.Backporter):
         self.pr = pr
         self.pulls = []
         self.comments = []
+        self.merged_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.labels = [{"name": f"backport release/1.{minor}"} for minor in (2, 3, 4)] + [{"name": "bug"}]
 
     def api(self, endpoint, payload=None, *, method=None, paginate=False):
         if endpoint == "repos/fixture/repository":
@@ -33,9 +36,12 @@ class FakeGitHubBackporter(backport.Backporter):
             if "head" in query:
                 return [pr for pr in pulls if pr["head"] == query["head"][0].split(":")[1]]
             return [{**pr, "head": {"ref": pr["head"], "repo": {"full_name": self.repo}}} for pr in pulls]
+        if endpoint.startswith("repos/fixture/repository/labels?"):
+            return self.labels
         if "issues?" in endpoint:
             label = parse_qs(urlparse(endpoint).query)["labels"][0]
-            return [{"number": 42, "pull_request": {}, "updated_at": "2020-01-01T00:00:00Z"}] if any(item["name"] == label for item in self.pr["labels"]) else []
+            issue = {"number": 42, "pull_request": {"merged_at": self.merged_at}, "updated_at": "2020-01-01T00:00:00Z"}
+            return [issue] if any(item["name"] == label for item in self.pr["labels"]) else []
         if endpoint.endswith("/pulls") and payload:
             pr = {**payload, "state": "open", "html_url": "https://github.com/fixture/repository/pull/43"}
             self.pulls.append(pr)
@@ -84,18 +90,20 @@ class BackportTests(unittest.TestCase):
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
 
-    def test_fork_and_deleted_source_repositories_are_ineligible(self):
-        for repository in [{"full_name": "contributor/fork"}, None]:
+    def test_fork_and_deleted_source_repositories_backport_the_merge_commit(self):
+        for number, repository in enumerate([{"full_name": "contributor/fork"}, None], start=1):
             with self.subTest(repository=repository):
                 self.pr["head"]["repo"] = repository
-                with self.assertRaisesRegex(ValueError, "branches in this repository"):
-                    self.bot.run(42)
-                with self.assertRaisesRegex(ValueError, "branches in this repository"):
-                    self.bot.run(42, "release/1.3")
                 self.bot.poll()
-                self.assertEqual(self.bot.pulls, [])
-                self.assertEqual(self.bot.comments, [])
-                self.assertEqual(self.git("ls-remote", "--heads", "origin", "refs/heads/backport/*"), "")
+                self.assertEqual(len(self.bot.pulls), 1)
+                self.assertEqual(self.bot.pulls[0]["base"], "release/1.3")
+                self.git("fetch", "origin")
+                ref = "origin/backport/release-1.3/pr-42"
+                self.assertEqual(self.git("show", ref + ":feature.txt"), "fixed")
+                self.assertIn(f"(cherry picked from commit {self.pr['merge_commit_sha']})",
+                              self.git("show", "-s", "--format=%B", ref))
+                if number == 1:
+                    self.setUp()
 
     def test_label_before_merge_is_processed_by_later_scan_once(self):
         self.pr["merged"] = False
@@ -131,7 +139,7 @@ class BackportTests(unittest.TestCase):
         self.assertEqual(self.git("show", "-s", "--format=%an <%ae>", ref), "Test <test@example.com>")
         self.assertEqual(
             self.git("show", "-s", "--format=%cn <%ce>", ref),
-            "archestra-ci[bot] <222894074+archestra-ci[bot]@users.noreply.github.com>",
+            "archestra-automation-prs[bot] <222894074+archestra-automation-prs[bot]@users.noreply.github.com>",
         )
 
     def test_duplicate_event_and_closed_pr_do_not_create_duplicates(self):
@@ -226,6 +234,26 @@ class BackportTests(unittest.TestCase):
         self.assertEqual(len(self.bot.pulls), 1)
         self.assertEqual(len(self.bot.comments), 1)
 
+    def test_poll_answers_labels_for_targets_that_are_not_enabled(self):
+        self.pr["labels"] = [{"name": "backport release/1.2"}, {"name": "backport release/1.4"}]
+        self.bot.poll()
+        self.bot.poll()
+        self.assertEqual([pr["base"] for pr in self.bot.pulls], ["release/1.4"])
+        notices = [comment["body"] for comment in self.bot.comments if "release/1.2" in comment["body"]]
+        self.assertEqual(len(notices), 1)
+        self.assertIn("not enabled", notices[0])
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", "refs/heads/backport/release-1.2/*"), "")
+
+    def test_poll_leaves_old_or_hand_made_disabled_target_requests_alone(self):
+        self.pr["labels"] = [{"name": "backport release/1.2"}]
+        self.bot.merged_at = "2020-01-01T00:00:00Z"
+        self.bot.poll()
+        self.assertEqual(self.bot.comments, [])
+        self.bot.merged_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.bot.pulls.append({"base": "release/1.2", "head": "backport/release-1.2/pr-42", "state": "open"})
+        self.bot.poll()
+        self.assertEqual(self.bot.comments, [])
+
     def test_poll_ignores_closed_unmerged_requests(self):
         self.pr["merged"] = False
         self.bot.poll()
@@ -261,6 +289,7 @@ for (const eventName of ['push', 'schedule', 'workflow_dispatch', 'pull_request'
   assert.equal(allowed(eventName, {repo:'contributor/fork'}), false, eventName);
 }
 assert.equal(allowed('pull_request', {merged:false}), false);
+// Fork label events carry no secrets; the scheduled poll backports those PRs.
 assert.equal(allowed('pull_request', {headRepo:'contributor/fork'}), false);
 assert.equal(allowed('pull_request', {base:'release/1.3'}), false);
 assert.equal(allowed('pull_request', {label:'bug'}), false);
@@ -299,8 +328,9 @@ const assert = require('node:assert/strict');
 const conditions = JSON.parse(process.argv[1]);
 for (const [job, condition] of Object.entries(conditions)) {
   for (const [login, ref, headRepo, expected] of [
-    ['archestra-ci[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
-    ['archestra-ci[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
+    ['archestra-automation-prs[bot]', 'backport/release-1.3/pr-42', 'archestra-ai/archestra', false],
+    ['archestra-automation-prs[bot]', 'release-please--branches--main', 'archestra-ai/archestra', false],
+    ['archestra-releaser[bot]', 'release-please--branches--main', 'archestra-ai/archestra', job === 'platform-lint-and-unit-tests'],
     ['contributor', 'fix/example', 'archestra-ai/archestra', false],
     ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'archestra-ai/archestra', job === 'openappa-native-tests'],
     ['openappa-archestra-updater[bot]', 'chore/openappa-v1.2.4', 'contributor/fork', false],
@@ -316,7 +346,7 @@ for (const [job, condition] of Object.entries(conditions)) {
   const mergeGroupCondition = condition.replace(/needs\.([\w-]+)/g, "needs['$1']");
   const evaluate = (inputs) => vm.runInNewContext(mergeGroupCondition, {
     github: {event_name: 'merge_group'}, always: () => true, cancelled: () => false,
-    needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}, 'supply-chain-policy': {result: 'success'}},
+    needs: {'changed-inputs': inputs, 'dagger-sdk-integration': {result: 'success'}},
   });
   const changed = {result: 'success', outputs: {backend: 'true', frontend: 'true', platform_rust: 'true', ai_labs: 'true'}};
   const unchanged = {result: 'success', outputs: {backend: 'false', frontend: 'false', platform_rust: 'false', ai_labs: 'false'}};
@@ -348,7 +378,7 @@ const owners = JSON.parse(env.ASSIGNEE_LOGINS);
 const coreTeam = JSON.parse(env.CORE_TEAM_LOGINS);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 function pr(number, login, ref, extra = {}) {
-  return {number, user: {login, name: 'archestra-ci (bot)'}, draft: false,
+  return {number, user: {login, name: 'archestra-automation-prs (bot)'}, draft: false,
     updated_at: new Date().toISOString(), requested_reviewers: [],
     head: {ref, repo: {full_name: 'archestra-ai/archestra'}}, ...extra};
 }
@@ -359,11 +389,11 @@ function pr(number, login, ref, extra = {}) {
     if (!enabled) continue;
 
     // Neither the triggering actor nor a display name determines the PR author.
-    for (const actor of ['maintainer', 'archestra-ci[bot]']) {
+    for (const actor of ['maintainer', 'archestra-automation-prs[bot]']) {
       const prs = [
-        pr(1, 'archestra-ci[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
-        pr(2, 'archestra-ci[bot]', 'release-please--branches--main'),
-        pr(3, 'archestra-ci[bot]', 'other/change'),
+        pr(1, 'archestra-automation-prs[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
+        pr(2, 'archestra-releaser[bot]', 'release-please--branches--main'),
+        pr(3, 'archestra-automation-prs[bot]', 'other/change'),
         pr(4, 'contributor', 'fix/example'),
         pr(5, 'contributor', 'backport/manual', {base: {ref: 'release/1.4'}}),
         pr(6, 'archestra-task-envs[bot]', 'task/example'),
@@ -373,7 +403,7 @@ function pr(number, login, ref, extra = {}) {
         pr(10, 'contributor', 'draft/change', {draft: true}),
         pr(11, 'contributor', 'assigned/change', {requested_reviewers: [{login: owners[0]}]}),
         pr(12, 'contributor', 'reviewed/change'),
-        pr(13, 'archestra-ci', 'fix/lookalike'),
+        pr(13, 'archestra-automation-prs', 'fix/lookalike'),
       ];
       const requests = [];
       const pulls = {list: 'list', listReviews: 'listReviews',

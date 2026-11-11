@@ -1,8 +1,16 @@
 "use client";
-// one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
+// one result: headline, chart, sortable summary or heat-shaded pivot, exports,
 // and the REST call that returns the same data.
 
-import { ArrowRight, Download, Info, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  Info,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import {
   type SetStateAction,
@@ -14,6 +22,12 @@ import {
 } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -51,6 +65,8 @@ import {
   ChartKindToggle,
   csvFilename,
   exportCsv,
+  exportJson,
+  exportParquet,
   PivotChart,
   PivotTable,
   QueryChip,
@@ -287,6 +303,23 @@ export default function CostExplorer() {
     .filter((r) => focus.has(r.key))
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
+  const exportParams = {
+    cube,
+    metric: q.metric,
+    dimLabel: dim.label,
+    view,
+    bySplit: pivotBySplit,
+    filename: csvFilename({
+      scope: "costs",
+      parts: [
+        view === "summary" && cube.exportTable ? null : metric.label,
+        `by ${dim.label}`,
+        hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
+        q.model,
+      ],
+      timeframe: String(timeframe),
+    }),
+  };
   const focusedRows = cube.rows.filter((row) => focus.has(row.key));
   const limitsLink = limitsAccess.canRead
     ? getCostLimitsLink(
@@ -690,36 +723,33 @@ export default function CostExplorer() {
                 </span>
               )
             )}
-            <Button
-              variant="ghost"
-              size="xs"
-              className="ml-auto"
-              disabled={cube.rows.length === 0}
-              onClick={() =>
-                exportCsv({
-                  cube,
-                  metric: q.metric,
-                  dimLabel: dim.label,
-                  view,
-                  bySplit: pivotBySplit,
-                  filename: csvFilename({
-                    scope: "costs",
-                    parts: [
-                      view === "summary" && cube.exportTable
-                        ? null
-                        : metric.label,
-                      `by ${dim.label}`,
-                      hasSplit ? `and ${DIMS[q.split as DimId].label}` : null,
-                      q.model,
-                    ],
-                    timeframe: String(timeframe),
-                  }),
-                })
-              }
-            >
-              <Download />
-              <span>Export CSV</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto"
+                  disabled={cube.rows.length === 0}
+                >
+                  <Download />
+                  Export
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => exportCsv(exportParams)}>
+                  <FileSpreadsheet /> CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportJson(exportParams)}>
+                  <FileJson /> JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void exportParquet(exportParams)}
+                >
+                  <Download /> Parquet
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="border-t">
             {cube.error ? null : cube.isLoading ? (

@@ -57,14 +57,17 @@ if (!isCI && !process.env.NODE_COMPILE_CACHE) {
 }
 
 /**
- * Partition test files by explicit database usage and Vitest module mocking.
+ * Partition test files by explicit database usage and module isolation needs.
  *
  * `vi.mock`/`vi.doMock` registrations live in the worker's shared module/mock
  * registry, which Vitest does NOT reset between files when `isolate: false`
  * (see https://vitest.dev/guide/improving-performance and
- * vitest-dev/vitest#4894, #10145) — so mock-using files must keep isolation,
- * while everything else can share each worker's module cache and skip
- * re-importing the whole backend graph per file (~6s/file saved).
+ * vitest-dev/vitest#4894, #10145) — so mock-using files must keep isolation.
+ * `vi.resetModules` also needs isolation: it reloads app singletons while
+ * external packages retain theirs (for example, the Prometheus registry).
+ * A later file can then register a gauge twice. Everything else can share
+ * each worker's module cache and skip re-importing the whole backend graph
+ * per file (~6s/file saved).
  *
  * Rollback-eligible files join the clean project and select transaction
  * teardown through their filename in setup hooks, retaining its shared module
@@ -80,7 +83,8 @@ function partitionTestFiles(): {
   rollback: string[];
 } {
   const root = path.resolve(__dirname, "./src");
-  const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
+  const needsModuleIsolation =
+    /\bvi\.(mock|doMock|unmock|doUnmock|hoisted|resetModules)\(/;
   const mocked: string[] = [];
   const clean: string[] = [];
   const unitMocked: string[] = [];
@@ -96,16 +100,18 @@ function partitionTestFiles(): {
     const relative = `./${path.relative(__dirname, absolute)}`;
     const databaseFree = entry.name.endsWith(".unit.test.ts");
     const rollsBack = entry.name.endsWith(".rollback.test.ts");
-    const moduleMocks = usesModuleMocks.test(readFileSync(absolute, "utf-8"));
+    const isolated = needsModuleIsolation.test(readFileSync(absolute, "utf-8"));
     if (databaseFree) {
-      (moduleMocks ? unitMocked : unit).push(relative);
+      (isolated ? unitMocked : unit).push(relative);
     } else if (rollsBack) {
-      if (moduleMocks) {
-        throw new Error(`${relative} cannot use module mocks with rollback`);
+      if (isolated) {
+        throw new Error(
+          `${relative} cannot use module mocks or resetModules with rollback`,
+        );
       }
       rollback.push(relative);
     } else {
-      (moduleMocks ? mocked : clean).push(relative);
+      (isolated ? mocked : clean).push(relative);
     }
   }
 

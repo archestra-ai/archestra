@@ -7,17 +7,14 @@ archestra:
 
   orchestrator:
     kubernetes:
-      networkPolicy:
-        create: true
       rbac:
         # The CI deployer can only write the release namespaces (infra
         # gke/access-lockdown.tf), so it cannot create the kube-system Role.
         # GKE does not need it: the backend falls back to the pod's resolv.conf,
         # and the NetworkPolicy floor allows DNS by kube-dns selector.
         kubeDnsServiceRead: false
-      serviceAccount:
-        annotations:
-          iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com
+      # Each installation sets its own Google service account in its values
+      # file: it is the identity for both Vertex AI and its Cloud SQL login.
 
   env:
     ARCHESTRA_ANALYTICS: disabled
@@ -36,6 +33,9 @@ archestra:
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "8"
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
     ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
+    # Unprivileged runs use the GKE Sandbox (gVisor) runtime pool
+    # (infra: gcp/gke agent-runtime-pool-gvisor). Privileged runs are unaffected.
+    ARCHESTRA_AGENT_RUNTIME_RUNTIME_CLASS_NAME: "gvisor"
     # Each workspace volume counts against the region's SSD quota for 72 hours.
     # Peak use on staging is about 10Gi (p95 12Gi). Runs that keep a kind node
     # and images on the volume can need more; watch them after a change.
@@ -44,7 +44,6 @@ archestra:
     ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
-    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
@@ -59,5 +58,8 @@ archestra:
     # values-demo.yaml re-enables basic auth and invitations for demo only.
     ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
-    # Trust only the GKE load balancer proxy ranges for client IP resolution.
-    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
+    # Trust only the internal load balancers for client IP resolution
+    # (archestra-ai/infra gcp/staging-private-access): the proxy-only subnet
+    # (the peer for requests routed straight to the backend) and the VIP subnet
+    # (each load balancer adds its own VIP to X-Forwarded-For).
+    ARCHESTRA_TRUST_PROXY: "10.94.0.0/23,10.94.2.0/28"

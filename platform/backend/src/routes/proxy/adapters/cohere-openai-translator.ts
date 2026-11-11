@@ -88,8 +88,11 @@ export function openaiToCohere(req: OpenAiRequest): {
     cohereBody.temperature = req.temperature;
   }
 
-  if (req.max_tokens !== undefined && req.max_tokens !== null) {
-    cohereBody.max_tokens = req.max_tokens;
+  // Newer clients send max_completion_tokens and omit max_tokens. Same
+  // precedence as the Gemini translator: the completion cap wins.
+  const maxTokens = req.max_completion_tokens ?? req.max_tokens;
+  if (maxTokens !== undefined && maxTokens !== null) {
+    cohereBody.max_tokens = maxTokens;
   }
 
   if (loose.top_p !== undefined && loose.top_p !== null) {

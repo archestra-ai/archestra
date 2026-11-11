@@ -17,6 +17,7 @@ import config, {
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
+  getAuditLogOtelExporter,
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
@@ -29,6 +30,7 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getRumOtlpAuthHeaders,
+  getSentryConfig,
   getTrustedOrigins,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
@@ -157,6 +159,68 @@ describe("getAnalyticsConfig", () => {
         key: "ph_custom",
         host: "https://posthog.example.com",
       },
+    });
+  });
+});
+
+describe("getSentryConfig", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", undefined);
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", undefined);
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  test("reports errors only to Archestra's project by default in production", () => {
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: expect.stringMatching(
+        /^https:\/\/[0-9a-f]+@[\w.]+\.sentry\.io\/\d+$/,
+      ),
+      environment: "self-hosted",
+      errorsOnly: true,
+    });
+  });
+
+  test("ARCHESTRA_ANALYTICS=disabled turns default error reporting off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+
+    expect(getSentryConfig().enabled).toBe(false);
+  });
+
+  test("stays off in development unless analytics is turned on", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(getSentryConfig().enabled).toBe(false);
+
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "enabled");
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      environment: "development",
+    });
+  });
+
+  test("an explicit DSN reports to that project with full diagnostics, even with analytics off", () => {
+    vi.stubEnv("ARCHESTRA_ANALYTICS", "disabled");
+    vi.stubEnv(
+      "ARCHESTRA_SENTRY_BACKEND_DSN",
+      "https://key@sentry.example.com/7",
+    );
+    vi.stubEnv("ARCHESTRA_SENTRY_ENVIRONMENT", "Staging");
+
+    expect(getSentryConfig()).toEqual({
+      enabled: true,
+      dsn: "https://key@sentry.example.com/7",
+      environment: "staging",
+      errorsOnly: false,
+    });
+  });
+
+  test("an empty DSN falls back to the default project", () => {
+    vi.stubEnv("ARCHESTRA_SENTRY_BACKEND_DSN", "");
+
+    expect(getSentryConfig()).toMatchObject({
+      enabled: true,
+      errorsOnly: true,
     });
   });
 });
@@ -375,6 +439,40 @@ describe("getOtlpAuthHeaders", () => {
 
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("getAuditLogOtelExporter", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("shares the backend log pipeline when no endpoint is set", () => {
+    expect(getAuditLogOtelExporter(undefined)).toBeNull();
+    expect(getAuditLogOtelExporter("  ")).toBeNull();
+  });
+
+  test("sends to the logs path of its own endpoint with only its own credentials", () => {
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "shared-token";
+    delete process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER;
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318/")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: undefined,
+    });
+
+    process.env.ARCHESTRA_AUDIT_LOG_OTEL_AUTH_BEARER = "audit-token";
+
+    expect(getAuditLogOtelExporter("http://audit-collector:4318")).toEqual({
+      url: "http://audit-collector:4318/v1/logs",
+      headers: { Authorization: "Bearer audit-token" },
     });
   });
 });
@@ -1687,12 +1785,12 @@ describe("Agent Runtime catalog images", () => {
     );
   });
 
-  test("follows the stable alias on a stable platform release", async () => {
+  test("uses the platform version on a stable release, not a moving alias", async () => {
     vi.stubEnv("ARCHESTRA_VERSION", "1.3.52");
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
-      "ghcr.io/archestra-ai/agent-claude-code:latest",
+      "ghcr.io/archestra-ai/agent-claude-code:1.3.52",
     );
   });
 
@@ -1717,6 +1815,99 @@ describe("Agent Runtime catalog images", () => {
     expect(cfg.agentRuntime.catalogImages.hermes).toBe(
       "mirror.example:5000/team/agent-hermes:v2",
     );
+  });
+});
+
+describe("release image digests", () => {
+  const digest = (char: string) => `sha256:${char.repeat(64)}`;
+  const shipped = JSON.stringify({
+    version: "1.6.0",
+    images: {
+      "mcp-server-base": digest("a"),
+      "p4-shim": digest("b"),
+      "agent-codex": digest("c"),
+    },
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "");
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG", "");
+    vi.stubEnv("ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE", "");
+    vi.stubEnv("ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE", "");
+    vi.stubEnv(
+      "ARCHESTRA_DATABASE_URL",
+      "postgresql://archestra:pass@localhost:5432/archestra",
+    );
+  });
+
+  test("pins the default release images to the digests shipped with this version", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      `ghcr.io/archestra-ai/mcp-server-base:1.6.0@${digest("a")}`,
+    );
+    expect(cfg.kb.perforceShim.image).toBe(
+      `ghcr.io/archestra-ai/p4-shim:1.6.0@${digest("b")}`,
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      `ghcr.io/archestra-ai/agent-codex:1.6.0@${digest("c")}`,
+    );
+    // No digest shipped for this image: it keeps its version tag.
+    expect(cfg.agentRuntime.catalogImages.hermes).toBe(
+      "ghcr.io/archestra-ai/agent-hermes:1.6.0",
+    );
+  });
+
+  test("leaves operator overrides and mirrors exactly as configured", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.0");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    vi.stubEnv(
+      "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE",
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY", "mirror.example");
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "mirror.example/mcp-server-base:1.6.0",
+    );
+    expect(cfg.agentRuntime.catalogImages.codex).toBe(
+      "mirror.example/agent-codex:1.6.0",
+    );
+  });
+
+  test("falls back to version tags when the digests belong to another version or none ship", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.6.1");
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", shipped);
+    const { default: cfg } = await import("./config");
+    expect(cfg.orchestrator.mcpServerBaseImage).toBe(
+      "ghcr.io/archestra-ai/mcp-server-base:1.6.1",
+    );
+
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_RELEASE_IMAGE_DIGESTS", "");
+    const { default: dev } = await import("./config");
+    expect(dev.agentRuntime.catalogImages.codex).toBe(
+      "ghcr.io/archestra-ai/agent-codex:1.6.1",
+    );
+  });
+
+  test("rejects a malformed digest map", async () => {
+    const { parseReleaseImageDigests } = await import("./config");
+    for (const rawValue of [
+      "not json",
+      JSON.stringify({ version: "1.6.0", images: { codex: "latest" } }),
+      JSON.stringify({ version: "1.6.0", images: { "../x": digest("a") } }),
+      JSON.stringify({ images: {} }),
+      JSON.stringify({ version: "1.6.0", images: {}, extra: true }),
+    ]) {
+      expect(() =>
+        parseReleaseImageDigests({ rawValue, appVersion: "1.6.0" }),
+      ).toThrow(/ARCHESTRA_RELEASE_IMAGE_DIGESTS/);
+    }
   });
 });
 
@@ -2993,31 +3184,39 @@ describe("parseTrustProxy", () => {
   });
 
   test("should return string for a single IP", () => {
-    expect(parseTrustProxy("127.0.0.1")).toBe("127.0.0.1");
+    expect(parseTrustProxy("127.0.0.1")).toBe("loopback,127.0.0.1");
   });
 
   test("should return string for a single CIDR", () => {
-    expect(parseTrustProxy("192.168.1.0/24")).toBe("192.168.1.0/24");
+    expect(parseTrustProxy("192.168.1.0/24")).toBe("loopback,192.168.1.0/24");
   });
 
   test("should return normalised string for comma-separated IPs", () => {
-    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
   });
 
   test("should return normalised string for comma-separated CIDRs", () => {
     expect(parseTrustProxy("10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")).toBe(
-      "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+      "loopback,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
     );
   });
 
   test("should trim whitespace around each IP in a comma-separated list", () => {
     expect(parseTrustProxy("  127.0.0.1 , 10.0.0.1  ")).toBe(
-      "127.0.0.1,10.0.0.1",
+      "loopback,127.0.0.1,10.0.0.1",
     );
   });
 
   test("should filter empty entries from extra commas", () => {
-    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe("127.0.0.1,10.0.0.1");
+    expect(parseTrustProxy("127.0.0.1,,10.0.0.1")).toBe(
+      "loopback,127.0.0.1,10.0.0.1",
+    );
+  });
+
+  test("keeps an explicit loopback entry once", () => {
+    expect(parseTrustProxy("10.0.0.0/8,loopback")).toBe("10.0.0.0/8,loopback");
   });
 });
 

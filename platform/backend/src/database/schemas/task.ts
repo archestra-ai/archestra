@@ -64,7 +64,7 @@ const tasksTable = pgTable(
         sql`${table.taskType} = 'openappa_github_sync' AND ${table.status} IN ('pending', 'processing')`,
       ),
     uniqueIndex("tasks_auto_routing_fit_single_flight_idx")
-      .on(sql`(${table.payload} ->> 'organizationId')`)
+      .on(sql`(${table.payload} ->> 'routerId')`)
       .where(
         sql`${table.taskType} = 'auto_routing_fit' AND ${table.status} IN ('pending', 'processing')`,
       ),

@@ -129,6 +129,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   chatgpt: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
   "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
+  "grok-build": INSTALLER_CLIENT_KEY_PROVIDERS["grok-build"],
   // Cursor routes every model through the Unified Model API with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
@@ -172,7 +173,7 @@ const CreateConnectionSetupBodySchema = z.object({
   llmProxyId: z.string().uuid().optional(),
   provider: SupportedProvidersSchema.optional(),
   /** Passthrough by default; "virtual-key" auto-provisions a personal key. */
-  proxyAuth: ConnectionSetupProxyAuthSchema.default("provider-key"),
+  proxyAuth: ConnectionSetupProxyAuthSchema.optional(),
   /**
    * In passthrough (provider-key) mode, auto-provision a personal passthrough
    * key and inject the X-Archestra-Virtual-Key header so the proxy attributes
@@ -501,7 +502,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         platform,
         mcpGatewayId,
         provider: requestedProvider,
-        proxyAuth,
+        proxyAuth = clientId === "grok-build" && requestedProvider === "xai"
+          ? "native-session"
+          : "provider-key",
         attributePassthrough,
         providerApiKeyId,
         model: requestedModel,
@@ -510,6 +513,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = body;
       let provider = requestedProvider;
       let model = requestedModel;
+      if (
+        proxyAuth === "native-session" &&
+        (clientId !== "grok-build" || requestedProvider !== "xai")
+      )
+        throw new ApiError(
+          400,
+          "Native Grok subscription mode requires Grok Build and xAI.",
+        );
       if (
         clientId === "pi" &&
         (!mcpGatewayId ||
@@ -523,13 +534,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       if (
-        clientId === "pi" &&
-        proxyAuth === "provider-key" &&
+        ((clientId === "pi" && proxyAuth === "provider-key") ||
+          proxyAuth === "native-session") &&
         !attributePassthrough
       ) {
         throw new ApiError(
           400,
-          "Pi requires a personal platform key for native guardrails.",
+          "This native client requires a personal platform key for guardrails.",
         );
       }
       const allPrimary = proxyAuth === "primary-providers";
@@ -580,11 +591,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId !== "copilot-cli" &&
         clientId !== "claude-desktop" &&
         clientId !== "pi" &&
-        clientId !== "kimi-code"
+        clientId !== "kimi-code" &&
+        clientId !== "grok-build"
       ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
+          "model is only supported for copilot-cli, claude-desktop, pi, kimi-code and grok-build setups",
         );
       }
       // A model the catalog knows to be served elsewhere would fail every
@@ -737,6 +749,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (clientId === "kimi-code" &&
               (provider === "kimi-code" || provider === "kimi")) ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
+            clientId === "grok-build" ||
             isOpenCodeFamilyClient(clientId))
         ) {
           const canCreateVirtualKey = await userHasPermission(
@@ -745,10 +758,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "llmVirtualKey",
             "create",
           );
-          if (clientId === "pi" && !canCreateVirtualKey) {
+          if (
+            (clientId === "pi" || proxyAuth === "native-session") &&
+            !canCreateVirtualKey
+          ) {
             throw new ApiError(
               403,
-              "Pi native guardrails require permission to create a personal platform key.",
+              "Native guardrails require permission to create a personal platform key.",
             );
           }
           if (canCreateVirtualKey) {
@@ -823,6 +839,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ReturnType<typeof PluginModel.findDeliverableForClient>
       > = [];
       if (requestedPluginIds !== undefined) {
+        if (clientId === "grok-build" && requestedPluginIds.length > 0)
+          throw new ApiError(
+            400,
+            "Grok connections deliver native skills only, not plugins",
+          );
         const uniqueIds = Array.from(new Set(requestedPluginIds));
         if (uniqueIds.length !== requestedPluginIds.length) {
           throw new ApiError(400, "pluginIds must be unique");
@@ -873,6 +894,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId !== "pi" &&
         clientId !== "kimi-code" &&
         clientId !== "chatgpt" &&
+        clientId !== "grok-build" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1230,6 +1252,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             staticUrl.password = encodeURIComponent(marketplaceToken);
             skills = {
               cloneUrl: staticUrl.toString(),
+              organizationId: setup.organizationId,
               marketplaceName: sharedMarketplaceRepo.marketplaceName,
               hasSkills: true,
               pluginNames: [],
@@ -1264,6 +1287,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
             skills = {
               cloneUrl: `${proxyBaseUrlToOrigin(setup.baseUrl)}${SKILL_MARKETPLACE_PREFIX}/${linkToken}/repo.git`,
+              organizationId: setup.organizationId,
               marketplaceName: marketplaceRender.marketplaceName,
               hasSkills: marketplaceRender.skillIds.length > 0,
               pluginNames: marketplaceRender.pluginNames,
@@ -1323,7 +1347,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi" | "kimi-code" | "chatgpt"
+    OpenCodeFamilyClientId | "pi" | "kimi-code" | "chatgpt" | "grok-build"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1365,6 +1389,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       isPersonalGateway: gateway.isPersonalGateway,
     };
     mcp = {
+      oauthIssuer: config.frontendBaseUrl,
       serverName: resolveMcpClientServerName(gatewayNaming),
       toolPrefix: archestraMcpBranding.toolPrefix,
       // Clients connected by an earlier run still hold the gateway's own name
@@ -1411,13 +1436,19 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       ) {
         passthroughVirtualKey = await openCodeFamilyPassthroughKey(setup);
       }
-    } else if (setup.proxyAuth === "provider-key" && setup.virtualApiKeyId) {
+    } else if (
+      (setup.proxyAuth === "provider-key" ||
+        setup.proxyAuth === "native-session") &&
+      setup.virtualApiKeyId
+    ) {
       // Passthrough attribution key (provider-key mode reuses virtualApiKeyId).
       // Best-effort: a revoked key just drops the header — never throw GONE(),
       // since the subscription credential still passes through unattributed.
       passthroughVirtualKey = await readVirtualKeyValue(setup.virtualApiKeyId);
     }
     if (setup.clientId === "pi" && !virtualKeyValue && !passthroughVirtualKey)
+      throw GONE();
+    if (setup.proxyAuth === "native-session" && !passthroughVirtualKey)
       throw GONE();
 
     // The approved installer can change settings in a running conversation.
@@ -1542,9 +1573,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     }
   }
 
-  const pluginIds = await ConnectionSetupModel.getPluginIds({
-    connectionSetupId: setup.id,
-  });
+  const pluginIds =
+    setup.clientId === "grok-build"
+      ? []
+      : await ConnectionSetupModel.getPluginIds({
+          connectionSetupId: setup.id,
+        });
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     assertConnectPluginsEnabledOrGone(organization);
@@ -1565,7 +1599,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       plugins.length !== pluginIds.length ||
       plugins.some(
         (plugin) =>
-          plugin.clientType !== setup.clientId ||
+          plugin.clientType !==
+            (setup.clientId === "grok-build"
+              ? "claude-code"
+              : setup.clientId) ||
           !plugin.supportedPlatforms.includes(
             resolvePluginPlatform(setup.platform),
           ),
@@ -1603,7 +1640,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
         !isOpenCodeFamilyClient(setup.clientId) &&
         setup.clientId !== "pi" &&
         setup.clientId !== "kimi-code" &&
-        setup.clientId !== "chatgpt"
+        setup.clientId !== "chatgpt" &&
+        setup.clientId !== "grok-build"
           ? setup.clientId
           : null,
       pluginPlatform:

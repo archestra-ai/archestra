@@ -982,6 +982,10 @@ class InteractionModel {
           attemptOutcome: schema.interactionsTable.attemptOutcome,
           failureReason: schema.interactionsTable.failureReason,
           source: schema.interactionsTable.source,
+          autoRouted: sql<boolean>`EXISTS (
+            SELECT 1 FROM ${schema.routingUsageTable}
+            WHERE ${schema.routingUsageTable.interactionId} = ${schema.interactionsTable.id}
+          )`,
           // The row's small stored preview (not the payload), so the trace can
           // name a turn by the prompt it served; decrypted below.
           attributionLabels: schema.interactionsTable.attributionLabels,

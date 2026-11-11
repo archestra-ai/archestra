@@ -50,10 +50,9 @@ concurrency:
 
 env:
   # This published stable-release fallback is owned by release publication,
-  # not the CI SHA publishers. Keep it available until the release cutover;
-  # CI packages deliberately do not move a latest tag.
+  # not the CI SHA publishers; CI packages deliberately do not move a latest tag.
   # supply-chain-policy: allow-latest published stable MCP fallback
-  RELEASED_MCP_SERVER_BASE_IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest
+  RELEASED_MCP_SERVER_BASE_IMAGE: ghcr.io/archestra-ai/mcp-server-base:latest
   PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
   MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
@@ -149,9 +148,7 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # Docker builds use Blacksmith so BuildKit can retain sticky-disk
-            # layers and cache mounts across trusted queue commits.
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-24.04-16core
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -159,7 +156,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-24.04-16core
             context: ./platform/docker_images/mcp_server
             dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -194,8 +191,6 @@ jobs:
           # trim export time and keep a plain single-manifest image. (Published release
           # images keep provenance via build-native-multi-arch-image.yml's default.)
           provenance: "false"
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Read-only caches: untrusted PRs have no registry credentials to export back.
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
@@ -277,8 +272,6 @@ jobs:
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: $/.github/actions/build-docker-image
         with:
-          # Keep BuildKit layers and cache mounts between trusted builds.
-          builder-cache-key: ${{ github.repository }}-platform-e2e-linux-amd64-v1
           context: ${{ matrix.context }}
           push: "true"
           target: unified-slim
@@ -298,21 +291,17 @@ jobs:
           # Docker Scout reads this attached SBOM directly instead of spending
           # ~3m35s storing and indexing the image again during every scan.
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Import both the E2E cache and the amd64 cache populated by staging
-          # and labeled dev builds. Each workflow keeps its own writer
+          # and manual dev builds. Each workflow keeps its own writer
           # to avoid last-writer-wins cache-manifest clobbering.
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
           # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
           # supply intermediate layers, so E2E only needs to export final layers.
-          # Only a fresh standard builder exports it, from this first build:
-          # exporting from reused BuildKit state (the second build, or the
-          # persistent builder's restored disk) dropped the BuildKit connection
-          # (rpc EOF) after the images were already pushed. The persistent
-          # builder skips the export and keeps its layers on its own disk.
+          # Only this first build on the fresh builder exports it: exporting
+          # from reused BuildKit state (the second build) dropped the BuildKit
+          # connection (rpc EOF) after the images were already pushed.
           cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
       # Full image for the quickstart job: `unified` is `unified-slim` plus one
@@ -336,8 +325,6 @@ jobs:
             ${{ steps.platform-reuse.outputs.input_tag }}
           provenance: "false"
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Reuse the slim build's live BuildKit cache instead of creating a
           # second builder and re-importing/rebuilding the same graph.
           setup-builder: "false"
@@ -445,7 +432,7 @@ jobs:
     name: Capture Docs Screenshots (validation)
     needs: [platform-e2e-build]
     if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e')
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 25
     permissions:
       contents: read
@@ -508,7 +495,7 @@ jobs:
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     # Setup dominates this environment; keep the existing 8-vCPU runner.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -682,7 +669,7 @@ jobs:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -809,11 +796,11 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    # 8-vcpu Blacksmith, as before the runner migration. Each leg boots the
+    # 8-core runner, as before the runner migration. Each leg boots the
     # full lite stack and then runs Playwright next to it: the pre-migration
     # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
     # min each.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     # Leave room for cold image pulls and platform startup.
     timeout-minutes: 45
     strategy:
@@ -1045,7 +1032,7 @@ jobs:
     # The test steps are short; image loads and platform startup dominate
     # this job. Match the other E2E legs' 8-vCPU runner so image extraction
     # and first-run initialization are not CPU-bound.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-8core
     # Covers cold image pulls and both environments.
     timeout-minutes: 50
     permissions:
@@ -1518,7 +1505,7 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-16core
     timeout-minutes: 30
     permissions:
       contents: read

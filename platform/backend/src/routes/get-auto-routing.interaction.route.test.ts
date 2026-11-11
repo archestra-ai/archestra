@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import db from "@/database";
+import { InteractionModel } from "@/models";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingUsageModel from "@/models/routing-usage";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
+  ensureAutoRouter,
   makeRoutingModel,
   makeScorerVersion,
   plannedDecision,
@@ -42,6 +44,7 @@ describe("GET /api/interactions/:interactionId/auto-routing", () => {
     const { decision } = await RoutingDecisionModel.insertOrGet({
       ...plannedDecision({
         organizationId: ctx.organizationId,
+        routerId: (await ensureAutoRouter(ctx.organizationId)).id,
         sessionKey: RoutingSessionKeySchema.parse(sessionId),
         modelId: model.id,
         scorerVersionId: scorer.id,
@@ -91,6 +94,20 @@ describe("GET /api/interactions/:interactionId/auto-routing", () => {
     expect(unlinked.statusCode).toBe(200);
     expect(unlinked.json()).toEqual({ decision: null });
 
+    // The trace's request list marks the routed row, and only it.
+    const summaries = await InteractionModel.findSummariesPaginated({
+      pagination: { limit: 10, offset: 0 },
+      filters: { organizationId: ctx.organizationId, sessionId },
+    });
+    expect(
+      new Map(summaries.data.map((row) => [row.id, row.autoRouted])),
+    ).toEqual(
+      new Map([
+        [routed.id, true],
+        [unrelated.id, false],
+      ]),
+    );
+
     await RoutingDecisionModel.purgeExpired(
       new Date(Date.now() + 91 * 24 * 60 * 60 * 1000),
     );
@@ -110,6 +127,7 @@ describe("GET /api/interactions/:interactionId/auto-routing", () => {
     const { decision } = await RoutingDecisionModel.insertOrGet({
       ...plannedDecision({
         organizationId: ctx.organizationId,
+        routerId: (await ensureAutoRouter(ctx.organizationId)).id,
         sessionKey: RoutingSessionKeySchema.parse("fallback"),
         modelId: model.id,
         scorerVersionId: scorer.id,

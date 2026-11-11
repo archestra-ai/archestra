@@ -22,7 +22,8 @@ export interface SkillMarketplaceClient {
     | "cursor"
     | "copilot-cli"
     | "pi"
-    | OpenCodeFamilyClientId;
+    | OpenCodeFamilyClientId
+    | "grok-build";
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -34,6 +35,17 @@ export interface SkillMarketplaceInstallParams {
 }
 
 export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
+  {
+    id: "grok-build",
+    getInstallSteps: () => [
+      {
+        label: "Install and refresh shared skills",
+        body: "Use the Grok Build connection installer to deliver native SKILL.md packages and resources to the dedicated managed profile. No plugins or marketplace registrations are installed. The launcher refreshes skills before each session.",
+        code: "node ~/.archestra/grok/launch.cjs",
+        language: "bash",
+      },
+    ],
+  },
   {
     id: "claude-code",
     getInstallSteps: ({ cloneUrl, marketplaceName }) => [

@@ -55,6 +55,7 @@ import {
   ProjectModel,
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
+import AutoRouterModel from "@/models/auto-router";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -94,6 +95,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
+import { assertEntraAgentIdentityChange } from "@/services/identity-providers/enterprise-managed/agent-identity";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -809,6 +811,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: null,
         next: body.runtime,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await assertEntraAgentIdentityChange({
+        organizationId,
+        userId: user.id,
+        agentId: null,
+        previous: null,
+        next: body.entraAgentIdentityId,
+      });
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -842,6 +855,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentAutoRouter(body, {
+        organizationId,
+        runtime: body.runtime ?? null,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
@@ -2238,6 +2255,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         previous: existingAgent.githubActionsAccess ?? null,
         next: body.githubActionsAccess,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await assertEntraAgentIdentityChange({
+        organizationId,
+        userId: user.id,
+        agentId: existingAgent.id,
+        previous: existingAgent.entraAgentIdentityId ?? null,
+        next: body.entraAgentIdentityId,
+      });
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -2271,6 +2299,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentAutoRouter(body, {
+        organizationId,
+        runtime:
+          body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+        builtIn: existingAgent.builtInAgentConfig !== null,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
 
       // Built-in agent guard: restrict which fields can be modified
@@ -3347,4 +3381,50 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
     ids: params.ids,
   } satisfies Parameters<typeof AgentModel.findAll>[2];
   return { userId, isAgentAdmin: isAdmin, options };
+}
+
+/**
+ * An auto router replaces the agent's model, key and pool; picking any of
+ * them leaves the router. Agent Runtime agents and built-in agents cannot run
+ * on one.
+ */
+async function applyAgentAutoRouter(
+  body: {
+    autoRouterId?: string | null;
+    modelPoolId?: string | null;
+    llmApiKeyId?: string | null;
+    modelId?: string | null;
+  },
+  agent: { organizationId: string; runtime: unknown; builtIn?: boolean },
+): Promise<void> {
+  const hasRuntime = agent.runtime !== null && agent.runtime !== undefined;
+  if (body.autoRouterId) {
+    if (hasRuntime) {
+      throw new ApiError(
+        400,
+        "Agent Runtime agents cannot run on an auto router.",
+      );
+    }
+    if (agent.builtIn) {
+      throw new ApiError(400, "Built-in agents cannot run on an auto router.");
+    }
+    if (
+      !(await AutoRouterModel.findInOrganization(
+        agent.organizationId,
+        body.autoRouterId,
+      ))
+    ) {
+      throw new ApiError(400, "The selected auto router no longer exists.");
+    }
+    body.modelId = null;
+    body.llmApiKeyId = null;
+    body.modelPoolId = null;
+  } else if (
+    hasRuntime ||
+    (body.autoRouterId === undefined &&
+      (body.modelPoolId || body.llmApiKeyId || body.modelId))
+  ) {
+    // An agent that becomes an Agent Runtime agent leaves its auto router too.
+    body.autoRouterId = null;
+  }
 }

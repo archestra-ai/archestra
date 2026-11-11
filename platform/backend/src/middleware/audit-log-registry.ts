@@ -5,6 +5,7 @@ import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import AutoRouterModel from "@/models/auto-router";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
@@ -45,6 +46,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import ServiceAccountFederatedCredentialModel from "@/models/service-account-federated-credential";
 import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
@@ -186,6 +188,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  // These provider-account routes authenticate outside ordinary API auth;
+  // grok-native-privacy records their audit with the verified proxy identity.
+  "/v1/xai/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
+  },
+  "/v1/xai/:agentId/native/privacy/coding-data-retention": {
+    resourceType: "clientPrivacy",
+    action: "clientPrivacy.updated",
+    onlyWhenChanged: true,
   },
   // Disconnecting a client: the resource is the user whose client it was;
   // the snapshot names the client.
@@ -506,6 +520,25 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "serviceAccount.updated",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Trust policies for workload identity federation. `:id` is the account,
+  // so both entries name `credentialId`: the POST, which has none in its
+  // path, then takes the new credential's id from the response body.
+  "/api/service-accounts/:id/federated-credentials": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id/federated-credentials/:credentialId": {
+    resourceType: "serviceAccountFederatedCredential",
+    resourceIdParam: "credentialId",
+    fetchById: (id, orgId) =>
+      ServiceAccountFederatedCredentialModel.findByIdForAudit(id, orgId),
+  },
+  // SPDX-SnippetEnd
 
   // LLM Provider API Keys (REDACTED — secretId and key material excluded)
   "/api/llm-provider-api-keys": {
@@ -1039,6 +1072,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/model-pools/:id": {
     resourceType: "modelPool",
     fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
+  },
+  "/api/auto-routing/routers": {
+    resourceType: "autoRouter",
+    fetchById: (id, orgId) => AutoRouterModel.findByIdForAudit(id, orgId),
+  },
+  "/api/auto-routing/routers/:id": {
+    resourceType: "autoRouter",
+    fetchById: (id, orgId) => AutoRouterModel.findByIdForAudit(id, orgId),
   },
   "/api/llm-virtual-keys": {
     resourceType: "virtualApiKey",

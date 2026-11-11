@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, jsonSchema } from "ai";
 import { vi } from "vitest";
 import { ConversationCompactionModel, ModelModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -152,7 +152,7 @@ describe("compactMessagesForChat auto trigger", () => {
     expect(typeof mockGenerateText.mock.calls[1][0].prompt).toBe("string");
   });
 
-  test("retries in context with a correction turn when the retry fits the window", async () => {
+  test("retries in context without counting tool definitions not sent to this provider", async () => {
     const task: ChatMessage = {
       id: "big-u1",
       role: "user",
@@ -190,6 +190,12 @@ describe("compactMessagesForChat auto trigger", () => {
       selectedModel: "qwen3-32b-wide",
       modelId: wideModel.id,
       messages: [task, pending],
+      tools: {
+        unused: {
+          description: LONG_TURN.repeat(100),
+          inputSchema: jsonSchema({ type: "object", properties: {} }),
+        },
+      },
     });
 
     expect(result.status).toBe("created");
@@ -197,6 +203,8 @@ describe("compactMessagesForChat auto trigger", () => {
     expect(result.messages[1]).toEqual(pending);
     expect(mockGenerateText).toHaveBeenCalledTimes(2);
     expect(mockGenerateText.mock.calls[1][0].messages).toBeDefined();
+    expect(mockGenerateText.mock.calls[0][0].tools).toBeUndefined();
+    expect(mockGenerateText.mock.calls[1][0].tools).toBeUndefined();
   });
 
   test("summarizes an oversized tool call instead of keeping it in the tail", async () => {

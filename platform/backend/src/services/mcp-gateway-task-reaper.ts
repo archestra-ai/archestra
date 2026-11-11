@@ -82,6 +82,9 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.AgentWorkspaceTransferTicket,
       );
+      await cacheManager.deleteExpiredByPrefix(CacheKey.SubagentLoadBalancer);
+      // A tool call the client never ran through the gateway is never read.
+      await cacheManager.deleteExpiredByPrefix(CacheKey.LlmToolCallSession);
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

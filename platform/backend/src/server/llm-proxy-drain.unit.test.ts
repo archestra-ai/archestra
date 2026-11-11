@@ -6,6 +6,11 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, expect, test, vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { withDrainScope } from "@/utils/drain-scope";
 import {
@@ -253,6 +258,72 @@ test.each([
     wallClock.mockRestore();
     elapsedClock.mockRestore();
   }
+});
+
+test.each([
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  `${OPENAPPA_HELPERS_PREFIX}/:installId/:externalName`,
+])("admits the runtime's %s consult only while admitted work runs before the deadline", async (route) => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 1000);
+  const started = gate();
+  const finish = gate();
+  app.post("/v1/openai/chat/completions", async () => {
+    started.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  app.post(route, async () => ({ consulted: true }));
+  app.post("/api/other", async () => ({ completed: true }));
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  const path = route
+    .replace(":installId", "install")
+    .replace(":externalName", "helper");
+  const admitted = fetch(`${url}/v1/openai/chat/completions`, {
+    method: "POST",
+  });
+  await started.promise;
+  drain.beginShutdown();
+  expect((await fetch(`${url}${path}`, { method: "POST" })).status).toBe(200);
+  expect((await fetch(`${url}/api/other`, { method: "POST" })).status).toBe(
+    503,
+  );
+  finish.resolve();
+  expect((await admitted).status).toBe(200);
+  await setImmediate();
+  expect((await fetch(`${url}${path}`, { method: "POST" })).status).toBe(503);
+});
+
+test("refuses the runtime's consults past the drain deadline even while work runs", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 5);
+  const started = gate();
+  const finish = gate();
+  app.post("/v1/openai/chat/completions", async () => {
+    started.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  app.post(OPENAPPA_ARCHESTRA_ANNOTATOR_PATH, async () => ({
+    consulted: true,
+  }));
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  const admitted = fetch(`${url}/v1/openai/chat/completions`, {
+    method: "POST",
+  });
+  await started.promise;
+  drain.beginShutdown();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(
+    (
+      await fetch(`${url}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`, {
+        method: "POST",
+      })
+    ).status,
+  ).toBe(503);
+  finish.resolve();
+  await admitted;
 });
 
 test("a backward wall-clock correction cannot extend the drain wait", async () => {

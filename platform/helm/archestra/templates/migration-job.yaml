@@ -7,9 +7,24 @@ schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
 */}}
-{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom) . -}}
+{{- $migrationOverrides := dict -}}
+{{- range $key, $_ := .Values.archestra.migrationJob.env -}}
+{{- $_ := set $migrationOverrides $key true -}}
+{{- end -}}
+{{- range .Values.archestra.migrationJob.envFromSecrets -}}
+{{- $_ := set $migrationOverrides .name true -}}
+{{- end -}}
+{{- range .Values.archestra.migrationJob.envWithValueFrom -}}
+{{- $_ := set $migrationOverrides .name true -}}
+{{- end -}}
+{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom "migrationJobEnvOverride" $migrationOverrides) . -}}
 {{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
 {{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) $migrationContext -}}
+{{- end }}
+{{- $awsSecretAccessKey := index .Values.archestra.env "AWS_SECRET_ACCESS_KEY" | default "" -}}
+{{- $awsSessionToken := index .Values.archestra.env "AWS_SESSION_TOKEN" | default "" -}}
+{{- if or (ne (toString $awsSecretAccessKey) "") (ne (toString $awsSessionToken) "") -}}
+{{- $migrationContext = merge (dict "migrationAwsSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) $migrationContext -}}
 {{- end }}
 {{- /*
 Reuse archestra.extraVolumes/extraVolumeMounts (e.g. a database CA bundle), but
@@ -55,14 +70,28 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      serviceAccountName: {{ include "archestra-platform.migrationJobServiceAccountName" . }}
+      {{- /*
+      Migrations reach only PostgreSQL. The Vault Kubernetes login is the one
+      startup path here that reads the pod's API token.
+      */}}
+      {{- $automount := .Values.archestra.migrationJob.automountServiceAccountToken }}
+      {{- if kindIs "invalid" $automount }}
+      {{- $automount = .Values.archestra.initContainers.vaultSecrets.enabled | default false }}
+      {{- end }}
+      automountServiceAccountToken: {{ $automount }}
       restartPolicy: Never
+      {{- with .Values.archestra.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         {{- include "archestra-platform.initContainers" $migrationContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}-migrate
           image: {{ include "archestra-platform.image" . }}
           imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          {{- include "archestra-platform.containerSecurityContext" . | nindent 10 }}
           workingDir: /app/backend
           {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
           {{- include "archestra-platform.vaultSecretsCommand" "node ./scripts/migrate-with-lock.mjs" | nindent 10 }}
@@ -104,9 +133,30 @@ spec:
               valueFrom:
                 {{- toYaml .valueFrom | nindent 16 }}
             {{- end }}
-            {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) }}
+            {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) (not (hasKey $migrationOverrides "ARCHESTRA_DATABASE_URL")) }}
             - name: ARCHESTRA_DATABASE_URL
               value: {{ index .Values.archestra.env "ARCHESTRA_DATABASE_URL" | quote }}
+            {{- end }}
+            {{- range $dbEnvKey := list "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED" "ARCHESTRA_DATABASE_AWS_REGION" "AWS_REGION" "AWS_DEFAULT_REGION" "AWS_ROLE_ARN" "AWS_WEB_IDENTITY_TOKEN_FILE" "AWS_ROLE_SESSION_NAME" "AWS_SHARED_CREDENTIALS_FILE" "AWS_CONFIG_FILE" "AWS_PROFILE" "AWS_SDK_LOAD_CONFIG" "AWS_ACCESS_KEY_ID" "PGSSLMODE" "PGSSLROOTCERT" "NODE_EXTRA_CA_CERTS" }}
+            {{- if and (hasKey $.Values.archestra.env $dbEnvKey) (not (hasKey $migrationOverrides $dbEnvKey)) }}
+            - name: {{ $dbEnvKey }}
+              value: {{ index $.Values.archestra.env $dbEnvKey | quote }}
+            {{- end }}
+            {{- end }}
+            {{- range $awsSecretEnvKey := list "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN" }}
+            {{- if and (hasKey $.Values.archestra.env $awsSecretEnvKey) (not (hasKey $migrationOverrides $awsSecretEnvKey)) }}
+            {{- $awsSecretVal := index $.Values.archestra.env $awsSecretEnvKey }}
+            {{- if $awsSecretVal }}
+            - name: {{ $awsSecretEnvKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "archestra-platform.migrationJobAuthSecretName" $ }}
+                  key: {{ $awsSecretEnvKey | lower | replace "_" "-" }}
+            {{- else }}
+            - name: {{ $awsSecretEnvKey }}
+              value: ""
+            {{- end }}
+            {{- end }}
             {{- end }}
             {{- /*
             Fail-fast lock acquisition for migration DDL: the hook overlaps
@@ -114,9 +164,10 @@ spec:
             lock would block that traffic until the lock is granted. Rendered
             after the operator-supplied env blocks so hook-only env stays
             first for $(VAR) expansion; skipped entirely when the operator
-            provides their own PGOPTIONS through migrationJob.env.
+            provides their own PGOPTIONS through migrationJob.env,
+            migrationJob.envFromSecrets, or migrationJob.envWithValueFrom.
             */}}
-            {{- if and .Values.archestra.migrationJob.lockTimeout (not (hasKey .Values.archestra.migrationJob.env "PGOPTIONS")) }}
+            {{- if and .Values.archestra.migrationJob.lockTimeout (not (hasKey $migrationOverrides "PGOPTIONS")) }}
             - name: PGOPTIONS
               value: {{ printf "-c lock_timeout=%s" (toString .Values.archestra.migrationJob.lockTimeout) | quote }}
             {{- end }}
@@ -140,11 +191,17 @@ spec:
           other PVCs stay off because the hook overlaps running web/worker
           pods during upgrades.
           */}}
-          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $jobExtraVolumeMounts }}
+          {{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumeMounts }}
           volumeMounts:
             {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
             - name: vault-secrets
               mountPath: /vault/secrets
+              readOnly: true
+            {{- end }}
+            {{- if $iamAuth.injectWebIdentityTokenVolume }}
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/aws-iam-token/serviceaccount
               readOnly: true
             {{- end }}
             {{- with $jobExtraVolumeMounts }}
@@ -159,12 +216,22 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $jobExtraVolumes }}
+      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $iamAuth.injectWebIdentityTokenVolume $jobExtraVolumes }}
       volumes:
         {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
         - name: vault-secrets
           emptyDir:
             medium: Memory
+        {{- end }}
+        {{- if $iamAuth.injectWebIdentityTokenVolume }}
+        - name: aws-iam-token
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                  audience: {{ $iamAuth.webIdentityTokenAudience | default "sts.amazonaws.com" | quote }}
+                  expirationSeconds: {{ $iamAuth.webIdentityTokenExpirationSeconds | default 3600 }}
+                  path: token
         {{- end }}
         {{- with $jobExtraVolumes }}
         {{- toYaml . | nindent 8 }}

@@ -56,6 +56,22 @@ describe("resource list origin filters", () => {
       renderHook(() => useScopeFilterParams()).result.current.scope,
     ).toBeUndefined();
   });
+  it.each([
+    "scope=built_in&builtIn=true",
+    "scope=built_in&builtIn=true&access=mine&sharedWith=org&owner=user-a",
+  ])("omits access filters for a built-in-only list (%s)", (query) => {
+    setQuery(query);
+    const { result } = renderHook(() =>
+      useScopeFilterParams({ includeBuiltIn: true }),
+    );
+    expect(result.current).toMatchObject({
+      scope: "built_in",
+      access: undefined,
+      sharedWith: undefined,
+      owner: undefined,
+      hasActiveScopeFilters: true,
+    });
+  });
   it("reads a bookmarked built-in origin through a namespaced query adapter", () => {
     setQuery("scope=team&page=7&externalScope=built_in&externalPage=3");
     const paramNames = {

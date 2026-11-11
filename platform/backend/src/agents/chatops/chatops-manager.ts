@@ -70,7 +70,6 @@ import type {
   ChatOpsProviderType,
   ChatOpsReplyStream,
   ChatReplyOptions,
-  DiscoveredChannel,
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
@@ -513,6 +512,10 @@ export class ChatOpsManager {
     allWorkspaceIds?: string[];
   }): Promise<void> {
     const { provider, context, workspaceId } = params;
+    if (provider.providerId === "slack") {
+      await this.discoverSlackChannels(context);
+      return;
+    }
 
     // TTL check using distributed (PostgreSQL-backed) cache — shared across pods
     const cacheKey =
@@ -520,13 +523,7 @@ export class ChatOpsManager {
     if (await cacheManager.get(cacheKey)) return;
 
     try {
-      // Every Slack connection shares the channel table, so a channel only one
-      // pinned bot belongs to must count as active, or the stale sweep below
-      // deletes its binding.
-      const channels =
-        provider.providerId === "slack"
-          ? await this.discoverAllSlackChannels(context)
-          : await provider.discoverChannels(context);
+      const channels = await provider.discoverChannels(context);
       if (!channels?.length) {
         logger.debug(
           { workspaceId },
@@ -578,6 +575,166 @@ export class ChatOpsManager {
       logger.warn(
         { error: error instanceof Error ? error.message : String(error) },
         "[ChatOps] Failed to discover channels",
+      );
+    }
+  }
+
+  /**
+   * All configured Slack bots share one complete snapshot and admission lease.
+   * Slack I/O happens outside the lock; the final owner check and reconciliation
+   * share one short transaction, so an expired worker cannot publish stale data.
+   */
+  async discoverSlackChannels(context: unknown): Promise<void> {
+    if (this.stopping) return;
+    const providers = this.getSlackProviders().filter((provider) =>
+      provider.isConfigured(),
+    );
+    if (!providers.length) return;
+    const scope =
+      `${CacheKey.ChannelDiscoveryLease}-slack-all` as AllowedCacheKey;
+    const freshnessKey =
+      `${CacheKey.ChannelDiscovery}-slack-all` as AllowedCacheKey;
+    const owner = randomUUID();
+    const configuration = JSON.stringify(
+      providers
+        .map((provider) => [provider.getWorkspaceId(), provider.getBotUserId()])
+        .sort(),
+    );
+    const isCurrent = () =>
+      !this.stopping &&
+      providers.length ===
+        this.getSlackProviders().filter((provider) => provider.isConfigured())
+          .length &&
+      providers.every((provider) =>
+        this.getSlackProviders().includes(provider),
+      );
+    try {
+      const admitted = await cacheManager.withLock(scope, async (cache, tx) => {
+        if (!(await this.hasCurrentSlackDiscoveryConfig(tx))) return false;
+        if (
+          (await cache.get(scope)) ||
+          (await cache.get(freshnessKey)) === configuration
+        )
+          return false;
+        // Discovery bounds each scan to two minutes plus one request timeout.
+        // A crashed process cannot retain admission indefinitely.
+        await cache.set(scope, { owner }, 3 * 60_000);
+        return true;
+      });
+      if (!admitted) return;
+      try {
+        const workspaceIds = [
+          ...new Set(
+            providers.map((provider) => {
+              const workspaceId = provider.getWorkspaceId();
+              if (!workspaceId)
+                throw new Error(
+                  "Slack discovery requires an authenticated workspace",
+                );
+              return workspaceId;
+            }),
+          ),
+        ];
+        // Wait for every bot, even after one fails: no orphan scan may overlap
+        // a later attempt admitted after the failure cooldown.
+        const results = await Promise.allSettled(
+          providers.map((provider) => provider.discoverChannels(context)),
+        );
+        const failed = results.filter((result) => result.status === "rejected");
+        if (failed.length) {
+          const retryAfter = Math.max(
+            0,
+            ...failed.map((result) => {
+              const value = result.reason?.retryAfter;
+              return typeof value === "number" && Number.isFinite(value)
+                ? value
+                : 0;
+            }),
+          );
+          throw Object.assign(new Error("Slack channel snapshot incomplete"), {
+            retryAfter,
+          });
+        }
+        const channels = results.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        );
+        const uniqueChannels = [
+          ...new Map(
+            channels.map((channel) => [
+              `${channel.workspaceId}:${channel.channelId}`,
+              channel,
+            ]),
+          ).values(),
+        ];
+        const organizationId = await getDefaultOrganizationId();
+        await cacheManager.withLock(scope, async (cache, tx) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          if (
+            !isCurrent() ||
+            !(await this.hasCurrentSlackDiscoveryConfig(tx))
+          ) {
+            await cache.delete(scope);
+            return;
+          }
+          await ChatOpsChannelBindingModel.ensureChannelsExist(
+            { organizationId, provider: "slack", channels: uniqueChannels },
+            tx,
+          );
+          for (const workspaceId of workspaceIds) {
+            await ChatOpsChannelBindingModel.deleteStaleChannels(
+              {
+                organizationId,
+                provider: "slack",
+                workspaceIds: [workspaceId],
+                activeChannelIds: uniqueChannels
+                  .filter((channel) => channel.workspaceId === workspaceId)
+                  .map((channel) => channel.channelId),
+                allowEmptySnapshot: true,
+              },
+              tx,
+            );
+          }
+          // Keep an empty snapshot eligible for the next trigger, so a first
+          // invitation is not hidden behind successful-result freshness.
+          if (uniqueChannels.length) {
+            await cache.set(
+              freshnessKey,
+              configuration,
+              CHATOPS_CHANNEL_DISCOVERY.TTL_MS,
+            );
+          } else {
+            await cache.delete(freshnessKey);
+          }
+          await cache.delete(scope);
+          // A reload/shutdown can happen during any awaited publication query.
+          // Throw before committing so bindings and freshness roll back together.
+          if (!isCurrent()) throw new Error("Slack discovery interrupted");
+        });
+      } catch (error) {
+        await cacheManager.withLock(scope, async (cache) => {
+          if ((await cache.get<{ owner: string }>(scope))?.owner !== owner)
+            return;
+          const retryAfter =
+            error &&
+            typeof error === "object" &&
+            "retryAfter" in error &&
+            typeof error.retryAfter === "number"
+              ? error.retryAfter
+              : 0;
+          // Manual refresh clears freshness only, never admission or Retry-After.
+          await cache.set(
+            scope,
+            { owner: null },
+            Math.max(30_000, retryAfter * 1_000),
+          );
+        });
+        throw error;
+      }
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Slack channel discovery failed; retaining existing bindings",
       );
     }
   }
@@ -1111,8 +1268,9 @@ export class ChatOpsManager {
     const arrivedMessage: IncomingChatMessage = { ...message };
     await this.addPlatformMessageFiles({ provider, message });
     // A file only its sender can open (a Teams group-chat file in their
-    // OneDrive): hold the message and ask them to sign in; it is answered
-    // again, with the file, once they have.
+    // OneDrive, or a channel file the app has no site grant for): hold the
+    // message and ask them to sign in; it is answered again, with the file,
+    // once they have.
     const signInFiles =
       message.skippedAttachments?.filter(
         (skipped) => skipped.reason === "sign_in_required",
@@ -2680,21 +2838,32 @@ export class ChatOpsManager {
     ];
   }
 
-  /**
-   * The channels every Slack connection is a member of, merged. A connection
-   * whose listing fails contributes nothing (SlackProvider logs it).
-   */
-  private async discoverAllSlackChannels(
-    context: unknown,
-  ): Promise<DiscoveredChannel[]> {
-    const listings = await Promise.all(
-      this.getSlackProviders().map((slack) => slack.discoverChannels(context)),
+  private async hasCurrentSlackDiscoveryConfig(
+    tx: Parameters<typeof ChatOpsConfigModel.getSlackDiscoveryConfigs>[0],
+  ): Promise<boolean> {
+    const { main, bots } =
+      await ChatOpsConfigModel.getSlackDiscoveryConfigs(tx);
+    const expected = [
+      ...(main?.enabled
+        ? [{ config: main, provider: this.slackProvider }]
+        : []),
+      ...bots
+        .filter((bot) => bot.enabled)
+        .map((bot) => ({
+          config: bot,
+          provider: this.slackAgentBots.get(bot.agentId),
+        })),
+    ];
+    const providers = this.getSlackProviders().filter((provider) =>
+      provider.isConfigured(),
     );
-    const byId = new Map<string, DiscoveredChannel>();
-    for (const channel of listings.flat()) {
-      if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
-    }
-    return [...byId.values()];
+    return (
+      expected.length === providers.length &&
+      expected.every(
+        ({ config, provider }) =>
+          provider?.isConfigured() && provider.matchesDiscoveryConfig(config),
+      )
+    );
   }
 
   /**
@@ -3228,9 +3397,14 @@ export class ChatOpsManager {
 
       const { selectedModel, selectedProvider } =
         await resolveConversationLlmSelectionForAgent({
-          agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+          agent: {
+            llmApiKeyId: agent.llmApiKeyId,
+            modelId: agent.modelId,
+            autoRouterId: agent.autoRouterId,
+          },
           organizationId: params.organizationId,
           userId: params.userId,
+          allowAutoModel: agent.runtime === null,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);

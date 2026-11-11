@@ -520,7 +520,7 @@ describe("chat tool execution", () => {
   test("a staged HITL review replaces model-authored copy and records approval", async () => {
     const offerId = "offer-hitl";
     const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+      'Approve the example__write call?  •  Arguments: {value: 1}  •  Policy review: "Approve this call?\\nmcp/example/write {\\"value\\":1}"  •  Approve allows only this exact call. Deny keeps it blocked.';
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
     });
@@ -680,10 +680,10 @@ describe("chat tool execution", () => {
       mockContext,
     );
 
-    // MCP forms keep the full review text.
-    expect(requests.map((request) => request.message)).toEqual([
-      "Full review text.",
-    ]);
+    // The form keeps both the policy text and the actual reviewed arguments.
+    expect(requests[0].message).toContain("Full review text.");
+    expect(requests[0].message).toContain("Arguments: {value: 1}");
+    expect(requests[0].message).not.toContain("\n");
     expect(result.structuredContent).toEqual({
       action: "accept",
       selected: ["Deny"],

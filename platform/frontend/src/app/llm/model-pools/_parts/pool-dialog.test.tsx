@@ -47,6 +47,7 @@ function pool(benchedUntil: string | null): ModelPool {
     streamTimeoutSeconds: null,
     timeoutSeconds: null,
     cooldownSeconds: null,
+    retrySettings: null,
     createdAt: new Date(NOW).toISOString(),
     updatedAt: new Date(NOW).toISOString(),
     virtualApiKeyIds: [],
@@ -60,6 +61,7 @@ function pool(benchedUntil: string | null): ModelPool {
       priority: 1,
       weight: 1,
       enabled: true,
+      retrySettings: null,
       createdAt: new Date(NOW).toISOString(),
       benchedUntil: modelId === "glm-5" ? benchedUntil : null,
       benchReason:
@@ -79,6 +81,72 @@ describe("PoolDialog", () => {
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
+  });
+
+  it("shows the retry defaults and keeps Save off for out-of-range values", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /Failover/ }));
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    const retries = screen.getByLabelText("Retries", {
+      selector: "#pool-retry-numRetries",
+    });
+    expect(retries).toHaveValue("");
+    expect(retries).toHaveAttribute("placeholder", "2");
+    await user.type(retries, "11");
+    expect(retries).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await user.clear(retries);
+    await user.type(retries, "-0");
+    // Only digits are kept, so a count can't go negative.
+    expect(retries).toHaveValue("0");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+
+    const initial = screen.getByLabelText("Initial delay", {
+      selector: "#pool-retry-initialDelayMs",
+    });
+    const maximum = screen.getByLabelText("Maximum delay", {
+      selector: "#pool-retry-maxDelayMs",
+    });
+    await user.type(initial, "2000");
+    await user.type(maximum, "1000");
+    expect(maximum).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("drops a member's retry override with the member", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /Failover/ }));
+    await user.type(
+      screen.getByLabelText("Retries", {
+        selector: "#member-0-retry-numRetries",
+      }),
+      "4",
+    );
+
+    await user.click(screen.getByRole("button", { name: /^Pool/ }));
+    await user.click(
+      screen.getAllByRole("button", { name: "Remove member" })[0],
+    );
+
+    await user.click(screen.getByRole("button", { name: /Failover/ }));
+    expect(
+      screen.getByLabelText("Retries", {
+        selector: "#member-0-retry-numRetries",
+      }),
+    ).toHaveValue("");
+    expect(
+      document.getElementById("member-1-retry-numRetries"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps edits in progress when the list refetches with new status", async () => {

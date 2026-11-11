@@ -1,37 +1,57 @@
 ---
 title: Auto Routing
-description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
+description: Create auto routers that pick a fast, normal, or smart model for each session of agents, chats and apps, within a daily budget
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Turn it on once, and every agent and chat on the organization default model gets a fast, normal, or smart model per session, so that average daily spend stays near your target. Easy sessions run on the cheap model, hard ones on the smart model. Agent makers change nothing, and apps opt in by sending `auto`.
+An auto router is a model name, `auto` or `auto:<name>`, that sends each session to a fast, normal, or smart model so that average daily spend stays near a target. Easy sessions run on the cheap model, hard ones on the smart model. An organization can have several routers, each with its own models, budget and decision model, for example one per team or per customer.
 
 ## Set It Up
 
-The three tiers are your organization's default models: the default model is the normal tier.
+1. Add a Jev API key shared with the whole organization under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
+2. Go to **LLM → Auto Routing** and click **Create auto router**.
+3. Give it a name. The model name clients request is `auto:` followed by the name, such as `auto:support`. The first router is named `auto`.
+4. Pick a provider key and model for each of the three tiers. Only keys shared with the whole organization can be used, and each tier can come from a different provider.
+5. Pick a daily budget and the decision model.
+6. Turn auto routing on under **Settings → LLM**. This switch covers every router of the organization.
 
-1. Add a Jev API key under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
-2. Go to **Settings → Agents**. Under **Default Model for Agents and New Chats**, pick the default key and model, then the **Fast model** and **Smart model**.
-3. Go to **LLM → Auto Routing**, check the three tiers it shows, and set a daily budget in USD. The page says how many agents use the organization default.
-4. Turn auto routing on and save.
+Open a router from the list to see its plan, its plan history and its diagnostics.
 
-Each tier can come from a different provider.
+### Daily Budget
 
-## What Gets Routed
+The daily budget is the average spend a router aims for, not a cap: spend on a given day can go above or below it. To stop spend at a ceiling, [add a spend limit](/docs/llm-proxy/costs-and-limits/limits#create-a-limit) under **Limits** for the team or virtual keys that use the router. It blocks their requests once spend reaches it.
 
-Routing is the admin's call: whatever runs on the organization default is routed, and everything with a model of its own is not.
+Pick a preset and Archestra sets the budget from the router's recent traffic, then adjusts it every time the plan is refitted:
 
-- **Agents and chats:** an agent with no model or [model pool](/docs/llm-proxy/model-pools) of its own, and its chats on the default model. In the agent form and the chat model list, **Organization default** names the three tiers while routing is on.
-- **Apps:** send `auto` as the model to the [Unified Model API](/docs/llm-proxy/unified-model) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
+- **Cost-efficient:** the most it can spend while the fast model still serves two thirds of sessions.
+- **Intelligence:** the least it needs for the smart model to serve two thirds of sessions.
+- **Balanced:** halfway in cost between the two.
+- **Custom:** a daily budget in USD that you set yourself.
+
+Until enough sessions are scored for a first plan, every session runs on the normal model, whatever the budget. Configure shows what the selected preset costs at today's traffic.
+
+### Decision Model
+
+The decision model reads the start of each session and judges how hard it is. Each router picks a provider that offers decision models, one of its organization-wide keys and a model. Jev is the only such provider today. Changing the decision model starts the router learning again.
+
+### Each Router Learns on Its Own
+
+A router scores, plans and learns only from its own sessions. A new router starts cold: every session runs on its normal model until it has scored enough sessions for a first plan. Changing one router's models, budget or decision model never changes another router's plan.
+
+## Who Can Use a Router
+
+- **Agents and chats:** pick a router in the agent form or the chat model list, where `auto` shows as **Auto** and `auto:support` as **Auto · support**. To route everything without a model of its own, pick a router as the **Default Model for Agents and New Chats** under **Settings → Agents**.
+- **Apps:** send the router's name as the model to the [Unified Model API](/docs/llm-proxy/unified-model) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). Add the router to the key under **Auto routers** in the key's settings first; a key calls only the routers it was given, and gets a 403 error for any other. The request then runs on the provider key of the tier the router picked. A tier is one key and model, so it doesn't fail over to another key the way a [model pool](/docs/llm-proxy/model-pools) does. The key's model list shows the routers it can call. Native provider routes answer a router name with a 400 error.
 
 What to know:
 
-- An agent or chat with an explicit model or pool is never routed. Agent Runtime agents are not routed either: they stay on the default model.
-- A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent is routed too, unless the agent asks for the Fast or Smart model.
+- An agent or chat with an explicit model or pool is never routed. Agent Runtime agents are not routed either.
+- A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent is routed by the same router, unless the agent asks for the Fast or Smart model.
+- Deleting a router deletes its plans and what it learned. Agents and chats on it go back to their own model.
 
 ## How Sessions Are Routed
 
@@ -42,32 +62,33 @@ The scorer assesses the opening user message with a bounded excerpt of the reque
 Under **Try a prompt**, turn on **Use request JSON** to preview an opening request body copied from LLM Logs, including its system instructions and tools. Text-only previews omit that context. A preview makes a fresh choice under the current plan; it does not replay the session's saved choice or execute the request, and scorer calls are billed.
 
 - **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, initial system instructions and current tool names. Instructions added after the first user message, tool ordering and cache markers do not change this identity. Changing the initial instructions or tool-name list can trigger another scorer call and model choice; send a stable session ID to preserve the choice across those changes.
-- **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
-- **Plans:** a background job builds a routing plan from past sessions. Changing the settings or the default models triggers a new plan within about a minute, and every organization is re-planned at least daily. Each plan is versioned.
+- **Plans:** a background job builds each router's routing plan from its past sessions. Changing a router triggers a new plan for it within about a minute, and every router is re-planned at least daily. Each plan is versioned.
 
 ## Learning From Past Sessions
 
-A new plan needs about 1000 finished sessions. Past traffic can supply them instead of waiting for `auto` traffic.
+Only the `auto` router that existed before an organization could have several learns from past traffic; routers you create start cold. For that router, past traffic can supply the sessions a plan needs instead of waiting for `auto` traffic.
 
-1. **Find past sessions.** Runs on its own when you first enable auto routing, or from the Overview page. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
+1. **Find past sessions.** Runs on its own when you first enable auto routing, or from the router's Overview page. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
 2. **Score them.** You start this. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
 
 Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the page offers to score the same sessions again.
 
 ## When It Falls Back to the Normal Model
 
-Archestra uses the normal model, the organization's default model, when it cannot make a better choice:
+Archestra uses the router's normal model when it cannot make a better choice:
 
-- **Cold start:** fewer than the minimum number of finished sessions exist. See [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS).
+- **Cold start:** the router has fewer than the minimum number of finished sessions. See [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS).
 - **No plan yet**, or the plan is stale because the three models or their prices changed.
 - **Scorer error or timeout.** See [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS).
 - **No user text** in the request to score, as in Bedrock Converse requests.
 
-The session keeps that fallback until it ends. An agent or chat on the organization default also runs on the normal model, without being routed, while auto routing is off, a tier is unset or on a per-user provider such as GitHub Copilot, or the person has no key for one of the tiers.
+The session keeps that fallback until it ends. An agent or chat on a router also runs on its normal model, without being routed, while auto routing is off or a tier is unset.
 
 ## Inspect a Recorded Decision
 
-Use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing) to inspect the decision linked to a request you can view in LLM Logs. It returns the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
+See why a request got its model in [Logs](/docs/admin/logs): an auto-routed request is marked **auto→**. Open it, and **Auto routing** shows the router's name, how the scorer rated the task for each tier, the tier it picked and why, and how much cheaper it was than the smart model.
+
+To read the decision programmatically, use [`GET /api/llm-proxy-logs/{logId}/auto-routing`](/docs/reference/api/llm-proxy/logs#tag/llm-proxy-logs/GET/api/llm-proxy-logs/{logId}/auto-routing) to inspect the decision linked to a request you can view in LLM Logs. It returns the router, the chosen model and tier, routing reason, scorer features and version, plan identifier, selection probability, budget multiplier and expected cost. It does not call the scorer again.
 
 A `null` decision means there is no retained decision linked to that request; the request may not have been auto routed, or its decision may have expired. It is not a reconstructed explanation or proof that routing was disabled.
 
@@ -83,4 +104,4 @@ Some models charge more for long prompts. On a model's settings, add a threshold
 
 - Routing decisions are kept for 90 days. After that, the same session is routed again as a new one.
 - Every request still goes through your existing [cost limits](/docs/llm-proxy/costs-and-limits) and guardrails.
-- Without a Jev key for the organization, every session uses the normal model.
+- Without a Jev key for the organization, every session uses the router's normal model.

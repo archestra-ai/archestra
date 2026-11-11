@@ -2,7 +2,7 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
-import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
+import { IdentityProviderIcon } from "@/components/identity-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

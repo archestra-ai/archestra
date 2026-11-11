@@ -72,6 +72,16 @@ export async function observeUnenforcedSession(
 export async function startedUnenforced(
   session: OpenAppaSession,
 ): Promise<boolean> {
+  return (await unenforcedSessionReason(session)) !== null;
+}
+
+/**
+ * Why `startedUnenforced` would say yes, or null. A `superyell` session may
+ * have run governed before, so its requests keep the shape they had then.
+ */
+export async function unenforcedSessionReason(
+  session: OpenAppaSession,
+): Promise<UnenforcedSessionReason | null> {
   if (await softBlockWaivedLocally(session)) {
     // An inherited waiver must become this session's own waiver so its
     // children and forks can discover it without walking arbitrary ancestry.
@@ -84,10 +94,10 @@ export async function startedUnenforced(
         "Could not persist the inherited soft-block waiver; the local session remains waived",
       );
     }
-    return true;
+    return "superyell";
   }
   const decision = await decideUnenforced(session);
-  if (decision.record) {
+  if (decision.unenforced && decision.record) {
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: session.organization_id,
       sessionId: session.session_id,
@@ -95,7 +105,7 @@ export async function startedUnenforced(
       ...(decision.record === "superyell" ? { reason: "superyell" } : {}),
     });
   }
-  return decision.unenforced;
+  return decision.unenforced ? decision.reason : null;
 }
 
 /**
@@ -260,10 +270,14 @@ export async function deleteExpiredUnenforcedRecords(
  * The decision behind `startedUnenforced`, and the record it would write so
  * the session's own children follow it.
  */
-async function decideUnenforced(session: OpenAppaSession): Promise<{
-  unenforced: boolean;
-  record?: UnenforcedSessionReason;
-}> {
+async function decideUnenforced(session: OpenAppaSession): Promise<
+  | { unenforced: false }
+  | {
+      unenforced: true;
+      reason: UnenforcedSessionReason;
+      record?: UnenforcedSessionReason;
+    }
+> {
   const recorded = await OpenAppaUnenforcedModel.findSessions({
     organizationId: session.organization_id,
     sessionIds: [
@@ -281,7 +295,7 @@ async function decideUnenforced(session: OpenAppaSession): Promise<{
       (row) => row.sessionId === session.fork_of && row.reason === "superyell",
     )
   ) {
-    return { unenforced: true, record: "superyell" };
+    return { unenforced: true, reason: "superyell", record: "superyell" };
   }
   const ownRow = recorded.find(
     (row) =>
@@ -294,9 +308,10 @@ async function decideUnenforced(session: OpenAppaSession): Promise<{
   if (!own && !parent) return { unenforced: false };
   // A person superyelled the session or its parent: it stays out of OpenAPPA
   // although the runtime governed it before.
-  if (ownRow?.reason === "superyell") return { unenforced: true };
+  if (ownRow?.reason === "superyell")
+    return { unenforced: true, reason: "superyell" };
   if (!own && parentRow?.reason === "superyell") {
-    return { unenforced: true, record: "superyell" };
+    return { unenforced: true, reason: "superyell", record: "superyell" };
   }
   // One lookup for the session and its parent in the runtime's own rows.
   const governed = await OpenAppaSessionModel.startedSessionIds({
@@ -313,9 +328,13 @@ async function decideUnenforced(session: OpenAppaSession): Promise<{
     if (session.parent_id && governed.has(session.parent_id)) {
       return { unenforced: false };
     }
-    return { unenforced: true, record: "enforcement_off" };
+    return {
+      unenforced: true,
+      reason: "enforcement_off",
+      record: "enforcement_off",
+    };
   }
-  return { unenforced: true };
+  return { unenforced: true, reason: "enforcement_off" };
 }
 
 /** How long a record lasts: longer than a session is likely to go on. */

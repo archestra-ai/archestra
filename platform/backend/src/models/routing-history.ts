@@ -588,7 +588,7 @@ class RoutingHistoryModel {
    * Deletes, `batchSize` rows per statement, history no fit can read any
    * more: sessions started before `windowStart` (with their usage and
    * scores), scores by a scorer version that is neither `keepScorerVersionId`
-   * nor the organization's, and finished backfills whose sessions are gone.
+   * nor that of the organization's router reading past sessions, and finished backfills whose sessions are gone.
    * Nothing a running or waiting backfill covers is touched.
    */
   static async purgeExpired(params: {
@@ -617,8 +617,9 @@ class RoutingHistoryModel {
         batchSize,
         (limit) => sql`
           with referenced_scorers as materialized (
-            select distinct organization_id, auto_routing_scorer_version_id
-            from agents where auto_routing_scorer_version_id is not null
+            select distinct organization_id, scorer_version_id
+            from auto_routers
+            where uses_past_sessions and scorer_version_id is not null
           )
           delete from routing_history_scores where (history_session_id, scorer_version_id) in (
             select sc.history_session_id, sc.scorer_version_id
@@ -628,7 +629,7 @@ class RoutingHistoryModel {
               and not exists (
                 select 1 from referenced_scorers a
                 where a.organization_id = s.organization_id
-                  and a.auto_routing_scorer_version_id = sc.scorer_version_id
+                  and a.scorer_version_id = sc.scorer_version_id
               )
               and not ${active(sql`s.organization_id`, sql`b.scorer_version_id = sc.scorer_version_id`)}
             limit ${limit})`,

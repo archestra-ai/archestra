@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -19,6 +19,7 @@ import {
   stripChildTrajectoryReceipts,
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   collectDelegationMarkers,
   mintDelegationMarker,
@@ -42,12 +43,17 @@ import {
   parseTrajectoryStamp,
   stampToolCallId,
 } from "@/openappa/trajectory-stamp";
-import { isUnenforcedSession } from "@/openappa/unenforced";
+import {
+  findUnenforcedCalls,
+  isUnenforcedSession,
+} from "@/openappa/unenforced";
 import {
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallsContext,
+  type LlmProxyToolResultsContext,
 } from "@/proxy/plugins/registry";
+import { GrokDeferredTools } from "@/routes/proxy/utils/grok-deferred-tools";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -60,14 +66,18 @@ import {
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaCopilotCliAdapter } from "./adapters/copilot-cli";
+import { AppaGrokAdapter } from "./adapters/grok";
 import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
+  APPA_PLUGIN_RETAINED_SHAPE,
   APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_WITHDRAWN_CHILD_RETURN,
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
+  GROK_DEFERRED_TOOLS,
 } from "./types";
 import { withoutRemedySections } from "./utils";
 
@@ -171,12 +181,6 @@ describe("asking through the client's own question tool", () => {
     {
       name: "Claude Agent",
       tool: "Agent",
-      family: "anthropic:messages",
-      adapter: () => new AppaClaudeCodeAdapter(),
-    },
-    {
-      name: "Claude Task",
-      tool: "Task",
       family: "anthropic:messages",
       adapter: () => new AppaClaudeCodeAdapter(),
     },
@@ -1342,6 +1346,215 @@ describe("asking through the client's own question tool", () => {
     });
   }
 
+  describe("remedy continuation delivery", () => {
+    /**
+     * One session with two offered rulings. Each request gets a fresh plugin
+     * and request context, as separate proxy replicas would, so only shared
+     * state carries between requests.
+     */
+    async function rulingSession(organizationId: string, sessionId: string) {
+      const callIds = ["call_notice", "call_notice_2"] as const;
+      const root = openappaActor(sessionId);
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId,
+        callerId: "user:user",
+        sessionId,
+        actor: root,
+        root,
+        parentId: null,
+        startDecision: { decision: "ack" },
+      });
+      for (const callId of callIds) {
+        await db.insert(schema.openappaOperationsTable).values({
+          organizationId,
+          callerId: "user:user",
+          sessionId,
+          root,
+          operationId: `call:${callId}`,
+          status: "complete",
+          input: { semantic: { event: "tool_call" } },
+          decision: { decision: "deny_call" },
+        });
+      }
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: Object.fromEntries(
+            callIds.map((callId) => [
+              callId,
+              {
+                content: `[appa] Blocked: execute_remedy_plan(offer_id: "offer-${callId}", plan: "Submit for approval")`,
+                outputSource: "runtime" as const,
+              },
+            ]),
+          ),
+        });
+      const ruling = (index: 0 | 1) => ({
+        id: callIds[index],
+        name: "archestra__get_remedy_plans",
+        namespace: "mcp__gateway",
+        content: "client echo",
+        isError: false,
+      });
+      const later = (id: string) => ({
+        id,
+        name: "read_document",
+        namespace: "mcp__foreign",
+        content: "Done",
+        isError: false,
+      });
+      /** Sends one request; true when it told the model to apply the plan. */
+      const guided = async (
+        toolResults: LlmProxyToolResultsContext["toolResults"],
+      ) => {
+        const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+        const context = requestContext({ sessionId, organizationId });
+        context.headers = { originator: "codex_cli_rs" };
+        const trusted = trustedOf(context);
+        trusted.request = {
+          tools: {
+            control: {
+              name: "archestra__execute_remedy_plan",
+              namespace: "mcp__gateway",
+            },
+            notice: {
+              name: "archestra__get_remedy_plans",
+              namespace: "mcp__gateway",
+            },
+            askUser: undefined,
+            platformToolNames: new Set(),
+            namespaces: new Map(),
+          },
+          customTools: new Set(),
+          declaredTools: [],
+          session: {},
+        };
+        await plugin.onSessionInit(context);
+        try {
+          await plugin.onToolResults({ ...context, toolResults });
+          const request = {
+            input: [],
+            tool_choice: "auto",
+            parallel_tool_calls: true,
+          };
+          await plugin.onBeforeModel({
+            ...context,
+            interactionType: "openai:responses",
+            request,
+          });
+          const nudged = JSON.stringify(request.input).includes(
+            "The ruling above offers a remedy plan",
+          );
+          expect(request.tool_choice).toBe(nudged ? "required" : "auto");
+          return nudged;
+        } finally {
+          await plugin.onCleanup(context);
+        }
+      };
+      return {
+        ruling,
+        later,
+        guided,
+        restore: () => processResults.mockRestore(),
+      };
+    }
+
+    test("puts a remedy offer to the model once, not on every later request", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-once",
+      );
+      try {
+        // The ruling arrives: the model is told to apply a fitting plan.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The same history again (a retry) is told again.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The model read the ruling, declined the plan and went on: not again.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+        expect(
+          await guided([ruling(0), later("later-1"), later("later-2")]),
+        ).toBe(false);
+        // A new ruling arms the nudge once more, and only once.
+        const history = [ruling(0), later("later-1"), later("later-2")];
+        expect(await guided([...history, ruling(1)])).toBe(true);
+        expect(await guided([...history, ruling(1), later("later-3")])).toBe(
+          false,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test("keeps every guided history after many ever shorter replays", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-many-replays",
+      );
+      const history = (laterResults: number) => [
+        ruling(0),
+        ...Array.from({ length: laterResults }, (_, index) =>
+          later(`later-${index + 1}`),
+        ),
+      ];
+      try {
+        // 41 guided histories, each one shorter than the last.
+        for (let laterResults = 40; laterResults >= 0; laterResults--) {
+          expect(await guided(history(laterResults))).toBe(true);
+        }
+        // The oldest, longest ones are still recognized as retries.
+        expect(await guided(history(40))).toBe(true);
+        expect(await guided(history(39))).toBe(true);
+        // A history past every guided one is progress.
+        expect(await guided(history(41))).toBe(false);
+      } finally {
+        restore();
+      }
+    }, 60_000);
+
+    test("guides again every history it guided, after a shorter replay or overlapping requests", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { ruling, later, guided, restore } = await rulingSession(
+        org.id,
+        "remedy-continuation-replays",
+      );
+      const longer = [ruling(0), later("later-1"), later("later-2")];
+      try {
+        // The ruling first arrives with two results after it in one batch.
+        expect(await guided(longer)).toBe(true);
+        // An older, shorter request is replayed: it was never guided, and the
+        // model had not gone on from it.
+        expect(await guided([ruling(0)])).toBe(true);
+        // The longer history is retried exactly: it gets what it got before.
+        expect(await guided(longer)).toBe(true);
+        expect(await guided([ruling(0)])).toBe(true);
+        // A history that extends the shortest guided one is progress.
+        expect(await guided([ruling(0), later("later-1")])).toBe(false);
+
+        // Two first requests after a new ruling overlap. Which one counts as
+        // progress depends on which record lands first, but a retry of each
+        // must get the answer it got the first time: a lost record would
+        // turn a guided history into "progress".
+        const short = [...longer, ruling(1)];
+        const long = [...short, later("later-3"), later("later-4")];
+        const first = await Promise.all([guided(long), guided(short)]);
+        // Nothing follows the ruling in the short history: never progress.
+        expect(first[1]).toBe(true);
+        expect([await guided(long), await guided(short)]).toEqual(first);
+        expect(await guided([...short, later("later-3")])).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+  });
+
   test("tells Codex to use declared collaboration spawn tools instead of a nested CLI", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-native-delegation" });
@@ -1496,7 +1709,324 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("names only the gateway ask_user when Codex cannot take questions natively", async () => {
+  test.each([
+    "xai:responses",
+    "xai:chatCompletions",
+  ])("Grok receives tool and remedy guidance once on %s", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const context = requestContext({ sessionId: "grok-native-guidance" });
+    context.provider = "xai";
+    context.interactionType = interactionType;
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-client-mode": "interactive",
+    };
+    trustedOf(context).request = {
+      session: {},
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "write" }, { name: "ask_user_question" }],
+    };
+    const clientInstructions = {
+      role: "system",
+      content: "Synthetic client instructions.",
+    };
+    const prompt = {
+      role: "user",
+      content: "Write the synthetic file, then follow its offered remedy.",
+    };
+    const responses = interactionType === "xai:responses";
+    const request = responses
+      ? { input: [clientInstructions, prompt] }
+      : { messages: [clientInstructions, prompt] };
+    context.requestBody = request;
+    try {
+      await plugin.onSessionInit(context);
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request });
+        const history = responses ? request.input : request.messages;
+        const text = JSON.stringify(history);
+        expect(text).toContain("Grok MCP tools are deferred.");
+        expect(text).toContain(
+          "The organization's guardrails policy can block a tool call",
+        );
+        expect(text).toContain("ask with ask_user_question");
+        expect(text).toContain("retry the exact native tool and arguments");
+        expect(text).toContain("search_tool searches MCP tools only");
+        expect(text).toContain("Reuse a discovered entry point");
+        expect(history).toHaveLength(5);
+        expect(history?.[0]).toBe(clientInstructions);
+        if (responses) expect(history?.at(-1)).toBe(prompt);
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.for([
+    "own Responses",
+    "own Chat Completions",
+    "foreign caller",
+    "foreign session",
+    "foreign parent",
+    "foreign root",
+    "pending",
+    "allowed",
+    "gateway wrapper",
+    "undeclared native",
+    "unrecorded",
+  ])("restores Grok recovery searches only from its denied native call receipt: %s", async (mode, {
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const sessionId = "user:user|grok-recovery-history";
+    const context = requestContext({ organizationId, sessionId });
+    const chat = mode === "own Chat Completions";
+    context.provider = "xai";
+    context.interactionType = chat ? "xai:chatCompletions" : "xai:responses";
+    context.headers = { "x-archestra-agent-id": "grok-build" };
+    const call = {
+      type: "function_call",
+      call_id: "held-native",
+      name: "search_tool",
+      arguments: '{"query":"archestra remedy","limit":8}',
+    };
+    const chatCall = {
+      id: call.call_id,
+      type: "function",
+      function: { name: call.name, arguments: call.arguments },
+    };
+    const untouched = {
+      ...call,
+      call_id: "real-search",
+      arguments: '{"query":"synthetic lookup"}',
+    };
+    context.requestBody = chat
+      ? {
+          messages: [
+            { role: "assistant", tool_calls: [chatCall] },
+            { role: "tool", tool_call_id: call.call_id, content: "CATALOG" },
+          ],
+        }
+      : {
+          input: [
+            { type: "reasoning", encrypted_content: "SYNTHETIC_REASONING" },
+            call,
+            {
+              type: "function_call_output",
+              call_id: call.call_id,
+              output: "CATALOG",
+            },
+            untouched,
+          ],
+        };
+    trustedOf(context).request.declaredTools = [
+      { name: "search_tool" },
+      { name: "use_tool" },
+      ...(mode === "undeclared native" ? [] : [{ name: "write" }]),
+    ];
+    const stored = {
+      organizationId,
+      sessionId: mode === "foreign session" ? "other-session" : sessionId,
+      callerId: mode === "foreign caller" ? "user:other" : "user:user",
+      actor: openappaActor(
+        mode === "foreign session" ? "other-session" : sessionId,
+      ),
+      root: openappaActor(sessionId),
+      parentId: mode === "foreign parent" ? "other-parent" : null,
+      startDecision: { decision: "ack" },
+    };
+    await db.insert(schema.openappaSessionsTable).values(stored);
+    const original = {
+      file_path: "/synthetic/review.txt",
+      content: "ORIGINAL",
+    };
+    const ruling =
+      '[appa] Blocked: Write requires approval. execute_remedy_plan(offer_id: "synthetic-offer", plan: "Submit for approval")';
+    if (mode !== "unrecorded")
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId,
+        callerId: stored.callerId,
+        sessionId: stored.sessionId,
+        root: mode === "foreign root" ? "other-root" : stored.root,
+        operationId: `call:${call.call_id}`,
+        status: mode === "pending" ? "pending" : "complete",
+        input: {
+          semantic: { event: "tool_call" },
+          context: {
+            spelling: mode === "gateway wrapper" ? "use_tool" : "write",
+            arguments: original,
+          },
+        },
+        decision:
+          mode === "pending"
+            ? null
+            : {
+                decision: mode === "allowed" ? "allow_call" : "deny_call",
+                feedback: ruling,
+                offers: [{ offer_id: "synthetic-offer" }],
+              },
+      });
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {
+          [call.call_id]: {
+            denied: true,
+            outputSource: "runtime",
+            content: ruling,
+          },
+        },
+      });
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    try {
+      await plugin.onSessionInit(context);
+      const result = await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: call.call_id,
+            name: "search_tool",
+            content: "CATALOG",
+            isError: false,
+          },
+        ],
+      });
+      const restored = mode.startsWith("own ");
+      const shown = chat ? chatCall.function : call;
+      expect(shown.name).toBe(restored ? "write" : "search_tool");
+      expect(JSON.parse(shown.arguments)).toEqual(
+        restored ? original : { query: "archestra remedy", limit: 8 },
+      );
+      expect(untouched.name).toBe("search_tool");
+      if (restored)
+        expect(result?.toolResultUpdates?.[call.call_id]).toBe(ruling);
+      else expect(result?.toolResultUpdates?.[call.call_id]).toContain(ruling);
+      expect(
+        trustedOf(context).request.restoredNoticeCallIds?.has(call.call_id) ??
+          false,
+      ).toBe(restored);
+      expect(JSON.stringify(context.requestBody)).toContain(
+        chat ? "tool_calls" : "SYNTHETIC_REASONING",
+      );
+    } finally {
+      process.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.for([
+    "write",
+    "archestra__run_tool",
+  ])("Grok reporting recovery ends an ordinary %s call with a terminal refusal instead of another notice", async (name, {
+    makeOrganization,
+  }) => {
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "grok-blocked-history",
+    });
+    context.provider = "xai";
+    context.interactionType = "xai:responses";
+    context.headers = {
+      "x-archestra-agent-id": "grok-build",
+      "x-grok-session-id": "grok-blocked-history",
+    };
+    context.requestBody = {
+      input: [
+        { role: "user", content: "Attempt one Write, then stop if held." },
+      ],
+      tools: [
+        "write",
+        "archestra__run_tool",
+        "archestra__yell",
+        "archestra__execute_remedy_plan",
+        "archestra__get_remedy_plans",
+        "archestra__ask_user",
+      ].map((name) => ({ type: "function", name, parameters: {} })),
+    };
+    const trusted = trustedOf(context);
+    trusted.childReturnRefusal = new ApiError(
+      409,
+      "OpenAPPA withheld an unrecorded child result.",
+    );
+    trusted.request = {
+      session: {},
+      customTools: new Set(),
+      declaredTools: [{ name: "write" }, { name: "archestra__yell" }],
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+    };
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    const note = vi
+      .spyOn(appaService, "notePrompt")
+      .mockResolvedValue(undefined);
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({ ...context, toolResults: [] });
+      await plugin.onBeforeModel({ ...context, request: context.requestBody });
+      expect(JSON.stringify(context.requestBody)).not.toContain(
+        "Native tools already declared in this request",
+      );
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "ordinary-attempt",
+            name,
+            arguments: JSON.stringify(
+              name === "write"
+                ? { file_path: "/synthetic/file.txt", content: "changed" }
+                : {
+                    tool_name: "write",
+                    tool_args: {
+                      file_path: "/synthetic/file.txt",
+                      content: "changed",
+                    },
+                  },
+            ),
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: {
+          reason: "openappa_blocked_conversation",
+          contentMessage: expect.stringContaining(
+            "OpenAPPA withheld an unrecorded child result.",
+          ),
+        },
+      });
+      expect(JSON.stringify(outcome)).not.toContain('"toolCalls"');
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      process.mockRestore();
+      evaluate.mockRestore();
+      note.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "openai:responses",
+    "github-copilot:responses",
+  ])("%s names only the gateway ask_user when Codex cannot take questions natively", async (wire) => {
     // Without the native-question header, ask_user stays on the gateway form.
     // Naming request_user_input sent the model to a tool that returns no answer.
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
@@ -1514,7 +2044,7 @@ describe("asking through the client's own question tool", () => {
       declaredTools: [{ name: "request_user_input" }],
     };
     context.headers = { originator: "codex_cli_rs" };
-    context.interactionType = "openai:responses";
+    context.interactionType = wire;
     const request = {
       input: [
         {
@@ -1564,38 +2094,6 @@ describe("asking through the client's own question tool", () => {
       await plugin.onSessionInit(context);
       await plugin.onBeforeModel({ ...context, request });
       expect(request.input).toHaveLength(1);
-    } finally {
-      await plugin.onCleanup(context);
-    }
-  });
-
-  test("omits wait_agent guidance when that collaboration tool is not declared", async () => {
-    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
-    const context = requestContext({ sessionId: "codex-spawn-without-wait" });
-    context.headers = { originator: "codex_cli_rs" };
-    context.interactionType = "openai:responses";
-    const request = {
-      input: [
-        {
-          type: "additional_tools",
-          role: "developer",
-          tools: [
-            {
-              type: "namespace",
-              name: "collaboration",
-              tools: [{ type: "function", name: "spawn_agent" }],
-            },
-          ],
-        },
-      ],
-    };
-
-    try {
-      await plugin.onSessionInit(context);
-      await plugin.onBeforeModel({ ...context, request });
-      const guidance = JSON.stringify(request.input);
-      expect(guidance).toContain("name spawn_agent");
-      expect(guidance).not.toContain("collaboration.wait_agent");
     } finally {
       await plugin.onCleanup(context);
     }
@@ -1658,6 +2156,73 @@ describe("asking through the client's own question tool", () => {
       expect(request.input).toContainEqual(developer);
     } finally {
       await plugin.onCleanup(context);
+    }
+  });
+
+  test("a waived Codex request keeps the developer messages of a governed one", async () => {
+    const adapter = new AppaCodexAdapter();
+    const preparedRequest: AppaTrustedContext["request"] = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: undefined,
+        platformToolNames: new Set<string>(),
+        namespaces: new Map(),
+      },
+      session: { provenance: "none" },
+      customTools: new Set<string>(),
+      declaredTools: [],
+    };
+    const providerRequest = () => ({
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [{ type: "function", name: "spawn_agent" }],
+            },
+          ],
+        },
+        { type: "message", role: "user", content: "Delegate this" },
+      ],
+    });
+    const contextFor = (sessionId: string) => {
+      const context = requestContext({ sessionId });
+      context.headers = { originator: "codex_cli_rs" };
+      context.interactionType = "openai:responses";
+      return context;
+    };
+
+    const plugin = new AppaPluginArchestra([adapter]);
+    const governedContext = contextFor("codex-governed-shape");
+    const trusted = governedContext.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = preparedRequest;
+    const governed = providerRequest();
+
+    const waivedContext = contextFor("codex-waived-shape");
+    waivedContext.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    waivedContext.resources.set(APPA_PLUGIN_RETAINED_SHAPE, {
+      adapter,
+      identity: trusted.toolIdentity,
+      request: preparedRequest,
+    });
+    const waived = providerRequest();
+    try {
+      await plugin.onSessionInit(governedContext);
+      await plugin.onBeforeModel({ ...governedContext, request: governed });
+      await plugin.onSessionInit(waivedContext);
+      await plugin.onBeforeModel({ ...waivedContext, request: waived });
+
+      expect(governed.input).toHaveLength(4);
+      expect(waived.input).toEqual(governed.input);
+    } finally {
+      await plugin.onCleanup(governedContext);
+      await plugin.onCleanup(waivedContext);
     }
   });
 
@@ -1754,6 +2319,7 @@ describe("asking through the client's own question tool", () => {
       question: "Which branch should I push?",
       shortQuestion: "Approve the Bash command?",
       callPreview: "**Bash command**\n\n```sh\ngit status\n```",
+      plainCallPreview: "command: git push origin main",
       options: [
         { label: "main", preview: "command: git push origin main" },
         { label: "feature" },
@@ -2138,83 +2704,7 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("refuses one native answer sent twice in a request", async () => {
-    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
-    const context = requestContext({
-      sessionId: "opencode-duplicate-answer",
-      toolIdentity: identityStub({
-        canonicalize: (name) => name.replace(/^my_gateway_(?=archestra__)/, ""),
-      }),
-    });
-    const trusted = context.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    trusted.request = {
-      tools: {
-        control: { name: "my_gateway_archestra__execute_remedy_plan" },
-        notice: { name: "my_gateway_archestra__get_remedy_plans" },
-        askUser: { name: "my_gateway_archestra__ask_user" },
-        platformToolNames: new Set(["my_gateway_archestra__ask_user"]),
-        namespaces: new Map(),
-      },
-      session: {},
-      customTools: new Set(),
-      declaredTools: [{ name: "question" }],
-    };
-    context.headers = { "x-opencode-session": "s" };
-    try {
-      await stageHitlReview({
-        session: trusted.session,
-        review: {
-          offerId: "offer-duplicate-answer",
-          text: "Canonical HITL review.",
-        },
-      });
-      await plugin.onSessionInit(context);
-      const prepared = await plugin.onPrepareToolCalls({
-        ...context,
-        toolCalls: [
-          {
-            id: "call_dup",
-            name: "my_gateway_archestra__ask_user",
-            arguments: JSON.stringify({
-              question: "Continue?",
-              options: [{ label: "Yes" }, { label: "No" }],
-              remedy_offer_ids: ["offer-duplicate-answer"],
-            }),
-          },
-        ],
-      });
-      if (prepared?.decision !== "allow")
-        throw new Error("expected native question");
-      // The client answers under the signed id the proxy issued for the call.
-      const answerId = prepared.toolCalls[0].wireId ?? "";
-      await expect(
-        plugin.onToolResults({
-          ...context,
-          toolResults: [
-            {
-              id: answerId,
-              name: "question",
-              content: 'approval="Yes"',
-              isError: false,
-            },
-            {
-              id: answerId,
-              name: "question",
-              content: 'approval="No"',
-              isError: false,
-            },
-          ],
-        }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-    } finally {
-      await plugin.onCleanup(context);
-    }
-  });
-
   test.each([
-    { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 2 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 4 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 5 },
     { client: "Claude Code", adapter: new AppaClaudeCodeAdapter(), count: 12 },
@@ -2554,9 +3044,13 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
-  test("binds an OpenCode native approval to the staged offer", async () => {
-    const questionText =
-      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+  test.each([
+    { asked: "with the current heading", headingPrefix: "" },
+    { asked: "before the heading changed", headingPrefix: "[OpenAPPA] " },
+  ])("binds an OpenCode native approval to the staged offer ($asked)", async ({
+    headingPrefix,
+  }) => {
+    const questionText = 'Approve this call?\nmcp/example/write {"value":1}';
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
       sessionId: "user:user|opencode-hitl-session",
@@ -2752,7 +3246,10 @@ describe("asking through the client's own question tool", () => {
             // trajectory stamp before the native HITL claim sees this ID.
             id: outerStamp?.callId ?? question.id,
             name: "question",
-            content: openCodeAnswer(questionText, "Approve"),
+            content: openCodeAnswer(
+              `${headingPrefix}${questionText}`,
+              "Approve",
+            ),
             isError: false,
           },
         ],
@@ -4365,7 +4862,7 @@ describe("asking through the client's own question tool", () => {
   });
 
   const INSPECTABLE_REVIEW_TEXT = [
-    "[OpenAPPA] Approve this call?",
+    "Approve this call?",
     'APPA asks you to rule as the authority "hitl".',
     "",
     "What this ruling would cover:",
@@ -4459,7 +4956,7 @@ describe("asking through the client's own question tool", () => {
       review: {
         offerId,
         text: [
-          "[OpenAPPA] Approve this call?",
+          "Approve this call?",
           "",
           "What this ruling would cover:",
           ...Array(5).fill(wide),
@@ -5936,6 +6433,77 @@ describe("AppaPluginArchestra", () => {
   });
 });
 
+test("Grok transcript refusal does not tell the model to discover a nonexistent remedy", async ({
+  makeOrganization,
+}) => {
+  const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+  const identity = {
+    ...identityStub(),
+    mode: "compat" as const,
+    gatewayConnected: false,
+    verified: [],
+    unverifiedMarkerCount: 0,
+  };
+  const context = requestContext({
+    sessionId: "grok-transcript-boundary",
+    organizationId: (await makeOrganization()).id,
+    toolIdentity: identity,
+  });
+  context.provider = "xai";
+  context.interactionType = "xai:responses";
+  context.headers = {
+    "x-archestra-agent-id": "grok-build",
+    "x-grok-session-id": "grok-transcript-boundary",
+  };
+  context.requestBody = {
+    input: [],
+    tools: ["read_file", "search_tool", "use_tool"].map((name) => ({
+      type: "function",
+      name,
+      parameters: {},
+    })),
+  };
+  trustedOf(context).request = prepareAppaRequest({
+    body: context.requestBody,
+    interactionType: context.interactionType,
+    session: {
+      sessionId: "grok-transcript-boundary",
+      provenance: "grok-session-header",
+    },
+    identity,
+  });
+  const cancel = vi
+    .spyOn(appaService, "cancelCalls")
+    .mockResolvedValue(undefined);
+  try {
+    await plugin.onSessionInit(context);
+    const result = await plugin.onToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "transcript-read",
+          name: "read_file",
+          arguments: {
+            target_file:
+              "C:\\Users\\synthetic\\.archestra\\grok\\native\\sessions\\probe.json",
+            limit: 1,
+          },
+        },
+      ],
+    });
+    expect(result).toMatchObject({
+      decision: "refuse",
+      refusal: {
+        contentMessage:
+          "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+      },
+    });
+  } finally {
+    cancel.mockRestore();
+    await plugin.onCleanup(context);
+  }
+});
+
 describe("Claude Code task output reads", () => {
   test("releases a background command's output and withholds a child agent's transcript", async () => {
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
@@ -6022,17 +6590,6 @@ describe("withoutRemedySections", () => {
         "Why:",
         "  - allowed readers would narrow: public -> internal",
         "  - Accepting restricts 25 of 319 tools for this session: 25 will need sign-off, 0 will be blocked.",
-      ].join("\n"),
-    );
-  });
-
-  test("drops an alternative route offered after the plans", () => {
-    expect(withoutRemedySections(APPROVAL_RULING)).toBe(
-      [
-        "[appa] Blocked: Bash cannot run yet.",
-        "",
-        "Why:",
-        "  - trust is suspicious, below the required floor trusted",
       ].join("\n"),
     );
   });
@@ -6354,17 +6911,31 @@ describe("rendering runtime text for this client", () => {
         .mockResolvedValue(undefined);
       const run = async (
         sessionId: string,
-        how: "header" | "runtime" | "attended",
+        how:
+          | "header"
+          | "runtime"
+          | "attended"
+          | "grok-headless"
+          | "grok-interactive"
+          | "grok-unknown"
+          | "unmatched-headless",
         toolCalls: LlmProxyToolCallsContext["toolCalls"] = [
           { id: "post", name: "post_message", arguments: {} },
           { id: "send", name: "send_email", arguments: {} },
           { id: "read", name: "read_file", arguments: {} },
         ],
       ) => {
-        const plugin = new AppaPluginArchestra([]);
+        const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
         const context = requestContext({ sessionId, organizationId });
         if (how === "header")
           context.headers = { "x-archestra-unattended": "1" };
+        if (how.startsWith("grok-"))
+          context.headers = {
+            "x-archestra-agent-id": "grok-build",
+            "x-grok-client-mode": how.slice("grok-".length),
+          };
+        if (how === "unmatched-headless")
+          context.headers = { "x-grok-client-mode": "headless" };
         // An Agent Runtime run is known from its credential, whatever its
         // image sends.
         if (how === "runtime")
@@ -6495,6 +7066,103 @@ describe("rendering runtime text for this client", () => {
         expect(
           await isUnattendedSession(session(organizationId, "runtime-only")),
         ).toBe(false);
+      } finally {
+        restore();
+      }
+    });
+
+    test("an attended batch whose unattended note cannot be withdrawn is refused", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, cancelCalls, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      try {
+        await run("stuck-note", "header");
+        expect(
+          await isUnattendedSession(session(organizationId, "stuck-note")),
+        ).toBe(true);
+        await db.execute(sql`
+          CREATE FUNCTION refuse_unattended_note() RETURNS trigger
+          LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cache storage down'; END $$
+        `);
+        for (const [name, write, row] of [
+          ["refuse_unattended_note_delete", "DELETE", "OLD"],
+          ["refuse_unattended_note_write", "INSERT OR UPDATE", "NEW"],
+        ])
+          await db.execute(
+            sql.raw(`
+              CREATE TRIGGER ${name} BEFORE ${write} ON keyv_cache
+              FOR EACH ROW WHEN (${row}.key LIKE '%openappa-unattended-session-%')
+              EXECUTE FUNCTION refuse_unattended_note()
+            `),
+          );
+        try {
+          await expect(
+            run("stuck-note", "attended", [
+              { id: "post-2", name: "post_message", arguments: {} },
+              { id: "send-2", name: "send_email", arguments: {} },
+              { id: "read-2", name: "read_file", arguments: {} },
+            ]),
+          ).rejects.toThrow();
+        } finally {
+          await db.execute(sql`DROP FUNCTION refuse_unattended_note() CASCADE`);
+        }
+        expect(cancelCalls).toHaveBeenLastCalledWith(
+          expect.anything(),
+          ["read-2"],
+          expect.anything(),
+        );
+        // The call it would have let through was never recorded as released.
+        expect(
+          (
+            await findUnenforcedCalls({
+              session: session(organizationId, "stuck-note"),
+              toolCallIds: ["send-2"],
+            })
+          ).reasons.size,
+        ).toBe(0);
+      } finally {
+        restore();
+      }
+    });
+
+    test("Grok headless leaves runtime approval to remedy negotiation and withdraws its unattended note when interactive", async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { run, restore } = await harness(organizationId, {
+        breakTheGlassEnabled: false,
+      });
+      const calls = [
+        {
+          id: "start",
+          name: "archestra__start_agent_run",
+          arguments: { agent_id: "agent", message: "go" },
+        },
+      ];
+      try {
+        for (const [how, unattended] of [
+          ["grok-headless", true],
+          ["grok-interactive", false],
+          ["grok-headless", true],
+          ["grok-unknown", false],
+          ["unmatched-headless", false],
+        ] as const) {
+          const result = await run("grok-mode-transition", how, calls);
+          expect(result).toMatchObject({
+            decision: "allow",
+            toolCalls: [{ name: "archestra__get_remedy_plans" }],
+          });
+          expect(
+            await isUnattendedSession(
+              session(organizationId, "grok-mode-transition"),
+            ),
+          ).toBe(unattended);
+        }
+        // No approval was waived at the proxy; the gateway handles the plan.
+        expect(await yellsOf(organizationId)).toEqual([]);
       } finally {
         restore();
       }
@@ -6862,6 +7530,256 @@ describe("rendering runtime text for this client", () => {
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
+    }
+  });
+
+  for (const name of ["run_terminal_command", "search_tool"]) {
+    test(`Grok deferred remedy recovery withholds the denied ${name}`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+      const identity = {
+        ...identityStub(),
+        mode: "compat" as const,
+        gatewayConnected: false,
+        verified: [],
+        unverifiedMarkerCount: 0,
+      };
+      const context = requestContext({
+        sessionId: "grok-remedies-not-discovered",
+        organizationId,
+        toolIdentity: identity,
+      });
+      context.provider = "xai";
+      context.interactionType = "xai:responses";
+      context.headers = {
+        "x-archestra-agent-id": "grok-build",
+        "x-grok-session-id": "grok-remedies-not-discovered",
+      };
+      context.requestBody = {
+        input: [],
+        tools: ["run_terminal_command", "search_tool", "use_tool"].map(
+          (name) => ({ type: "function", name, parameters: {} }),
+        ),
+      };
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      trusted.request = prepareAppaRequest({
+        body: context.requestBody,
+        interactionType: context.interactionType,
+        session: {
+          sessionId: "grok-remedies-not-discovered",
+          provenance: "grok-session-header",
+        },
+        identity,
+      });
+      const feedback =
+        "[appa] Blocked: accept the narrower audience to proceed.";
+      const evaluateToolCalls = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockResolvedValue([
+          { kind: "deny", recorded: true, feedback, offers: ["offered-plan"] },
+        ]);
+      const cancelCalls = vi
+        .spyOn(appaService, "cancelCalls")
+        .mockResolvedValue(undefined);
+      const call = {
+        id: "denied",
+        name,
+        arguments:
+          name === "search_tool"
+            ? '{"query":"archestra","limit":8}'
+            : '{"command":"curl.exe http://preview.localhost/welcome.md"}',
+      };
+      try {
+        await plugin.onSessionInit(context);
+        const first = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [call],
+        });
+        if (name === "search_tool") {
+          // An explicitly denied search must not run as its own recovery.
+          expect(first).toMatchObject({
+            decision: "refuse",
+            refusal: { blockedToolName: name },
+          });
+        } else
+          expect(first).toEqual({
+            decision: "allow",
+            toolCalls: [
+              {
+                id: "denied",
+                name: "search_tool",
+                arguments: JSON.stringify({
+                  query: `${archestraMcpBranding.serverName} remedy`,
+                  limit: 8,
+                }),
+              },
+            ],
+            blocked: [{ id: "denied", name: call.name, reason: feedback }],
+          });
+        const second = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [call],
+        });
+        expect(second).toMatchObject({
+          decision: "refuse",
+          refusal: {
+            blockedToolName: name,
+            contentMessage: expect.stringContaining(
+              "This client defers tools it has not loaded",
+            ),
+          },
+        });
+        expect(JSON.stringify(second)).not.toContain("Open /mcps");
+        expect(
+          (
+            await OpenAppaYellModel.list({
+              organizationId,
+              status: "all",
+              limit: 10,
+            })
+          ).data,
+        ).toHaveLength(0);
+      } finally {
+        evaluateToolCalls.mockRestore();
+        cancelCalls.mockRestore();
+      }
+    });
+  }
+
+  test("Grok can rediscover a lost remedy catalog on a later user turn without reopening a lookup loop or searching for a hard denial", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const sessionId = "grok-catalog-lost-later";
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const identity = {
+      ...identityStub(),
+      mode: "compat" as const,
+      gatewayConnected: false,
+      verified: [],
+      unverifiedMarkerCount: 0,
+    };
+    const lookup = {
+      name: "search_tool",
+      arguments: JSON.stringify({
+        query: `${archestraMcpBranding.serverName} remedy`,
+        limit: 8,
+      }),
+    };
+    const feedback = "[appa] Blocked: review the exact write.";
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        { kind: "deny", recorded: true, feedback, offers: ["live-review"] },
+      ]);
+    const cancel = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const contextFor = (
+      input: unknown[],
+      withTransport = true,
+    ): LlmProxyRequestContext => {
+      const context = requestContext({
+        sessionId,
+        organizationId,
+        toolIdentity: identity,
+      });
+      context.provider = "xai";
+      context.interactionType = "xai:responses";
+      context.headers = {
+        "x-archestra-agent-id": "grok-build",
+        "x-grok-session-id": sessionId,
+      };
+      context.requestBody = {
+        input,
+        tools: ["write", "search_tool", "use_tool"].map((name) => ({
+          type: "function",
+          name,
+          parameters: {},
+        })),
+      };
+      if (withTransport)
+        context.resources.set(
+          GROK_DEFERRED_TOOLS,
+          new GrokDeferredTools(context.requestBody),
+        );
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      trusted.request = prepareAppaRequest({
+        body: context.requestBody,
+        interactionType: context.interactionType,
+        session: { sessionId, provenance: "grok-session-header" },
+        identity,
+      });
+      return context;
+    };
+    const attempt = async (context: LlmProxyRequestContext) => {
+      await plugin.onSessionInit(context);
+      return plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "write-probe",
+            name: "write",
+            arguments: '{"file_path":"review.txt","content":"synthetic"}',
+          },
+        ],
+      });
+    };
+    const expectLookup = (outcome: unknown) =>
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ id: "write-probe", ...lookup }],
+        blocked: [{ id: "write-probe", name: "write" }],
+      });
+    try {
+      // Reproduce the already-consumed session-wide wait used before this fix.
+      expectLookup(await attempt(contextFor([], false)));
+      const next = [{ role: "user", content: "Prepare a new live review" }];
+      expectLookup(await attempt(contextFor(next)));
+      const afterLookup = [
+        ...next,
+        {
+          type: "function_call",
+          name: lookup.name,
+          call_id: "write-probe",
+          arguments: lookup.arguments,
+        },
+        {
+          type: "function_call_output",
+          call_id: "write-probe",
+          output: '{"results":[],"status":"partial"}',
+        },
+      ];
+      expect(await attempt(contextFor(afterLookup))).toMatchObject({
+        decision: "refuse",
+        refusal: { blockedToolName: "write" },
+      });
+      expectLookup(
+        await attempt(
+          contextFor([
+            ...afterLookup,
+            { role: "user", content: "Retry after reconnecting the gateway" },
+          ]),
+        ),
+      );
+      evaluate.mockResolvedValue([
+        { kind: "deny", recorded: true, feedback, offers: [] },
+      ]);
+      expect(
+        await attempt(contextFor([{ role: "user", content: "Hard denial" }])),
+      ).toMatchObject({
+        decision: "refuse",
+        refusal: { blockedToolName: "write" },
+      });
+    } finally {
+      evaluate.mockRestore();
+      cancel.mockRestore();
     }
   });
 
@@ -7526,84 +8444,6 @@ describe("rendering runtime text for this client", () => {
       const buffered = await plugin.onBufferedModelResponse({
         ...context,
         streaming: true,
-        response: {},
-        responseText: "",
-      });
-      expect(buffered).toBeUndefined();
-      expect(endChild).toHaveBeenCalledTimes(1);
-    } finally {
-      endChild.mockRestore();
-      config.openappa.offerSigningSecret = priorSecret;
-    }
-  });
-
-  test("keeps releasing the rewritten handback call when the child is not streaming", async ({
-    makeOrganization,
-  }) => {
-    const priorSecret = config.openappa.offerSigningSecret;
-    config.openappa.offerSigningSecret = DELEGATION_SECRET;
-    const organization = await makeOrganization();
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
-    const context = requestContext({
-      sessionId: "user:user|s1",
-      organizationId: organization.id,
-    });
-    context.headers = {
-      "user-agent": "claude-code/1",
-      "x-claude-code-session-id": "s1",
-      "x-claude-code-agent-id": "a1",
-    };
-    const trusted = context.resources.get(
-      APPA_PLUGIN_TRUSTED_CONTEXT,
-    ) as AppaTrustedContext;
-    trusted.request.tools = stubRequestTools();
-    trusted.request.turnEndOperationId = "turn_end:buffered-handback";
-    const marker = mintDelegationMarker({
-      organizationId: organization.id,
-      callerId: "user:user",
-      parentId: "s1",
-      spawnerNativeId: "s1",
-      prompt: "task",
-      spawnCallId: "spawn-call",
-    });
-    if (!marker) throw new Error("expected delegation marker");
-    trusted.request.delegation = {
-      markers: collectDelegationMarkers({
-        family: "anthropic:messages",
-        body: {
-          messages: [{ role: "user", content: `task\n\n${marker}` }],
-        },
-      }),
-    };
-    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
-      decision: "release",
-      crossed: true,
-    });
-
-    try {
-      await plugin.onSessionInit(context);
-      const outcome = await plugin.onToolCalls({
-        ...context,
-        toolCalls: [
-          {
-            id: "handback",
-            name: "SubagentHandback",
-            arguments: { message: "raw child return" },
-          },
-        ],
-      });
-      if (outcome?.decision !== "allow") {
-        throw new Error("expected the handback batch to be released");
-      }
-      const handback = outcome.toolCalls.find((call) => call.id === "handback");
-      expect(JSON.stringify(handback?.arguments)).toContain(
-        "finished subagent",
-      );
-      expect(JSON.stringify(handback?.arguments)).not.toContain("[appa]");
-
-      const buffered = await plugin.onBufferedModelResponse({
-        ...context,
-        streaming: false,
         response: {},
         responseText: "",
       });
@@ -9748,15 +10588,6 @@ describe("child return contract delivery", () => {
       ],
     },
     {
-      name: "as a leading system message on native Chat Completions",
-      interactionType: "openai:chatCompletions",
-      messages: [{ role: "user", content: "go" }],
-      expected: [
-        { role: "system", content: contract },
-        { role: "user", content: "go" },
-      ],
-    },
-    {
       name: "as a text part of a leading developer message",
       interactionType: "openrouter:chatCompletions",
       messages: [
@@ -11259,8 +12090,6 @@ describe("delegation markers", () => {
 
   describe("on an allowed spawn call", () => {
     test.each([
-      { name: "Task", blocks: false },
-      { name: "Task", blocks: true },
       { name: "Agent", blocks: false },
       { name: "Agent", blocks: true },
     ])("ends an admitted prefix-bearing $name task without native handback, blocks=$blocks", async ({
@@ -12379,8 +13208,7 @@ context_control = true
             JSON.stringify({
               organization_id: organizationId,
               caller_id: parent.caller_id,
-              session_id: parent.session_id,
-              owner_caller_id: parent.caller_id,
+              trajectory: currentTrajectory(parent),
               execution_mode: "tracked",
               tool_call_id: "declare-return",
               arguments: {
@@ -12423,13 +13251,12 @@ context_control = true
         });
         const badOffer = badHeld.offers?.[0]?.offer_id;
         if (!badOffer) throw new Error("second spawn offered no label");
-        const rejected = JSON.parse(
-          await native.executeRemedyByOffer(
+        await expect(
+          native.executeRemedyByOffer(
             JSON.stringify({
               organization_id: organizationId,
               caller_id: badParent.caller_id,
-              session_id: badParent.session_id,
-              owner_caller_id: badParent.caller_id,
+              trajectory: currentTrajectory(badParent),
               execution_mode: "tracked",
               tool_call_id: "bad-label",
               arguments: {
@@ -12444,13 +13271,7 @@ context_control = true
             }),
             policy,
           ),
-        ) as {
-          result?: { isError?: boolean; content?: Array<{ text?: string }> };
-        };
-        expect(rejected.result?.isError).toBe(true);
-        expect(
-          rejected.result?.content?.map((block) => block.text).join(" "),
-        ).toContain("unknown trust rank");
+        ).rejects.toThrow("unknown trust rank");
 
         const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
         const registry = new LlmProxyPluginRegistry();
@@ -12552,8 +13373,7 @@ context_control = true
             JSON.stringify({
               organization_id: organizationId,
               caller_id: optionsParent.caller_id,
-              session_id: optionsParent.session_id,
-              owner_caller_id: optionsParent.caller_id,
+              trajectory: currentTrajectory(optionsParent),
               execution_mode: "tracked",
               tool_call_id: "options-declare",
               arguments: {
@@ -12931,19 +13751,6 @@ context_control = true
       ).resolves.toBe("user:user|p:c");
     });
 
-    test("binds as today without a marker", async () => {
-      await expect(
-        boundSessionId(
-          claudePlugin(),
-          clientContext({
-            interactionType: "anthropic:messages",
-            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
-            body: claudeTurns([SPAWN_PROMPT]),
-          }),
-        ),
-      ).resolves.toBe("user:user|s1:a1");
-    });
-
     // WebFetch reads its page with a model call of its own, sent under the
     // headers of the agent that ran the tool.
     test("keeps a tool's own model call out of the agent that ran the tool", async () => {
@@ -12959,19 +13766,6 @@ context_control = true
           }),
         ),
       ).resolves.toBe("user:user|s1");
-    });
-
-    test("binds a child that declares no tools by its marker", async () => {
-      await expect(
-        boundSessionId(
-          claudePlugin(),
-          clientContext({
-            interactionType: "anthropic:messages",
-            headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
-            body: userTurns([marked({ parentId: "s1", spawner: "s1" })]),
-          }),
-        ),
-      ).resolves.toBe("user:user|s1:a1");
     });
   });
 
@@ -13605,6 +14399,85 @@ function stubRequestTools() {
   };
 }
 
+describe("withdrawal observation", () => {
+  test.for([
+    "openai:chatCompletions",
+    "github-copilot:chatCompletions",
+  ])("delivers advisory withdrawal on a valid %s request", async (interactionType) => {
+    const context = requestContext({ sessionId: "waived-child" });
+    context.resources.delete(APPA_PLUGIN_TRUSTED_CONTEXT);
+    context.resources.set(APPA_WITHDRAWN_CHILD_RETURN, true);
+    const request = {
+      messages: [{ role: "user", content: "Return the useful result." }],
+    };
+    const plugin = new AppaPluginArchestra([]);
+    await expect(
+      plugin.onBeforeModel({ ...context, interactionType, request }),
+    ).resolves.toBeUndefined();
+    expect(JSON.stringify(request)).toContain(
+      "withdrawn its earlier protected-return instructions",
+    );
+    expect(request.messages).toContainEqual({
+      role: "user",
+      content: "Return the useful result.",
+    });
+  });
+
+  test.for([
+    { client: "claude-code", allowSoftBlocks: false },
+    { client: "claude-code", allowSoftBlocks: true },
+    { client: "codex", allowSoftBlocks: false },
+    { client: "codex", allowSoftBlocks: true },
+  ] as const)("keeps invalid $client lineage advisory while inactive (soft override=$allowSoftBlocks)", async ({
+    client,
+    allowSoftBlocks,
+  }, { makeOrganization }) => {
+    const organizationId = (await makeOrganization()).id;
+    config.openappa.breakTheGlassOverrides = {
+      ...config.openappa.breakTheGlassOverrides,
+      unapprovableBlockMode: allowSoftBlocks ? "allow" : "refuse",
+    };
+    const context = requestContext({
+      organizationId,
+      sessionId: "observed-unverified-child",
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.enforcement = "inactive";
+    trusted.claims = { parentId: "unverified-parent" };
+    context.headers =
+      client === "codex"
+        ? { originator: "codex_cli_rs" }
+        : { "user-agent": "claude-code/1" };
+    const plugin = new AppaPluginArchestra([
+      new AppaClaudeCodeAdapter(),
+      new AppaCodexAdapter(),
+    ]);
+    const request = {
+      messages: [{ role: "user", content: "Keep the original request." }],
+    };
+    await plugin.onSessionInit(context);
+    await expect(
+      plugin.onBeforeModel({ ...context, request }),
+    ).resolves.toBeUndefined();
+    expect(request).toEqual({
+      messages: [{ role: "user", content: "Keep the original request." }],
+    });
+    expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([]);
+    await plugin.onCleanup(context);
+  });
+});
+
 describe("soft-block emergency override", () => {
   beforeEach(() => {
     config.openappa.breakTheGlassOverrides = {
@@ -13612,6 +14485,118 @@ describe("soft-block emergency override", () => {
       unapprovableBlockMode: "allow",
     };
     config.openappa.yellEnabled = false;
+  });
+
+  test("a failed approval preparation cannot waive a batch containing a Grok resume", async ({
+    makeOrganization,
+  }) => {
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "grok-prepare-resume",
+    });
+    context.headers = { "x-archestra-agent-id": "grok-build" };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    trusted.request.tools = {
+      ...stubRequestTools(),
+      askUser: { name: "archestra__ask_user" },
+      platformToolNames: new Set(["archestra__ask_user"]),
+    };
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    await plugin.onSessionInit(context);
+    const review = vi
+      .spyOn(hitlReview, "getHitlAskUserArguments")
+      .mockRejectedValue(new ApiError(503, "Synthetic review storage failure"));
+    try {
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "resume",
+              name: "spawn_subagent",
+              arguments: {
+                resume_from: "00000000-0000-4000-8000-000000000001",
+                prompt: "Continue the child.",
+              },
+            },
+            {
+              id: "review",
+              name: "archestra__ask_user",
+              arguments: {
+                question: "Approve?",
+                options: [{ label: "Approve" }, { label: "Deny" }],
+                remedy_offer_ids: ["synthetic-offer"],
+              },
+            },
+          ],
+        }),
+      ).rejects.toThrow("Synthetic review storage failure");
+      expect(review).toHaveBeenCalledOnce();
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      review.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.for([
+    "denial",
+    "runtime failure",
+  ] as const)("a denied Grok resume cannot bypass its lineage binding through an ordinary-call waiver (%s)", async (mode, {
+    makeOrganization,
+  }) => {
+    const context = requestContext({
+      organizationId: (await makeOrganization()).id,
+      sessionId: "grok-denied-resume",
+    });
+    context.headers = { "x-archestra-agent-id": "grok-build" };
+    const trusted = trustedOf(context);
+    trusted.enforcement = "active";
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([
+        {
+          kind: "deny",
+          feedback: "The requested continuation is not permitted.",
+          recorded: true,
+          offers: [],
+        },
+      ]);
+    if (mode === "runtime failure")
+      evaluate.mockRejectedValueOnce(
+        new ApiError(503, "Synthetic policy failure"),
+      );
+    try {
+      await plugin.onSessionInit(context);
+      const proposed = plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "resume",
+            name: "spawn_subagent",
+            arguments: {
+              resume_from: "00000000-0000-4000-8000-000000000001",
+              prompt: "Resume this unrecorded child.",
+            },
+          },
+        ],
+      });
+      if (mode === "runtime failure")
+        await expect(proposed).rejects.toThrow("Synthetic policy failure");
+      else expect(await proposed).toMatchObject({ decision: "refuse" });
+      expect(evaluate).toHaveBeenCalledOnce();
+      expect(
+        evaluate.mock.calls[0][2]?.isSpawn?.("spawn_subagent", undefined, {
+          resume_from: "00000000-0000-4000-8000-000000000001",
+        }),
+      ).toBe(false);
+      expect(await isUnenforcedSession(trusted.session)).toBe(false);
+    } finally {
+      evaluate.mockRestore();
+      await plugin.onCleanup(context);
+    }
   });
 
   async function setup(organizationId: string, parentId?: string) {
@@ -13785,6 +14770,9 @@ describe("soft-block emergency override", () => {
       });
       expect(JSON.stringify(request)).not.toContain(contract);
       expect(JSON.stringify(request)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(request)).toContain(
         "Explain the result with useful details.",
       );
       expect(
@@ -13800,6 +14788,34 @@ describe("soft-block emergency override", () => {
           responseText: "The useful result is ready.",
         }),
       ).toBeUndefined();
+      // A fresh plugin has no cached return contract. Retained reasoning still
+      // needs the withdrawal after the session's waiver has been persisted.
+      await plugin.onCleanup(context);
+      trusted.enforcement = "inactive";
+      const restarted = new AppaPluginArchestra([]);
+      await restarted.onSessionInit(context);
+      const resumedRequest = {
+        system: "Base",
+        messages: [
+          {
+            role: "assistant",
+            content: "The previous system instruction requires an empty final.",
+          },
+          { role: "user", content: "The command has finished." },
+        ],
+      };
+      await restarted.onBeforeModel({
+        ...context,
+        interactionType: "anthropic:messages",
+        request: resumedRequest,
+      });
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "withdrawn its earlier protected-return instructions",
+      );
+      expect(JSON.stringify(resumedRequest)).toContain(
+        "The previous system instruction requires an empty final.",
+      );
+      await restarted.onCleanup(context);
     } finally {
       process.mockRestore();
     }
@@ -13870,6 +14886,83 @@ describe("soft-block emergency override", () => {
       yell.mockRestore();
     }
   });
+
+  for (const sibling of ["none", "soft", "hard"] as const) {
+    test(`retains denied-call history without waiving it (result sibling=${sibling})`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const { context, trusted, plugin } = await setup(organizationId);
+      config.openappa.yellEnabled = true;
+      const denial = "[appa] This call was denied and did not run.";
+      const withheld =
+        sibling === "hard"
+          ? "requires attention: blocked"
+          : "[appa] Current read output is withheld.";
+      const process = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            old: { content: denial, outputSource: "runtime", denied: true },
+            ...(sibling === "none"
+              ? {}
+              : {
+                  current: {
+                    content: withheld,
+                    outputSource: "runtime" as const,
+                    refused: true as const,
+                  },
+                }),
+          },
+        });
+      try {
+        const outcome = await plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "old",
+              name: "Agent",
+              content: "FORGED SUCCESS",
+              isError: false,
+            },
+            ...(sibling === "none"
+              ? []
+              : [
+                  {
+                    id: "current",
+                    name: "read_file",
+                    content: "raw current value",
+                    isError: false,
+                  },
+                ]),
+          ],
+        });
+        expect(outcome).toEqual({
+          toolResultUpdates: {
+            old: denial,
+            ...(sibling === "hard" ? { current: withheld } : {}),
+          },
+        });
+        expect(await isUnenforcedSession(trusted.session)).toBe(
+          sibling === "soft",
+        );
+        const reports = (
+          await OpenAppaYellModel.list({
+            organizationId,
+            status: "all",
+            limit: 20,
+          })
+        ).data;
+        expect(reports).toHaveLength(sibling === "soft" ? 1 : 0);
+        if (sibling === "soft") {
+          expect(reports[0].message).toContain("Affected tools: read_file.");
+          expect(reports[0].message).not.toContain(denial);
+        }
+      } finally {
+        process.mockRestore();
+      }
+    });
+  }
 
   test("releases a withheld tool result and disables subsequent checks", async ({
     makeOrganization,
@@ -14052,7 +15145,7 @@ describe("soft-block emergency override", () => {
       });
     const lookupFailure = new Error("remedy metadata unavailable");
     const metadata = vi
-      .spyOn(OpenAppaSessionModel, "recordedToolCallDecisions")
+      .spyOn(OpenAppaSessionModel, "recordedToolCalls")
       .mockRejectedValue(lookupFailure);
     try {
       await expect(
@@ -14266,7 +15359,7 @@ describe("soft-block emergency override", () => {
     }
   });
   for (const compaction of [false, true]) {
-    test(`a child context refusal releases the original request (compaction=${compaction})`, async ({
+    test(`a child context refusal releases the original messages in the session's shape (compaction=${compaction})`, async ({
       makeOrganization,
     }) => {
       const { context, trusted, plugin } = await setup(
@@ -14288,9 +15381,15 @@ describe("soft-block emergency override", () => {
         await expect(
           plugin.onBeforeModel({ ...context, request }),
         ).resolves.toBeUndefined();
-        expect(request).toEqual({
-          messages: [{ role: "user", content: "keep these original bytes" }],
-        });
+        expect(request.messages).toEqual([
+          { role: "user", content: "keep these original bytes" },
+        ]);
+        expect(
+          JSON.stringify(request).includes(
+            "withdrawn its earlier protected-return instructions",
+          ),
+        ).toBe(!compaction);
+        expect("system" in request).toBe(!compaction);
         expect(await isUnenforcedSession(trusted.session)).toBe(true);
       } finally {
         start.mockRestore();

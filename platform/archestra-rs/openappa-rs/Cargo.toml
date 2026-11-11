@@ -42,12 +42,22 @@ crate-type = ["cdylib"]
 # audiences (#750), the project's own toolchain releases kept out of the
 # label-guide trust gate (#788), every Archestra built-in tool labeled (#789),
 # and Claude Code's SendMessage and RemoteTrigger as internal sinks (#787);
-# then v0.42.0 with recorders in place of the runtime file ledger (#790), glob
-# include entries (#799), more coding credential paths (#803), an internal
-# audience for archestra credential links (#798), superseded offers (#884),
-# returns declared ahead kept in the family log under the host's attempt
-# (#887), and an unanswered annotator told apart from a runtime failure
-# (#890); then battery sanitizers the deployment binds, and model and
+# then the planner-cap lint's redispatch index (#792), the battery scripts'
+# run lines (#793), kagent demo fixes (#794, #796), and a credential link
+# declaration that requires an internal audience (#798); then v0.39.0 and a
+# model sanitizer's rewritten value kept unwrapped (#797), the session module
+# split (#800), credential files and dotenv modes matched as path tokens with a
+# lower-trust return floor (#803), and recorders in place of the runtime file
+# ledger, with the consult recorder renamed `ConsultTranscriber` (#790); then
+# v0.40.1 and the LLM log tools labeled in the archestra battery (#852); then
+# v0.42.0 and empty child turns settled under their recorded return contract (#807);
+# then stale call offers refused as superseded (#884), a typed scope on reviews
+# (#888), and a return declared ahead kept in the family log (#887);
+# then an authority's `except_tags`, and plans that need only stock `approve`
+# authorities applied at the block and recorded (#889); then a remedy whose
+# annotator gave no answer refused as unanswered (#890); then unsafe integers
+# refused in canonical numbers (#891), small runtime and coding battery fixes
+# (#893, #895), battery sanitizers the deployment binds, and model and
 # archestra builtins named on a sanitizer's declaration, with each archestra
 # consult naming its kind (#791).
 appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "ab8c93dd547395c793985e31bb365950a15add20", features = ["archestra"] }

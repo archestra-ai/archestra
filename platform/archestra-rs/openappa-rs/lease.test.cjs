@@ -13,13 +13,15 @@ const { Client } = require('../../backend/node_modules/pg');
 const { databaseUrl } = require('./test-database.cjs');
 
 const annotation = '{"version":1,"answer":{"delta":{},"requires":{"history":[],"attention":[]},"emits":[]}}';
+// The public contract's annotator requires the partner desk the `redirect` rewrite admits.
+const classification = '{"version":1,"answer":{"delta":{},"requires":{"audience":{"contains":["partner"]},"history":[],"attention":[]},"emits":[]}}';
 
 test('a receipt lease recovers work its owner did not finish', { skip: !databaseUrl, timeout: 180000 }, async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'openappa-lease-'));
   // A holdable HTTP consult stand-in: while `hold` is set the request stays
   // open, so the dispatch sits between its claim and its finish. Serves the
   // annotator's annotation and the sanitizer's fixed answer alike.
-  const consults = { annotator: 0, sanitizer: 0 };
+  const consults = { annotator: 0, sanitizer: 0, classifier: 0, redirect: 0 };
   const standIn = (kind, body) => {
     const gate = { hold: false, fail: false, held: [], arrived: () => {} };
     const server = createServer((request, response) => {
@@ -41,6 +43,11 @@ test('a receipt lease recovers work its owner did not finish', { skip: !database
   const sanitizer = standIn('sanitizer', '{"version":1,"answer":{"body":"approved scrubbed output"}}');
   await new Promise((resolve) => annotator.server.listen(0, '127.0.0.1', resolve));
   await new Promise((resolve) => sanitizer.server.listen(0, '127.0.0.1', resolve));
+  // A `tool_input` rewrite into the public contract consults that contract's annotator.
+  const classifier = standIn('classifier', classification);
+  const redirect = standIn('redirect', JSON.stringify({ version: 1, answer: { body: JSON.stringify({ path: 'public/q3.md' }) } }));
+  await new Promise((resolve) => classifier.server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => redirect.server.listen(0, '127.0.0.1', resolve));
   const policyPath = path.join(dir, 'policy.toml');
   writeFileSync(policyPath, `[policy]
 version = 2
@@ -66,6 +73,22 @@ delta = { audience = ["insider"], trust = "suspicious" }
 [[policy.tool]]
 name = "agent__worker"
 delta = {}
+[[policy.annotator]]
+name = "classify"
+audiences = ["partner"]
+[[policy.tool]]
+name = "read_hr"
+delta = { audience = ["hr"] }
+[[policy.tool]]
+name = "read_file(path:public/*)"
+parameters = { type = "object", properties = { path = { type = "string" } }, required = ["path"] }
+annotator = "classify"
+[[policy.tool]]
+name = "read_file(path:private/*)"
+parameters = { type = "object", properties = { path = { type = "string" } }, required = ["path"] }
+requires = { audience = { contains = ["partner"] } }
+effects = ["classified"]
+delta = {}
 [[policy.sanitizer]]
 name = "scrub"
 on = ["tool_output"]
@@ -76,6 +99,11 @@ name = "attest-schema"
 on = ["tool_output"]
 [policy.sanitizer.permits]
 trust = { from = "suspicious", to = "trusted" }
+[[policy.sanitizer]]
+name = "redirect"
+on = ["tool_input"]
+[policy.sanitizer.permits]
+audience = { from = ["hr"], to = ["partner"] }
 [policy.deployment]
 confined_results = ["leak"]
 context_control = true
@@ -84,8 +112,12 @@ timeout_ms = 30000
 max_body_bytes = 65536
 [externals.annotators.gatekeeper]
 url = "http://127.0.0.1:${annotator.server.address().port}/"
+[externals.annotators.classify]
+url = "http://127.0.0.1:${classifier.server.address().port}/"
 [externals.sanitizers.scrub]
 url = "http://127.0.0.1:${sanitizer.server.address().port}/"
+[externals.sanitizers.redirect]
+url = "http://127.0.0.1:${redirect.server.address().port}/"
 `);
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
@@ -233,19 +265,99 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     }
   };
 
+  const rootOf = async (session) => (await client.query(
+    'SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2',
+    [session.organization_id, session.session_id],
+  )).rows[0].root;
+  // Fails every append to one family's event log, so a dispatch errors before
+  // the runtime keeps anything. Only the trigger and function this call
+  // created are dropped afterwards.
+  const failEventAppend = async (root, fn) => {
+    const name = 'openappa_lease_fail_openappa_events';
+    await client.query(`CREATE OR REPLACE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected event append failure'; END $$`);
+    await client.query(`DROP TRIGGER IF EXISTS ${name} ON openappa_events`);
+    await client.query(`CREATE TRIGGER ${name} BEFORE INSERT ON openappa_events FOR EACH ROW WHEN (NEW.root = '${root}') EXECUTE FUNCTION ${name}()`);
+    try {
+      await fn();
+    } finally {
+      await client.query(`DROP TRIGGER IF EXISTS ${name} ON openappa_events`);
+      await client.query(`DROP FUNCTION IF EXISTS ${name}()`);
+    }
+  };
+  // The attempts the family's log recorded declarations ahead under, in log order.
+  const aheadDeclarations = async (session) => (await client.query(
+    `SELECT convert_from(payload, 'UTF8')::jsonb #>> '{host,attempt,host}' AS attempt FROM openappa_events
+       WHERE root = (SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2)
+         AND convert_from(payload, 'UTF8')::jsonb #>> '{host,kind}' = 'ahead_declared'
+       ORDER BY seq`,
+    [session.organization_id, session.session_id],
+  )).rows.map((row) => row.attempt);
+  const delegation = { control_tool: 'archestra__execute_remedy_plan', supports_delegation: true };
+  const spawnOf = (session, id) => ({
+    ...session, event: 'tool_call', operation_id: `call:${id}`, tool: 'agent__worker',
+    arguments: { message: 'count the days' }, spawn: true, presentation: delegation,
+  });
+  // A return declared ahead of the spawn quotes no offer.
+  const declareAhead = (session, id) => remedy(session, { tool_call_id: id, arguments: { label: {} }, presentation: delegation });
+  // The declaration released exactly one spawn.
+  const releasedOnce = async (session) => {
+    const spawned = await run(spawnOf(session, 's1'));
+    assert.equal(spawned.decision, 'allow_call', JSON.stringify(spawned));
+    assert.ok(spawned.spawn_binding, 'the spawn starts its child under the declared return');
+    assert.equal((await run(spawnOf(session, 's2'))).decision, 'deny_call', 'a declaration covers one spawn');
+  };
+
+  // A session narrowed to `hr` whose private read is blocked with the `redirect` rewrite
+  // offered: executing it consults the public contract's annotator.
+  const readFile = (session, id, filePath) => ({
+    ...session, event: 'tool_call', operation_id: `call:${id}`, tool: 'read_file', arguments: { path: filePath },
+  });
+  const redirectOffer = async (session) => {
+    const narrowing = await run(toolCall(session, 'hr:held', 'read_hr'));
+    assert.equal(narrowing.decision, 'deny_call', JSON.stringify(narrowing));
+    const narrowed = await remedy(session, { tool_call_id: 'hr:accept', arguments: { offer_id: narrowing.offers[0].offer_id } });
+    assert.notEqual(narrowed.result?.isError, true, JSON.stringify(narrowed));
+    assert.equal((await run(toolCall(session, 'hr', 'read_hr'))).decision, 'allow_call');
+    assert.equal((await run(toolResult(session, 'hr', 'hr records'))).decision, 'ack');
+    const blocked = await run(readFile(session, 'private', 'private/q3.md'));
+    assert.equal(blocked.decision, 'deny_call', JSON.stringify(blocked));
+    assert.equal(blocked.offers?.length, 1, JSON.stringify(blocked));
+    return blocked.offers[0].offer_id;
+  };
+  const unanswered = async (fn) => {
+    const consulted = consults.classifier;
+    classifier.gate.fail = true;
+    try {
+      return await fn();
+    } finally {
+      classifier.gate.fail = false;
+      assert.equal(consults.classifier, consulted + 1, 'the plan consulted the failing annotator');
+    }
+  };
+  const expectRefusedNotice = (response) => {
+    assert.equal(response.decision, 'mcp_result', JSON.stringify(response));
+    assert.equal(response.output_source, 'runtime', JSON.stringify(response));
+    assert.equal(response.result?.isError, true, JSON.stringify(response));
+  };
+  const expectRedirected = async (session, response) => {
+    assert.equal(response.decision, 'mcp_result', JSON.stringify(response));
+    assert.notEqual(response.result?.isError, true, JSON.stringify(response));
+    const released = await run(readFile(session, 'public', 'public/q3.md'));
+    assert.equal(released.decision, 'allow_call', JSON.stringify(released));
+  };
+
   t.after(async () => {
     // Answer consults still held so a pod can end, then end any pod still
     // running: a cancelled assertion must not strand a fixture child.
-    answerConsults(annotator.gate);
-    answerConsults(sanitizer.gate);
+    for (const { gate } of [annotator, sanitizer, classifier, redirect]) answerConsults(gate);
     const running = [...pods];
     for (const child of running) child.kill('SIGKILL');
     await Promise.all(running.map((child) => new Promise((resolve) => child.once('exit', resolve))));
     // close() waits for open keep-alive and held connections; force them shut.
-    annotator.server.closeAllConnections();
-    sanitizer.server.closeAllConnections();
-    annotator.server.close();
-    sanitizer.server.close();
+    for (const { server } of [annotator, sanitizer, classifier, redirect]) {
+      server.closeAllConnections();
+      server.close();
+    }
     await client.end();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -550,6 +662,80 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.deepEqual(await run(request), recovered);
   });
 
+  await t.test('a tracked remedy whose annotator gave no answer completes with an error result', async () => {
+    const session = scope();
+    const offer = await redirectOffer(session);
+    const operationsBefore = await receipts(session);
+    const resultsBefore = await resultReceipts(session);
+
+    const refused = await unanswered(() => remedy(session, { tool_call_id: 'redirect:1', arguments: { offer_id: offer } }));
+    expectRefusedNotice(refused);
+    assert.deepEqual((await receipts(session)).sort(), [...operationsBefore, 'remedy:redirect:1=complete'].sort());
+    assert.deepEqual((await resultReceipts(session)).sort(), [...resultsBefore, 'redirect:1=complete'].sort());
+    assert.deepEqual(await liveLeases(session), []);
+    // The offer status is the remedy request's own field, not part of the answer.
+    const { offer: _status, ...answer } = refused;
+    assert.deepEqual(
+      await run({ ...session, event: 'tool_result', tool_call_id: 'redirect:1', output: 'anything', outcome: 'success' }),
+      answer,
+      'the client\'s report of the remedy replays its answer',
+    );
+
+    await expectRedirected(session, await remedy(session, { tool_call_id: 'redirect:2', arguments: { offer_id: offer } }));
+  });
+
+  await t.test('an untracked remedy whose annotator gave no answer keeps no receipt and runs again', async () => {
+    const session = scope();
+    const offer = await redirectOffer(session);
+    const operationsBefore = await receipts(session);
+    const resultsBefore = await resultReceipts(session);
+    const event = { execution_mode: 'untracked', arguments: { offer_id: offer } };
+
+    expectRefusedNotice(await unanswered(() => remedy(session, event)));
+    assert.deepEqual(await receipts(session), operationsBefore, 'the notice is not recorded');
+    assert.deepEqual(await resultReceipts(session), resultsBefore);
+    assert.deepEqual(await liveLeases(session), []);
+
+    const retried = await remedy(session, event);
+    const settled = (await receipts(session)).filter((receipt) => !operationsBefore.includes(receipt));
+    assert.equal(settled.length, 1, JSON.stringify(settled));
+    assert.match(settled[0], /^remedy:untracked:[0-9a-f]{64}=complete$/);
+    await expectRedirected(session, retried);
+  });
+
+  await t.test('an untracked remedy whose receipt another pod took over reports the lost lease, not the notice', async () => {
+    const session = scope();
+    const offer = await redirectOffer(session);
+    const operationsBefore = await receipts(session);
+    const added = async () => (await receipts(session)).filter((receipt) => !operationsBefore.includes(receipt));
+    const event = { execution_mode: 'untracked', arguments: { offer_id: offer } };
+    const stale = await waitingOnConsult(classifier.gate, { operation: 'by_offer', input: offerInput(session, event) });
+    await lapse(session);
+    // The takeover finds the offer still executing under the stale pod and leaves the
+    // receipt pending under its own, ended lease.
+    classifier.gate.hold = false;
+    const taken = await remedy(session, event);
+    assert.ok(taken.error, JSON.stringify(taken));
+    const pending = await added();
+    assert.equal(pending.length, 1, JSON.stringify(pending));
+    assert.match(pending[0], /^remedy:untracked:[0-9a-f]{64}=pending$/);
+
+    classifier.gate.fail = true;
+    try {
+      answerConsults(classifier.gate);
+      const late = await stale.done;
+      assert.match(late.error ?? JSON.stringify(late), /lost its lease on this operation; retry the request/);
+    } finally {
+      classifier.gate.fail = false;
+    }
+    assert.deepEqual(await added(), pending, 'the stale pod leaves the receipt it no longer owns');
+    assert.deepEqual(await liveLeases(session), []);
+
+    const retried = await remedy(session, event);
+    assert.deepEqual(await added(), [pending[0].replace(/=pending$/, '=complete')]);
+    await expectRedirected(session, retried);
+  });
+
   await t.test('a spawn call and its result recover across a stopped pod', async () => {
     const session = scope();
     const child = { ...session, session_id: `${session.session_id}:agent:s1`, parent_id: session.session_id };
@@ -604,6 +790,47 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.equal(recoveredResult.approved_output, 'worker done');
     assert.deepEqual(await resultReceipts(session), ['s1=complete', 's1:return=complete']);
     assert.deepEqual(await run(spawnResult), recoveredResult, 'the spawn result replays byte-identically');
+  });
+
+  await t.test('a declaration ahead whose append failed keeps nothing and is declared by its retry', async () => {
+    const session = scope();
+    assert.equal((await run(toolCall(session, 'start', 'read_plain'))).decision, 'allow_call');
+    const before = await receipts(session);
+    await failEventAppend(await rootOf(session), async () => {
+      const failed = await declareAhead(session, 'ahead');
+      assert.equal(typeof failed.error, 'string', 'an operational failure, not an answer');
+      assert.equal(failed.result, undefined, JSON.stringify(failed));
+    });
+    assert.deepEqual(await receipts(session), before, 'no remedy receipt stands');
+    assert.deepEqual(await resultReceipts(session), []);
+    assert.deepEqual(await liveLeases(session), []);
+    assert.deepEqual(await aheadDeclarations(session), []);
+
+    const declared = await declareAhead(session, 'ahead');
+    assert.equal(declared.result?.isError, false, JSON.stringify(declared));
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+    assert.deepEqual(await receipts(session), [...before, 'remedy:ahead=complete']);
+    await releasedOnce(session);
+  });
+
+  await t.test('a declaration ahead interrupted before its receipt completes is answered from its record', async () => {
+    const session = scope();
+    assert.equal((await run(toolCall(session, 'start', 'read_plain'))).decision, 'allow_call');
+    await failCompletion('openappa_operations', 'operation_id', 'remedy:ahead', async () => {
+      const failed = await declareAhead(session, 'ahead');
+      assert.equal(typeof failed.error, 'string', 'an operational failure, not an answer');
+      assert.equal(failed.result, undefined, JSON.stringify(failed));
+    });
+    assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=pending']);
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+
+    const recovered = await declareAhead(session, 'ahead');
+    assert.equal(recovered.result?.isError, false, JSON.stringify(recovered));
+    // The retry's control hook records its vouch again; the declaration is not made again.
+    assert.deepEqual(await aheadDeclarations(session), ['remedy:ahead']);
+    assert.deepEqual(await receipts(session), ['call:start=complete', 'remedy:ahead=complete']);
+    assert.deepEqual(await declareAhead(session, 'ahead'), recovered, 'the completed receipt replays byte-identically');
+    await releasedOnce(session);
   });
 
   await t.test('a cancellation interrupted before its receipt completes replays the withholding', async () => {

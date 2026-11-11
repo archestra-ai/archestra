@@ -43,7 +43,7 @@ The named agent does the work with its own tools and returns only the result. Th
 
 An agent reads a skill in three steps, so only what it needs enters its context:
 
-1. [`list_skills`](/docs/reference/archestra-mcp-server#list_skills) shows every skill's name and description.
+1. [`list_skills`](/docs/reference/archestra-mcp-server#list_skills) shows every skill's name and description. A catalog over 100,000 characters needs a search query instead, and the agent's prompt lists only the skill names.
 2. [`load_skill`](/docs/reference/archestra-mcp-server#load_skill) with a name returns that skill's `SKILL.md` and a list of its files.
 3. [`load_skill`](/docs/reference/archestra-mcp-server#load_skill) with a name and a file path returns that one file.
 

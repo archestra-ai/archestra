@@ -385,7 +385,10 @@ const INTERNAL_ENCRYPTION_COLUMNS = {
 export const CopilotCredentialSourceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("organization"),
+    /** The GitHub organization's login. */
     organization: z.string().nullable(),
+    /** The name GitHub shows for it, when known. */
+    organizationName: z.string().nullable().optional(),
   }),
   z.object({ kind: z.literal("personal") }),
 ]);
@@ -484,6 +487,11 @@ export const InteractionSummarySchema = DescribedSelectInteractionSchema.pick({
     .nullable()
     .optional(),
   responseTextPreview: z.string().nullable().optional(),
+  /**
+   * Whether auto routing chose this request's model: a saved routing decision
+   * covers it. Its details are at `/api/llm-proxy-logs/:id/auto-routing`.
+   */
+  autoRouted: z.boolean(),
 });
 
 /**
@@ -1028,6 +1036,57 @@ export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
 
 /** Max length of `lastUserMessagePreview` on session summaries. */
 export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
+
+/** One Agent Runtime run an LLM session handed work to. */
+const SessionHandoffRunSchema = z.object({
+  runId: z
+    .string()
+    .uuid()
+    .describe("The run's stable id: its first turn's task id."),
+  llmSessionId: z
+    .string()
+    .describe("The run's own LLM session: its workload name."),
+  originLlmSessionId: z
+    .string()
+    .describe("The LLM session that started the run."),
+  agentName: z.string(),
+  title: z.string(),
+  startedAt: z.date(),
+});
+
+/**
+ * The work changing hands between a session and a run: `push` starts the run,
+ * `pull` takes the work back (the run is stopped or its files are downloaded),
+ * `steer` sends it back to the run after a pull.
+ */
+const SessionHandoffMoveSchema = z.object({
+  kind: z.enum(["push", "pull", "steer"]),
+  runId: z.string().uuid(),
+  mcpToolCallId: z.string().uuid(),
+  at: z.date().describe("When the gateway call that made the move ended."),
+});
+
+/**
+ * Where a session's work moved between a client and Agent Runtime. Read from
+ * the run's recorded origin and the origin session's own gateway calls.
+ */
+export const SessionHandoffsSchema = z.object({
+  handedTo: z
+    .array(SessionHandoffRunSchema)
+    .describe("Runs this session started, oldest first."),
+  handedToTruncated: z
+    .boolean()
+    .describe("This session started more runs than `handedTo` lists."),
+  handedFrom: SessionHandoffRunSchema.nullable().describe(
+    "When this is a run's own session: that run, with the session that started it.",
+  ),
+  moves: z
+    .array(SessionHandoffMoveSchema)
+    .describe(
+      "Moves between the origin session and its runs, oldest first. A move to the side that already holds the work is left out.",
+    ),
+});
+export type SessionHandoffs = z.infer<typeof SessionHandoffsSchema>;
 
 /**
  * Session summary schema for the sessions endpoint

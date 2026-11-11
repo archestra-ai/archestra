@@ -7,20 +7,16 @@ on:
         description: "Version tag for the Helm chart"
         required: true
         type: string
-      push_chart:
-        description: "Whether to push the Helm chart to the repository"
-        required: true
-        type: boolean
       checkout_ref:
         description: "Optional ref to checkout when packaging the chart"
         required: false
         type: string
         default: ""
-    secrets:
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+      pin_release_images:
+        description: "Pin the chart to the digests of this run's staged release images"
         required: false
-      GCP_SERVICE_ACCOUNT_NAME:
-        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -29,14 +25,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # See here for inspiration on how this was put together:
-  # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
+  # Packages the chart for the release run. The archestra-ai/release-publisher
+  # publisher pushes it to Artifact Registry once the release attests it.
   publish-platform-helm-chart:
     name: Publish platform Helm chart
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to package the chart from the checked-out repository.
-      id-token: write # Required for Workload Identity Federation.
+      contents: read # Package the chart from the checked-out repository.
     defaults:
       run:
         working-directory: ./platform/helm/archestra
@@ -48,13 +43,22 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
-      - name: Authenticate to Google Artifact Registry
-        if: inputs.push_chart
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+      - name: Download staged release image references
+        if: inputs.pin_release_images
+        uses: $/.github/actions/github-download-artifact
         with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          pattern: release-image-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-images
+          merge-multiple: true
+
+      # The digests the release attests and the publisher copies unchanged.
+      - name: Pin release image digests
+        if: inputs.pin_release_images
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          (cd "$RUNNER_TEMP" && bash "$GITHUB_WORKSPACE/.github/scripts/release-subjects.sh" release-images ghcr.io/archestra-ai)
+          DIGESTS=$(cat "$RUNNER_TEMP/release-pins.json") python3 -I ../../../.github/scripts/release-chart-digests.py values.yaml
 
       - name: helm package
         env:
@@ -62,16 +66,9 @@ jobs:
         run: |
           helm package . --version "$IMAGE_TAG" --app-version "$IMAGE_TAG"
 
-      - name: Preserve chart for qualification and publication
+      - name: Preserve chart for attestation and publication
         uses: $/.github/actions/github-upload-artifact
         with:
           name: release-helm-chart
           path: platform/helm/archestra/archestra-platform-${{ inputs.version }}.tgz
           if-no-files-found: error
-
-      - name: helm push
-        if: inputs.push_chart
-        env:
-          IMAGE_TAG: ${{ inputs.version }}
-        run: |
-          helm push "archestra-platform-${IMAGE_TAG}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts

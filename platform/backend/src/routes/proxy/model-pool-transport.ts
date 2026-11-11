@@ -29,11 +29,13 @@ import type {
   OpenAi,
   UsageView,
 } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   bedrockAdapterFactory,
   bedrockInvokeAdapterFactory,
   cerebrasAdapterFactory,
@@ -43,6 +45,7 @@ import {
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
+  openAiResponsesAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -74,11 +77,15 @@ import {
   createOpenaiToAnthropicStreamTranslator,
   openaiResponseToAnthropic,
 } from "./adapters/openai-anthropic-translator";
-import { withOpenAiChatToolCallIds } from "./utils/tool-call-ids";
+import {
+  withOpenAiChatToolCallIds,
+  withOpenAiResponsesToolCallIds,
+} from "./utils/tool-call-ids";
 
 /** The request formats a pool can carry a request in. */
 export type PoolWire =
   | "openai-chat"
+  | "openai-responses"
   | "anthropic"
   | "bedrock-converse"
   | "gemini";
@@ -106,6 +113,11 @@ export function isPoolableProvider(provider: SupportedProvider): boolean {
 export function inboundPoolWire(
   interactionType: SupportedProviderDiscriminator,
 ): PoolWire | null {
+  if (
+    interactionType === "openai:responses" ||
+    interactionType === "azure:responses"
+  )
+    return "openai-responses";
   if (interactionType === "anthropic:messages") return "anthropic";
   if (interactionType === "bedrock:converse") return "bedrock-converse";
   if (interactionType === "gemini:generateContent") return "gemini";
@@ -124,6 +136,8 @@ export function canReachMember(
   inbound: PoolWire,
   provider: SupportedProvider,
 ): boolean {
+  if (inbound === "openai-responses")
+    return provider === "openai" || provider === "azure";
   const target = wireOf(provider);
   if (!target) return false;
   return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
@@ -195,14 +209,28 @@ function memberTransportOnWire(params: {
     isClaudeOnBedrock(modelId);
   const adapter = claudeOnBedrock
     ? bedrockInvokeAdapterFactory
-    : memberAdapter(provider);
-  const target = claudeOnBedrock ? "anthropic" : wireOf(provider);
+    : memberAdapter(provider, inbound);
+  const target = claudeOnBedrock
+    ? "anthropic"
+    : inbound === "openai-responses" && adapter
+      ? "openai-responses"
+      : wireOf(provider);
   if (!adapter || !target) {
     throw new Error(`Provider ${provider} cannot serve a model pool`);
   }
 
   if (target === inbound) {
     const withModel = (request: unknown) => {
+      if (target === "openai-responses") {
+        const body = request as OpenAi.Types.ResponsesRequest;
+        return {
+          ...body,
+          model: modelId,
+          input: Array.isArray(body.input)
+            ? body.input.map(withOpenAiResponsesToolCallIds)
+            : body.input,
+        };
+      }
       if (target === "bedrock-converse")
         return { ...(request as object), modelId };
       if (target === "gemini")
@@ -231,9 +259,22 @@ function memberTransportOnWire(params: {
       };
     };
     return {
-      execute: (request) => adapter.execute(client, withModel(request)),
-      executeStream: (request, onAccepted) =>
-        adapter.executeStream(client, withModel(request), onAccepted),
+      async execute(request) {
+        const response = await adapter.execute(client, withModel(request));
+        if (target === "openai-responses")
+          assertResponsesAttemptSucceeded(response);
+        return response;
+      },
+      async executeStream(request, onAccepted) {
+        const stream = await adapter.executeStream(
+          client,
+          withModel(request),
+          onAccepted,
+        );
+        return target === "openai-responses"
+          ? bufferResponsesPreamble(stream)
+          : stream;
+      },
     };
   }
 
@@ -278,16 +319,23 @@ function memberTransportOnWire(params: {
 
   if (inbound === "openai-chat" && target === "bedrock-converse") {
     const translate = (request: unknown) => {
-      const { converseBody, openaiContext } = openaiToConverse(
-        request as OpenAi.Types.ChatCompletionsRequest,
-      );
+      const openaiRequest = request as OpenAi.Types.ChatCompletionsRequest;
+      // Model-specific options must use the selected member, not the pool alias.
+      const { converseBody, openaiContext } = openaiToConverse({
+        ...openaiRequest,
+        model: modelId,
+      });
       return {
         body: {
           ...converseBody,
           modelId,
           messages: withBedrockToolCallIds(converseBody.messages ?? []),
         } as Bedrock.Types.ConverseRequest,
-        openaiContext: { ...openaiContext, includeUsageInStream: true },
+        openaiContext: {
+          ...openaiContext,
+          requestedModel: openaiRequest.model,
+          includeUsageInStream: true,
+        },
       };
     };
     return {
@@ -493,17 +541,17 @@ function memberTransportOnWire(params: {
  * undefined when it sets no limit (allowed on OpenAI chat and Converse).
  */
 export function requestedMaxOutputTokens(request: unknown): number | undefined {
-  const body = request as {
-    max_completion_tokens?: unknown;
-    max_tokens?: unknown;
-    inferenceConfig?: { maxTokens?: unknown };
-    generationConfig?: { maxOutputTokens?: unknown };
-  } | null;
+  const body = asRecord(request);
+  const generation = asRecord(
+    body?.generationConfig ?? body?.generation_config,
+  );
   const limit =
+    body?.max_output_tokens ??
     body?.max_completion_tokens ??
     body?.max_tokens ??
-    body?.inferenceConfig?.maxTokens ??
-    body?.generationConfig?.maxOutputTokens;
+    asRecord(body?.inferenceConfig)?.maxTokens ??
+    generation?.maxOutputTokens ??
+    generation?.max_output_tokens;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? limit
     : undefined;
@@ -512,15 +560,18 @@ export function requestedMaxOutputTokens(request: unknown): number | undefined {
 /** The adapter whose client and execute calls a member's provider uses. */
 export function memberAdapter(
   provider: SupportedProvider,
+  inbound?: PoolWire,
 ): LLMProvider<unknown, unknown, unknown, unknown, unknown> | null {
   if (!isModelPoolProvider(provider)) return null;
-  return MEMBER_ADAPTERS[provider] as LLMProvider<
-    unknown,
-    unknown,
-    unknown,
-    unknown,
-    unknown
-  >;
+  const adapter =
+    inbound === "openai-responses"
+      ? provider === "openai"
+        ? openAiResponsesAdapterFactory
+        : provider === "azure"
+          ? azureResponsesAdapterFactory
+          : null
+      : MEMBER_ADAPTERS[provider];
+  return adapter as LLMProvider<unknown, unknown, unknown, unknown, unknown>;
 }
 
 // === Internal helpers ===
@@ -564,6 +615,78 @@ function wireOf(provider: SupportedProvider): PoolWire | null {
   if (provider === "bedrock") return "bedrock-converse";
   if (provider === "gemini") return "gemini";
   return "openai-chat";
+}
+
+/** Only an empty, usage-free transient failure is safe to try elsewhere. */
+function assertResponsesAttemptSucceeded(value: unknown): void {
+  const response = asRecord(value);
+  if (
+    response?.status !== "failed" ||
+    response.usage ||
+    !Array.isArray(response.output) ||
+    response.output.length > 0
+  )
+    return;
+  const error = asRecord(response.error);
+  const status =
+    error?.code === "server_error"
+      ? 500
+      : error?.code === "rate_limit_exceeded" ||
+          error?.code === "insufficient_quota"
+        ? 429
+        : undefined;
+  if (status === undefined) return;
+  throw Object.assign(
+    new Error(
+      typeof error?.message === "string"
+        ? error.message
+        : "Upstream Responses generation failed",
+    ),
+    { status, error },
+  );
+}
+
+/**
+ * A Responses HTTP 200 commonly starts with two lifecycle envelopes before
+ * inference produces anything. Keep those inside the pool's first-output
+ * timeout/failover boundary. Once any other event is seen, replay the original
+ * envelopes and never replace that member's answer, including tool/reasoning
+ * output. Retain at most one envelope of each kind while waiting.
+ */
+async function* bufferResponsesPreamble(source: AsyncIterable<unknown>) {
+  const preamble = new Map<string, unknown>();
+  let started = false;
+  let terminal = false;
+  for await (const chunk of source) {
+    const event = asRecord(chunk);
+    const response = asRecord(event?.response);
+    const type = event?.type;
+    if (
+      !started &&
+      (type === "response.created" || type === "response.in_progress") &&
+      !response?.usage &&
+      (!Array.isArray(response?.output) || response.output.length === 0)
+    ) {
+      preamble.set(type, chunk);
+      continue;
+    }
+    if (!started && type === "response.failed")
+      assertResponsesAttemptSucceeded(response);
+    started = true;
+    yield* preamble.values();
+    preamble.clear();
+    if (
+      type === "response.completed" ||
+      type === "response.failed" ||
+      type === "response.incomplete"
+    )
+      terminal = true;
+    yield chunk;
+  }
+  if (!terminal)
+    throw new UpstreamStreamIncompleteError(
+      "The upstream Responses stream ended before it finished",
+    );
 }
 
 async function* mapStream<T>(

@@ -278,6 +278,12 @@ export function buildAgentRuntimeSandbox(
                 })),
               }
             : {}),
+          // A sandboxing runtime (gVisor) gives the run its own kernel. It
+          // cannot host a privileged container, so a privileged run, which
+          // needs one for nested Docker, keeps the node's default runtime.
+          ...(spec.runtimeClassName && !spec.privileged
+            ? { runtimeClassName: spec.runtimeClassName }
+            : {}),
           // The agent authenticates to the platform with credentials mounted
           // from a Secret; it has no business reading the cluster's API.
           automountServiceAccountToken: false,
@@ -462,6 +468,7 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
   platformPorts: number[];
+  clusterDnsIps: string[];
   platformService?: { ips: string[]; port: number };
 }): k8s.V1NetworkPolicy {
   const names = agentRuntimeNames(params.spec.frozenName);
@@ -526,12 +533,19 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
           ],
           ports: DNS_PORTS,
         },
-        // Clusters whose resolver is not the labelled kube-dns pod (a node-local
-        // cache, or a managed control plane) need the port opened by CIDR too.
-        {
-          to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
-          ports: DNS_PORTS,
-        },
+        // Exact resolver IPs cover Service DNAT and resolvers without kube-dns
+        // labels, including node-local caches. Unknown resolvers must not open
+        // DNS to arbitrary destinations alongside a restricted Environment.
+        ...(params.clusterDnsIps.length
+          ? [
+              {
+                to: params.clusterDnsIps.map((ip) => ({
+                  ipBlock: { cidr: `${ip}/${isIP(ip) === 6 ? 128 : 32}` },
+                })),
+                ports: DNS_PORTS,
+              },
+            ]
+          : []),
       ],
     },
   };

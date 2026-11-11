@@ -30,6 +30,7 @@ import { handleInteractionSessionPreviewBackfill } from "./interaction-session-p
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
+import { handleLlmUsageRollup } from "./llm-usage-rollup-handler";
 import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
 import { handleModelCostBackfill } from "./model-cost-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
@@ -38,6 +39,7 @@ import { handlePluginGithubSync } from "./plugin-github-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
+import { reconcileToolSearchTexts } from "./tool-search-text-reconcile-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);
@@ -53,6 +55,7 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "interaction_user_activity_rebuild",
     handleInteractionUserActivityRebuild,
   );
+  taskQueueService.registerHandler("llm_usage_rollup", handleLlmUsageRollup);
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);
@@ -145,6 +148,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "mcp_tool_description_backfill",
     handleMcpToolDescriptionBackfill,
+  );
+  taskQueueService.registerHandler(
+    "tool_search_text_reconcile",
+    reconcileToolSearchTexts,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
   taskQueueService.registerHandler("auto_routing_dispatch", () =>

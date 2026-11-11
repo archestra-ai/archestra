@@ -23,14 +23,24 @@ Background worker:
 Background worker: running in-process (worker Deployment disabled)
 {{- end }}
 
-{{- if .Values.postgresql.external_database_url }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- if or .Values.postgresql.external_database_url (not .Values.postgresql.enabled) }}
 
-Using external PostgreSQL database
+Using external PostgreSQL database{{- if $iamAuth.enabled }} (RDS IAM authentication enabled){{- end }}
 {{- else }}
 
 Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}
+{{- end }}
+
+{{- if not .Values.archestra.authSecret.existingSecretName }}
+
+Authentication and encryption keys:
+  The chart generated them in Secret {{ include "archestra-platform.authSecretName" . }}. Back it up with your database.
+  Tools that render this chart with `helm template`, such as Argo CD, cannot read that
+  Secret and would replace the keys on every sync, leaving stored credentials unreadable.
+  With such a tool, create the Secret yourself and set archestra.authSecret.existingSecretName.
 {{- end }}
 
 {{- $legacyOverrides := list }}

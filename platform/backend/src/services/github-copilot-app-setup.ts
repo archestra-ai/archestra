@@ -32,6 +32,7 @@ import {
   type GithubAppCredential,
   githubAppApiBase,
   githubAppKeyFingerprint,
+  githubOrganizationDisplayName,
   githubWebFromApi,
   resolveGithubAppCredential,
   validateGithubAppPrivateKey,
@@ -43,7 +44,7 @@ import {
   lookupAccount,
   parseAccount,
 } from "@/services/github-app-manifest-setup";
-import { assertModelProviderAllowed } from "@/services/integration-overrides";
+import { assertCopilotPlanAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -790,12 +791,20 @@ export async function copilotKeysUsingCredential(params: {
   const keys = await LlmProviderApiKeyModel.findGithubAppKeyValues(
     params.organizationId,
   );
-  return keys.flatMap((key) => {
-    const reference = decodeGithubAppReference(key.value);
-    return reference?.ref.credentialId === params.credentialId
-      ? [{ id: key.id, name: `GitHub Copilot for ${reference.organization}` }]
-      : [];
-  });
+  const using = await Promise.all(
+    keys.map(async (key) => {
+      const reference = decodeGithubAppReference(key.value);
+      if (reference?.ref.credentialId !== params.credentialId) return [];
+      // Named as every surface names a plan: after its GitHub organization.
+      const organization =
+        (await githubOrganizationDisplayName({
+          value: key.value,
+          organizationId: params.organizationId,
+        })) ?? reference.organization;
+      return [{ id: key.id, name: `GitHub Copilot ${organization}` }];
+    }),
+  );
+  return using.flat();
 }
 
 // ===================== Internals =====================
@@ -829,13 +838,13 @@ githubAppManifestSetup.register("copilot", {
 });
 
 /**
- * Admins can turn GitHub Copilot off for the organization: then no plan is
- * set up, connected or reconnected.
+ * Admins can turn GitHub Copilot off for the organization, or only its
+ * enterprise plans: then no plan is set up, connected or reconnected.
  */
 async function assertCopilotAllowed(owner: Owner) {
-  await assertModelProviderAllowed({
+  await assertCopilotPlanAllowed({
     organizationId: owner.organizationId,
-    provider: "github-copilot",
+    plan: "enterprise",
   });
 }
 

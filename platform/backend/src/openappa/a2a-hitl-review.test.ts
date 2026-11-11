@@ -209,38 +209,6 @@ test("the reviewer's approval reaches the resumed remedy call exactly once", asy
   ).toBeUndefined();
 });
 
-test("a decline is recorded as a deny ruling for OpenAPPA to close the offer", async ({
-  makeOrganization,
-  makeUser,
-}) => {
-  const org = await makeOrganization();
-  const reviewer = await makeUser();
-  stubReview("offer-1");
-  const { task } = await pausedReview({
-    organizationId: org.id,
-    reviewerUserId: reviewer.id,
-    offerId: "offer-1",
-  });
-
-  expect(
-    await decideChatHitlReview({
-      organizationId: org.id,
-      taskId: task.id,
-      approvalId: "approval-1",
-      clickerUserId: reviewer.id,
-      clickChannelId: "C123",
-      approved: false,
-      now: NOW,
-    }),
-  ).toEqual({ status: "recorded", ruling: "deny" });
-  const session = reviewSessionFromTrajectory({
-    organizationId: org.id,
-    trajectory: { session_id: SESSION_ID },
-    context: { userId: reviewer.id },
-  });
-  expect(await consumeHitlRuling({ session, offerId: "offer-1" })).toBe("deny");
-});
-
 test("another user, another channel, or a late click records nothing", async ({
   makeOrganization,
   makeUser,

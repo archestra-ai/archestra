@@ -25,6 +25,7 @@ async function* from(items: unknown[]) {
 describe("the output a request allows", () => {
   test("reads the limit from each pool wire", () => {
     expect(requestedMaxOutputTokens({ max_tokens: 4096 })).toBe(4096);
+    expect(requestedMaxOutputTokens({ max_output_tokens: 128 })).toBe(128);
     expect(
       requestedMaxOutputTokens({ max_completion_tokens: 900, max_tokens: 10 }),
     ).toBe(900);
@@ -33,6 +34,11 @@ describe("the output a request allows", () => {
     ).toBe(512);
     expect(
       requestedMaxOutputTokens({ generationConfig: { maxOutputTokens: 2048 } }),
+    ).toBe(2048);
+    expect(
+      requestedMaxOutputTokens({
+        generation_config: { max_output_tokens: 2048 },
+      }),
     ).toBe(2048);
   });
 
@@ -544,4 +550,130 @@ for (const [stopReason, expected] of [
       ).toEqual([expected]);
     });
   }
+}
+
+for (const stream of [false, true]) {
+  test(`uses the selected Nova pool member for reasoning (stream=${stream})`, async () => {
+    const bodies: Record<string, unknown>[] = [];
+    bedrockServer.use(
+      http.post(
+        "https://bedrock.pool.test/model/:model/:operation",
+        async ({ request, params }) => {
+          expect(params.model).toBe("us.amazon.nova-2-lite-v1:0");
+          bodies.push((await request.json()) as Record<string, unknown>);
+          if (!stream)
+            return HttpResponse.json({
+              output: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      reasoningContent: {
+                        reasoningText: { text: "[REDACTED]" },
+                      },
+                    },
+                    { text: "42" },
+                  ],
+                },
+              },
+              stopReason: "end_turn",
+              usage: { inputTokens: 2, outputTokens: 2, totalTokens: 4 },
+            });
+          const events = [
+            ["messageStart", { role: "assistant" }],
+            [
+              "contentBlockDelta",
+              {
+                contentBlockIndex: 0,
+                delta: { reasoningContent: { text: "[REDACTED]" } },
+              },
+            ],
+            ["contentBlockStop", { contentBlockIndex: 0 }],
+            [
+              "contentBlockDelta",
+              { contentBlockIndex: 1, delta: { text: "42" } },
+            ],
+            ["contentBlockStop", { contentBlockIndex: 1 }],
+            ["messageStop", { stopReason: "end_turn" }],
+          ] as const;
+          return new HttpResponse(
+            Buffer.concat(
+              events.map(([type, body]) =>
+                new EventStreamCodec(toUtf8, fromUtf8).encode({
+                  headers: {
+                    ":message-type": { type: "string", value: "event" },
+                    ":event-type": { type: "string", value: type },
+                    ":content-type": {
+                      type: "string",
+                      value: "application/json",
+                    },
+                  },
+                  body: fromUtf8(JSON.stringify(body)),
+                }),
+              ),
+            ),
+            {
+              headers: { "content-type": "application/vnd.amazon.eventstream" },
+            },
+          );
+        },
+      ),
+    );
+    const transport = memberTransport({
+      inbound: "openai-chat",
+      provider: "bedrock",
+      modelId: "us.amazon.nova-2-lite-v1:0",
+      client: new BedrockClient({
+        baseUrl: "https://bedrock.pool.test",
+        region: "us-east-2",
+        apiKey: "synthetic-key",
+      }),
+    });
+    const request = {
+      model: "reasoning-pool",
+      messages: [{ role: "user", content: "17 + 25" }],
+      reasoning_effort: "medium",
+      max_completion_tokens: 400,
+    };
+    const results = stream
+      ? await collect(await transport.executeStream(request))
+      : [await transport.execute(request)];
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      inferenceConfig: { maxTokens: 400 },
+      additionalModelRequestFields: {
+        reasoningConfig: { type: "enabled", maxReasoningEffort: "medium" },
+      },
+    });
+    expect(JSON.stringify(results)).toContain(
+      '"reasoning_content":"[REDACTED]"',
+    );
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ model: "reasoning-pool" }),
+      ]),
+    );
+    expect(request.model).toBe("reasoning-pool");
+  });
+
+  test(`rejects an unsupported selected member instead of trusting a Nova pool alias (stream=${stream})`, async () => {
+    const transport = memberTransport({
+      inbound: "openai-chat",
+      provider: "bedrock",
+      modelId: "amazon.nova-lite-v1:0",
+      client: new BedrockClient({
+        baseUrl: "https://bedrock.pool.test",
+        region: "us-east-2",
+        apiKey: "synthetic-key",
+      }),
+    });
+    const request = {
+      model: "us.amazon.nova-2-lite-v1:0",
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "medium",
+    };
+    await expect(
+      stream ? transport.executeStream(request) : transport.execute(request),
+    ).rejects.toThrow("reasoning_effort is not supported");
+  });
 }

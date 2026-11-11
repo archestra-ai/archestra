@@ -5,6 +5,6 @@ import { makeStaticFetcher } from "./bearer-fetcher";
  * decision models: the provider is decisions-only, so no chat picker offers
  * them (see `providerSupportsChat`).
  */
-export const fetchJevModels = makeStaticFetcher("jev", [
-  { id: "jev-1.13.0", displayName: "Jev 1.13" },
-]);
+export const JEV_MODELS = [{ id: "jev-1.13.0", displayName: "Jev 1.13" }];
+
+export const fetchJevModels = makeStaticFetcher("jev", JEV_MODELS);

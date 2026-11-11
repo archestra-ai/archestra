@@ -5,7 +5,7 @@ class CacheEntryModel {
   /** Lock even an absent scope, so deletion cannot let a stale writer recreate it. */
   static async withLock<T>(
     scope: string,
-    callback: (entries: CacheEntryModel) => Promise<T>,
+    callback: (entries: CacheEntryModel, tx: Transaction) => Promise<T>,
   ): Promise<T> {
     return CacheEntryModel.withLocks([scope], callback);
   }

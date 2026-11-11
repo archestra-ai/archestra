@@ -1526,9 +1526,7 @@ describe("ChatMessages", () => {
     );
 
     // Completed: a compact circle whose expanded card lists the input.
-    fireEvent.click(
-      screen.getByRole("button", { name: /execute remedy plan/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /guardrails step/i }));
 
     const shownInputs = screen
       .getAllByText(/Share the report with the team/)

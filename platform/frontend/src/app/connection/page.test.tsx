@@ -859,6 +859,23 @@ describe("ConnectPage (no connect request)", () => {
     expect(screen.getByText("Not active")).toBeVisible();
   });
 
+  it("Grok includes shared marketplace delivery in its connection command", () => {
+    window.localStorage.clear();
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["grok-build"],
+        connectionSkillsEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+    expect(screen.getByText(/--client grok-build$/)).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Your organization hasn't shared any skills yet. They show up here.",
+      ),
+    ).toBeNull();
+  });
+
   it("Pi keeps model routing required and includes shared skills while excluding plugins", async () => {
     window.localStorage.clear();
     saveConnectChoices("pi", {

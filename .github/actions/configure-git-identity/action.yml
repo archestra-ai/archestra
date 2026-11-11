@@ -1,5 +1,5 @@
 name: Configure Git identity
-description: Use the verified Archestra CI bot as the checkout's commit identity
+description: Use the verified archestra-automation-prs bot as the checkout's commit identity
 inputs:
   working-directory:
     description: Git checkout whose local identity should be configured

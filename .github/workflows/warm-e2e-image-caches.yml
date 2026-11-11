@@ -14,8 +14,9 @@ name: Warm E2E Image Caches
 
 on:
   schedule:
-    # Daily, before European working hours; re-warms after any LRU eviction.
-    - cron: "17 4 * * *"
+    # Every six hours: re-warms after any eviction from the 10 GB repository
+    # cache limit, which a busy queue day reaches. All-hit runs are near-free.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
   push:
     branches:
@@ -62,21 +63,21 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-oauth-server.tar
-          key: mcp-oauth-server-0.0.1-${{ runner.arch }}
+          key: mcp-oauth-server-ghcr-0.0.1-${{ runner.arch }}
 
       - name: Cache MCP JWKS server image
         id: cache-jwks-image
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-jwks-server.tar
-          key: mcp-jwks-server-0.0.3-${{ runner.arch }}
+          key: mcp-jwks-server-ghcr-0.0.3-${{ runner.arch }}
 
       - name: Cache MCP ID-JAG server image
         id: cache-id-jag-image
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-id-jag-server.tar
-          key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+          key: mcp-id-jag-server-ghcr-0.0.4-${{ runner.arch }}
 
       # Pull and tarball whichever images missed; the cache action's post
       # step uploads them with main-branch scope, which is what makes them
@@ -105,11 +106,11 @@ jobs:
           PIDS=()
           save_image "${KIND_HIT}" "kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48" /tmp/kindest-node.tar &
           PIDS+=($!)
-          save_image "${OAUTH_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1" /tmp/mcp-oauth-server.tar &
+          save_image "${OAUTH_HIT}" "ghcr.io/archestra-ai/ci/mcp-example-oauth-server:0.0.1" /tmp/mcp-oauth-server.tar &
           PIDS+=($!)
-          save_image "${JWKS_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3" /tmp/mcp-jwks-server.tar &
+          save_image "${JWKS_HIT}" "ghcr.io/archestra-ai/ci/mcp-server-jwks-keycloak:0.0.3" /tmp/mcp-jwks-server.tar &
           PIDS+=($!)
-          save_image "${ID_JAG_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4" /tmp/mcp-id-jag-server.tar &
+          save_image "${ID_JAG_HIT}" "ghcr.io/archestra-ai/ci/mcp-server-id-jag:0.0.4" /tmp/mcp-id-jag-server.tar &
           PIDS+=($!)
 
           FAILED=0

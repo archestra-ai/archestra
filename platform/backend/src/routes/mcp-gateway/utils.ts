@@ -155,6 +155,7 @@ import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import { grokCanonicalToolName, grokToolName } from "./grok-tool-names";
 import {
   buildInputRequiredResult,
   clientSupportsInputRequest,
@@ -738,6 +739,7 @@ export async function buildAgentMcpToolList(params: {
  * Creates an MCP server for the given agent.
  */
 export async function createAgentServer(params: {
+  grokToolNames?: boolean;
   openappaSession?: import("@/openappa/service").OpenAppaSession;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
@@ -842,7 +844,12 @@ export async function createAgentServer(params: {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
-    return complete({ tools, ...buildPrivateListCacheHint() });
+    return complete({
+      tools: params.grokToolNames
+        ? tools.map((tool) => ({ ...tool, name: grokToolName(tool.name) }))
+        : tools,
+      ...buildPrivateListCacheHint(),
+    });
   });
 
   server.setRequestHandler(
@@ -966,7 +973,12 @@ export async function createAgentServer(params: {
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const { name, arguments: args } = request.params;
+    const { name: wireName, arguments: args } = request.params;
+    const name = params.grokToolNames
+      ? grokCanonicalToolName(wireName)
+      : wireName;
+    if (!name)
+      throw { code: -32602, message: "Unknown Grok gateway tool name" };
 
     // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
     // the client declared the extension in this request's _meta — races the
@@ -1488,7 +1500,10 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth?.organizationId,
               }),
               method: "tools/call",
-              requestParams: { name, arguments: args ?? {} },
+              // The client retries the name it was advertised. Grok's wire
+              // name is decoded above only for dispatch; binding state to
+              // that canonical name would reject its unchanged retry.
+              requestParams: { name: wireName, arguments: args ?? {} },
               keys: [error.key],
             }),
           });

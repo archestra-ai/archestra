@@ -167,7 +167,6 @@ const context = {
     },
   },
   cacheManager: { shutdown: () => emit("cache-closed") },
-  posthogErrorTrackingService: asyncService,
   skillSandboxRuntimeService: asyncService,
   shouldRunWorker: false,
   taskQueueService: asyncService,

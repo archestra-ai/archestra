@@ -8,8 +8,8 @@ ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
 ARG DOCKER_CLI_COMMIT=5927d80c76b3ce5cf782be818922966e8a0d87a3
-ARG DAGGER_VERSION=v0.21.9
-ARG DAGGER_COMMIT=f2aefc20cf41b5ed7922df7244e0f10ddc6031f7
+ARG DAGGER_VERSION=v0.21.11
+ARG DAGGER_COMMIT=631cdb609aaddc0037c2ba713e7642cadf645ff4
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261
@@ -69,11 +69,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
-    # transitively pull older x/net and grpc versions and would otherwise override these requirements.
     # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
     # CVE-2026-78661: x/net HTTP/2 fix requires >= 0.62.0.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    # go-archive 0.3.0 pulls klauspost/compress 1.18.7; CVE-2026-116591 is fixed in 1.20.2.
+    # Keep all three security floors in the LAST `go get` before `go mod vendor`:
+    # earlier OTel/x/sys and go-archive updates can pull older x/net, grpc, and compress versions.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -91,7 +92,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    # dagger v0.21.9's vendored Go SDK requires go >= 1.26.1; align the module directive.
+    # dagger v0.21.11's vendored Go SDK requires go >= 1.26.1; align the module directive.
     go mod edit -go=1.26.1 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
@@ -129,9 +130,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
-    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
-    # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 && \
+    # CVE-2026-116591: Dagger's transitive zstd decoder must use compress >= 1.20.2.
+    # Keep these security floors in the LAST `go get` before `go mod tidy` — earlier
+    # dependency updates can otherwise downgrade the explicit requirements.
+    go get golang.org/x/net@v0.62.0 google.golang.org/grpc@v1.83.2 github.com/klauspost/compress@v1.20.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
@@ -266,7 +268,7 @@ ENV OPENSSL_NO_VENDOR=1
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
-COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
+COPY archestra-rs/vendor/dagger-sdk-0.21.11 ./archestra-rs/vendor/dagger-sdk-0.21.11
 COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
 COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
@@ -306,7 +308,7 @@ COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/opena
 COPY --from=deps /app/archestra-rs/router-rs/node_modules ./archestra-rs/router-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
-COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
+COPY archestra-rs/vendor/dagger-sdk-0.21.11 ./archestra-rs/vendor/dagger-sdk-0.21.11
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
@@ -375,9 +377,6 @@ FROM builder-base AS builder
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
-# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-#
 # SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 # SENTRY_URL points to the EU region where the archestra org is hosted
 #
@@ -388,8 +387,6 @@ FROM builder-base AS builder
 # backend/frontend Turbo cache keys while excluding the four N-API tasks.
 RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
-    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
-    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
     pnpm exec turbo build --filter=@backend --filter=@frontend \
@@ -495,6 +492,9 @@ RUN apk --no-cache upgrade && \
     # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
     # so the explicit floors both guarantee the fixed version and bust the cache.
     apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
+    # CVE-2026-4738 (zlib, CRITICAL, fixed in 1.4-r0) and CVE-2026-107891 (musl, HIGH,
+    # fixed in 1.2.5-r24): same stale-layer hazard, so floor both explicitly.
+    apk add --no-cache --upgrade "zlib>=1.4-r0" "musl>=1.2.5-r24" "musl-utils>=1.2.5-r24" && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.

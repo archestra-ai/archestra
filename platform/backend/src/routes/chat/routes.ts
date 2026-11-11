@@ -190,6 +190,7 @@ import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
+import { buildBedrockThinkingOptions } from "./bedrock-provider-options";
 import { buildChatContext } from "./build-chat-context";
 import { compactMessagesForChat } from "./compaction/compact-messages";
 import {
@@ -1888,6 +1889,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
+
+                const bedrockTurn = buildBedrockThinkingOptions({
+                  provider,
+                  selectedModel,
+                  thinkingEffort,
+                  maxOutputTokens,
+                  hasExplicitOutputLimit:
+                    config.chat.maxOutputTokensExplicitlyConfigured ||
+                    modelRow?.customOutputLength != null,
+                  temperature,
+                });
+                if (bedrockTurn) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    bedrock: bedrockTurn.providerOptions,
+                  };
+                  streamTextConfig.maxOutputTokens =
+                    bedrockTurn.maxOutputTokens;
                 }
 
                 // vLLM and Ollama's `/v1` speak `reasoning_effort` too, but

@@ -32,6 +32,7 @@ import config, {
   getRumOtlpAuthHeaders,
   getSentryConfig,
   getTrustedOrigins,
+  isChatMaxOutputTokensConfigured,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
@@ -1193,6 +1194,22 @@ describe("parseContentMaxLength", () => {
 });
 
 describe("parseChatMaxOutputTokens", () => {
+  test.each([
+    [undefined, false],
+    ["", false],
+    ["32k", false],
+    ["0", false],
+    ["1.5", false],
+    ["1000001", false],
+    [" 16000 ", true],
+    ["32768", true],
+    ["1e6", true],
+  ])("only accepted ceilings count as explicit (%s)", (value, expected) => {
+    expect(isChatMaxOutputTokensConfigured(value as string | undefined)).toBe(
+      expected,
+    );
+  });
+
   test("should return default 32768 when no value provided", () => {
     expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
   });

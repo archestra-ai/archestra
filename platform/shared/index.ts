@@ -5,6 +5,7 @@ export * from "./agent-skills";
 export * from "./agents";
 export * from "./archestra-mcp-server";
 export * from "./azure-models";
+export * from "./bedrock-models";
 export * from "./built-in-agents";
 export * from "./bulk";
 export * from "./cascade-scenarios";

@@ -134,6 +134,7 @@ const CLIENT_ERROR_PATTERNS: Array<{
   {
     test: (msg) =>
       msg === "Failed to fetch" ||
+      msg === "Load failed" ||
       msg.includes("NetworkError") ||
       msg.includes("network"),
     code: ChatErrorCode.NetworkError,

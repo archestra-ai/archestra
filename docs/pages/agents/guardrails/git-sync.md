@@ -49,7 +49,7 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Self-service MCP Guardrails
 
-Users who are permitted to edit an MCP server can also manage its Guardrails rules themselves. Each MCP gets its own policy file under the `mcp/` folder by default:
+Users who are permitted to edit an MCP server can also manage its Guardrails rules from the MCP Registry page. Each MCP gets its own policy file under the `mcp/` folder by default:
 
 ```toml
 include = [

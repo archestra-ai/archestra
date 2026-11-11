@@ -36,6 +36,8 @@ export function DeploymentSettingRow<T extends string>(props: {
    * no padding of its own, and the variable's note runs under the text.
    */
   compact?: boolean;
+  /** The description already names the value: no value column. */
+  hideValue?: boolean;
   onChange?: (value: T) => void;
 }) {
   const current = props.options.find((option) => option.value === props.value);
@@ -105,7 +107,9 @@ export function DeploymentSettingRow<T extends string>(props: {
         </div>
         {props.compact ? note : null}
       </div>
-      {props.value && props.environmentVariable ? (
+      {props.value &&
+      props.environmentVariable &&
+      props.hideValue ? null : props.value && props.environmentVariable ? (
         <div
           className={cn(
             "min-w-0 space-y-1",

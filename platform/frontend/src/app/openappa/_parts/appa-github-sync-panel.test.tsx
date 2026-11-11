@@ -383,8 +383,15 @@ test("shows the deployment's self-service settings read-only, naming the variabl
       name: "MCP Guardrails Self-Service environment values",
     }),
   ).toBeEnabled();
-  // The folder too, with no other values to list.
-  expect(screen.getByText("mcp/", { selector: "p" })).toBeVisible();
+  // The folder too, named in its sentence and not in a value column, with
+  // no other values to list.
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "STRONG" && element.textContent === "mcp/",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText("mcp/", { selector: "p" })).toBeNull();
   expect(code("ARCHESTRA_OPENAPPA_SELF_SERVICE_DIRECTORY=mcp")).toBeVisible();
   expect(
     screen.queryByRole("button", {

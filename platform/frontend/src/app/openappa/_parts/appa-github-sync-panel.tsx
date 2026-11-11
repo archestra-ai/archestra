@@ -383,16 +383,16 @@ function SelfServiceRow({
           title="Self-service folder"
           description={
             <>
-              Each managed MCP server's rules file lives here, beside the policy
-              file, which includes them as{" "}
-              <code className="font-mono text-xs">
-                {selfService.directory}/*.toml
-              </code>
+              Each MCP server policy file goes to{" "}
+              <strong className="font-medium text-foreground">
+                {selfService.directory}/
+              </strong>
               .
             </>
           }
           value={selfService.directory}
           disabled
+          hideValue
           environmentVariable={selfService.directoryEnvironment.variable}
           options={[
             {
@@ -405,12 +405,6 @@ function SelfServiceRow({
           <RepositoryProtection
             policyPath={source.path ?? "appa.toml"}
             branchUrl={urls?.tree(source.ref ?? "HEAD") ?? null}
-            folderUrl={(folder) =>
-              urls?.tree(
-                source.ref ?? "HEAD",
-                policyFolderOf(source.path ?? "appa.toml", folder),
-              ) ?? null
-            }
             onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
@@ -447,23 +441,14 @@ function SelfServiceDocsLink() {
   );
 }
 
-/** A folder beside the policy file, as a repository path. */
-function policyFolderOf(policyPath: string, folder: string): string {
-  const slash = policyPath.lastIndexOf("/");
-  return slash < 0 ? folder : `${policyPath.slice(0, slash)}/${folder}`;
-}
-
 function RepositoryProtection({
   policyPath,
   branchUrl,
-  folderUrl,
   onFinishSetup,
 }: {
   policyPath: string;
   /** The synced branch on the host, for the ruleset sentence. */
   branchUrl: string | null;
-  /** The servers' folder on the host, for the include sentence. */
-  folderUrl: (folder: string) => string | null;
   /** Opens the self-service setup again, for a part that is still missing. */
   onFinishSetup?: () => void;
 }) {
@@ -473,46 +458,42 @@ function RepositoryProtection({
   const policyFile = policyPath.slice(policyPath.lastIndexOf("/") + 1);
   const unfinished =
     data.branchRules.state !== "active" || data.include.state === "missing";
+  const include = includeSentence(data.include, policyFile);
+  const finish =
+    unfinished && onFinishSetup ? (
+      <Button size="xs" type="button" variant="outline" onClick={onFinishSetup}>
+        Finish setup
+      </Button>
+    ) : null;
+  // The repository's state reads at the rows' size, set off from the settings.
   return (
-    <>
-      <p className="text-xs text-muted-foreground">
+    <div className="space-y-1 pt-2 text-sm leading-5 text-muted-foreground">
+      <p>
         {protectionSentence(data.branchRules, appName, branchUrl, data.app)}
       </p>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        {includeSentence(data.include, policyFile, folderUrl)}
-        {unfinished && onFinishSetup ? (
-          <Button
-            size="xs"
-            type="button"
-            variant="outline"
-            onClick={onFinishSetup}
-          >
-            Finish setup
-          </Button>
-        ) : null}
-      </p>
-    </>
+      {include || finish ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {include}
+          {finish}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 /**
- * One sentence on the include that makes the servers' files apply: where
- * they live, or the pull request that adds the line, or that it is missing.
+ * One sentence on the include that makes the servers' files apply: the pull
+ * request that adds the line, or that it is missing. Included, the folder
+ * row above already says where the files go.
  */
 function includeSentence(
   include: Protection["include"],
   policyFile: string,
-  folderUrl: (folder: string) => string | null,
 ): ReactNode {
   const entry = <code>{`${include.folder}/*.toml`}</code>;
   switch (include.state) {
     case "included":
-      return (
-        <span>
-          MCP servers&apos; policy files go to{" "}
-          {hostLink(folderUrl(include.folder), `${include.folder}/`)}
-        </span>
-      );
+      return null;
     case "pull_open":
       return (
         <span>

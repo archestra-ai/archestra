@@ -6,26 +6,23 @@ import {
 
 describe("organizationSubscriptionName", () => {
   it("names a plan after its GitHub organization, whatever its key is called", () => {
-    for (const name of [undefined, "", "GitHub Copilot (acme)", "Copilot"])
-      expect(
-        organizationSubscriptionName({
-          name,
-          isGithubAppKey: true,
-          githubOrganization: "acme",
-        }),
-      ).toBe("Github Copilot acme");
+    expect(
+      organizationSubscriptionName(
+        { isGithubAppKey: true, githubOrganization: "acme" },
+        "Copilot for engineering",
+      ),
+    ).toBe("GitHub Copilot acme");
   });
 
-  it("falls back to the plan's name when the organization is unknown", () => {
+  it("falls back to the plan's name from Settings when the organization is unknown", () => {
     expect(
-      organizationSubscriptionName({
-        name: "Copilot for engineering",
-        isGithubAppKey: true,
-        githubOrganization: null,
-      }),
+      organizationSubscriptionName(
+        { isGithubAppKey: true, githubOrganization: null },
+        "Copilot for engineering",
+      ),
     ).toBe("Copilot for engineering");
     expect(organizationSubscriptionName({ isGithubAppKey: true })).toBe(
-      "Github Copilot Organization",
+      "GitHub Copilot Organization",
     );
   });
 });
@@ -37,13 +34,19 @@ describe("copilotCredentialSourceLabel", () => {
         kind: "organization",
         organization: "acme",
       }),
-    ).toBe("Github Copilot acme");
+    ).toBe("GitHub Copilot acme");
     expect(
       copilotCredentialSourceLabel({
         kind: "organization",
         organization: null,
       }),
-    ).toBe("Github Copilot Organization");
+    ).toBe("GitHub Copilot Organization");
+    expect(
+      copilotCredentialSourceLabel(
+        { kind: "organization", organization: null },
+        "Copilot for engineering",
+      ),
+    ).toBe("Copilot for engineering");
     expect(copilotCredentialSourceLabel({ kind: "personal" })).toBe(
       "Personal sign-in",
     );

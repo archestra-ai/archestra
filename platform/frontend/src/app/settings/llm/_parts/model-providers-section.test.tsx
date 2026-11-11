@@ -45,7 +45,7 @@ beforeEach(() => {
 
 const planSwitch = (plan: "personal subscription" | "enterprise plan") =>
   screen.getByRole("switch", {
-    name: `Make ${plan === "enterprise plan" ? "Github Copilot Organization" : "GitHub Copilot"} ${plan} available`,
+    name: `Make ${plan === "enterprise plan" ? "GitHub Copilot Organization" : "GitHub Copilot"} ${plan} available`,
   });
 const save = async () =>
   userEvent.click(await screen.findByRole("button", { name: "Save" }));
@@ -109,18 +109,18 @@ describe("ModelProvidersSection — GitHub Copilot", () => {
     });
   });
 
-  it("names the enterprise card Github Copilot Organization by default", () => {
+  it("names the enterprise card GitHub Copilot Organization by default", () => {
     render(<ModelProvidersSection />);
 
     const card = screen.getByTestId(
       "model-provider-row-github-copilot-enterprise",
     );
-    expect(card).toHaveTextContent("Github Copilot Organization");
+    expect(card).toHaveTextContent("GitHub Copilot Organization");
     expect(
       screen.getByRole("textbox", {
-        name: "Github Copilot Organization enterprise plan display name",
+        name: "GitHub Copilot Organization enterprise plan display name",
       }),
-    ).toHaveAttribute("placeholder", "Show as “Github Copilot Organization”");
+    ).toHaveAttribute("placeholder", "Show as “GitHub Copilot Organization”");
   });
 
   it("gives each card its own name", async () => {
@@ -128,7 +128,7 @@ describe("ModelProvidersSection — GitHub Copilot", () => {
 
     await userEvent.type(
       screen.getByRole("textbox", {
-        name: "Github Copilot Organization enterprise plan display name",
+        name: "GitHub Copilot Organization enterprise plan display name",
       }),
       "Copilot for Teams",
     );

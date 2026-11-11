@@ -299,9 +299,9 @@ describe("GitHub Copilot plans", () => {
     });
   });
 
-  it("names the enterprise plan Github Copilot Organization until an admin names it", () => {
+  it("names the enterprise plan GitHub Copilot Organization until an admin names it", () => {
     expect(copilotEnterprisePlanLabel(null)).toBe(
-      "Github Copilot Organization",
+      "GitHub Copilot Organization",
     );
     expect(
       copilotEnterprisePlanLabel({

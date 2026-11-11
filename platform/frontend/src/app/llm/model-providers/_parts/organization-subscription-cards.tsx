@@ -60,11 +60,7 @@ export function OrganizationSubscriptionCards({
             key={credential.id}
             kind="github-copilot"
             provider="github-copilot"
-            name={
-              credential.githubOrganization
-                ? organizationSubscriptionName(credential)
-                : name
-            }
+            name={organizationSubscriptionName(credential, name)}
             description={
               credential.requiresReauthentication
                 ? "GitHub refused the App. Its installation or private key changed. Reconnect it to use this plan."

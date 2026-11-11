@@ -84,7 +84,7 @@ export function ConnectionConsentOptions({
     providerLabels: string[];
     /**
      * The account a per-user provider bills, as the summary names it:
-     * "GitHub Copilot · Personal subscription" or "Github Copilot acme".
+     * "GitHub Copilot · Personal subscription" or "GitHub Copilot acme".
      */
     accountLabel?: string | null;
     /** Provider choice, offered only for the user's own key. */

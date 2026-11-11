@@ -7,7 +7,6 @@ import { GITHUB_COPILOT_ORGANIZATION_LABEL } from "@archestra/shared";
  * provider API keys.
  */
 interface OrganizationSubscriptionKey {
-  name?: string | null;
   isGithubAppKey?: boolean;
   githubOrganization?: string | null;
 }
@@ -21,17 +20,19 @@ export function isOrganizationSubscription(
 }
 
 /**
- * How every picker and the Model Providers card name a connected plan:
- * "Github Copilot acme", after its GitHub organization. Without a known
- * organization, the plan's own name.
+ * How every surface names a connected plan: the Model Providers card, the
+ * pickers, Connect and the logs. "GitHub Copilot acme", after its GitHub
+ * organization. Without a known organization, `planName`: the name set under
+ * Settings → LLM → Model providers (the model provider catalog's
+ * `enterprisePlanName`).
  */
 export function organizationSubscriptionName(
   key: OrganizationSubscriptionKey,
+  planName: string = GITHUB_COPILOT_ORGANIZATION_LABEL,
 ): string {
-  if (key.githubOrganization) {
-    return `${ORGANIZATION_PLAN_NAME_PREFIX} ${key.githubOrganization}`;
-  }
-  return key.name?.trim() || GITHUB_COPILOT_ORGANIZATION_LABEL;
+  return key.githubOrganization
+    ? `${ORGANIZATION_PLAN_NAME_PREFIX} ${key.githubOrganization}`
+    : planName;
 }
 
 /** "Billed to acme on GitHub". */
@@ -42,17 +43,21 @@ export function organizationSubscriptionSubtitle(
 }
 
 /**
- * "Github Copilot acme" or "Personal sign-in", for the logs. A plan is named
+ * "GitHub Copilot acme" or "Personal sign-in", for the logs. A plan is named
  * as in every picker.
  */
 export function copilotCredentialSourceLabel(
   source:
     | { kind: "organization"; organization: string | null }
     | { kind: "personal" },
+  planName?: string,
 ): string {
   return source.kind === "organization"
-    ? organizationSubscriptionName({ githubOrganization: source.organization })
+    ? organizationSubscriptionName(
+        { githubOrganization: source.organization },
+        planName,
+      )
     : "Personal sign-in";
 }
 
-const ORGANIZATION_PLAN_NAME_PREFIX = "Github Copilot";
+const ORGANIZATION_PLAN_NAME_PREFIX = "GitHub Copilot";

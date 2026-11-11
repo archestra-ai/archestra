@@ -295,7 +295,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             icon: <KeyRoundIcon className="size-4" />,
             text: currentKey
               ? isOrganizationSubscription(currentKey)
-                ? organizationSubscriptionName(currentKey)
+                ? organizationSubscriptionName(
+                    currentKey,
+                    catalog.enterprisePlanName,
+                  )
                 : currentKey.name
               : "Default key",
             aria: currentKey
@@ -752,7 +755,13 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             {organizationSubscriptions.map((k) => (
               <KeyRow
                 key={k.id}
-                apiKey={{ ...k, name: organizationSubscriptionName(k) }}
+                apiKey={{
+                  ...k,
+                  name: organizationSubscriptionName(
+                    k,
+                    catalog.enterprisePlanName,
+                  ),
+                }}
                 keywords={keyKeywords(
                   k,
                   data.providerLabel,

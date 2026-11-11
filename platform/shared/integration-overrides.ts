@@ -86,7 +86,7 @@ export type CopilotPlan = z.infer<typeof CopilotPlanSchema>;
  * The name the enterprise plan shows under until an admin gives it one. The
  * personal plan has no name of its own: it shows under the provider's name.
  */
-export const GITHUB_COPILOT_ORGANIZATION_LABEL = "Github Copilot Organization";
+export const GITHUB_COPILOT_ORGANIZATION_LABEL = "GitHub Copilot Organization";
 
 /**
  * Model providers additionally take the organization's own name for the

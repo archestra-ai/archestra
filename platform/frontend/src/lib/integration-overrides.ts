@@ -5,6 +5,7 @@ import {
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
   type CopilotPlan,
+  copilotEnterprisePlanLabel,
   type IntegrationToggle,
   integrationLabel,
   isCopilotPlanHidden,
@@ -45,6 +46,12 @@ export type NamedIntegrationCatalog<Id extends string> =
      * Copilot itself. Never offer to set one up.
      */
     isCopilotPlanHidden: (plan: CopilotPlan) => boolean;
+    /**
+     * The GitHub Copilot enterprise plan's name: the admin's, or "GitHub
+     * Copilot Organization". A plan whose GitHub organization is known shows
+     * that organization instead.
+     */
+    enterprisePlanName: string;
     /**
      * Whether a person may add a new key or subscription for this provider.
      * A new GitHub Copilot key is always a personal sign-in (the enterprise
@@ -91,6 +98,7 @@ export function useModelProviderCatalog(
         integrationLabel(overrides, id, builtInProviderLabel(id)),
       isCopilotPlanHidden: (plan: CopilotPlan) =>
         isCopilotPlanHidden(overrides, plan),
+      enterprisePlanName: copilotEnterprisePlanLabel(overrides),
       canAddKey: (id: SupportedProvider) =>
         id === "github-copilot"
           ? !isCopilotPlanHidden(overrides, "personal")

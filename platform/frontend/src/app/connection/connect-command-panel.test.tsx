@@ -3201,7 +3201,7 @@ describe("setup choices on the approval page", () => {
         screen.getByRole("option", { name: /Personal subscription/ }),
       ).toHaveTextContent("Your own GitHub Copilot sign-in");
       const plan = screen.getByRole("option", {
-        name: /Github Copilot acme/,
+        name: /GitHub Copilot acme/,
       });
       expect(plan).toHaveTextContent("Billed to acme on GitHub");
       await user.click(plan);
@@ -3217,7 +3217,7 @@ describe("setup choices on the approval page", () => {
       // The plan's name already says GitHub Copilot, so the summary is just it.
       expect(
         screen.getByRole("switch", { name: "Model routing" }).parentElement,
-      ).toHaveTextContent(/^Model routingGithub Copilot acme$/);
+      ).toHaveTextContent(/^Model routingGitHub Copilot acme$/);
     } finally {
       finish();
     }
@@ -3251,7 +3251,7 @@ describe("setup choices on the approval page", () => {
         ),
       );
       await user.click(screen.getByRole("button", { name: /Setup options/ }));
-      expect(screen.getByText("Github Copilot acme")).toBeInTheDocument();
+      expect(screen.getByText("GitHub Copilot acme")).toBeInTheDocument();
       // One account is no choice.
       expect(
         screen.queryByRole("combobox", { name: "GitHub Copilot account" }),
@@ -3540,7 +3540,7 @@ describe("setup choices on the approval page", () => {
         { key: "ArrowDown" },
       );
       await user.click(
-        screen.getByRole("option", { name: /Github Copilot acme/ }),
+        screen.getByRole("option", { name: /GitHub Copilot acme/ }),
       );
       // The plan's own list, and the newest GPT line as its default.
       await waitFor(() =>
@@ -3553,7 +3553,7 @@ describe("setup choices on the approval page", () => {
       );
       expect(
         screen.getByText(/Saved as Copilot CLI's model by the setup script/),
-      ).toHaveTextContent("the models your Github Copilot acme serves.");
+      ).toHaveTextContent("the models your GitHub Copilot acme serves.");
       expect(screen.queryByPlaceholderText("Model id")).toBeNull();
     } finally {
       finish();

@@ -2,7 +2,6 @@
 
 import {
   type archestraApiTypes,
-  copilotEnterprisePlanLabel,
   DEFAULT_CREDENTIAL_GRANTS,
   E2eTestId,
   formatSecretStorageType,
@@ -811,7 +810,7 @@ export default function ApiKeysPage() {
         {/* Turned off by an admin, alone or with GitHub Copilot itself. */}
         {enterprisePlansHidden ? null : (
           <OrganizationSubscriptionCards
-            name={copilotEnterprisePlanLabel(providerCatalog.overrides)}
+            name={providerCatalog.enterprisePlanName}
             credentials={organizationSubscriptions}
             isLoading={
               permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)

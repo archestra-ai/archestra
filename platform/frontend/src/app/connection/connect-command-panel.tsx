@@ -644,7 +644,7 @@ export function ConnectCommandPanel({
     null;
   const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
     key.isGithubAppKey
-      ? organizationSubscriptionName(key)
+      ? organizationSubscriptionName(key, providerCatalog.enterprisePlanName)
       : ownSignIns.length > 1
         ? `Personal subscription · ${key.name}`
         : "Personal subscription";

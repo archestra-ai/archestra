@@ -26,6 +26,7 @@ import {
   useState,
 } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { OverviewFact } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -123,7 +124,10 @@ import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerToolsSection } from "../_parts/mcp-server-tools-section";
 import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
-import { ServerRulesMenuItem } from "../_parts/server-rules-launch";
+import {
+  SERVER_RULES_LABEL,
+  ServerRulesButton,
+} from "../_parts/server-rules-launch";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
@@ -651,6 +655,14 @@ function CatalogItemDetails({
               </span>
             </Button>
           )}
+          {/* The server's own Guardrails rules, for its editors while
+              self-service is on: a step of its own, not an overflow item. */}
+          {canModify && variant !== "builtin" && (
+            <ServerRulesButton catalog={item} variant="outline" size="sm">
+              <OpenAppaIcon />
+              <span className="max-sm:sr-only">{SERVER_RULES_LABEL}</span>
+            </ServerRulesButton>
+          )}
           {canModify && effectiveTab !== "yaml" && (
             <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
@@ -693,9 +705,6 @@ function CatalogItemDetails({
                     <Copy className="h-4 w-4" />
                     {cloneAction.label}
                   </DropdownMenuItem>
-                )}
-                {canModify && variant !== "builtin" && (
-                  <ServerRulesMenuItem catalog={item} />
                 )}
                 {canModify && !isPlaywright && (
                   <>

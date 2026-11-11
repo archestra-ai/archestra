@@ -2,6 +2,7 @@ import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
@@ -189,6 +190,20 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
+
+const serverRulesHref = vi.fn<() => string | null>(() => null);
+vi.mock("../_parts/server-rules-launch", () => ({
+  SERVER_RULES_LABEL: "Edit Guardrails rules",
+  ServerRulesButton: ({
+    children,
+  }: {
+    catalog: { id: string };
+    children: ReactNode;
+  }) => {
+    const href = serverRulesHref();
+    return href ? <a href={href}>{children}</a> : null;
+  },
+}));
 const initiateOAuth = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({ mutateAsync: initiateOAuth, isPending: false }),
@@ -436,6 +451,20 @@ describe("McpCatalogItemDetailPage overview", () => {
       "/mcp/registry/cat-1/edit?step=configuration",
     );
     expect(section("Connection").queryByRole("link")).toBeNull();
+  });
+
+  it("shows Edit Guardrails rules beside the header's Edit, not in the overflow menu", async () => {
+    serverRulesHref.mockReturnValue("/chat?agent=keeper");
+    renderPage();
+
+    expect(
+      screen.getByRole("link", { name: "Edit Guardrails rules" }),
+    ).toHaveAttribute("href", "/chat?agent=keeper");
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Edit Guardrails rules" }),
+    ).toBeNull();
+    serverRulesHref.mockReturnValue(null);
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {

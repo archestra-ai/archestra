@@ -21,6 +21,12 @@ before it writes anything.
            (GH_TOKEN: this repository, actions read and push access)
   sweep    GH_REPO, PUBLISHER_REPOSITORY, PUBLISHER_TOKEN, GITHUB_OUTPUT
            (GH_TOKEN: this repository, push access and actions write)
+  open-request
+           GH_REPO, PUBLISHER_REPOSITORY, PUBLISHER_TOKEN, VERSION
+           Prints the publisher run of an open (not yet finished) request for
+           VERSION, or nothing. release-please.yml recovers a draft release
+           only when it has none, so a push to the branch while the release
+           waits for its approval does not request it again.
 """
 
 import json
@@ -111,6 +117,21 @@ def sweep(repository, publisher, publisher_token, request=api):
     return found
 
 
+def open_request(publisher, version, publisher_token, request=api):
+    """The URL of a publisher run for `version` that the release App
+    requested and that has not finished (queued, waiting for its approval,
+    pending behind it in the version's concurrency group, or publishing), or
+    None."""
+    runs = request(f"repos/{publisher}/actions/workflows/publish.yml/runs"
+                   "?event=repository_dispatch&branch=main&per_page=100", token=publisher_token)["workflow_runs"]
+    for run in runs:
+        title = PUBLISH_TITLE.fullmatch(run.get("display_title") or "")
+        if (title and title.group(1) == version and run.get("status") != "completed"
+                and (run.get("triggering_actor") or {}).get("login") == REQUESTER):
+            return run.get("html_url") or f"run {run.get('id')}"
+    return None
+
+
 def main():
     mode = sys.argv[1]
     environment = os.environ
@@ -129,6 +150,11 @@ def main():
             print(f"Finishing request {request_id} on {branch}")
             command("gh", "workflow", "run", "release-finalize.yml", "--repo", repository, "--ref", branch,
                     "-f", f"request_id={request_id}")
+    elif mode == "open-request":
+        version = environment["VERSION"]
+        if not VERSION.fullmatch(version):
+            raise ValueError(f"Not a release version: {version}")
+        print(open_request(environment["PUBLISHER_REPOSITORY"], version, environment["PUBLISHER_TOKEN"]) or "")
     else:
         raise ValueError(f"Unknown mode {mode}")
 

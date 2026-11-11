@@ -159,11 +159,27 @@ jobs:
       # 422), which is what previously failed the release-please job and silently skipped
       # every downstream image/chart publish job.
       #
+      - name: Generate a publisher token
+        if: ${{ !inputs.handoff-fixture }}
+        id: publisher-token
+        uses: archestra-ai/.github/actions/github-app-token@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        with:
+          owner: archestra-ai
+          repositories: release-publisher
+          permission-actions: read # Read the publisher's runs.
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       # Draft releases don't create the underlying git tag, but downstream build jobs
       # check out the tag ref (checkout_ref) and release-please needs the tag to exist
       # when calculating the next version (otherwise it creates bogus PRs with stale
       # versions). Resolve a just-created release or an interrupted matching draft before
       # creating that tag ourselves, pinned to the release commit.
+      #
+      # A draft stays a draft while its publish request waits for approval, so every
+      # push to the branch in that time finds it. Recover it only when the publisher
+      # has no open request for its version: otherwise each push rebuilds the release
+      # and sends a duplicate request, which the version's concurrency group cancels.
       - name: Resolve release to publish or recover
         if: ${{ !inputs.handoff-fixture }}
         id: resolve-release
@@ -175,6 +191,8 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           REQUESTED_VERSION: ${{ needs.release-policy.outputs.requested }}
+          PUBLISHER_REPOSITORY: archestra-ai/release-publisher
+          PUBLISHER_TOKEN: ${{ steps.publisher-token.outputs.token }}
         run: |
           if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
             echo "::error::Release-please produced a version other than the merged manifest."
@@ -192,10 +210,17 @@ jobs:
             EXPECTED_TAG=platform-v${REQUESTED_VERSION}
             if RELEASE=$(gh release view "$EXPECTED_TAG" --json isDraft,targetCommitish 2>/dev/null); then
               if [ "$(jq -r .isDraft <<<"$RELEASE")" = true ]; then
-                SHOULD_PUBLISH=true
-                TAG_NAME=$EXPECTED_TAG
-                RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
-                echo "Recovering draft release ${TAG_NAME}"
+                # Unreadable publisher runs: recover as before rather than strand the draft.
+                OPEN_REQUEST=$(VERSION=$REQUESTED_VERSION python3 .github/scripts/release-finalize.py open-request) \
+                  || { echo "::warning::Could not read release-publisher's runs; recovering ${EXPECTED_TAG} anyway"; OPEN_REQUEST=''; }
+                if [ -n "$OPEN_REQUEST" ]; then
+                  echo "::notice::Draft release ${EXPECTED_TAG} already has an open publish request (${OPEN_REQUEST}); not requesting it again"
+                else
+                  SHOULD_PUBLISH=true
+                  TAG_NAME=$EXPECTED_TAG
+                  RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
+                  echo "Recovering draft release ${TAG_NAME}"
+                fi
               fi
             fi
           fi

@@ -3639,12 +3639,16 @@ class AgentModel {
     viewerId: string,
   ): Promise<
     | (AgentAccessContext &
-        Pick<Agent, "agentType" | "name" | "createdByServiceAccountId">)
+        Pick<
+          Agent,
+          "agentType" | "name" | "createdByServiceAccountId" | "environmentId"
+        >)
     | null
   > {
     const [agent] = await db
       .select({
         id: schema.agentsTable.id,
+        environmentId: schema.agentsTable.environmentId,
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,

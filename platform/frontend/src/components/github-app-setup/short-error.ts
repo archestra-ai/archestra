@@ -22,6 +22,10 @@ const SHORT_ERRORS: Array<[RegExp, string]> = [
   ],
   [/^GitHub has no account named /, "No such organization on this GitHub."],
   [
+    /^(\S+) already has a GitHub Copilot enterprise plan\./,
+    "$1 already has a plan. Manage that one instead.",
+  ],
+  [
     new RegExp(`^${escapeRegExp(GITHUB_ACCOUNT_INPUT_INVALID)}$`),
     "Enter the organization's name on GitHub.",
   ],

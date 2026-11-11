@@ -907,6 +907,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: provider key × model; parent audited",
   },
+  githubAppAccountsTable: {
+    audited: false,
+    reason:
+      "child: a GitHub Copilot plan's GitHub organization, written with its provider key; parent (LLM provider API key) audited",
+  },
   limitModelUsageTable: {
     audited: false,
     reason: "usage metrics; runtime data, not config",

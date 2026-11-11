@@ -14,6 +14,7 @@ import {
   useConnectCopilotGithubAppCredential,
   useConnectExistingCopilotGithubApp,
   useCopilotGithubAppKeySummary,
+  useCopilotGithubOrganizationName,
   useDiscardCopilotGithubApp,
   useInstallCopilotGithubApp,
   usePendingCopilotGithubApp,
@@ -35,6 +36,7 @@ vi.mock("@/lib/github-copilot-app.query", () => ({
   useConnectCopilotGithubAppCredential: vi.fn(),
   useConnectExistingCopilotGithubApp: vi.fn(),
   useCopilotGithubAppKeySummary: vi.fn(),
+  useCopilotGithubOrganizationName: vi.fn(),
   useDiscardCopilotGithubApp: vi.fn(),
   useInstallCopilotGithubApp: vi.fn(),
   usePendingCopilotGithubApp: vi.fn(),
@@ -124,6 +126,7 @@ beforeEach(() => {
   vi.mocked(useCopilotGithubAppKeySummary).mockImplementation(
     (keyId) => ({ data: keyId ? keyApp : undefined }) as never,
   );
+  vi.mocked(useCopilotGithubOrganizationName).mockReturnValue(null);
   vi.mocked(useLlmProviderApiKey).mockImplementation(
     (id) =>
       ({
@@ -226,7 +229,8 @@ describe("CopilotOrganizationConnectDialog", () => {
       {
         credentialId: "cred-1",
         organization: "my-org",
-        name: "GitHub Copilot (my-org)",
+        // Left empty: the server names the plan after the organization.
+        name: undefined,
       },
       expect.anything(),
     );
@@ -349,7 +353,7 @@ describe("CopilotOrganizationConnectDialog", () => {
         appId: "42",
         privateKey: pem,
         organization: "my-org",
-        name: "GitHub Copilot (my-org)",
+        name: undefined,
       },
       expect.anything(),
     );
@@ -548,26 +552,33 @@ describe("CopilotOrganizationConnectDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("takes an optional name, the default named after the organization", async () => {
+  it("takes an optional name, the default named after the organization's name on GitHub", async () => {
     const fromCredential = mutation(installed);
     vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
       fromCredential as never,
+    );
+    // GitHub tells the name once the typing stops.
+    vi.mocked(useCopilotGithubOrganizationName).mockImplementation(
+      (organization) => (organization === "my-org" ? "My Org Inc" : null),
     );
     const user = userEvent.setup();
     render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
     const name = screen.getByLabelText(/Name/);
     await user.type(screen.getByLabelText("Organization"), "my-org");
     expect(name).toHaveValue("");
-    expect(name).toHaveAttribute("placeholder", "GitHub Copilot (my-org)");
+    expect(name).toHaveAttribute("placeholder", "GitHub Copilot my-org");
+    await waitFor(() =>
+      expect(name).toHaveAttribute("placeholder", "GitHub Copilot My Org Inc"),
+    );
 
-    // Left empty, the plan gets the default.
+    // Left empty, the server names the plan: it reads the name as the App.
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(
       screen.getByRole("button", { name: /Use an App I already have/ }),
     );
     await user.click(screen.getByRole("button", { name: "Use this App" }));
     expect(fromCredential.mutate).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "GitHub Copilot (my-org)" }),
+      expect.objectContaining({ name: undefined }),
       expect.anything(),
     );
   });
@@ -617,6 +628,7 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
     id: "key-1",
     name: "GitHub Copilot (my-org)",
     organization: "my-org",
+    organizationName: "My Org Inc",
   };
   // The App the plan uses, and one other the organization connected.
   const inUse = { ...connectedApp, id: "cred-42", appId: "42" };
@@ -627,7 +639,7 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
     appId: "7",
   };
 
-  function renderManage(onOpenChange = vi.fn()) {
+  function renderManage(onOpenChange = vi.fn(), managed = plan) {
     const user = userEvent.setup();
     vi.mocked(useRuntimeCredentials).mockReturnValue({
       data: [inUse, other],
@@ -637,7 +649,7 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
       <CopilotOrganizationConnectDialog
         open
         onOpenChange={onOpenChange}
-        manage={plan}
+        manage={managed}
       />,
     );
     return user;
@@ -795,15 +807,47 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
     );
   });
 
-  it("keeps the name on the Organization step, editable, and saves a change on Done", async () => {
+  it("offers a plan an earlier release named by default today's default, and saves it on Done", async () => {
     const update = mutation({});
     vi.mocked(useUpdateLlmProviderApiKey).mockReturnValue(update as never);
-    const onOpenChange = vi.fn();
-    const user = renderManage(onOpenChange);
+    const user = renderManage();
 
     const name = screen.getByLabelText(/Name/);
-    expect(name).toHaveValue("GitHub Copilot (my-org)");
-    expect(name).toHaveAttribute("placeholder", "GitHub Copilot (my-org)");
+    expect(name).toHaveValue("");
+    expect(name).toHaveAttribute("placeholder", "GitHub Copilot My Org Inc");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(update.mutate).toHaveBeenCalledWith(
+      { id: "key-1", data: { name: "GitHub Copilot My Org Inc" } },
+      expect.anything(),
+    );
+  });
+
+  it("keeps a name someone chose on the Organization step, editable, and saves a change on Done", async () => {
+    const update = mutation({});
+    vi.mocked(useUpdateLlmProviderApiKey).mockReturnValue(update as never);
+    vi.mocked(useLlmProviderApiKey).mockImplementation(
+      (id) =>
+        ({
+          data: id
+            ? {
+                id,
+                name: "Research Copilot",
+                githubOrganizationName: "My Org Inc",
+              }
+            : undefined,
+        }) as never,
+    );
+    const onOpenChange = vi.fn();
+    const user = renderManage(onOpenChange, {
+      ...plan,
+      name: "Research Copilot",
+    });
+
+    const name = screen.getByLabelText(/Name/);
+    expect(name).toHaveValue("Research Copilot");
+    expect(name).toHaveAttribute("placeholder", "GitHub Copilot My Org Inc");
     expect(name).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByRole("button", { name: "Continue" }));

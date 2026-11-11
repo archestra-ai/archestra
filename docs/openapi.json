@@ -227540,10 +227540,15 @@
                   "properties": {
                     "organization": {
                       "type": "string"
+                    },
+                    "organizationName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "organization"
+                    "organization",
+                    "organizationName"
                   ],
                   "additionalProperties": false
                 }

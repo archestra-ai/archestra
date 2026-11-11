@@ -77,6 +77,12 @@ export const CheckCopilotGithubOrganizationSchema = z.object({
 export const CopilotGithubOrganizationSchema = z.object({
   /** The organization's login, as GitHub spells it. */
   organization: z.string(),
+  /**
+   * The name GitHub shows for the organization, which a new plan is named
+   * after. Null when GitHub does not tell it before an App is connected, as
+   * for an organization of managed users or on a private Enterprise Server.
+   */
+  organizationName: z.string().nullable(),
 });
 
 export const ExistingCopilotGithubAppValidationSchema = z.object({

@@ -508,17 +508,15 @@ export function SelfServiceOutcomeStep({
     if (include.state === "done" && detail?.pull)
       return (
         <span>
-          Pull request opened:{" "}
           <a
             href={detail.pull.url}
             target="_blank"
             rel="noreferrer"
             className="font-medium text-foreground underline underline-offset-4"
           >
-            #{detail.pull.number}
+            Pull request #{detail.pull.number}
           </a>{" "}
-          starts <code>{directory}/</code> and adds{" "}
-          <code>{directory}/*.toml</code> to {policyFile}. Merge it and re-sync.
+          opened. Merge it and re-sync to apply the new settings.
         </span>
       );
     if (include.state === "failed")

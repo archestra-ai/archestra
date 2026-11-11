@@ -324,9 +324,10 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
     await within(dialog).findByText(/Branch ruleset created/),
   ).toBeVisible();
   expect(
-    await within(dialog).findByText(/Pull request opened/),
+    (await within(dialog).findByRole("link", { name: "Pull request #12" }))
+      .parentElement,
   ).toHaveTextContent(
-    "Pull request opened: #12 starts rules/servers/ and adds rules/servers/*.toml to appa.toml. Merge it and re-sync.",
+    "Pull request #12 opened. Merge it and re-sync to apply the new settings.",
   );
   expect(actions).toEqual([
     { action: "self_service", enabled: true, directory: "rules/servers" },

@@ -100,6 +100,10 @@ export async function resolveOpenAppaGithubAccess(
     repo?: string | null;
   },
   permissions?: GithubJobPermissions,
+  options?: {
+    /** Mint the job's token anew, past a cached one: a check of what GitHub grants now. */
+    fresh?: boolean;
+  },
 ): Promise<OpenAppaGithubAccess> {
   if (source.githubAppConfigId && permissions && source.repo)
     return jobAccess({
@@ -107,6 +111,7 @@ export async function resolveOpenAppaGithubAccess(
       githubAppConfigId: source.githubAppConfigId,
       repo: source.repo,
       permissions,
+      fresh: options?.fresh ?? false,
     });
   if (source.githubAppConfigId) {
     const { githubToken, githubSource } =
@@ -149,6 +154,7 @@ async function jobAccess(params: {
   githubAppConfigId: string;
   repo: string;
   permissions: GithubJobPermissions;
+  fresh?: boolean;
 }): Promise<OpenAppaGithubAccess> {
   const { organizationId, repo } = params;
   const definition = await RuntimeCredentialDefinitionModel.findById({
@@ -174,7 +180,7 @@ async function jobAccess(params: {
     repo.toLowerCase(),
     JSON.stringify(permissions),
   ].join("\u0000");
-  const cached = jobTokens.get(key);
+  const cached = params.fresh ? undefined : jobTokens.get(key);
   if (cached && cached.expiresAt - Date.now() > JOB_TOKEN_MARGIN_MS)
     return { token: cached.token, api, web };
   const privateKey = await RuntimeCredentialConnectionModel.resolveValue({

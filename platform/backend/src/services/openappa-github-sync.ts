@@ -2477,12 +2477,17 @@ export async function getAppaGithubAppGrants(
 ): Promise<RepositoryProtection["app"] | null> {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.repo || !row.path || !row.githubAppConfigId) return null;
-  const grants = await githubAppReadiness({
-    ...row,
-    repo: row.repo,
-    path: row.path,
-    sourceCommit: row.sourceCommit ?? "",
-  });
+  // Asked by the switch's dialog and its check-again: what GitHub grants
+  // now, not what a token minted earlier still carries.
+  const grants = await githubAppReadiness(
+    {
+      ...row,
+      repo: row.repo,
+      path: row.path,
+      sourceCommit: row.sourceCommit ?? "",
+    },
+    { fresh: true },
+  );
   // Read when the switch's dialog checks again: a grant that just arrived
   // should not wait out a refused round of checks.
   if (grants?.permissions.every((permission) => permission.granted))
@@ -2580,6 +2585,7 @@ type ConnectedSource = NonNullable<
  */
 async function githubAppReadiness(
   source: ConnectedSource,
+  options?: { fresh?: boolean },
 ): Promise<RepositoryProtection["app"]> {
   if (!source.githubAppConfigId) return undefined;
   const profile = await githubAppProfile(source);
@@ -2587,7 +2593,7 @@ async function githubAppReadiness(
   const permissions = await Promise.all(
     GITHUB_APP_PERMISSIONS.map(async (name) => {
       try {
-        await resolveOpenAppaGithubAccess(source, { [name]: "write" });
+        await resolveOpenAppaGithubAccess(source, { [name]: "write" }, options);
         return { name, granted: true };
       } catch (error) {
         if (error instanceof MissingGithubPermission)

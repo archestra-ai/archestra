@@ -427,11 +427,10 @@ function SelfServiceRow({
           />
         ) : null}
       </div>
-      {setup && source.repo ? (
+      {setup ? (
         <SelfServiceSetupDialog
           open
           onOpenChange={setSetup}
-          repo={source.repo}
           policyPath={source.path ?? "appa.toml"}
           directory={selfService.directory}
           alreadyOn={selfService.enabled}

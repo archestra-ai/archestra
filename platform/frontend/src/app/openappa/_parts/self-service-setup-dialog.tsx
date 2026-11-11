@@ -36,9 +36,20 @@ const STEPS: { id: Step; label: string }[] = [
 ];
 const NEEDED = ["administration", "checks"] as const;
 const DEFAULT_FOLDER = "mcp";
-/** A folder beside the policy file: no `.` or `..` segment, no slash at either end. */
+/**
+ * A folder beside the policy file, nested as deep as wanted: segments of
+ * letters, digits, `_`, `-` and inner dots, so no `*`, no `.` or `..`, and
+ * not the batteries' own folder.
+ */
 const FOLDER =
   /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$/;
+function isSelfServiceFolder(folder: string): boolean {
+  return (
+    FOLDER.test(folder) &&
+    folder !== "batteries" &&
+    !folder.startsWith("batteries/")
+  );
+}
 const GITHUB_WINDOW = "archestra-github-app";
 
 /**
@@ -51,14 +62,12 @@ const GITHUB_WINDOW = "archestra-github-app";
 export function SelfServiceSetupDialog({
   open,
   onOpenChange,
-  repo,
   policyPath,
   directory,
   alreadyOn,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  repo: string;
   policyPath: string;
   /** The saved folder, the dialog's starting value. */
   directory: string;
@@ -69,7 +78,7 @@ export function SelfServiceSetupDialog({
   const [step, setStep] = useState<Step>("app");
   const [folder, setFolder] = useState(directory || DEFAULT_FOLDER);
   const chosen = folder.trim().replace(/^\/+|\/+$/g, "");
-  const folderValid = FOLDER.test(chosen) && !chosen.startsWith("batteries");
+  const folderValid = isSelfServiceFolder(chosen);
   const grants = useAppaGithubAppGrants(open);
   const granted = (name: Grants["permissions"][number]["name"]) =>
     grants.data?.permissions.find((entry) => entry.name === name)?.granted ===
@@ -152,9 +161,9 @@ export function SelfServiceSetupDialog({
         <div className="space-y-2">
           <Label htmlFor="self-service-folder">Self-service folder</Label>
           <FieldDescription>
-            Each managed MCP server gets its own rules file here, beside{" "}
-            {policyFile} in {repo}. A pull request starts the folder and adds
-            its include to {policyFile}.
+            Each managed MCP server policy file goes here and included into the
+            root policy. A pull request includes it to {policyFile} if not yet
+            done.
           </FieldDescription>
           <Input
             id="self-service-folder"
@@ -166,6 +175,12 @@ export function SelfServiceSetupDialog({
             aria-invalid={!folderValid}
             onChange={(event) => setFolder(event.target.value)}
           />
+          {folderValid ? null : (
+            <p className="text-xs text-destructive">
+              Use a folder path such as <code>rules/servers</code>. Wildcards
+              and <code>..</code> are not allowed.
+            </p>
+          )}
         </div>
       ) : null}
       {step === "enable" ? (

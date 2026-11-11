@@ -273,7 +273,8 @@ export function GithubSyncSetupDialog({
     !selfService ||
     gitlab ||
     (SELF_SERVICE_FOLDER.test(serversFolder) &&
-      !serversFolder.startsWith("batteries"));
+      serversFolder !== "batteries" &&
+      !serversFolder.startsWith("batteries/"));
   const locationValid =
     (!location.path || POLICY_PATH.test(location.path)) &&
     (!location.validationDirectory ||
@@ -1221,6 +1222,12 @@ export function GithubSyncSetupDialog({
                 aria-invalid={!serversFolderValid}
                 onChange={(event) => setSelfServiceFolder(event.target.value)}
               />
+              {serversFolderValid ? null : (
+                <p className="text-xs text-destructive">
+                  Use a folder path such as <code>rules/servers</code>.
+                  Wildcards and <code>..</code> are not allowed.
+                </p>
+              )}
             </div>
           ) : null}
           <Collapsible open={advanced} onOpenChange={setAdvanced}>

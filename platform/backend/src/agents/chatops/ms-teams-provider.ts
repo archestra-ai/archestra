@@ -64,6 +64,7 @@ import {
 } from "./constants";
 import {
   errorMessage,
+  formatApprovalAlsoAccepts,
   formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -2549,6 +2550,7 @@ function buildApprovalRequestCard(
     | "taskId"
     | "toolName"
     | "toolArgs"
+    | "alsoAccepts"
     | "reviewText"
     | "channelId"
     | "threadId"
@@ -2616,6 +2618,9 @@ function buildApprovalRequestCard(
       spacing: "Small",
     },
   );
+  const alsoAccepts = formatApprovalAlsoAccepts(options.alsoAccepts);
+  if (alsoAccepts)
+    body.push({ type: "TextBlock", text: alsoAccepts, wrap: true });
 
   const facts = Object.entries(options.toolArgs ?? {}).map(([name, value]) => ({
     title: name,

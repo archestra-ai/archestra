@@ -29,6 +29,8 @@ import {
 } from "./constants";
 import {
   errorMessage,
+  escapedPrefixWithin,
+  formatApprovalAlsoAccepts,
   formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -301,7 +303,11 @@ class TelegramProvider implements ChatOpsProvider {
       ? markdownToTelegramHtml(
           `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``,
         )
-      : approvalRequestHtml(options.toolName, options.toolArgs);
+      : approvalRequestHtml(
+          options.toolName,
+          options.toolArgs,
+          formatApprovalAlsoAccepts(options.alsoAccepts, escapeHtml),
+        );
 
     const metadata = options.originalMessage.metadata ?? {};
     await this.callApi("sendMessage", {
@@ -1143,8 +1149,10 @@ export function markdownToTelegramHtml(markdown: string): string {
 function approvalRequestHtml(
   toolName: string,
   args: Record<string, unknown> | undefined,
+  /** Already escaped. */
+  alsoAccepts: string | undefined,
 ): string {
-  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.`;
+  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.${alsoAccepts ? `\n\n${alsoAccepts}` : ""}`;
   const entries = Object.entries(args ?? {});
   if (entries.length === 0) return header;
 
@@ -1191,17 +1199,7 @@ function argValueText(value: unknown): string {
 function escapeHtmlWithin(text: string, maxLength: number): string {
   const escaped = escapeHtml(text);
   if (escaped.length <= maxLength) return escaped;
-  // Longest prefix whose escaped form leaves room for the "…".
-  let low = 0;
-  let high = Math.min(text.length, maxLength - 1);
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    if (escapeHtml(text.slice(0, mid)).length <= maxLength - 1) low = mid;
-    else high = mid - 1;
-  }
-  // Never split a surrogate pair: Telegram rejects malformed UTF-16.
-  const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
-  return `${escapeHtml(text.slice(0, end))}…`;
+  return `${escapedPrefixWithin(text, maxLength - 1, escapeHtml)}…`;
 }
 
 function escapeHtml(text: string): string {

@@ -60,6 +60,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import {
+  acceptedScope,
   displayedReview,
   reviewedCallArguments,
 } from "@/openappa/review-display";
@@ -1382,6 +1383,7 @@ const registry = defineArchestraTools([
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);
+                const accepted = acceptedScope(shown.scope);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1395,6 +1397,9 @@ const registry = defineArchestraTools([
                           : shown.arguments,
                       }
                     : {}),
+                  ...(accepted
+                    ? { reviewedCoverage: accepted }
+                    : { reviewedText: shown.text }),
                 });
                 if (outcome.status === "answered") {
                   const parsed = parseHitlRuling(outcome.result);

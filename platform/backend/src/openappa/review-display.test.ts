@@ -17,11 +17,44 @@ describe("approvalPromptCall", () => {
           text: "Approve this call?",
           tool: "mcp/context7/query-docs",
           arguments: '{"libraryId":"/node"}',
+          scope: [],
         },
       }),
     ).toEqual({
       toolName: "context7__query-docs",
       toolArgs: { libraryId: "/node" },
+    });
+  });
+
+  test("lists what approving also accepts, without the person's attention", () => {
+    expect(
+      approvalPromptCall({
+        toolName: "archestra__execute_remedy_plan",
+        review: {
+          text: "Approve this call?",
+          tool: "send_email",
+          scope: [
+            { kind: "attention", mark: "email-review", text: "attention" },
+            {
+              kind: "narrowing",
+              narrowing: { type: "sign_off", tools: ["send_email"] },
+              text: "later send_email calls need sign-off",
+            },
+          ],
+        },
+      }).alsoAccepts,
+    ).toEqual(["later send_email calls need sign-off"]);
+  });
+
+  test("falls back to the review text when its scope is unknown", () => {
+    expect(
+      approvalPromptCall({
+        toolName: "archestra__execute_remedy_plan",
+        review: { text: "Approve this call?", tool: "send_email" },
+      }),
+    ).toEqual({
+      toolName: "archestra__execute_remedy_plan",
+      reviewText: "Approve this call?",
     });
   });
 

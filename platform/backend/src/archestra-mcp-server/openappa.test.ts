@@ -976,8 +976,11 @@ describe("OpenAPPA tool execution", () => {
         kind: "openappa_review",
         reviewedTool: "archestra__todo_write",
         reviewedArguments: VALID_TODO,
+        // A review without a typed scope shows its whole text.
+        reviewedText: "Approve this email?",
       }),
     );
+    expect(elicitSpy.mock.calls[0][0]).not.toHaveProperty("reviewedCoverage");
     expect(executeSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         args: { offer_id: "offer-hitl" },
@@ -987,6 +990,47 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
     expect(result.content[0]).toEqual({ type: "text", text: "Authorized" });
     expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: the prompt lists the typed scope without the person's attention", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this email?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+      scope: [
+        { kind: "attention", mark: "signoff", text: "attention: signoff" },
+        {
+          kind: "requirement",
+          requirement: { type: "public_audience" },
+          text: "the readers must be the public audience",
+        },
+      ],
+    });
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+      result: { content: [{ type: "text", text: "Authorized" }] },
+      known: true,
+    });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-hitl",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    expect(elicitSpy.mock.calls[0][0].reviewedCoverage).toEqual([
+      "the readers must be the public audience",
+    ]);
+    expect(elicitSpy.mock.calls[0][0]).not.toHaveProperty("reviewedText");
   });
 
   test("chat client: the prompt hides credential headers while the ruling binds the original call", async () => {

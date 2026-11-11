@@ -26,7 +26,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -799,9 +802,18 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(filtered.pagination.total).toBe(1);
     });
 
-    test("an external request naming the sanitizer source is logged as api, with its content", async () => {
-      // A guardrail sanitizer's rows keep no content; a client of the proxy
-      // must not be able to claim that source to keep its own out of the logs.
+    test.each([
+      ["an external client", "api", () => ({}), true],
+      ["another in-process caller", "api", () => internalCallHeader(), true],
+      [
+        "the platform's guardrail call",
+        "guardrail:sanitizer",
+        () => guardrailCallHeader(),
+        false,
+      ],
+    ] as const)("the sanitizer source from %s is logged as %s", async (_caller, source, proof, storesContent) => {
+      // A guardrail sanitizer's rows keep no content, so only the guardrail
+      // call may claim that source; anyone else is logged as api, with content.
       const response = await app.inject({
         method: "POST",
         url: `/v1/openai/${testAgent.id}/chat/completions`,
@@ -810,10 +822,11 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           authorization: "Bearer test-key",
           "x-archestra-virtual-key": platformCredential,
           [SOURCE_HEADER]: "guardrail:sanitizer",
+          ...proof(),
         },
         payload: {
           model: "gpt-4o",
-          messages: [{ role: "user", content: "the-forged-sanitizer-prompt" }],
+          messages: [{ role: "user", content: "the-sanitizer-source-prompt" }],
         },
       });
 
@@ -823,10 +836,10 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, testAgent.id));
       expect(rows).toHaveLength(1);
-      expect(rows[0].source).toBe("api");
-      expect(JSON.stringify(rows[0].request)).toContain(
-        "the-forged-sanitizer-prompt",
-      );
+      expect(rows[0].source).toBe(source);
+      expect(
+        JSON.stringify(rows[0].request).includes("the-sanitizer-source-prompt"),
+      ).toBe(storesContent);
     });
 
     test("persists OpenCode main, title, and child-session sources", async () => {

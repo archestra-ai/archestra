@@ -1,3 +1,4 @@
+import config from "@/config";
 import AgentLabelModel from "@/models/agent-label";
 import * as metrics from "./metrics";
 import { initializeActiveUsersMetrics } from "./metrics/active-users";
@@ -11,7 +12,9 @@ export async function initializeObservabilityMetrics(params?: {
     params ?? {};
   const labelKeys = await AgentLabelModel.getAllKeys();
 
-  metrics.llm.initializeMetrics(labelKeys);
+  metrics.llm.initializeMetrics(labelKeys, {
+    callerLabels: config.observability.metrics.llmCallerLabels,
+  });
   metrics.llmProxy.initializeLlmProxyMetrics();
 
   if (includeMcpMetrics) {

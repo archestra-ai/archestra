@@ -369,7 +369,7 @@ function SelfServiceRow({
         {selfService.environment ? (
           <DeploymentSettingRow
             compact
-            title="Self-service MCP Guardrails"
+            title="MCP Guardrails Self-Service"
             description={description}
             value={selfService.enabled ? "enabled" : "disabled"}
             disabled
@@ -383,7 +383,7 @@ function SelfServiceRow({
         ) : (
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">Self-service MCP Guardrails</p>
+              <p className="text-sm font-medium">MCP Guardrails Self-Service</p>
               <p className="text-xs text-muted-foreground">{description}</p>
             </div>
             {/* Once on, Edit on the card changes or turns it off. */}
@@ -432,7 +432,7 @@ function SelfServiceDocsLink() {
   const href = getVisibleDocsUrl(
     getDocsUrl(
       DocsPage.PlatformAiToolGuardrailsGitSync,
-      "self-service-mcp-guardrails",
+      "mcp-guardrails-self-service",
     ),
   );
   if (!href) return null;

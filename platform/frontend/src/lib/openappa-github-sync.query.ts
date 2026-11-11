@@ -156,8 +156,8 @@ export function useUpdateAppaGithubSync() {
       if (body.action === "self_service") {
         toast.success(
           body.enabled
-            ? "Self-service MCP Guardrails turned on."
-            : "Self-service MCP Guardrails turned off. The branch ruleset was removed.",
+            ? "MCP Guardrails Self-Service turned on."
+            : "MCP Guardrails Self-Service turned off. The branch ruleset was removed.",
         );
         return;
       }

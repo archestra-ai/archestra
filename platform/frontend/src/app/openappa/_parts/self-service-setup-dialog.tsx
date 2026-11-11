@@ -198,9 +198,9 @@ export function SelfServiceSetupDialog({
             })
           }
           labels={{
-            pending: "Turn Self-service MCP Guardrails on",
-            done: "Self-service MCP Guardrails is on",
-            failed: "Could not turn Self-service MCP Guardrails on",
+            pending: "Turn MCP Guardrails Self-Service on",
+            done: "MCP Guardrails Self-Service is on",
+            failed: "Could not turn MCP Guardrails Self-Service on",
           }}
           directory={alreadyOn ? directory : chosen}
           policyFile={policyFile}
@@ -213,7 +213,7 @@ export function SelfServiceSetupDialog({
 function headerFor(step: Step, appName: string, githubApp: string | null) {
   if (step === "app")
     return {
-      title: "Self-service MCP Guardrails",
+      title: "MCP Guardrails Self-Service",
       description: `${appName} posts the policy check on each pull request and keeps a branch ruleset that requires it. The ${githubApp ? `${githubApp} App` : "GitHub App"} needs two more permissions for that.`,
     };
   if (step === "folder")
@@ -222,7 +222,7 @@ function headerFor(step: Step, appName: string, githubApp: string | null) {
       description: "Where each MCP server's own rules file lives.",
     };
   return {
-    title: "Turning Self-service MCP Guardrails on",
+    title: "Turning MCP Guardrails Self-Service on",
     description: "This takes a few seconds.",
   };
 }

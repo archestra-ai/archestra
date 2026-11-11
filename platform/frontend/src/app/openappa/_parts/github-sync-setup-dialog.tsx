@@ -536,7 +536,7 @@ export function GithubSyncSetupDialog({
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
 
-  // Self-service, on the Repository step beside its folder.
+  // Self-service, on its own step before the GitHub App, with its folder.
   const selfServiceChoice = (
     <div className="flex items-start gap-3">
       <Checkbox
@@ -548,7 +548,7 @@ export function GithubSyncSetupDialog({
       />
       <div className="space-y-1">
         <Label htmlFor="github-sync-self-service">
-          Self-service MCP Guardrails
+          MCP Guardrails Self-Service
         </Label>
         <FieldDescription>
           MCP owners can manage MCP Guardrails.
@@ -562,7 +562,7 @@ export function GithubSyncSetupDialog({
             </span>
           )}
           <a
-            href={`${policyDocsUrl}#self-service-mcp-guardrails`}
+            href={`${policyDocsUrl}#mcp-guardrails-self-service`}
             target="_blank"
             rel="noreferrer"
             className="text-primary underline underline-offset-2 hover:text-primary/80"
@@ -816,7 +816,8 @@ export function GithubSyncSetupDialog({
         <div className="space-y-5">
           {selfServiceChoice}
           {selfService ? (
-            <div className="space-y-2">
+            // Under the checkbox's text, on its left edge.
+            <div className="space-y-2 pl-7">
               <Label htmlFor="github-sync-self-service-folder">
                 Self-service folder
               </Label>
@@ -1819,7 +1820,7 @@ function headerFor(params: {
         };
   if (params.step === "selfService")
     return {
-      title: "Self-service MCP Guardrails",
+      title: "MCP Guardrails Self-Service",
       description:
         "Optional: let MCP owners manage their MCP servers' Guardrails.",
     };

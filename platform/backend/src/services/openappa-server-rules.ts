@@ -623,7 +623,7 @@ export async function ensureSelfServiceInclude(params: Caller) {
   const body = [
     `Adds \`${entry}\` to \`${source.path}\`'s include list, so the rules file each MCP server keeps in \`${folder}/\` applies once merged and pulled by Git sync.${folderExists ? "" : ` Starts \`${folder}/\` with a README.`}`,
     "",
-    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "an administrator"}${requester?.email ? ` (${requester.email})` : ""}, who turned Self-service MCP Guardrails on.`,
+    `Requested in ${archestraMcpBranding.appName} by ${requester?.name ?? "an administrator"}${requester?.email ? ` (${requester.email})` : ""}, who turned MCP Guardrails Self-Service on.`,
   ].join("\n");
   // A branch left by an earlier, closed pull request would refuse the new ref.
   await deleteBranch({ token, base, head: INCLUDE_BRANCH });
@@ -694,7 +694,7 @@ function repositoryView(
 
 /** The refusal every server rules tool gives while self-service is off. */
 const SELF_SERVICE_OFF =
-  "Self-service MCP Guardrails is off, so server rules cannot be read or proposed here. An administrator turns it on under Settings → Guardrails → Git sync.";
+  "MCP Guardrails Self-Service is off, so server rules cannot be read or proposed here. An administrator turns it on under Settings → Guardrails → Git sync.";
 
 async function requireSource(organizationId: string) {
   const source = await OpenAppaGithubSyncModel.find(organizationId);

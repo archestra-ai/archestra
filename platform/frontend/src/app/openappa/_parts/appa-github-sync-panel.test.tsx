@@ -195,7 +195,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Finish setup" }));
   const dialog = await screen.findByRole("dialog", {
-    name: "Self-service MCP Guardrails",
+    name: "MCP Guardrails Self-Service",
   });
   expect(
     await within(dialog).findByText(
@@ -303,7 +303,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
 
   fireEvent.click(enable);
   const dialog = await screen.findByRole("dialog", {
-    name: "Self-service MCP Guardrails",
+    name: "MCP Guardrails Self-Service",
   });
   expect(
     await within(dialog).findByText(/every permission self-service needs/),
@@ -318,7 +318,7 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
 
   // The switch, the ruleset, then the pull request, each reported.
   expect(
-    await within(dialog).findByText("Self-service MCP Guardrails is on"),
+    await within(dialog).findByText("MCP Guardrails Self-Service is on"),
   ).toBeVisible();
   expect(
     await within(dialog).findByText(/Branch ruleset created/),
@@ -386,7 +386,7 @@ test("locks self-service while the environment variable sets it, naming the vari
   );
   show();
   const locked = await screen.findByRole("combobox", {
-    name: "Self-service MCP Guardrails",
+    name: "MCP Guardrails Self-Service",
   });
   expect(locked).toHaveTextContent("On");
   expect(locked).toBeDisabled();
@@ -402,7 +402,7 @@ test("locks self-service while the environment variable sets it, naming the vari
   ).toBeVisible();
   expect(
     screen.getByRole("button", {
-      name: "Self-service MCP Guardrails environment values",
+      name: "MCP Guardrails Self-Service environment values",
     }),
   ).toBeEnabled();
   // In force: the protection shows all the same.
@@ -424,7 +424,7 @@ test("self-service needs a GitHub App: a source without one cannot enable it", a
   ).toBeVisible();
   expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
     "href",
-    expect.stringContaining("git-sync#self-service-mcp-guardrails"),
+    expect.stringContaining("git-sync#mcp-guardrails-self-service"),
   );
   expect(screen.queryByText(/Self-service branch protection/)).toBeNull();
 });
@@ -1215,7 +1215,7 @@ test("links the pull request that includes the servers' folder while it waits, a
   // Already on: the setup starts at the App step, and the folder is fixed.
   fireEvent.click(finish);
   const dialog = await screen.findByRole("dialog", {
-    name: "Self-service MCP Guardrails",
+    name: "MCP Guardrails Self-Service",
   });
   expect(
     await within(dialog).findByText(/every permission self-service needs/),

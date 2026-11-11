@@ -17,8 +17,8 @@ import {
   serverRulesFolderOf,
   serverRulesInclude,
   serverRulesPath,
-  withIncludeEntry,
   withRequester,
+  withServerRulesFolderIncluded,
 } from "@/openappa/policy-text";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { policyDiff } from "@/services/guardrails-policy-proposal";
@@ -382,7 +382,7 @@ async function checkedChange(
   // of `appa.toml`, and no server's later file needs another.
   const rootChanged = !includesServerRules(root.content, server.path);
   const rootAfter = rootChanged
-    ? await withInclude(root.content, include)
+    ? await withInclude(root.content, folder)
     : root.content;
   const before =
     (await acceptedFile({
@@ -459,9 +459,9 @@ function organizationHelpers(root: string) {
   };
 }
 
-async function withInclude(root: string, entry: string): Promise<string> {
+async function withInclude(root: string, folder: string): Promise<string> {
   try {
-    return await withIncludeEntry(root, entry);
+    return await withServerRulesFolderIncluded(root, folder);
   } catch (error) {
     throw new ApiError(
       400,
@@ -632,7 +632,7 @@ export async function ensureSelfServiceInclude(params: Caller) {
       },
     });
   }
-  const after = await withInclude(root.content, entry);
+  const after = await withInclude(root.content, folder);
   const requester = await UserModel.getById(params.userId);
   const title = `Include each MCP server's Guardrails rules file`;
   // Git keeps no empty folder: a README starts it, and says what goes there.

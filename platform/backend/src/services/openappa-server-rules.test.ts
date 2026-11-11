@@ -1859,7 +1859,23 @@ test("self-service is opt-in: off, no check is posted, no ruleset is kept and se
     selfService: true,
     selfServiceDirectory: "mcp",
   };
+  // A move that does not save withdraws nothing: the branch keeps its
+  // ruleset until the new source is really in place.
+  server.use(
+    http.get(`${REPO}/commits/polcy-v2`, () =>
+      HttpResponse.json({ message: "Not Found" }, { status: 404 }),
+    ),
+  );
   calls.length = 0;
+  await expect(
+    configureAppaGithubSync({
+      organizationId: org.id,
+      userId: admin.id,
+      source: { ...moved, ref: "polcy-v2", validationDirectory: "traces" },
+    }),
+  ).rejects.toThrow();
+  expect(calls).toEqual([]);
+  expect((await OpenAppaGithubSyncModel.find(org.id))?.ref).toBe("main");
   await configureAppaGithubSync({
     organizationId: org.id,
     userId: admin.id,

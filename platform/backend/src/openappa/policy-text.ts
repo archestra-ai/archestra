@@ -331,6 +331,54 @@ export async function withIncludeEntry(
 }
 
 /**
+ * The root with `<folder>/*.toml` in its include list. A narrower glob over
+ * the same folder, such as `mcp/a*.toml`, is replaced rather than joined:
+ * OpenAPPA refuses a file two globs match, so the two could not stand
+ * together once such a file exists. Two such entries are refused; that root
+ * takes a person's edit.
+ */
+export async function withServerRulesFolderIncluded(
+  root: string,
+  folder: string,
+): Promise<string> {
+  const entry = serverRulesInclude(folder);
+  const narrower = narrowerFolderGlobs(root, folder);
+  if (narrower.length === 0) return withIncludeEntry(root, entry);
+  const [only] = narrower;
+  if (narrower.length === 1 && only !== undefined) {
+    for (const literal of [JSON.stringify(only), `'${only}'`]) {
+      if (root.split(literal).length !== 2) continue;
+      const edited = root.replace(literal, JSON.stringify(entry));
+      if (
+        repositoryIncludePaths(edited).includes(entry) &&
+        narrowerFolderGlobs(edited, folder).length === 0
+      )
+        return edited;
+    }
+  }
+  throw new Error(
+    `the policy already includes ${narrower
+      .map((item) => JSON.stringify(item))
+      .join(
+        " and ",
+      )}, which takes in only some of the files in ${folder}/; replace it with ${JSON.stringify(entry)} first`,
+  );
+}
+
+/** The glob entries over `folder` other than its whole glob, `<folder>/*.toml`. */
+function narrowerFolderGlobs(root: string, folder: string): string[] {
+  const whole = serverRulesInclude(folder);
+  return repositoryIncludePaths(root).filter((item) => {
+    if (item === whole) return false;
+    try {
+      return parseIncludeGlob(item)?.folder === folder;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * `entry` added as its own line at the end of a multi-line `include` list,
  * indented like the entry before it, or null when the root has no such list
  * or the edit did not read back as expected.

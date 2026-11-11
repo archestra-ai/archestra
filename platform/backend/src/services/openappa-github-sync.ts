@@ -1833,7 +1833,6 @@ async function saveSource(params: {
   userId: string;
   source: AppaGithubSource & { setupPullRequestNumber?: number };
 }) {
-  await beforeSourceChange(params.organizationId, params.source);
   if (
     (params.source.githubPatId ||
       params.source.githubAppConfigId ||
@@ -1872,6 +1871,7 @@ async function saveSource(params: {
         allowEmpty: true,
       });
     }
+    await beforeSourceChange(params.organizationId, params.source);
     await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
     return;
   }
@@ -1901,6 +1901,9 @@ async function saveSource(params: {
       allowEmpty: true,
     });
   }
+  // Only now, with the new source checked: a save that fails leaves the
+  // branch it would have left protected.
+  await beforeSourceChange(params.organizationId, params.source);
   await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
 }
 

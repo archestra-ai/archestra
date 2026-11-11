@@ -13,6 +13,7 @@ import {
   serverRulesPath,
   withIncludeEntry,
   withoutRepositoryIncludes,
+  withServerRulesFolderIncluded,
 } from "./policy-text";
 
 const ROOT = `include = [
@@ -666,4 +667,33 @@ test("a folder counts as included only through its whole glob: one file by name 
   expect(includesServerRulesFolder("[policy]\nversion = 2\n", "mcp")).toBe(
     false,
   );
+});
+
+test("withServerRulesFolderIncluded replaces a narrower glob over the folder rather than joining it, and refuses two", async () => {
+  const one = `include = [\n  "batteries/archestra/appa.toml",\n  "mcp/a*.toml",\n]\n[policy]\nversion = 2\n`;
+  expect(await withServerRulesFolderIncluded(one, "mcp")).toBe(
+    `include = [\n  "batteries/archestra/appa.toml",\n  "mcp/*.toml",\n]\n[policy]\nversion = 2\n`,
+  );
+  // Single quotes, and another folder's glob, which stays.
+  expect(
+    await withServerRulesFolderIncluded(
+      `include = ['teams/*.toml', 'mcp/pay*.toml']\n[policy]\nversion = 2\n`,
+      "mcp",
+    ),
+  ).toBe(`include = ['teams/*.toml', "mcp/*.toml"]\n[policy]\nversion = 2\n`);
+  // No glob over the folder: the entry is added as before.
+  expect(
+    await withServerRulesFolderIncluded(
+      `include = [\n  "teams/*.toml",\n]\n[policy]\nversion = 2\n`,
+      "mcp",
+    ),
+  ).toBe(
+    `include = [\n  "teams/*.toml",\n  "mcp/*.toml",\n]\n[policy]\nversion = 2\n`,
+  );
+  await expect(
+    withServerRulesFolderIncluded(
+      `include = ["mcp/a*.toml", "mcp/b*.toml"]\n[policy]\nversion = 2\n`,
+      "mcp",
+    ),
+  ).rejects.toThrow(/already includes "mcp\/a\*\.toml" and "mcp\/b\*\.toml"/);
 });

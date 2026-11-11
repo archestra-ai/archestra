@@ -2,7 +2,7 @@
 title: Secret Rotation
 description: Change each secret Archestra uses, and know who gets signed out and what must be redone
 order: 7
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-11
 ---
 
 Every secret Archestra holds can be changed, and this page says how, or links the page that does. Most change with one restart or one click, and nobody notices. Two need care: the encryption keys make stored credentials or chat history unreadable if you change them out of order, and the session secret signs every user out.
@@ -115,7 +115,7 @@ People create these in Archestra, and replace them there. None needs a restart.
 | [Provider API key](/docs/llm-proxy/providers#with-an-api-key) | **Model Providers** | **Edit** the key and paste the new value under **API Key**. Clients keep their virtual keys. |
 | [Subscription](/docs/llm-proxy/providers#with-a-subscription) | **Model Providers** | Sign in again when the card says the sign-in expired. |
 | [Virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) | **LLM Proxy** | Create a new key, move the app to it, then delete the old one. |
-| [Gateway token](/docs/mcp/authentication/gateway#platform-token) | Your name in the sidebar, **Settings → Teams**, or **Settings → Auth** | Click **Rotate Token**. The old token stops working. |
+| [Gateway token](/docs/mcp/authentication/gateway#bearer-token) | Your name in the sidebar, or **Settings → Service Accounts** | For a personal token, click **Rotate Token**. For a service-account key, revoke it and create a replacement. Update clients to use the new token. |
 | [OAuth client secret](/docs/mcp/authentication/applications) | **Settings → OAuth Clients** | Click **Rotate secret**. The old secret stops working at once, so update the app right away. |
 | [API key or service account key](/docs/reference/api#authentication) | **API Keys** | Create a new key, move your clients to it, then delete the old one. |
 | [Workload identity](/docs/admin/identity/workload-identity) | **Settings → Service Accounts** | Nothing to rotate: each token expires after one hour. |

@@ -9,15 +9,27 @@ import type {
   CallToolResult,
   ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { queryService } from "@/knowledge-base";
 import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  ServiceAccountModel,
+  TeamTokenModel,
   ToolModel,
 } from "@/models";
+import { migrateTeamTokensToServiceAccounts } from "@/services/team-token-migration";
 import { describe, expect, test } from "@/test";
+import {
+  configureKnowledgeSearch,
+  indexKnowledgeDocument,
+  knowledgeEmbeddingHandler,
+} from "@/test/knowledge-search";
+import { useMswServer } from "@/test/msw";
+import mcpGatewayRoutes from "./index";
 import { createAgentServer } from "./utils";
 
 /**
@@ -222,3 +234,101 @@ async function connectAsServiceAccountClient(params: {
     },
   };
 }
+
+describe("knowledge search with migrated gateway tokens", () => {
+  const originalRateLimitDisabled = config.authRateLimitDisabled;
+  beforeEach(() => {
+    // This suite exercises credential validation and RBAC, not rate-limit storage.
+    config.authRateLimitDisabled = true;
+  });
+  afterEach(() => {
+    config.authRateLimitDisabled = originalRateLimitDisabled;
+  });
+  useMswServer(knowledgeEmbeddingHandler);
+  for (const kind of ["team", "organization"] as const) {
+    test(`${kind} token keeps permitted knowledge discovery and retrieval after migration`, async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+      makeAgentTool,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const owner = await makeUser();
+      const team = kind === "team" ? await makeTeam(org.id, owner.id) : null;
+      const { value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Synthetic legacy key",
+        teamId: team?.id ?? null,
+        isOrganizationToken: kind === "organization",
+      });
+      await migrateTeamTokensToServiceAccounts();
+      const [account] = await ServiceAccountModel.listByOrganizationId(org.id);
+      const shared = await makeSource({
+        organizationId: org.id,
+        name: "Allowed handbook",
+        grants: [grantTo({ type: "serviceAccount", id: account.id })],
+      });
+      const denied = await makeSource({
+        organizationId: org.id,
+        name: "Private handbook",
+        grants: [grantTo({ type: "user", id: owner.id })],
+      });
+      await configureKnowledgeSearch(org.id, makeLlmProviderApiKey);
+      await indexKnowledgeDocument({
+        organizationId: org.id,
+        connectorId: shared.connectorId,
+        content: "The public launch code is ORBIT.",
+        acl: ["org:*"],
+      });
+      await indexKnowledgeDocument({
+        organizationId: org.id,
+        connectorId: denied.connectorId,
+        content: "The private launch code is SECRET.",
+        acl: ["org:*"],
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        access: "org",
+        knowledgeBaseIds: [shared.knowledgeBaseId, denied.knowledgeBaseId],
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+      await assignKnowledgeTool({ agentId: agent.id, makeAgentTool });
+      const app = createFastifyInstance();
+      await app.register(mcpGatewayRoutes);
+      try {
+        const call = async (method: string, params: unknown) => {
+          const response = await app.inject({
+            method: "POST",
+            url: `/v1/mcp/${agent.id}`,
+            headers: {
+              authorization: `Bearer ${value}`,
+              accept: "application/json, text/event-stream",
+            },
+            payload: { jsonrpc: "2.0", id: 1, method, params },
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          const line = response.body
+            .split("\n")
+            .find((entry) => entry.startsWith("data: "));
+          return JSON.parse(line ? line.slice(6) : response.body).result;
+        };
+        const listed = await call("tools/list", {});
+        expect(JSON.stringify(listed)).toContain("Allowed handbook");
+        expect(JSON.stringify(listed)).not.toContain("Private handbook");
+        const queried = await call("tools/call", {
+          name: KNOWLEDGE_TOOL,
+          arguments: { query: "launch code" },
+        });
+        expect(queried.isError).toBeFalsy();
+        expect(JSON.stringify(queried)).toContain("ORBIT");
+        expect(JSON.stringify(queried)).not.toContain("SECRET");
+      } finally {
+        await app.close();
+      }
+    });
+  }
+});

@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-11-07
+lastUpdated: 2026-11-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1467,7 +1467,7 @@ Choose whether stored LLM proxy logs, MCP gateway logs, and Guardrails consult r
   - Applies to records written after a restart. Stored records keep their content.
   - Metadata-only mode also omits captured prompt/response and tool argument/result fields from LLM proxy and MCP tool-call trace spans.
 
-Application error logs omit attached SDK request bodies, including those in retry histories. Error messages and provider responses can still contain sensitive content in either mode.
+Application error logs omit attached SDK request bodies, including those in retry histories. In `metadata_only` mode, logged errors keep type, status and retry metadata; free-text messages, stacks, attached payloads and raw provider error diagnostics are withheld from stdout and OTLP logs. In `full` mode, error messages and provider responses can still contain sensitive content.
 
 To disable captured prompt/response and tool argument/result fields on trace spans independently, set [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_CAPTURE_CONTENT) to `false`. MCP trace error messages can still contain sensitive content.
 

@@ -47,6 +47,22 @@ Before you connect, the dialog checks what the repository holds:
 - **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
 - **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
 
+## Validations in Git
+
+With Git sync on, [validation files](/docs/agents/guardrails/policies#validating-the-policy) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
+
+What to know:
+
+- Credentials never live in the repository. A policy with a `[credentials]` line fails to sync. Bind keys on the [**Batteries**](/docs/agents/guardrails/policies#batteries) tab instead.
+- Validation failures do not block a merge on their own. Set up repository CI if they should.
+
+Required permissions:
+
+- [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to set up Git sync.
+- [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or GitLab token.
+- [`credential:create`](/docs/reference/permissions#credential:create) to create a GitHub App or save a GitLab token.
+- To change a server's rules: the server shared for editing and the APPA Keeper agent shared for use ([Granular Access Control](/docs/admin/access-control#granular-access-control)). No Guardrails permission.
+
 ## Self-service MCP Guardrails
 
 Users who are permitted to edit an MCP server can also manage its Guardrails rules from the MCP Registry page. Each MCP gets its own policy file under the `mcp/` folder by default:
@@ -63,20 +79,4 @@ Enable it in the Guardrails setting when setting up git sync or afterwards. Can 
 ### The Check and the Ruleset
 
 - **The check**, `Check OpenAPPA Guardrails` pull request check. It fails when the policy update author lacks required permissions or if the update would make the effective policy invalid. [`ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME) env var allows to set custom name for this check.
-- **The ruleset**, named like the check, with one rule: that check must pass before a merge. Pull requests, reviews, pushes and history stay the repository's to rule, so it fits a folder in a repository that holds other work too. Rules an administrator adds stay; the check rule comes back at the next sync if removed.
-
-## Validations in Git
-
-With Git sync on, [validation files](/docs/agents/guardrails/policies#validating-the-policy) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
-
-What to know:
-
-- Credentials never live in the repository. A policy with a `[credentials]` line fails to sync. Bind keys on the [**Batteries**](/docs/agents/guardrails/policies#batteries) tab instead.
-- Validation failures do not block a merge on their own. Set up repository CI if they should.
-
-Required permissions:
-
-- [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to set up Git sync.
-- [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or GitLab token.
-- [`credential:create`](/docs/reference/permissions#credential:create) to create a GitHub App or save a GitLab token.
-- To change a server's rules: the server shared for editing and the APPA Keeper agent shared for use ([Granular Access Control](/docs/admin/access-control#granular-access-control)). No Guardrails permission.
+- **The ruleset**, the branch ruleset to keep the check required in order to merge a pull request introducing policy updates.

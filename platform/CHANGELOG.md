@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.28](https://github.com/archestra-ai/archestra/compare/platform-v1.4.27...platform-v1.4.28) (2026-11-11)
+
+
+### Features
+
+* **openappa:** adopt authority except_tags and recorded auto-approvals (release/1.4) ([#10538](https://github.com/archestra-ai/archestra/issues/10538)) ([584a15f](https://github.com/archestra-ai/archestra/commit/584a15f28f870148b963ed436c50ce842bea50c7))
+
+
+### Bug Fixes
+
+* **agent-runtime:** keep recordings out of container logs (backport release/1.4) ([#10565](https://github.com/archestra-ai/archestra/issues/10565)) ([2b37bca](https://github.com/archestra-ai/archestra/commit/2b37bcae00266c26ad674ab585f54a9bbfab84e7))
+* **openappa:** backport Guardrails fixes and run release/1.4 on the OpenAPPA main line ([#10576](https://github.com/archestra-ai/archestra/issues/10576)) ([b09e766](https://github.com/archestra-ai/archestra/commit/b09e766fd18c51f7edd3710566c358bdcfec22c7))
+* **openappa:** put a remedy offer to the model once, not on every later request [1.4] ([#10561](https://github.com/archestra-ai/archestra/issues/10561)) ([e83da94](https://github.com/archestra-ai/archestra/commit/e83da944a4b1323061ad7570571d94b6de509357))
+* **security:** require patched krb5-libs in the MCP server base image (backport release/1.4) ([#10593](https://github.com/archestra-ai/archestra/issues/10593)) ([18eb07f](https://github.com/archestra-ai/archestra/commit/18eb07fe8162eeec6017ecba8fd62bf0412f303a))
+
 ## [1.4.27](https://github.com/archestra-ai/archestra/compare/platform-v1.4.26...platform-v1.4.27) (2026-11-10)
 
 

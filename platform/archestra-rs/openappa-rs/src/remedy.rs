@@ -472,7 +472,7 @@ pub(crate) fn render_remedy_outcome(
             OutputSource::Runtime,
             unknown_control_reason(&reason),
             true,
-            reason.detail().to_owned(),
+            reason.detail().into_owned(),
         ),
     };
     serde_json::to_value(HostMcpResult {
@@ -555,6 +555,7 @@ fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
         | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
+        | RemedyRefusal::Unanswered { .. }
         | RemedyRefusal::Runtime { .. } => None,
     }
 }

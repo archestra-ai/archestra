@@ -10,6 +10,7 @@ import { parseGitHubAppSecrets } from "@/integrations/github/app-secrets";
 import logger from "@/logging";
 import {
   AuditLogModel,
+  GithubAppAccountModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   RuntimeCredentialConnectionModel,
@@ -575,8 +576,9 @@ class CopilotGithubAppSetup {
           {
             initialPermissionGrants: grants,
             apiKeyValue: apiKey,
-            // The unique index refuses a second plan for the organization,
-            // also when two connects race past assertNoOtherPlan.
+            // Recorded with the key: the account's unique constraint refuses
+            // a second plan for the organization, also when two connects race
+            // past assertNoOtherPlan.
             githubAppAccount: reference
               ? githubAppAccountOf(reference)
               : undefined,
@@ -587,7 +589,7 @@ class CopilotGithubAppSetup {
         await secretManager()
           .deleteSecret(secret.id)
           .catch(() => undefined);
-        if (LlmProviderApiKeyModel.isGithubAppAccountTaken(error))
+        if (GithubAppAccountModel.isTaken(error))
           throw new ApiError(409, planTakenMessage(organization));
         throw error;
       }
@@ -789,7 +791,11 @@ class CopilotGithubAppSetup {
     const target = githubAppAccountOf(params);
     const isTarget = (value: string | null) => {
       const reference = decodeGithubAppReference(value);
-      return !!reference && githubAppAccountOf(reference) === target;
+      if (!reference) return false;
+      const account = githubAppAccountOf(reference);
+      return (
+        account.githubUrl === target.githubUrl && account.login === target.login
+      );
     };
     const plans = await LlmProviderApiKeyModel.findGithubAppKeyValues(
       params.organizationId,
@@ -1022,15 +1028,17 @@ function copilotPlanName(organization: string): string {
 
 /**
  * The GitHub organization a plan bills, in one spelling: its GitHub web
- * address and login, in lower case (`https://github.com/acme`). Two plans
+ * address and login, in lower case (`https://github.com`, `acme`). Two plans
  * with the same one bill the same organization.
  */
 function githubAppAccountOf(params: {
   organization: string;
   githubUrl: string;
-}): string {
-  const web = params.githubUrl.trim().replace(/\/+$/, "").toLowerCase();
-  return `${web}/${params.organization.toLowerCase()}`;
+}): { githubUrl: string; login: string } {
+  return {
+    githubUrl: params.githubUrl.trim().replace(/\/+$/, "").toLowerCase(),
+    login: params.organization.toLowerCase(),
+  };
 }
 
 function planTakenMessage(organization: string): string {

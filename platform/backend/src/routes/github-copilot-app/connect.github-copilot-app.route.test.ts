@@ -1573,7 +1573,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     await createAppFromManifest();
     // A connect for my-org that raced this install saved its plan after the
-    // install's check: only the unique index on the organization sees it.
+    // install's check: only the GitHub account's unique constraint sees it.
     const { secretManager } = await import("@/secrets-manager");
     await LlmProviderApiKeyModel.create(
       {
@@ -1586,7 +1586,9 @@ describe("GitHub Copilot organization subscription setup", () => {
         scope: "org",
         userId: null,
       },
-      { githubAppAccount: "https://github.com/my-org" },
+      {
+        githubAppAccount: { githubUrl: "https://github.com", login: "my-org" },
+      },
     );
     const credentials = async () =>
       (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
@@ -1641,7 +1643,7 @@ describe("GitHub Copilot organization subscription setup", () => {
 
   test("refuses a plan when a concurrent connect saved one for its organization first, and keeps nothing", async () => {
     // A connect for my-org that raced this one saved its plan after this one
-    // passed the check: only the unique index on the organization sees it.
+    // passed the check: only the GitHub account's unique constraint sees it.
     const { secretManager } = await import("@/secrets-manager");
     const raced = await LlmProviderApiKeyModel.create(
       {
@@ -1654,7 +1656,9 @@ describe("GitHub Copilot organization subscription setup", () => {
         scope: "org",
         userId: null,
       },
-      { githubAppAccount: "https://github.com/my-org" },
+      {
+        githubAppAccount: { githubUrl: "https://github.com", login: "my-org" },
+      },
     );
     const secrets = async () =>
       (await db.select().from(schema.secretsTable)).length;
@@ -1690,13 +1694,22 @@ describe("GitHub Copilot organization subscription setup", () => {
       privateKey,
     });
     expect(connected.statusCode, connected.body).toBe(200);
-    const [stored] = await db
+    const accounts = await db
       .select({
-        githubAppAccount: schema.llmProviderApiKeysTable.githubAppAccount,
+        providerApiKeyId: schema.githubAppAccountsTable.providerApiKeyId,
+        githubUrl: schema.githubAppAccountsTable.githubUrl,
+        login: schema.githubAppAccountsTable.login,
       })
-      .from(schema.llmProviderApiKeysTable)
-      .where(eq(schema.llmProviderApiKeysTable.id, connected.json().id));
-    expect(stored?.githubAppAccount).toBe("https://github.com/my-org");
+      .from(schema.githubAppAccountsTable)
+      .where(eq(schema.githubAppAccountsTable.organizationId, organizationId));
+    // Deleting the raced key freed its account; the new plan holds it now.
+    expect(accounts).toEqual([
+      {
+        providerApiKeyId: connected.json().id,
+        githubUrl: "https://github.com",
+        login: "my-org",
+      },
+    ]);
   });
 
   async function setConnection(credentialKey: string) {

@@ -82,14 +82,6 @@ const llmProviderApiKeysTable = pgTable(
      * column; the first read classifies the value once and stores it.
      */
     credentialKind: text("credential_kind").$type<LlmProviderCredentialKind>(),
-    /**
-     * The GitHub organization a GitHub Copilot plan (a GitHub App key) bills:
-     * its GitHub web address and login, in lower case
-     * (`https://github.com/acme`). Set when the plan is created, so the unique
-     * index below keeps one plan per GitHub organization. Null on every other
-     * key, and on plans connected before the column existed.
-     */
-    githubAppAccount: text("github_app_account"),
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,
@@ -122,11 +114,6 @@ const llmProviderApiKeysTable = pgTable(
     uniqueIndex("chat_api_keys_primary_shared_unique")
       .on(table.organizationId, table.provider)
       .where(sql`${table.isPrimary} = true AND ${table.userId} IS NULL`),
-    // One GitHub Copilot plan per GitHub organization, also when two connects
-    // for one organization race.
-    uniqueIndex("chat_api_keys_github_app_account_unique")
-      .on(table.organizationId, table.githubAppAccount)
-      .where(sql`${table.githubAppAccount} IS NOT NULL`),
   ],
 );
 

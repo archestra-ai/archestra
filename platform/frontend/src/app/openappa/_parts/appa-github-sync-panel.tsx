@@ -359,8 +359,8 @@ function SelfServiceRow({
   const description = (
     <>
       {eligible
-        ? "Let MCP server owners manage its guardrails rules. This requests additional permissions to check corresponding pull requests."
-        : "Connect the policy repository through a GitHub App to let MCP server owners manage its guardrails rules."}{" "}
+        ? "MCP owners can manage MCP Guardrails. Additional GitHub App permissions are added to ensure the related pull requests are checked."
+        : "Connect the policy repository through a GitHub App so MCP owners can manage MCP Guardrails."}{" "}
       <SelfServiceDocsLink />
     </>
   );

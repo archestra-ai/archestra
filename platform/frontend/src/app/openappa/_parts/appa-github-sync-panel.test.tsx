@@ -368,7 +368,13 @@ test("shows the deployment's self-service settings read-only, naming the variabl
     ),
   );
   show();
-  expect(await screen.findByText("On", { selector: "p" })).toBeVisible();
+  expect(
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === "STRONG" && element.textContent === "Enabled",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText("On", { selector: "p" })).toBeNull();
   expect(
     screen.queryByRole("combobox", { name: "MCP Guardrails Self-Service" }),
   ).toBeNull();
@@ -411,7 +417,12 @@ test("self-service needs a GitHub App: a source without one gets no check or rul
     selfService: selfServiceSetting(false),
   };
   show();
-  expect(await screen.findByText("Off", { selector: "p" })).toBeVisible();
+  expect(
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === "STRONG" && element.textContent === "Disabled",
+    ),
+  ).toBeVisible();
   expect(
     screen.getByText(/Connect the policy repository through a GitHub App/),
   ).toBeVisible();

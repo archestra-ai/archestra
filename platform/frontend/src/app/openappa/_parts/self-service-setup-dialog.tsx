@@ -298,8 +298,7 @@ function AppStep({
                   openGithubWindow(grants.installationUrl ?? "", GITHUB_WINDOW)
                 }
               >
-                <span>Accept new permissions</span>
-                <ExternalLink className="size-3" aria-hidden />
+                <span>Approve the request</span>
               </Button>
             ) : null
           }

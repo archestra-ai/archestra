@@ -204,7 +204,7 @@ test("Finish setup lists the permissions an existing GitHub App lacks, with wher
     within(dialog).getByRole("button", { name: /Update App/ }),
   ).toBeEnabled();
   expect(
-    within(dialog).getByRole("button", { name: /Accept new permissions/ }),
+    within(dialog).getByRole("button", { name: "Approve the request" }),
   ).toBeEnabled();
   expect(
     within(dialog).getByRole("button", { name: "Continue" }),

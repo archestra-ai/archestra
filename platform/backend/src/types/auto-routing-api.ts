@@ -246,9 +246,9 @@ export const AutoRoutingUsageResponseSchema = z.object({
   /** Sessions with at least one request in the window. */
   sessions: z.number().int().nonnegative(),
   requests: z.number().int().nonnegative(),
-  /** What the routed requests were billed. */
+  /** What the routed requests were billed: metered requests only, subscription-covered ones cost nothing. */
   costUsd: z.number(),
-  /** The same tokens priced at the current smart model's list price; null without a smart model. */
+  /** The billed requests' tokens priced at the current smart model's list price; null without a smart model. */
   allSmartCostUsd: z.number().nullable(),
   tiers: z.array(
     z.object({

@@ -5,9 +5,10 @@ import { loadAutoRouter } from "./settings";
 import { prices, type RouterTokenPrices, TIER_NAMES } from "./tiers";
 
 /**
- * What the router routed over the last `days` days: sessions, requests and billed
- * spend per tier, and what the same tokens would have cost on its current
- * smart model at list price.
+ * What the router routed over the last `days` days: sessions, requests and
+ * billed spend per tier, and what the billed requests' tokens would have
+ * cost on its current smart model at list price. Subscription-covered
+ * requests count as sessions and requests only.
  */
 export async function describeRoutedUsage(
   organizationId: string,

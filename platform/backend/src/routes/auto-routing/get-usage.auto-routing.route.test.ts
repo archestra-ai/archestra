@@ -77,6 +77,49 @@ describe("GET /api/auto-routing/routers/:id/usage", () => {
     });
   });
 
+  test("counts subscription-covered requests without billing them or pricing them at the smart model", async ({
+    makeAgent,
+  }) => {
+    const { router, trio } = await configureAutoRouter(ctx.organizationId);
+    const agent = await makeAgent({ organizationId: ctx.organizationId });
+    const scorer = await makeScorerVersion();
+    const { decision } = await RoutingDecisionModel.insertOrGet({
+      ...plannedDecision({
+        organizationId: ctx.organizationId,
+        routerId: router.id,
+        sessionKey: RoutingSessionKeySchema.parse("subscription-session"),
+        modelId: trio[0].id,
+        scorerVersionId: scorer.id,
+        tierIndex: 0,
+      }),
+    });
+    await record({
+      profileId: agent.id,
+      decisionId: decision.id,
+      cost: "1.00",
+    });
+    await record({
+      profileId: agent.id,
+      decisionId: decision.id,
+      cost: "5.00",
+      billingMode: "subscription",
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/auto-routing/routers/${router.id}/usage`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Only the metered request is billed, and only its tokens are re-priced: $22.50.
+    expect(response.json()).toMatchObject({
+      sessions: 1,
+      requests: 2,
+      costUsd: 1,
+      allSmartCostUsd: 22.5,
+    });
+  });
+
   test("is empty for a router that routed nothing", async () => {
     const { router } = await configureAutoRouter(ctx.organizationId);
 
@@ -166,6 +209,7 @@ async function record(params: {
   decisionId: string;
   cost: string;
   ago?: number;
+  billingMode?: InsertInteraction["billingMode"];
 }) {
   const id = randomUUID();
   const interaction: InsertInteraction = {
@@ -192,6 +236,7 @@ async function record(params: {
     inputTokens: 1_000_000,
     outputTokens: 100_000,
     cost: params.cost,
+    billingMode: params.billingMode,
   };
   await InteractionModel.record(interaction);
   if (params.ago) {

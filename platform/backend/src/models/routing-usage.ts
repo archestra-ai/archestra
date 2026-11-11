@@ -86,9 +86,12 @@ class RoutingUsageModel {
 
   /**
    * The router's live usage recorded since `since`, per routed tier: the
-   * sessions and requests it served, what they were billed, and their
-   * tokens split at `longContextThreshold` so they can be re-priced at
-   * another model. Usage whose interaction was purged is left out.
+   * sessions and requests it served, what they were billed, and the billed
+   * requests' tokens split at `longContextThreshold` so they can be re-priced
+   * at another model. Billed means metered: subscription-covered requests
+   * count as sessions and requests but add no cost and no tokens, so a
+   * re-priced comparison stays like for like. Usage whose interaction was
+   * purged is left out.
    */
   static async findRoutedUsage(params: {
     routerId: string;
@@ -102,20 +105,25 @@ class RoutingUsageModel {
         ? sql`false`
         : sql`${prompt} > ${params.longContextThreshold}`;
     const short = sql`not (${long})`;
-    const block = (filter: SQL) => ({
-      input: total(usage.input, filter),
-      cacheRead: total(usage.cacheRead, filter),
-      cacheWrite: total(usage.cacheWrite, filter),
-      output: total(usage.output, filter),
-    });
+    const metered = sql`${interactions.billingMode} = 'metered'`;
+    const block = (tokens: SQL) => {
+      const filter = sql`${metered} and ${tokens}`;
+      return {
+        input: total(usage.input, filter),
+        cacheRead: total(usage.cacheRead, filter),
+        cacheWrite: total(usage.cacheWrite, filter),
+        output: total(usage.output, filter),
+      };
+    };
     return db
       .select({
         tierIndex: decisions.tierIndex,
         sessions: sql<number>`count(distinct ${decisions.id})`.mapWith(Number),
         requests: count(),
-        costUsd: sql<number>`coalesce(sum(${interactions.cost}), 0)`.mapWith(
-          Number,
-        ),
+        costUsd:
+          sql<number>`coalesce(sum(${interactions.cost}) filter (where ${metered}), 0)`.mapWith(
+            Number,
+          ),
         short: block(short),
         long: block(long),
       })

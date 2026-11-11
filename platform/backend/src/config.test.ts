@@ -3833,10 +3833,10 @@ describe("OpenAPPA feature configuration", () => {
 
   test("the policy check's name defaults to a product-free one, is trimmed, and is bounded", () => {
     expect(parseOpenAppaPolicyCheckName(undefined)).toBe(
-      "Check OpenAPPA Guardrails [:githubAppName App]",
+      "Check OpenAPPA Guardrails",
     );
     expect(parseOpenAppaPolicyCheckName("  ")).toBe(
-      "Check OpenAPPA Guardrails [:githubAppName App]",
+      "Check OpenAPPA Guardrails",
     );
     expect(parseOpenAppaPolicyCheckName(" Acme policy ")).toBe("Acme policy");
     expect(() => parseOpenAppaPolicyCheckName("x".repeat(101))).toThrow(
@@ -3923,7 +3923,7 @@ describe("OpenAPPA feature configuration", () => {
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
-      policyCheckName: "Check OpenAPPA Guardrails [:githubAppName App]",
+      policyCheckName: "Check OpenAPPA Guardrails",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

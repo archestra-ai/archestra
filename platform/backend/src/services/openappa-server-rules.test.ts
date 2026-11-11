@@ -58,7 +58,7 @@ timeout_ms = 2000
 max_body_bytes = 65536
 `;
 /** The policy check's name for the tests' App, from the default template. */
-const CHECK = "Check OpenAPPA Guardrails [Policy App App]";
+const CHECK = "Check OpenAPPA Guardrails";
 const INCLUDING = `include = ["mcp/payments_api.toml"]\n${RULES}`;
 const REFUNDS = `[policy]
 version = 2

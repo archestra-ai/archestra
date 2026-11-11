@@ -3,7 +3,7 @@ title: Auto Routing
 description: Create auto routers that pick a fast, normal, or smart model for each session of agents, chats and apps, within a daily budget
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,9 @@ Open a router from the list to see its plan, its plan history and its diagnostic
 
 ### Daily Budget
 
-Each router has its own budget. Pick a preset and Archestra sets the budget from the router's recent traffic, then adjusts it every time the plan is refitted:
+The daily budget is the average spend a router aims for, not a cap: spend on a given day can go above or below it. To stop spend at a ceiling, [add a spend limit](/docs/llm-proxy/costs-and-limits/limits#create-a-limit) under **Limits** for the team or virtual keys that use the router. It blocks their requests once spend reaches it.
+
+Pick a preset and Archestra sets the budget from the router's recent traffic, then adjusts it every time the plan is refitted:
 
 - **Cost-efficient:** the most it can spend while the fast model still serves two thirds of sessions.
 - **Intelligence:** the least it needs for the smart model to serve two thirds of sessions.
@@ -43,7 +45,7 @@ A router scores, plans and learns only from its own sessions. A new router start
 ## Who Can Use a Router
 
 - **Agents and chats:** pick a router in the agent form or the chat model list, where `auto` shows as **Auto** and `auto:support` as **Auto · support**. To route everything without a model of its own, pick a router as the **Default Model for Agents and New Chats** under **Settings → Agents**.
-- **Apps:** send the router's name as the model to the [Unified Model API](/docs/llm-proxy/unified-model) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). Add the router to the key under **Auto routers** in the key's settings first; a key calls only the routers it was given, and gets a 403 error for any other. The request then runs on the router's own provider keys, like a [model pool](/docs/llm-proxy/model-pools). The key's model list shows the routers it can call. Native provider routes answer a router name with a 400 error.
+- **Apps:** send the router's name as the model to the [Unified Model API](/docs/llm-proxy/unified-model) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). Add the router to the key under **Auto routers** in the key's settings first; a key calls only the routers it was given, and gets a 403 error for any other. The request then runs on the provider key of the tier the router picked. A tier is one key and model, so it doesn't fail over to another key the way a [model pool](/docs/llm-proxy/model-pools) does. The key's model list shows the routers it can call. Native provider routes answer a router name with a 400 error.
 
 What to know:
 
@@ -60,7 +62,6 @@ The scorer assesses the opening user message with a bounded excerpt of the reque
 Under **Try a prompt**, turn on **Use request JSON** to preview an opening request body copied from LLM Logs, including its system instructions and tools. Text-only previews omit that context. A preview makes a fresh choice under the current plan; it does not replay the session's saved choice or execute the request, and scorer calls are billed.
 
 - **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, initial system instructions and current tool names. Instructions added after the first user message, tool ordering and cache markers do not change this identity. Changing the initial instructions or tool-name list can trigger another scorer call and model choice; send a stable session ID to preserve the choice across those changes.
-- **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
 - **Plans:** a background job builds each router's routing plan from its past sessions. Changing a router triggers a new plan for it within about a minute, and every router is re-planned at least daily. Each plan is versioned.
 
 ## Learning From Past Sessions

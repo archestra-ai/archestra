@@ -19,7 +19,7 @@ import type {
   AskUserArguments,
   NativeQuestionResult,
 } from "../types";
-import { readHeader } from "../utils";
+import { readHeader, withoutCallerScope } from "../utils";
 import {
   admitGrokRelayReport,
   grokRelayArrivals,
@@ -220,23 +220,24 @@ export class AppaGrokAdapter implements AppaClientAdapter {
         400,
         "Grok sent an invalid or contradictory native session ID.",
       );
-    const explicit = Object.entries(context.headers)
-      .filter(([name]) => name.toLowerCase() === "x-appa-session-id")
-      .flatMap(([, value]) => (Array.isArray(value) ? value : [value]));
-    if (explicit.some((value) => value !== sessionId))
-      throw new ApiError(
-        400,
-        "Grok native and MCP session headers must identify the same session.",
-      );
     return { sessionId, provenance: "grok-session-header" };
   }
 
   nativeConversationId(context: AppaMatchContext): string | undefined {
     // Resume keeps the governed actor even though Grok assigns a new ID.
-    return (
-      this.bindChildTrajectory(context)?.sessionId.split(":").at(-1) ??
-      this.extractSessionIdentity(context)?.sessionId
-    );
+    // In Agent Runtime, the root parent's trajectory segment is the bound
+    // workspace name rather than Grok's ephemeral native session UUID.
+    const childSegment = this.bindChildTrajectory(context)
+      ?.sessionId.split(":")
+      .at(-1);
+    if (childSegment) return childSegment;
+    const trusted = context.trustedContext;
+    if (trusted?.runtimeSessionId) {
+      return withoutCallerScope(trusted.session, trusted.runtimeSessionId)
+        ?.split(":")
+        .at(-1);
+    }
+    return this.extractSessionIdentity(context)?.sessionId;
   }
 
   gatewayToolsHint(serverName: string): string {
@@ -414,6 +415,7 @@ export class AppaGrokAdapter implements AppaClientAdapter {
         },
         parentNativeId,
         childNativeId,
+        preserveRecordedChildId: true,
       });
     }
     const receipts = trusted?.request.childTrajectoryReceipts ?? [];
@@ -422,6 +424,7 @@ export class AppaGrokAdapter implements AppaClientAdapter {
         context,
         parentNativeId: undefined,
         childNativeId,
+        preserveRecordedChildId: true,
       });
     if (markers.length)
       throw new ApiError(

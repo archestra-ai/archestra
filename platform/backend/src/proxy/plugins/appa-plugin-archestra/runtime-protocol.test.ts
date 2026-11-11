@@ -626,6 +626,159 @@ describe("protected runtime protocol", () => {
     expect(evaluate.mock.calls[0][2]?.spawnCallIds?.size).toBe(0);
   });
 
+  test("classifies omitted-agent_id start_agent_run as a spawn for load-balanced Chat router agents and attested gateways only", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await makeAgent({
+      organizationId: org.id,
+      name: "Lobster Grok",
+      runtime: runtimeConfig(),
+    });
+    const lobsterEnv = await makeAgent({
+      organizationId: org.id,
+      name: "Lobster Env",
+      agentType: "agent",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 1,
+        fallbackEnabled: true,
+      },
+    });
+    const plainChatAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Plain Chat Agent",
+      agentType: "agent",
+    });
+    const lbGateway = await makeAgent({
+      organizationId: org.id,
+      name: "LB Gateway",
+      agentType: "mcp_gateway",
+      subagentLoadBalancing: {
+        enabled: true,
+        algorithm: "round_robin",
+        retries: 0,
+        fallbackEnabled: true,
+      },
+    });
+    const plainGateway = await makeAgent({
+      organizationId: org.id,
+      name: "Plain Gateway",
+      agentType: "mcp_gateway",
+    });
+
+    const plugin = new AppaPluginArchestra([]);
+    const evaluate = vi
+      .spyOn(service, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    // 1. Load-balanced Chat router (`Lobster Env`) omitting `agent_id` -> `spawn: true`
+    const envChatCtx = request(org.id);
+    envChatCtx.profileId = lobsterEnv.id;
+    const envTrusted = envChatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    envTrusted.profileId = lobsterEnv.id;
+    envTrusted.chatSource = "chat";
+    await plugin.onSessionInit(envChatCtx);
+    const envReleased = await plugin.onToolCalls({
+      ...envChatCtx,
+      toolCalls: [
+        {
+          id: "env-spawn",
+          name: "archestra__run_tool",
+          arguments: {
+            tool_name: "archestra__start_agent_run",
+            tool_args: { message: "Fix the bug" },
+          },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("env-spawn"),
+    ).toBe(true);
+    if (envReleased?.decision !== "allow")
+      throw new Error("Expected governed released call for Lobster Env");
+    const envSigned = (
+      envReleased.toolCalls[0].arguments as {
+        tool_args: Record<string, unknown>;
+      }
+    ).tool_args;
+    expect(
+      verifyRuntimeToolProof({
+        proof: envSigned.runtime_proof,
+        arguments: envSigned,
+        organizationId: org.id,
+        callerId: "user:owner",
+        action: "start_agent_run",
+        secret,
+      }),
+    ).toMatchObject({ toolCallId: "env-spawn", spawn: true });
+
+    // 2. Non-load-balanced Chat agent omitting `agent_id` -> `spawn: false`
+    const plainChatCtx = request(org.id);
+    plainChatCtx.profileId = plainChatAgent.id;
+    const plainTrusted = plainChatCtx.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    plainTrusted.profileId = plainChatAgent.id;
+    plainTrusted.chatSource = "chat";
+    await plugin.onSessionInit(plainChatCtx);
+    await plugin.onToolCalls({
+      ...plainChatCtx,
+      toolCalls: [
+        {
+          id: "plain-no-spawn",
+          name: "archestra__start_agent_run",
+          arguments: { message: "Missing agent_id" },
+        },
+      ],
+    });
+    expect(
+      evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has("plain-no-spawn"),
+    ).toBe(false);
+
+    // 3. Attested external gateway with vs without load balancing
+    for (const [gateway, expectedSpawn] of [
+      [lbGateway, true],
+      [plainGateway, false],
+    ] as const) {
+      const gwCtx = request(org.id);
+      const gwTrusted = gwCtx.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      gwTrusted.toolIdentity = {
+        canonicalize: () => "archestra__run_tool",
+        attestationOf: () => ({
+          name: "mcp__gw__archestra__run_tool",
+          gatewayId: gateway.id,
+          advertisedName: "archestra__run_tool",
+          kind: "b",
+        }),
+        looseRunToolDispatch: false,
+      };
+      await plugin.onSessionInit(gwCtx);
+      await plugin.onToolCalls({
+        ...gwCtx,
+        toolCalls: [
+          {
+            id: `gw-${gateway.id}`,
+            name: "mcp__gw__archestra__run_tool",
+            arguments: {
+              tool_name: "archestra__start_agent_run",
+              tool_args: { message: "Dispatch via gateway" },
+            },
+          },
+        ],
+      });
+      expect(
+        evaluate.mock.calls.at(-1)?.[2]?.spawnCallIds?.has(`gw-${gateway.id}`),
+      ).toBe(expectedSpawn);
+    }
+  });
+
   test("delivers the retained return contract before inference and does not end the retained runtime", async ({
     makeOrganization,
   }) => {

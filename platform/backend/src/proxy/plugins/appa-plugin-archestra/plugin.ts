@@ -10,6 +10,7 @@ import {
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
+  type SupportedProviderDiscriminator,
   slugify,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
@@ -255,6 +256,7 @@ type AppaPluginBinding = {
   reportingRecovery?: boolean;
   reportingRefusal?: string;
   session: OpenAppaSession;
+  profileId: string;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
   request: AppaTrustedContext["request"];
@@ -317,6 +319,7 @@ type AppaRequestShape = AppaRetainedShape &
 /** A request of a governed session, seen while enforcement is off. */
 type AppaPluginObserver = {
   session: OpenAppaSession;
+  profileId: string;
   adapter: AppaClientAdapter | undefined;
   identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
@@ -418,6 +421,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     });
     const binding: AppaPluginBinding = {
       session: trajectory.session,
+      profileId: trustedContext.profileId,
       identity: trustedContext.toolIdentity,
       adapter: trajectory.adapter,
       request: trustedContext.request,
@@ -1102,7 +1106,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
     }
     if (binding?.compaction) return;
-    if (binding?.adapter?.id === "grok-build" && !binding.reportingRecovery) {
+    if (
+      binding?.adapter?.id === "grok-build" &&
+      !binding.reportingRecovery &&
+      !grokUsesDirectGatewayTools(binding)
+    ) {
       insertRequestGuidance({
         request: context.request,
         interactionType: context.interactionType,
@@ -1731,6 +1739,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: binding.session.organization_id,
+      profileId: binding.profileId,
+      chat: binding.chat,
+      identity: binding.identity,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
@@ -2904,6 +2915,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (started !== "governed") return;
       this.observers.set(context.resources, {
         session,
+        profileId: trustedContext.profileId,
         adapter,
         identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
@@ -3555,6 +3567,7 @@ async function correlatedClaudeTeammateId(
 type RuntimeCall = {
   action: string;
   args: Record<string, unknown>;
+  gatewayId?: string;
   wrapper?: Record<string, unknown>;
   stringArgs?: boolean;
   spawn: boolean;
@@ -3617,6 +3630,9 @@ function signedCall(params: {
 
 async function resolveRuntimeCalls(params: {
   organizationId: string;
+  profileId: string;
+  chat?: boolean;
+  identity: AppaTrustedContext["toolIdentity"];
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
 }): Promise<Map<string, RuntimeCall>> {
@@ -3638,9 +3654,14 @@ async function resolveRuntimeCalls(params: {
     // run_tool refuses tool_args it cannot read, so that call never runs and
     // gets no proof.
     if (wrapper && !readRunToolArgs(wrapper.tool_args)) continue;
+    const gatewayId = params.identity.attestationOf(
+      call.name,
+      call.namespace,
+    )?.gatewayId;
     result.set(call.id, {
       action,
       args,
+      ...(gatewayId ? { gatewayId } : {}),
       spawn: false,
       ...(wrapper
         ? { wrapper, stringArgs: typeof wrapper.tool_args === "string" }
@@ -3660,6 +3681,11 @@ async function resolveRuntimeCalls(params: {
       AgentModel.findSpawnTargets(organizationId),
     ]);
     const ids = new Set(runtimeTargets.map((target) => target.id));
+    const loadBalancedIds = new Set(
+      runtimeTargets
+        .filter((target) => target.loadBalanced)
+        .map((target) => target.id),
+    );
     const runtimeNames = new Set(
       runtimeTargets.map(
         (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
@@ -3675,12 +3701,25 @@ async function resolveRuntimeCalls(params: {
       ),
     ]);
     for (const call of result.values()) {
-      call.spawn =
-        call.action === TOOL_START_AGENT_RUN_SHORT_NAME
-          ? typeof call.args.agent_id === "string" &&
-            (ids.has(call.args.agent_id) ||
-              runtimeNames.has(call.args.agent_id))
-          : names.has(call.action);
+      if (call.action === TOOL_START_AGENT_RUN_SHORT_NAME) {
+        const rawAgentId =
+          typeof call.args.agent_id === "string"
+            ? call.args.agent_id.trim()
+            : null;
+        if (rawAgentId && rawAgentId.length > 0) {
+          call.spawn = ids.has(rawAgentId) || runtimeNames.has(rawAgentId);
+        } else if (call.args.agent_id === undefined || rawAgentId === "") {
+          call.spawn = call.gatewayId
+            ? loadBalancedIds.has(call.gatewayId)
+            : params.chat
+              ? loadBalancedIds.has(params.profileId)
+              : loadBalancedIds.size > 0;
+        } else {
+          call.spawn = false;
+        }
+      } else {
+        call.spawn = names.has(call.action);
+      }
     }
   }
   return result;
@@ -4703,6 +4742,8 @@ async function signObservedRuntimeCalls(
   try {
     const runtimeCalls = await resolveRuntimeCalls({
       organizationId: observer.session.organization_id,
+      profileId: observer.profileId,
+      identity: observer.identity,
       calls,
       resolution: toolNameResolution(observer),
     });
@@ -8475,15 +8516,48 @@ function requestCarriesContract(params: {
   }
 }
 
+type NativeAppaGuidanceWire =
+  | "anthropic:messages"
+  | "openai:responses"
+  | "openai:chatCompletions"
+  | "chatCompletions:noDeveloper";
+
+/**
+ * Providers with native APPA guardrails support and how they carry guidance.
+ * Providers without native APPA support are omitted so governed guidance leaves
+ * their requests untouched.
+ */
+const NATIVE_APPA_GUIDANCE_WIRES: Partial<
+  Record<SupportedProviderDiscriminator, NativeAppaGuidanceWire>
+> = {
+  "anthropic:messages": "anthropic:messages",
+  "bedrock:invoke": "anthropic:messages",
+  "openai:responses": "openai:responses",
+  "github-copilot:responses": "openai:responses",
+  "xai:responses": "openai:responses",
+  "openai:chatCompletions": "openai:chatCompletions",
+  "github-copilot:chatCompletions": "openai:chatCompletions",
+  "kimi-code:chatCompletions": "chatCompletions:noDeveloper",
+  "xai:chatCompletions": "chatCompletions:noDeveloper",
+};
+
+function nativeAppaGuidanceWire(
+  interactionType: string,
+): NativeAppaGuidanceWire | undefined {
+  return NATIVE_APPA_GUIDANCE_WIRES[
+    interactionType as SupportedProviderDiscriminator
+  ];
+}
+
 function requestCarriesInstruction(params: {
   request: unknown;
   interactionType: string;
   text: string;
 }): boolean {
   const { request, text } = params;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(request)) return false;
-  if (interactionType === "openai:responses") {
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(request)) return false;
+  if (wire === "openai:responses") {
     return (
       Array.isArray(request.input) &&
       request.input.some(
@@ -8500,7 +8574,7 @@ function requestCarriesInstruction(params: {
       )
     );
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "anthropic:messages") {
     if (Array.isArray(request.system)) {
       return request.system.some(
         (block) =>
@@ -8508,6 +8582,12 @@ function requestCarriesInstruction(params: {
       );
     }
     return typeof request.system === "string" && request.system.includes(text);
+  }
+  if (wire === "chatCompletions:noDeveloper") {
+    return (
+      Array.isArray(request.messages) &&
+      leadingSystemCarries(request.messages, text)
+    );
   }
   return false;
 }
@@ -8527,16 +8607,23 @@ function insertRequestGuidance(params: {
   onContinue?: "skip";
 }): void {
   const { request, guidance } = params;
-  const interactionType = appaWireFamily(params.interactionType);
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire) return;
   if (
-    interactionType !== "openai:responses" ||
+    wire !== "openai:responses" ||
     !isRecord(request) ||
     !Array.isArray(request.input)
   ) {
     appendQuestionContinuation({ ...params, scope: "request" });
     return;
   }
-  if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
+  if (
+    requestCarriesInstruction({
+      request,
+      interactionType: wire,
+      text: guidance,
+    })
+  ) {
     return;
   }
   const input = request.input;
@@ -8570,14 +8657,16 @@ function appendQuestionContinuation(params: {
   onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
-  const interactionType = appaWireFamily(params.interactionType);
-  if (!isRecord(params.request)) return;
+  const wire = nativeAppaGuidanceWire(params.interactionType);
+  if (!wire || !isRecord(params.request)) return;
   if (params.onContinue === "skip") return;
   if (params.onContinue === "turn") {
-    appendToLastUserTurn(params.request, guidance);
+    appendToLastUserTurn(params.request, guidance, {
+      plainText: wire === "chatCompletions:noDeveloper",
+    });
     return;
   }
-  if (interactionType === "openai:responses") {
+  if (wire === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
       input = [
@@ -8616,15 +8705,15 @@ function appendQuestionContinuation(params: {
     }
     return;
   }
-  if (interactionType === "openai:chatCompletions") {
+  if (wire === "openai:chatCompletions") {
     const messages = params.request.messages;
     if (!Array.isArray(messages)) return;
     if (
       messages.some(
-        (message) =>
-          isRecord(message) &&
-          message.role === "developer" &&
-          message.content === guidance,
+        (item) =>
+          isRecord(item) &&
+          item.role === "developer" &&
+          item.content === guidance,
       )
     ) {
       return;
@@ -8635,7 +8724,18 @@ function appendQuestionContinuation(params: {
     });
     return;
   }
-  if (interactionType === "anthropic:messages") {
+  if (wire === "chatCompletions:noDeveloper") {
+    // Kimi and xAI Chat Completions reject `developer`; fixed guidance merges
+    // into the leading `system` prompt and transient turn guidance trails in
+    // the user turn after the cached prefix.
+    if (params.scope === "request") {
+      mergeLeadingSystemMessage(params.request, guidance);
+      return;
+    }
+    appendToLastUserTurn(params.request, guidance, { plainText: true });
+    return;
+  }
+  if (wire === "anthropic:messages") {
     // Keep transient guidance after the cached prefix. Changing system would
     // invalidate all cached messages, including signed thinking blocks.
     if (params.scope !== "request") {
@@ -8660,18 +8760,28 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds turn guidance without placing user text after native SDK control frames. */
+/** Adds turn guidance without placing user text before leading system prompts or after native SDK control frames. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
+  options?: { plainText?: boolean },
 ): void {
   const messages = request.messages;
   if (!Array.isArray(messages)) return;
+  let conversationStart = 0;
+  while (
+    conversationStart < messages.length &&
+    isRecord(messages[conversationStart]) &&
+    (messages[conversationStart].role === "system" ||
+      messages[conversationStart].role === "developer")
+  ) {
+    conversationStart++;
+  }
   let index = messages.length - 1;
   // Native SDKs can end a turn with system control messages. They must remain
   // last (or immediately before an assistant); they are not conversation turns.
   while (
-    index >= 0 &&
+    index >= conversationStart &&
     isRecord(messages[index]) &&
     messages[index].role === "system"
   )
@@ -8680,17 +8790,23 @@ function appendToLastUserTurn(
   if (!isRecord(last) || last.role !== "user") {
     messages.splice(index + 1, 0, {
       role: "user",
-      content: [{ type: "text", text }],
+      content: options?.plainText ? text : [{ type: "text", text }],
     });
     return;
   }
   if (last.content === text) return;
-  if (typeof last.content === "string")
+  if (typeof last.content === "string") {
+    if (options?.plainText) {
+      if (last.content.includes(text)) return;
+      last.content =
+        last.content.length > 0 ? `${last.content}\n\n${text}` : text;
+      return;
+    }
     last.content = [
       { type: "text", text: last.content },
       { type: "text", text },
     ];
-  else if (Array.isArray(last.content)) {
+  } else if (Array.isArray(last.content)) {
     if (
       !last.content.some(
         (block) =>
@@ -8698,7 +8814,9 @@ function appendToLastUserTurn(
       )
     )
       last.content.push({ type: "text", text });
-  } else last.content = [{ type: "text", text }];
+  } else {
+    last.content = options?.plainText ? text : [{ type: "text", text }];
+  }
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */
@@ -8862,4 +8980,24 @@ function restoreSoftBlockRequest(target: unknown, original: unknown): void {
     delete (target as Record<string, unknown>)[key];
   if (Array.isArray(target)) target.length = 0;
   Object.assign(target, original);
+}
+
+/**
+ * Agent Runtime's `archestra-grok-llm` strips Grok's `search_tool`/`use_tool`
+ * dispatchers and declares gateway tools directly, so deferred-MCP instructions
+ * do not apply.
+ */
+function grokUsesDirectGatewayTools(binding: AppaPluginBinding): boolean {
+  const hasDeferredDispatchers = ["search_tool", "use_tool"].every((name) =>
+    binding.request.declaredTools.some(
+      (tool) => tool.name === name && !tool.namespace,
+    ),
+  );
+  if (hasDeferredDispatchers) return false;
+  return (
+    binding.runtimeSessionId !== undefined ||
+    binding.request.declaredTools.some(
+      (tool) => !tool.namespace && tool.name.includes("__"),
+    )
+  );
 }

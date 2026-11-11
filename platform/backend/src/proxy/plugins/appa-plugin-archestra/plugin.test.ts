@@ -1760,10 +1760,263 @@ describe("asking through the client's own question tool", () => {
         expect(text).toContain("retry the exact native tool and arguments");
         expect(text).toContain("search_tool searches MCP tools only");
         expect(text).toContain("Reuse a discovered entry point");
-        expect(history).toHaveLength(5);
+        expect(history).toHaveLength(responses ? 5 : 2);
         expect(history?.[0]).toBe(clientInstructions);
-        if (responses) expect(history?.at(-1)).toBe(prompt);
+        expect(history?.at(-1)).toBe(prompt);
+        expect(
+          history?.some(
+            (item) =>
+              (item as { role?: string } | undefined)?.role === "developer",
+          ),
+        ).toBe(responses);
       }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("delivers Kimi Code request and turn guidance without developer-role messages on kimi-code:chatCompletions", async () => {
+    const plugin = new AppaPluginArchestra([new AppaKimiCodeAdapter()]);
+    const sessionId = "user:user|kimi-runtime-workspace";
+    const context = requestContext({ sessionId });
+    context.provider = "kimi-code";
+    context.interactionType = "kimi-code:chatCompletions";
+    context.headers = {
+      "user-agent": "kimi-code-cli/2.3.3",
+      "x-appa-session-id": "kimi-runtime-workspace",
+    };
+    const trusted = trustedOf(context);
+    trusted.runtimeSessionId = sessionId;
+    trusted.agentRuntimeRun = true;
+    trusted.request = {
+      session: {
+        sessionId: "kimi-runtime-workspace",
+        provenance: "appa-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [
+        { name: "AskUserQuestion" },
+        { name: "Bash" },
+        { name: "mcp__archestra__archestra_execute_remedy_plan" },
+        { name: "mcp__archestra__archestra_get_remedy_plans" },
+        { name: "mcp__archestra__archestra_ask_user" },
+      ],
+    };
+    const greeting = {
+      prompt_cache_key: "kimi-session-1",
+      messages: [
+        { role: "system", content: "You are Kimi Code." },
+        { role: "user", content: "Hi" },
+      ] as Array<Record<string, unknown>>,
+    };
+    context.requestBody = greeting;
+
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request: greeting });
+      }
+      expect(greeting.messages).toHaveLength(2);
+      expect(greeting.messages.map((message) => message.role)).toEqual([
+        "system",
+        "user",
+      ]);
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "You are Kimi Code.",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "The organization's guardrails policy can block a tool call",
+      );
+      expect(String(greeting.messages[0]?.content)).toContain(
+        "ask with AskUserQuestion",
+      );
+      expect(greeting.messages[1]).toEqual({ role: "user", content: "Hi" });
+
+      const cachedSystemPrefix = greeting.messages[0]?.content;
+      const offerId = "offer-kimi-remedy";
+      await stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId,
+          text: "Review Bash call.",
+          tool: "Bash",
+          arguments: '{"command":"whoami"}',
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "call_remedy",
+            name: "archestra__execute_remedy_plan",
+            content: JSON.stringify({
+              outcome: "review_required",
+              offer_id: offerId,
+            }),
+            isError: false,
+          },
+        ],
+      });
+      const continuation = {
+        prompt_cache_key: "kimi-session-1",
+        messages: [
+          { role: "system", content: "You are Kimi Code." },
+          { role: "user", content: "Run whoami" },
+          {
+            role: "assistant",
+            reasoning_content: "Call execute_remedy_plan.",
+            content: null,
+            tool_calls: [{ id: "call_remedy", type: "function" }],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call_remedy",
+            content:
+              '{"outcome":"review_required","offer_id":"offer-kimi-remedy"}',
+          },
+        ] as Array<Record<string, unknown>>,
+      };
+      await plugin.onBeforeModel({ ...context, request: continuation });
+      expect(
+        continuation.messages.some((message) => message.role === "developer"),
+      ).toBe(false);
+      expect(continuation.messages[0]?.content).toBe(cachedSystemPrefix);
+      expect(continuation.messages.at(-1)).toEqual({
+        role: "user",
+        content: expect.stringContaining(offerId),
+      });
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    "kimi:chatCompletions",
+    "deepseek:chatCompletions",
+    "mistral:chatCompletions",
+    "vllm:chatCompletions",
+    "ollama:chatCompletions",
+    "openrouter:chatCompletions",
+    "azure:chatCompletions",
+    "perplexity:responses",
+  ] as const)("leaves providers without native APPA guardrails support untouched (%s)", async (interactionType) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|opencode-session" });
+    context.interactionType = interactionType;
+    context.headers = {
+      "user-agent": "opencode/1.18.23",
+      "x-opencode-session": "opencode-session",
+    };
+    trustedOf(context).request = {
+      session: {
+        sessionId: "opencode-session",
+        provenance: "opencode-session-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "bash" }, { name: "question" }],
+    };
+    const request =
+      interactionType === "perplexity:responses"
+        ? {
+            input: [
+              {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: "Hi" }],
+              },
+            ],
+          }
+        : {
+            messages: [
+              { role: "system", content: "Base system." },
+              { role: "user", content: "Hi" },
+            ],
+          };
+    const original = structuredClone(request);
+    context.requestBody = request;
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request).toEqual(original);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("omits deferred-MCP guidance for Grok in Agent Runtime when gateway tools are declared directly", async () => {
+    const plugin = new AppaPluginArchestra([new AppaGrokAdapter()]);
+    const sessionId = "user:user|grok-runtime-workspace";
+    const context = requestContext({ sessionId });
+    context.provider = "xai";
+    context.interactionType = "xai:chatCompletions";
+    context.headers = {
+      "user-agent": "grok-shell/1.0.70 (linux; x86_64)",
+      "x-grok-client-identifier": "grok-shell",
+      "x-grok-client-mode": "interactive",
+      "x-grok-session-id": "00000000-0000-4000-8000-000000000001",
+      "x-appa-session-id": "grok-runtime-workspace",
+    };
+    const trusted = trustedOf(context);
+    trusted.runtimeSessionId = sessionId;
+    trusted.agentRuntimeRun = true;
+    trusted.request = {
+      session: {
+        sessionId: "grok-runtime-workspace",
+        provenance: "appa-header",
+      },
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [
+        { name: "write" },
+        { name: "ask_user_question" },
+        { name: "archestra__execute_remedy_plan" },
+        { name: "archestra__get_remedy_plans" },
+        { name: "archestra__ask_user" },
+      ],
+    };
+    const request = {
+      messages: [
+        { role: "system", content: "Synthetic runtime instructions." },
+        { role: "user", content: "hi" },
+      ],
+    };
+    context.requestBody = request;
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onBeforeModel({ ...context, request });
+      const text = JSON.stringify(request.messages);
+      expect(text).not.toContain("Grok MCP tools are deferred.");
+      expect(text).toContain(
+        "The organization's guardrails policy can block a tool call",
+      );
+      expect(text).toContain("ask with ask_user_question");
     } finally {
       await plugin.onCleanup(context);
     }

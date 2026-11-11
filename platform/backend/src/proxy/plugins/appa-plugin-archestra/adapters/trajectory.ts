@@ -117,6 +117,11 @@ export function bindMintedChildTrajectory(params: {
   parentNativeId: string | undefined;
   /** Trusted client metadata, which may be assigned after the receipt's birth. */
   childNativeId: string | undefined;
+  /**
+   * Keep the server-signed child trajectory ID when a resumed client launches
+   * under a fresh native session ID (e.g., Grok `resume_from`).
+   */
+  preserveRecordedChildId?: boolean;
 }): AppaChildTrajectory | undefined {
   const claims = claimedIds(params.context);
   const childNativeId = nativeId(params.childNativeId);
@@ -162,13 +167,20 @@ export function bindMintedChildTrajectory(params: {
     childNativeId,
     delegated,
     recorded,
+    preserveRecordedChildId: params.preserveRecordedChildId,
   });
   if (anchor && childIdentity && !nested) {
     const mintedChild = childSessionId(anchor, childIdentity);
     if (
       (delegated && delegated.parentId !== anchor) ||
       (recorded &&
-        (recorded.parentId !== anchor || recorded.childId !== mintedChild))
+        (recorded.parentId !== anchor ||
+          !recordedChildMatchesParent({
+            childId: recorded.childId,
+            parentId: anchor,
+            mintedChild,
+            preserveRecordedChildId: params.preserveRecordedChildId,
+          })))
     ) {
       throw correlationError(
         "OpenAPPA signed child lineage does not match the authenticated session root",
@@ -467,6 +479,7 @@ function runtimeNest(params: {
     childId: string;
     runtimeSessionId?: string;
   };
+  preserveRecordedChildId?: boolean;
 }): { parentId: string; sessionId: string; runtimeClaim: string } | undefined {
   const markerAnchor = params.delegated?.runtimeSessionId;
   const receiptAnchor = params.recorded?.runtimeSessionId;
@@ -507,7 +520,15 @@ function runtimeNest(params: {
   const parentId = params.delegated?.parentId ?? params.recorded?.parentId;
   if (!parentId || parentId === runtimeClaim) return undefined;
   const minted = childSessionId(parentId, childKey);
-  if (params.recorded && params.recorded.childId !== minted) {
+  if (
+    params.recorded &&
+    !recordedChildMatchesParent({
+      childId: params.recorded.childId,
+      parentId,
+      mintedChild: minted,
+      preserveRecordedChildId: params.preserveRecordedChildId,
+    })
+  ) {
     throw correlationError(
       "OpenAPPA signed child lineage does not match the authenticated session root",
     );
@@ -634,4 +655,18 @@ function agentFileIds(text: string, prefix: string, suffix: string): string[] {
     from = at + prefix.length;
   }
   return ids;
+}
+
+function recordedChildMatchesParent(params: {
+  childId: string;
+  parentId: string;
+  mintedChild: string;
+  preserveRecordedChildId?: boolean;
+}): boolean {
+  if (params.childId === params.mintedChild) return true;
+  if (!params.preserveRecordedChildId) return false;
+  const prefix = `${params.parentId}:`;
+  if (!params.childId.startsWith(prefix)) return false;
+  const segment = params.childId.slice(prefix.length);
+  return segment.length > 0 && !segment.includes(":");
 }

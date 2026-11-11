@@ -34,9 +34,7 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   selfService: boolean("self_service").notNull().default(false),
   // The folder beside the policy file that holds one rules file per MCP
   // server, which `<folder>/*.toml` in the policy includes.
-  selfServiceDirectory: text("self_service_directory")
-    .notNull()
-    .default("mcp"),
+  selfServiceDirectory: text("self_service_directory").notNull().default("mcp"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
 });

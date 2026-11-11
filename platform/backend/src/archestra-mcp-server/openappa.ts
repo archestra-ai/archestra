@@ -1367,6 +1367,8 @@ const registry = defineArchestraTools([
               const stagedReview = {
                 offerId: remedy.offer_id,
                 text: review.text,
+                scope: review.scope ?? null,
+                ...(review.hint ? { hint: review.hint } : {}),
                 ...(review.tool ? { tool: review.tool } : {}),
                 ...(review.arguments ? { arguments: review.arguments } : {}),
                 ...(toolDescription ? { toolDescription } : {}),

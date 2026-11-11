@@ -25,6 +25,7 @@ import {
   sealHitlClosure,
   stageHitlReview,
 } from "./hitl-review";
+import type { ReviewScopeItem } from "./review-scope";
 import type { OpenAppaSession } from "./service";
 
 vi.mock("@/logging");
@@ -961,6 +962,66 @@ test("keeps the full review text when its coverage is in an unknown shape", asyn
     offerIds: ["offer-1"],
   });
   expect(question?.question).toBe(text);
+});
+
+/** Stages `review` of send_report and returns its native card and its form. */
+async function cardAndForm(
+  name: string,
+  review: { text: string; scope?: ReviewScopeItem[] | null },
+) {
+  const active = session(name);
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+      ...review,
+    },
+  });
+  const ask = (presentation?: "form") =>
+    getHitlAskUserArguments({
+      session: active,
+      offerIds: ["offer-1"],
+      ...(presentation ? { presentation } : {}),
+    });
+  return { card: await ask(), form: await ask("form") };
+}
+
+test("asks the same card from a typed scope as from the text it prints", async () => {
+  const text = runtimeReview(
+    "  - attention: human-approval\n  - the readers must be the public audience",
+  );
+  const scope: ReviewScopeItem[] = [
+    {
+      kind: "attention",
+      mark: "human-approval",
+      text: "attention: human-approval",
+    },
+    {
+      kind: "requirement",
+      requirement: { type: "public_audience" },
+      text: "the readers must be the public audience",
+    },
+  ];
+  expect(await cardAndForm("typed-scope", { text, scope })).toEqual(
+    await cardAndForm("text-scope", { text }),
+  );
+});
+
+test("asks with the whole text when a review joins several authorities", async () => {
+  const text = [
+    runtimeReview("  - attention: human-approval"),
+    runtimeReview("  - the readers must be the public audience"),
+  ].join("\n\n");
+  const { card, form } = await cardAndForm("joined-review", {
+    text,
+    scope: null,
+  });
+  expect(card?.question).toBe(text);
+  expect(form?.question.split("  •  ")).toContain(
+    `Policy review: ${JSON.stringify(text)}`,
+  );
 });
 
 test("renders a terminal-safe heading without changing the reviewed payload", async () => {

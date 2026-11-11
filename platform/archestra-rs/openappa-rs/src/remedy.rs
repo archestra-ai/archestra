@@ -123,6 +123,8 @@ pub struct OfferReviewOutput {
     /// review stored before the runtime typed it, or one that joins several
     /// authorities), so show `text`; `[]` means the ruling accepts nothing else.
     pub scope: Option<String>,
+    /// The ruling authority's own hint to the reviewer, when it declares one.
+    pub hint: Option<String>,
 }
 
 /// Reads an offer's original refusal from authenticated, host-scoped journal
@@ -181,6 +183,7 @@ pub async fn load_offer_review(
                 &format!(
                     "SELECT entry->>'text' AS text, \
                      (entry->'scope')::text AS scope, \
+                     entry->>'hint' AS hint, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
                      COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
                      FROM openappa_operations o \
@@ -203,6 +206,7 @@ pub async fn load_offer_review(
                     tool: row.get("tool"),
                     arguments: row.get("arguments"),
                     scope: row.get("scope"),
+                    hint: row.get("hint"),
                 }));
             }
             let opened = sealed::read(
@@ -245,6 +249,7 @@ fn review_in(
             tool: source["tool"].as_str().map(str::to_owned),
             arguments: source.get("arguments").map(Value::to_string),
             scope: review.get("scope").map(Value::to_string),
+            hint: review["hint"].as_str().map(str::to_owned),
         })
     })
 }
@@ -1413,13 +1418,14 @@ mod review_tests {
         let old = json!({ "review": [{ "offer_id": "o1", "text": "approve?" }] });
         let typed = json!({ "review": [{
             "offer_id": "o2", "text": "approve?", "authority": "operator", "scope": [],
+            "hint": "Check the recipient.",
         }] });
         let receipts = [(input.clone(), old), (input, typed)];
 
-        assert_eq!(review_in(receipts.clone(), "o1", "s").unwrap().scope, None);
-        assert_eq!(
-            review_in(receipts, "o2", "s").unwrap().scope.as_deref(),
-            Some("[]")
-        );
+        let old = review_in(receipts.clone(), "o1", "s").unwrap();
+        assert_eq!((old.scope, old.hint), (None, None));
+        let typed = review_in(receipts, "o2", "s").unwrap();
+        assert_eq!(typed.scope.as_deref(), Some("[]"));
+        assert_eq!(typed.hint.as_deref(), Some("Check the recipient."));
     }
 }

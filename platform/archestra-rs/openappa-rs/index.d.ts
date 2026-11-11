@@ -282,6 +282,8 @@ export interface OfferReviewOutput {
    * authorities), so show `text`; `[]` means the ruling accepts nothing else.
    */
   scope?: string
+  /** The ruling authority's own hint to the reviewer, when it declares one. */
+  hint?: string
 }
 
 /**

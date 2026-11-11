@@ -1569,6 +1569,39 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
+  test("an install that loses a race for its organization keeps no credential, and the App stays pending", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    await createAppFromManifest();
+    // A connect for my-org that raced this install saved its plan after the
+    // install's check: only the unique index on the organization sees it.
+    const { secretManager } = await import("@/secrets-manager");
+    await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot My Org",
+        provider: "github-copilot",
+        secretId: (
+          await secretManager().createSecret({ apiKey: "in-flight" }, "raced")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      { githubAppAccount: "https://github.com/my-org" },
+    );
+    const credentials = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).length;
+    const before = await credentials();
+
+    const refused = await post("/api/github-copilot-app/install");
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(await credentials()).toBe(before);
+    const pending = await app.inject({
+      method: "GET",
+      url: "/api/github-copilot-app/pending",
+    });
+    expect(pending.json()).toMatchObject({ account: "my-org", appId });
+  });
+
   test("keeps a plan on its organization: reconnecting it cannot move it to another", async () => {
     vi.stubGlobal("fetch", enterpriseFake(appId));
     const plan = await post("/api/github-copilot-app/existing", {

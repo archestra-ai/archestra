@@ -129,21 +129,33 @@ class CopilotGithubAppSetup {
       icon: "logo:github",
       value: JSON.stringify(app.secret),
     });
-    await githubAppManifestSetup.discard(params);
-    return this.connect({
-      ...params,
-      reference: {
-        ref: {
-          organizationId: params.organizationId,
-          credentialId: definition.id,
+    let connected: Awaited<ReturnType<CopilotGithubAppSetup["connect"]>>;
+    try {
+      connected = await this.connect({
+        ...params,
+        reference: {
+          ref: {
+            organizationId: params.organizationId,
+            credentialId: definition.id,
+          },
+          installationId: String(installation.id),
+          organization: app.account,
+          githubUrl: app.web,
         },
-        installationId: String(installation.id),
-        organization: app.account,
-        githubUrl: app.web,
-      },
-      installation,
-      models,
-    });
+        installation,
+        models,
+      });
+    } catch (error) {
+      // The credential was saved for this plan alone, and the App stays
+      // pending, so the person can install it again.
+      await deleteRuntimeCredentialDefinition({
+        organizationId: params.organizationId,
+        key: definition.key,
+      }).catch(() => undefined);
+      throw error;
+    }
+    await githubAppManifestSetup.discard(params);
+    return connected;
   }
 
   /**

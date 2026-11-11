@@ -3,6 +3,7 @@ import {
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
   type CopilotPlan,
+  copilotPlanTurnedOffMessage,
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
@@ -54,14 +55,9 @@ export async function assertCopilotPlanAllowed(params: {
   const { modelProviderOverrides } =
     await OrganizationModel.getIntegrationOverrides(params.organizationId);
   if (!isCopilotPlanHidden(modelProviderOverrides, params.plan)) return;
-  const label = integrationLabel(
-    modelProviderOverrides,
-    "github-copilot",
-    builtInProviderLabel("github-copilot"),
-  );
   throw new ApiError(
     400,
-    `${label} ${COPILOT_PLAN_NOUNS[params.plan]} are turned off for this organization. Ask an administrator to turn them on under Settings → LLM → Model providers.`,
+    copilotPlanTurnedOffMessage(modelProviderOverrides, params.plan),
   );
 }
 
@@ -126,7 +122,3 @@ export async function getHiddenMessagingChannels(
 // ===================================================================
 
 /** The plan names the Model Providers page uses for its two sections. */
-const COPILOT_PLAN_NOUNS: Record<CopilotPlan, string> = {
-  personal: "personal subscriptions",
-  enterprise: "enterprise plans",
-};

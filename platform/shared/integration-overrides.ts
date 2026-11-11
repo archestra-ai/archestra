@@ -265,6 +265,45 @@ export function isCopilotPlanHidden(
   return copilot?.hidden === true || copilot?.plans?.[plan]?.hidden === true;
 }
 
+/**
+ * True when a provider key belongs to something an admin turned off. For
+ * GitHub Copilot that is the key's own plan: an organization's GitHub App key
+ * is the enterprise plan, any other key a personal sign-in. Each plan's switch
+ * alone decides its keys.
+ */
+export function isProviderKeyHidden(
+  overrides: ModelProviderOverrides | null,
+  key: { provider: SupportedProvider; isGithubAppKey?: boolean | null },
+): boolean {
+  return key.provider === "github-copilot"
+    ? isCopilotPlanHidden(
+        overrides,
+        key.isGithubAppKey ? "enterprise" : "personal",
+      )
+    : isIntegrationHidden(overrides, key.provider);
+}
+
+/**
+ * What a person reads when a GitHub Copilot plan they asked for is turned
+ * off: "GitHub Copilot enterprise plans are turned off for this organization…".
+ */
+export function copilotPlanTurnedOffMessage(
+  overrides: ModelProviderOverrides | null,
+  plan: CopilotPlan,
+): string {
+  const label = integrationLabel(
+    overrides,
+    "github-copilot",
+    builtInProviderLabel("github-copilot"),
+  );
+  return `${label} ${COPILOT_PLAN_NOUNS[plan]} are turned off for this organization. Ask an administrator to turn them on under Settings → LLM → Model providers.`;
+}
+
+const COPILOT_PLAN_NOUNS: Record<CopilotPlan, string> = {
+  personal: "personal subscriptions",
+  enterprise: "enterprise plans",
+};
+
 /** The name the GitHub Copilot enterprise plan shows under. */
 export function copilotEnterprisePlanLabel(
   overrides: ModelProviderOverrides | null,

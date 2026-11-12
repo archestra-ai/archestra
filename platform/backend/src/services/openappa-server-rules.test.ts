@@ -1363,6 +1363,213 @@ test("a server's editors propose its rules as a pull request; readers and outsid
   });
 });
 
+test("MCP servers whose tools share a prefix share one rules file: a change takes edit access to each shared server, and members' personal copies follow it", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  const billing = await makeTeam(org.id, admin.id, { name: "Billing" });
+  // Pat may edit both shared servers, Bea only payments_api, Cody neither.
+  const pat = await makeUser({ name: "Pat" });
+  await makeTeamMember(payments.id, pat.id);
+  await makeTeamMember(billing.id, pat.id);
+  const bea = await makeUser({ name: "Bea" });
+  await makeTeamMember(payments.id, bea.id);
+  const cody = await makeUser({ name: "Cody" });
+  await makeMember(cody.id, org.id);
+  const addServer = async (params: {
+    name: string;
+    tools: string[];
+    scope?: "org" | "personal";
+    editors?: string;
+    authorId?: string;
+  }) => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: params.name,
+        serverType: "remote",
+        serverUrl: "https://payments.example.com/mcp",
+        scope: params.scope ?? "org",
+      },
+      {
+        organizationId: org.id,
+        authorId: params.authorId,
+        initialPermissionGrants: params.editors
+          ? [
+              {
+                subject: { type: "team", id: params.editors },
+                actions: ["read", "use", "update"],
+              },
+              {
+                subject: { type: "organization", id: "*" },
+                actions: ["read", "use"],
+              },
+            ]
+          : undefined,
+      },
+    );
+    for (const name of params.tools)
+      await ToolModel.createToolIfNotExists({
+        name,
+        description: name,
+        parameters: {},
+        catalogId: catalog.id,
+      });
+    return catalog;
+  };
+  const paymentsApi = await addServer({
+    name: "payments_api",
+    tools: ["payments_api__refund_payment"],
+    editors: payments.id,
+  });
+  const billingApi = await addServer({
+    name: "Payments API",
+    tools: ["payments_api__get_invoice"],
+    editors: billing.id,
+  });
+  // Cody's personal copy of payments_api, with the same tool.
+  const copy = await addServer({
+    name: "payments_api",
+    tools: ["payments_api__refund_payment"],
+    scope: "personal",
+    authorId: cody.id,
+  });
+  const doubled = await addServer({
+    name: "pay__ments",
+    tools: ["pay__ments__export"],
+    editors: payments.id,
+  });
+  const mixed = await addServer({
+    name: "helpdesk",
+    tools: ["helpdesk__close_ticket", "crm__find_contact"],
+    editors: payments.id,
+  });
+
+  await connectApp({ organizationId: org.id });
+  serveRepository({ head: FIRST, files: { [FIRST]: { "appa.toml": RULES } } });
+  await syncAppaGithubPolicy(org.id);
+
+  const read = (userId: string, catalogId: string) =>
+    getServerRules({ organizationId: org.id, userId, catalogId });
+  const shared = {
+    id: billingApi.id,
+    name: "Payments API",
+    scope: "org",
+    owner: true,
+  };
+  // Pat may edit both, so either server's file is Pat's to change; Cody's
+  // copy is one Pat cannot see, and does not gate the file.
+  for (const catalog of [paymentsApi, billingApi])
+    expect(await read(pat.id, catalog.id)).toMatchObject({
+      canEdit: true,
+      path: "mcp/payments_api.toml",
+    });
+  const forPat = await read(pat.id, paymentsApi.id);
+  expect(forPat.sharedWith).toEqual([shared]);
+  expect(forPat.hiddenCopies).toBe(1);
+  expect(forPat.instruction).toContain(
+    "its rules also govern Payments API and 1 personal copy the user cannot see",
+  );
+
+  // Bea may edit payments_api only: the change also needs Payments API.
+  const forBea = await read(bea.id, paymentsApi.id);
+  expect(forBea).toMatchObject({
+    canEdit: false,
+    path: "mcp/payments_api.toml",
+    sharedWith: [shared],
+    hiddenCopies: 1,
+  });
+  expect(forBea.instruction).toContain(
+    "that takes edit access to Payments API in the MCP registry",
+  );
+
+  // Cody reads the same file through the copy, which follows the shared
+  // servers' editors.
+  const forCody = await read(cody.id, copy.id);
+  expect(forCody).toMatchObject({
+    canEdit: false,
+    path: "mcp/payments_api.toml",
+    hiddenCopies: 0,
+  });
+  expect(forCody.sharedWith).toEqual(
+    expect.arrayContaining([
+      shared,
+      { id: paymentsApi.id, name: "payments_api", scope: "org", owner: true },
+    ]),
+  );
+  expect(forCody.instruction).toContain(
+    "takes edit access to Payments API and payments_api in the MCP registry",
+  );
+
+  // A server that cannot have a file says why.
+  await expect(read(pat.id, doubled.id)).rejects.toMatchObject({
+    statusCode: 409,
+    message:
+      'pay__ments has no rules file: its tool prefix, pay__ments, is not a safe file name or holds "__".',
+  });
+  await expect(read(pat.id, mixed.id)).rejects.toMatchObject({
+    statusCode: 409,
+    message:
+      "helpdesk has no rules file: some of its tools carry other prefixes than helpdesk__ (crm__).",
+  });
+
+  const change = {
+    organizationId: org.id,
+    catalogId: paymentsApi.id,
+    content: INVOICES,
+    expectedCommit: FIRST,
+    summary: "Invoices are suspicious",
+  };
+  expect(
+    await previewServerRulesChange({ ...change, userId: pat.id }),
+  ).toMatchObject({ valid: true, path: "mcp/payments_api.toml" });
+  await expect(
+    previewServerRulesChange({ ...change, userId: bea.id }),
+  ).rejects.toMatchObject({ statusCode: 403 });
+  await expect(
+    proposeServerRulesChange({ ...change, userId: bea.id }),
+  ).rejects.toMatchObject({
+    statusCode: 403,
+    message:
+      "You may propose payments_api's Guardrails rules only if you may edit Payments API in the MCP registry",
+  });
+
+  const pulls: Array<{ body: string }> = [];
+  server.use(
+    http.get(`${REPO}/git/commits/${FIRST}`, () =>
+      HttpResponse.json({ tree: { sha: TREE } }),
+    ),
+    http.post(`${REPO}/git/trees`, () =>
+      HttpResponse.json({ sha: "4".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/commits`, () =>
+      HttpResponse.json({ sha: "5".repeat(40) }),
+    ),
+    http.post(`${REPO}/git/refs`, () => HttpResponse.json({})),
+    http.post(`${REPO}/pulls`, async ({ request }) => {
+      pulls.push((await request.json()) as (typeof pulls)[number]);
+      return HttpResponse.json({
+        number: 7,
+        html_url: "https://github.com/example/policies/pull/7",
+      });
+    }),
+  );
+  expect(
+    await proposeServerRulesChange({ ...change, userId: pat.id }),
+  ).toMatchObject({ delivery: "pull_request", number: 7 });
+  expect(pulls).toHaveLength(1);
+  expect(pulls[0]?.body).toContain(
+    "who may edit the MCP servers Payments API and payments_api in the MCP registry",
+  );
+});
+
 test("each job's GitHub App token covers the policy repository and its own permissions only, and a permission the App lacks is reported", async ({
   makeOrganization,
 }) => {
@@ -2182,6 +2389,155 @@ test("the policy check judges who asked for a pull request Archestra opened, rea
   // Nothing moved: nothing is posted again.
   await checkDueAppaGithubSyncs();
   expect(runs).toHaveLength(6);
+});
+
+test("the policy check asks for edit access to each shared server a rules file governs; a member's personal copy changes nothing", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+}) => {
+  config.openappa.enabled = true;
+  const org = await makeOrganization();
+  const admin = await makeUser({ email: "admin@example.com" });
+  await makeMember(admin.id, org.id, { role: "admin" });
+  const payments = await makeTeam(org.id, admin.id, { name: "Payments" });
+  const billing = await makeTeam(org.id, admin.id, { name: "Billing" });
+  const pat = await makeUser({ email: "pat@example.com" });
+  await makeTeamMember(payments.id, pat.id);
+  await makeTeamMember(billing.id, pat.id);
+  const bea = await makeUser({ email: "bea@example.com" });
+  await makeTeamMember(payments.id, bea.id);
+  const cody = await makeUser({ email: "cody@example.com" });
+  await makeMember(cody.id, org.id);
+  // Every member may open Payments API in the registry; payments_api only
+  // its team's members.
+  const servers = [
+    { name: "payments_api", scope: "org", editors: payments.id, open: false },
+    { name: "Payments API", scope: "org", editors: billing.id, open: true },
+    // Cody's personal copy: it follows the file, and gates nothing.
+    { name: "payments_api", scope: "personal", editors: null, open: false },
+  ] as const;
+  for (const { name, scope, editors, open } of servers) {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "remote",
+        serverUrl: "https://payments.example.com/mcp",
+        scope,
+      },
+      {
+        organizationId: org.id,
+        authorId: editors ? admin.id : cody.id,
+        initialPermissionGrants: editors
+          ? [
+              {
+                subject: { type: "team", id: editors },
+                actions: ["read", "use", "update"],
+              },
+              ...(open
+                ? [
+                    {
+                      subject: {
+                        type: "organization" as const,
+                        id: "*" as const,
+                      },
+                      actions: ["read" as const, "use" as const],
+                    },
+                  ]
+                : []),
+            ]
+          : undefined,
+      },
+    );
+    await ToolModel.createToolIfNotExists({
+      name: "payments_api__refund_payment",
+      description: "refund_payment",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+  }
+  await connectApp({ organizationId: org.id });
+  const root = `include = ["mcp/*.toml"]\n${RULES}`;
+  const results = { 1: "a".repeat(40), 2: "b".repeat(40), 3: "c".repeat(40) };
+  serveRepository({
+    head: FIRST,
+    files: {
+      [FIRST]: { "appa.toml": root, "mcp/payments_api.toml": REFUNDS },
+      ...Object.fromEntries(
+        Object.values(results).map((sha) => [
+          sha,
+          { "appa.toml": root, "mcp/payments_api.toml": INVOICES },
+        ]),
+      ),
+    },
+  });
+  await syncAppaGithubPolicy(org.id);
+
+  const bot = { id: 900, login: "acme-guardrails[bot]", type: "Bot" };
+  const signed = (email: string, sha: string) => ({
+    sha,
+    commit: {
+      message: `Guardrails rules for payments_api\n\nRequested-by: ${email}`,
+      verification: { verified: true, reason: "valid" },
+    },
+    author: bot,
+    committer: { login: bot.login, type: "Bot" },
+  });
+  // Opened by the App for Pat, who may edit both shared servers; for Bea,
+  // who may edit payments_api only; and for Cody, who owns only the copy.
+  // Everyone who reads the repository reads a check's summary, so it names
+  // only the servers the requester may open in the registry.
+  const requesters = { 1: pat.email, 2: bea.email, 3: cody.email };
+  const runs: Array<{
+    head_sha: string;
+    conclusion: string;
+    output: { title: string; summary: string };
+  }> = [];
+  server.use(
+    http.get(`${REPO}/pulls`, () =>
+      HttpResponse.json(
+        Object.entries(results).map(([number, sha]) => ({
+          number: Number(number),
+          head: { sha },
+          merge_commit_sha: null,
+          user: bot,
+        })),
+      ),
+    ),
+    http.get(`${REPO}/pulls/:number/files`, () =>
+      HttpResponse.json([{ filename: "mcp/payments_api.toml" }]),
+    ),
+    http.get(`${REPO}/pulls/:number/commits`, ({ params }) => {
+      const number = Number(params.number) as keyof typeof results;
+      return HttpResponse.json([signed(requesters[number], results[number])]);
+    }),
+    http.post(`${REPO}/check-runs`, async ({ request }) => {
+      runs.push((await request.json()) as (typeof runs)[number]);
+      return HttpResponse.json({ id: 1 }, { status: 201 });
+    }),
+  );
+  await checkDueAppaGithubSyncs();
+  const posted = Object.fromEntries(
+    runs.map((run) => [
+      run.head_sha,
+      { conclusion: run.conclusion, ...run.output },
+    ]),
+  );
+  expect(posted[results[1]]).toMatchObject({ conclusion: "success" });
+  expect(posted[results[2]]).toEqual({
+    conclusion: "failure",
+    title: "The requester may not change these rules",
+    summary:
+      "bea@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP server Payments API in the MCP registry.",
+  });
+  expect(posted[results[3]]).toEqual({
+    conclusion: "failure",
+    title: "The requester may not change these rules",
+    summary:
+      "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP servers Payments API and an MCP server they cannot see in the MCP registry.",
+  });
 });
 
 test("a policy in a folder of a repository that holds other work gets the same one-rule ruleset, and a pull request that changes no policy file gets the check as skipped at once", async ({

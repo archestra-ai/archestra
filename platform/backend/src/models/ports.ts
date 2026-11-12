@@ -116,7 +116,7 @@ export interface ScopedPermissionsPort {
     userId: string;
     resource: "mcpRegistry";
     scope: string;
-    action: "update";
+    action: "read" | "update";
   }) => Promise<boolean>;
 }
 

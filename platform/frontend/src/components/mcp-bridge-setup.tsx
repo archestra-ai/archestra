@@ -43,7 +43,8 @@ import { cn } from "@/lib/utils/tailwind";
  * program opens the approval page, as before.
  *
  * `device` is the user's device once it is linked, null before. The caller
- * reads it live (`useDesktopDevices`), so the steps turn done by themselves.
+ * reads it live (`useDesktopDevices`), so the steps turn done by themselves:
+ * the last one once the MCP bridge on it is online, not when it is approved.
  */
 export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
   const appName = useAppName();
@@ -73,8 +74,8 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
     const timer = setTimeout(() => setCopied(false), 1600);
     return () => clearTimeout(timer);
   }, [copied]);
-  const done = device !== null;
-  const approved = done || answered?.decision === "approve";
+  const done = device?.online === true;
+  const approved = device !== null || answered?.decision === "approve";
   const commandRan = approved || Boolean(request);
 
   return (
@@ -158,7 +159,7 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
         </SetupStep>
         <SetupStep
           number={3}
-          state={done ? "done" : approved ? "current" : "upcoming"}
+          state={done ? "done" : approved ? "working" : "upcoming"}
         >
           <p
             className={approved && !done ? "font-medium" : "text-foreground/80"}
@@ -173,19 +174,21 @@ export function McpBridgeSetup({ device }: { device: DesktopDevice | null }) {
 
 /**
  * The live line for the footer of a dialog around {@link McpBridgeSetup}:
- * it waits for the device, then names it.
+ * it waits for the device, then for its MCP bridge to be online, then names
+ * it as linked.
  */
 export function McpBridgeSetupStatus({
   device,
 }: {
   device: DesktopDevice | null;
 }) {
+  const linked = device?.online === true;
   return (
     <output
       aria-live="polite"
       className="flex min-w-0 items-center gap-2 self-center text-sm sm:mr-auto"
     >
-      {device ? (
+      {linked ? (
         <CheckCircle2 className="size-4 shrink-0 text-green-600" aria-hidden />
       ) : (
         <Loader2
@@ -194,13 +197,17 @@ export function McpBridgeSetupStatus({
         />
       )}
       <span
-        key={device ? "linked" : "waiting"}
+        key={linked ? "linked" : device ? "linking" : "waiting"}
         className={cn(
           "truncate",
-          device ? "font-medium" : "text-muted-foreground",
+          linked ? "font-medium" : "text-muted-foreground",
         )}
       >
-        {device ? `${device.name} is linked` : "Waiting for your device..."}
+        {linked
+          ? `${device.name} is linked`
+          : device
+            ? `Linking ${device.name}...`
+            : "Waiting for your device..."}
       </span>
     </output>
   );
@@ -278,7 +285,8 @@ function SetupStep({
   children,
 }: {
   number: number;
-  state: "current" | "upcoming" | "done";
+  /** `working`: the current step, which waits on the device by itself. */
+  state: "current" | "working" | "upcoming" | "done";
   /** Holds more than one line: the circle stays at its top. */
   multiline?: boolean;
   children: ReactNode;
@@ -295,7 +303,8 @@ function SetupStep({
         aria-hidden
         className={cn(
           "flex size-[26px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold",
-          state === "current" && "bg-primary text-primary-foreground",
+          (state === "current" || state === "working") &&
+            "bg-primary text-primary-foreground",
           state === "upcoming" &&
             "border border-muted-foreground/40 text-muted-foreground",
           state === "done" && "bg-green-600/10 text-green-600",
@@ -303,6 +312,8 @@ function SetupStep({
       >
         {state === "done" ? (
           <Check className="size-3.5" strokeWidth={3} />
+        ) : state === "working" ? (
+          <Loader2 className="size-3.5 animate-spin" strokeWidth={3} />
         ) : (
           <span>{number}</span>
         )}
@@ -362,6 +373,7 @@ export function McpBridgeSetupDialog({
 }) {
   const devices = useDesktopDevices({ enabled: open });
   const device = devices.data?.[0] ?? null;
+  const linked = device?.online === true;
   return (
     <StandardDialog
       open={open}
@@ -380,10 +392,10 @@ export function McpBridgeSetupDialog({
           <McpBridgeSetupStatus device={device} />
           <Button
             type="button"
-            variant={device ? "default" : "outline"}
+            variant={linked ? "default" : "outline"}
             onClick={() => onOpenChange(false)}
           >
-            <OneOf inline shown={device ? 1 : 0}>
+            <OneOf inline shown={linked ? 1 : 0}>
               <span>Close</span>
               <span>Done</span>
             </OneOf>

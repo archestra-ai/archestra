@@ -10,6 +10,7 @@ import logger from "@/logging";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import {
   firstFileAtEachPath,
+  hasRepositoryIncludeGlob,
   strayGlobMatches,
 } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
@@ -301,16 +302,18 @@ class OpenAppaGitlab {
     const files = firstFileAtEachPath(params.files);
     // Files the project holds that the policy's globs would read, and that
     // were never in the policy, go with the merge request.
-    const remove = strayGlobMatches({
-      content: params.content,
-      policyPath: params.policyPath,
-      paths: (
-        await withGitlabErrors(() => client.listTree(params.repo, baseSha))
-      )
-        .filter((entry) => entry.type === "blob")
-        .map((entry) => entry.path),
-      written: files.map((file) => file.path),
-    });
+    const remove = hasRepositoryIncludeGlob(params.content)
+      ? strayGlobMatches({
+          content: params.content,
+          policyPath: params.policyPath,
+          paths: (
+            await withGitlabErrors(() => client.listTree(params.repo, baseSha))
+          )
+            .filter((entry) => entry.type === "blob")
+            .map((entry) => entry.path),
+          written: files.map((file) => file.path),
+        })
+      : [];
     const unchanged = await withGitlabErrors(async () => {
       if (remove.length > 0) return false;
       for (const file of files) {

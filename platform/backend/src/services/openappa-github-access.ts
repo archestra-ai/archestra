@@ -527,68 +527,122 @@ class OpenAppaRepositoryIncludes {
     });
   }
 
-  /** The head commit of the setup pull or merge request, for a minute. */
+  /**
+   * The commit of the setup pull or merge request, for a minute: the one
+   * commit Archestra opened it with, which holds the files accepted before.
+   * A request that carries any other commit, pushed by someone else, or
+   * that was closed unmerged, has none to read: nothing unmerged reaches
+   * the composition, and the last one that opened stays in force.
+   */
   private async pendingSetupCommit(
     source: RepositorySource & { setupPullRequestNumber: number },
   ): Promise<string | null> {
     const key = `${source.repo}#${source.setupPullRequestNumber}`;
     const cached = this.pendingSetups.get(key);
     if (cached !== undefined) return cached;
-    let sha: string | null = null;
-    if (source.gitlabTokenId) {
-      const client = gitClient(
-        await resolveOpenAppaGitlabAccess({
-          organizationId: source.organizationId,
-          gitlabTokenId: source.gitlabTokenId,
-        }),
-      );
-      let request: Awaited<ReturnType<typeof client.gitlabMergeRequest>>;
-      try {
-        request = await client.gitlabMergeRequest(
-          source.repo,
-          source.setupPullRequestNumber,
-        );
-      } catch (error) {
-        if (error instanceof GitHostError)
-          throw new ApiError(
-            502,
-            `GitLab returned HTTP ${error.status} for the setup merge request. Check project access and the token.`,
-          );
-        throw error;
-      }
-      // Open, or merged and not pulled yet: the request's head commit holds
-      // the files, also once the merge removed its branch.
-      sha = request.state === "closed" ? null : request.sha;
-    } else {
-      const { token, api } = await resolveOpenAppaGithubAccess(source, {
-        pull_requests: "read",
-      });
-      const response = await githubFetch({
-        url: `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`,
-        token: token || undefined,
-      });
+    const own = source.gitlabTokenId
+      ? await this.ownGitlabSetupCommit(source)
+      : await this.ownGithubSetupCommit(source);
+    if (own === null) return null;
+    if (!/^[a-f0-9]{40}$/.test(own))
+      throw new ApiError(502, "The setup request names an invalid commit");
+    this.pendingSetups.set(key, own);
+    return own;
+  }
+
+  private async ownGithubSetupCommit(
+    source: RepositorySource & { setupPullRequestNumber: number },
+  ): Promise<string | null> {
+    const { token, api } = await resolveOpenAppaGithubAccess(source, {
+      pull_requests: "read",
+    });
+    const base = `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`;
+    const read = async <T>(url: string): Promise<T> => {
+      const response = await githubFetch({ url, token: token || undefined });
       if (!response.ok)
         throw new ApiError(
           502,
           `GitHub returned HTTP ${response.status} for the setup pull request. Check repository access and App permissions.`,
         );
-      const pull = (await response.json()) as {
-        state?: string;
-        merged?: boolean;
-        head?: { sha?: string };
-      };
-      // Open, or merged and not pulled yet: the head still holds the files.
-      sha =
-        pull.state === "open" || pull.merged === true
-          ? (pull.head?.sha ?? null)
-          : null;
+      return (await response.json()) as T;
+    };
+    const pull = await read<{
+      state?: string;
+      merged?: boolean;
+      head?: { sha?: string };
+    }>(base);
+    // Open, or merged and not pulled yet; a request closed unmerged is not.
+    if (pull.state !== "open" && pull.merged !== true) return null;
+    const [login, commits] = await Promise.all([
+      githubAppLogin(source),
+      read<
+        Array<{
+          sha?: string;
+          author?: { login?: string } | null;
+          committer?: { login?: string } | null;
+        }>
+      >(`${base}/commits?per_page=2`),
+    ]);
+    const only = commits.length === 1 ? commits[0] : undefined;
+    if (
+      !only?.sha ||
+      only.sha !== pull.head?.sha ||
+      !login ||
+      (only.author?.login ?? only.committer?.login) !== login
+    ) {
+      logger.info(
+        { repo: source.repo, number: source.setupPullRequestNumber },
+        "OpenAPPA does not read a setup pull request that carries more than its own commit",
+      );
+      return null;
     }
-    if (sha === null) return null;
-    if (!/^[a-f0-9]{40}$/.test(sha))
-      throw new ApiError(502, "The setup request names an invalid commit");
-    // A request closed unmerged is not remembered: reopened, it reads again.
-    this.pendingSetups.set(key, sha);
-    return sha;
+    return only.sha;
+  }
+
+  private async ownGitlabSetupCommit(
+    source: RepositorySource & { setupPullRequestNumber: number },
+  ): Promise<string | null> {
+    const client = gitClient(
+      await resolveOpenAppaGitlabAccess({
+        organizationId: source.organizationId,
+        gitlabTokenId: source.gitlabTokenId as string,
+      }),
+    );
+    try {
+      const request = await client.gitlabMergeRequest(
+        source.repo,
+        source.setupPullRequestNumber,
+      );
+      if (request.state === "closed") return null;
+      const [me, commits] = await Promise.all([
+        client.gitlabCurrentUser(),
+        client.gitlabMergeRequestCommits(
+          source.repo,
+          source.setupPullRequestNumber,
+        ),
+      ]);
+      const only = commits.length === 1 ? commits[0] : undefined;
+      if (
+        !only ||
+        only.id !== request.sha ||
+        !me.email ||
+        only.authorEmail !== me.email
+      ) {
+        logger.info(
+          { repo: source.repo, number: source.setupPullRequestNumber },
+          "OpenAPPA does not read a setup merge request that carries more than its own commit",
+        );
+        return null;
+      }
+      return only.id;
+    } catch (error) {
+      if (error instanceof GitHostError)
+        throw new ApiError(
+          502,
+          `GitLab returned HTTP ${error.status} for the setup merge request. Check project access and the token.`,
+        );
+      throw error;
+    }
   }
 
   /**
@@ -735,6 +789,17 @@ export function templateExampleBlob(): string {
  * been in it, so setup removes them in the same commit, where the reviewer
  * sees them go and can keep any on the branch.
  */
+/** Whether the policy's include list has a glob over repository files. */
+export function hasRepositoryIncludeGlob(content: string): boolean {
+  return repositoryIncludePaths(content).some((entry) => {
+    try {
+      return parseIncludeGlob(entry) !== null;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function strayGlobMatches(params: {
   content: string;
   policyPath: string;

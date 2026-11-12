@@ -63,6 +63,7 @@ import {
   firstFileAtEachPath,
   githubAppLogin,
   githubAppProfile,
+  hasRepositoryIncludeGlob,
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
@@ -427,12 +428,14 @@ export async function createAppaGithubRepository(params: {
         branch,
         parent,
         files,
-        remove: strayGlobMatches({
-          content: seed,
-          policyPath: "appa.toml",
-          paths: await blobPaths({ base, token, commit: parent }),
-          written: files.map((file) => file.path),
-        }),
+        remove: hasRepositoryIncludeGlob(seed)
+          ? strayGlobMatches({
+              content: seed,
+              policyPath: "appa.toml",
+              paths: await blobPaths({ base, token, commit: parent }),
+              written: files.map((file) => file.path),
+            })
+          : [],
         message: "Seed current OpenAPPA policy",
         pull: {
           title: "Seed current OpenAPPA policy",
@@ -527,12 +530,14 @@ async function proposeSetupPullRequest(params: {
       files,
       // Files the repository holds that the policy's globs would read, and
       // that were never in the policy, go in the same commit.
-      remove: strayGlobMatches({
-        content: params.seed,
-        policyPath: path,
-        paths: await blobPaths({ base, token, commit: parent }),
-        written: files.map((file) => file.path),
-      }),
+      remove: hasRepositoryIncludeGlob(params.seed)
+        ? strayGlobMatches({
+            content: params.seed,
+            policyPath: path,
+            paths: await blobPaths({ base, token, commit: parent }),
+            written: files.map((file) => file.path),
+          })
+        : [],
       message: "Seed current OpenAPPA policy",
       pull: {
         title: "Seed current OpenAPPA policy",

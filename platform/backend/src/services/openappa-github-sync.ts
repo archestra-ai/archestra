@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   getGithubWebOrigin,
   gitHostFromUrl,
+  isBuiltInCatalogId,
   parseFullToolName,
   slugifyMcpServerName,
   TimeInMs,
@@ -1609,8 +1610,13 @@ async function judgeGithubPull(params: {
     : null;
   let needsPolicyPermission = false;
   for (const file of governed) {
-    if (!file.prefix || !prefixes?.byPrefix.get(file.prefix)?.size) {
-      // No server carries that prefix: the policy's own matter.
+    if (
+      !file.prefix ||
+      !prefixes?.byPrefix.get(file.prefix)?.size ||
+      governsBuiltInTools(file.prefix, prefixes)
+    ) {
+      // No server carries that prefix, or the built-in tools do: the policy's
+      // own matter.
       needsPolicyPermission = true;
       continue;
     }
@@ -1644,7 +1650,10 @@ async function judgeGithubPull(params: {
     });
     if (!permissions.guardrailsPolicy?.includes("update")) {
       const first = governed.find(
-        (file) => !file.prefix || !prefixes?.byPrefix.get(file.prefix)?.size,
+        (file) =>
+          !file.prefix ||
+          !prefixes?.byPrefix.get(file.prefix)?.size ||
+          governsBuiltInTools(file.prefix, prefixes),
       );
       return {
         governed: paths,
@@ -2801,6 +2810,8 @@ export function rulesFileRefusal(params: {
   ].sort();
   if (stray.length > 0)
     return `${catalog.name} has no rules file: some of its tools carry other prefixes than ${prefix}__ (${stray.join(", ")}).`;
+  if (governsBuiltInTools(prefix, prefixes))
+    return `${catalog.name} has no rules file: its tools carry the prefix ${prefix}__ of the built-in ${archestraMcpBranding.catalogName} tools, which only the organization's own policy governs.`;
   if (
     [...(prefixes.byPrefix.get(prefix) ?? [])].some(
       (id) => id !== catalog.id && prefixes.conflicting.has(id),
@@ -2808,6 +2819,19 @@ export function rulesFileRefusal(params: {
   )
     return `${catalog.name} has no rules file: another MCP server's tools put "__" inside its tool prefix, ${prefix}__.`;
   return null;
+}
+
+/**
+ * Whether a prefix is the built-in tools' own: their catalog carries it, or it
+ * is one of their names (a white-labeled deployment's, and the default name
+ * they still answer to). A catalog that predates the name check can still
+ * carry it, and a rules file for it would govern the built-in tools too.
+ */
+function governsBuiltInTools(prefix: string, prefixes: ToolPrefixes): boolean {
+  return (
+    archestraMcpBranding.allowedServerNames.includes(prefix) ||
+    [...(prefixes.byPrefix.get(prefix) ?? [])].some(isBuiltInCatalogId)
+  );
 }
 
 /** A server a rules file governs, and whether its editors gate the file. */

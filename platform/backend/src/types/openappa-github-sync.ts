@@ -180,6 +180,11 @@ export const AppaBranchRulesetSchema = z.object({
   ),
 });
 
+/** `fresh=true` reads GitHub now, past the minute the last read is kept. */
+export const AppaRepositoryProtectionQuerySchema = z.object({
+  fresh: z.enum(["true", "false"]).optional(),
+});
+
 export const AppaRepositoryProtectionSchema = z
   .object({
     /** The name of the policy check, and of the ruleset that requires it. */

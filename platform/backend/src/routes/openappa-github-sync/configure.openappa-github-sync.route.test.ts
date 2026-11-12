@@ -1832,6 +1832,146 @@ describe("APPA GitHub sync", () => {
     });
   });
 
+  test("an existing repository connected with self-service on gets the servers' include in the setup pull request, which stands for the include until it merges", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-setup-include-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    // The target holds its own policy: the current one goes in as a pull request.
+    const git = fakeGitData("example/other-policy", {
+      head: { "appa.toml": policy },
+    });
+    let pull = { merged: false, state: "open" };
+    const opened: unknown[] = [];
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get("https://api.github.com/repos/example/other-policy", () =>
+        HttpResponse.json({ default_branch: "main" }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits",
+        () => HttpResponse.json([{ sha: commit }]),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/git/ref/heads/main",
+        () => HttpResponse.json({ object: { sha: commit } }),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/git/refs",
+        () => HttpResponse.json({}),
+      ),
+      http.post(
+        "https://api.github.com/repos/example/other-policy/pulls",
+        async ({ request }) => {
+          opened.push(await request.json());
+          return HttpResponse.json({
+            number: 8,
+            html_url: "https://github.com/example/other-policy/pull/8",
+          });
+        },
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/pulls/8",
+        () =>
+          HttpResponse.json({
+            head: { sha: SETUP_COMMIT },
+            html_url: "https://github.com/example/other-policy/pull/8",
+            ...pull,
+          }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/main",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/rules/branches/main",
+        () => HttpResponse.json([]),
+      ),
+      contentsOf("example/other-policy", git.files, () =>
+        pull.merged ? [commit, SETUP_COMMIT] : [SETUP_COMMIT],
+      ),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: {
+        owner: "example",
+        name: "other-policy",
+        githubAppConfigId: githubApp.id,
+        interval: "1h",
+        existing: true,
+        replace: true,
+        selfService: true,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    // The seed includes the servers' folder from the first commit.
+    expect(git.written()["appa.toml"]).toContain('"mcp/*.toml"');
+    expect(opened).toHaveLength(1);
+    expect(response.json()).toMatchObject({
+      source: { setupPullRequestNumber: 8, sourceCommit: null },
+      selfService: { enabled: true },
+    });
+    // Until it merges, the setup pull request is the include on its way:
+    // the protection names it, and nothing else opens.
+    const protection = async () => {
+      const read = await app.inject({
+        method: "GET",
+        url: "/api/openappa/github-sync/protection",
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      // The branch rules are read meanwhile: the ruleset can be imported
+      // before the merge.
+      expect(read.json().branchRules).toMatchObject({ state: "missing" });
+      return read.json().include;
+    };
+    expect(await protection()).toEqual({
+      folder: "mcp",
+      state: "pull_open",
+      pull: {
+        number: 8,
+        url: "https://github.com/example/other-policy/pull/8",
+      },
+    });
+    const include = await app.inject({
+      method: "PATCH",
+      url: "/api/openappa/github-sync",
+      payload: { action: "include_servers" },
+    });
+    expect(include.statusCode, include.body).toBe(200);
+    expect(opened).toHaveLength(1);
+    // Merged and pulled, the include is in place.
+    pull = { merged: true, state: "closed" };
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      sourceCommit: commit,
+      setupPullRequestNumber: null,
+      lastSyncError: null,
+    });
+    expect(await protection()).toEqual({ folder: "mcp", state: "included" });
+  });
+
   test("a policy that reads repository files no commit was accepted for is not moved, and nothing is created", async () => {
     const root = `include = ["teams/ops.toml"]\n\n${policy}`;
     // Kept as the latest revision without a source: nowhere to read teams/ops.toml from.

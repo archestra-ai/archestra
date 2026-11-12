@@ -3073,12 +3073,15 @@ async function repositoryProtection(
   organizationId: string,
 ): Promise<RepositoryProtection | null> {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!row?.sourceCommit || !selfServiceActive(row)) return null;
+  if (!selfServiceActive(row)) return null;
+  // The branch's rules and the App's grants are there to read as soon as
+  // the repository is connected, a setup pull request still open or not:
+  // the administrator imports the ruleset while it waits.
   const source = {
     ...row,
     repo: row.repo,
     path: row.path,
-    sourceCommit: row.sourceCommit,
+    sourceCommit: row.sourceCommit ?? "",
   };
   const checkName = POLICY_CHECK_NAME;
   const [branchRules, app] = await Promise.all([
@@ -3137,8 +3140,14 @@ const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
  */
 export async function getRepositoryProtection(
   organizationId: string,
+  options: {
+    /** Read GitHub now: the administrator just imported or edited the ruleset. */
+    fresh?: boolean;
+  } = {},
 ): Promise<RepositoryProtection | null> {
-  const cached = protectionStatus.get(organizationId);
+  const cached = options.fresh
+    ? undefined
+    : protectionStatus.get(organizationId);
   if (cached !== undefined) return cached;
   const read = await repositoryProtection(organizationId);
   protectionStatus.set(organizationId, read);

@@ -125627,7 +125627,9 @@ export type ConfigureAppaGithubSyncResponse = ConfigureAppaGithubSyncResponses[k
 export type GetAppaRepositoryProtectionData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        fresh?: 'true' | 'false';
+    };
     url: '/api/openappa/github-sync/protection';
 };
 
@@ -126069,7 +126071,6 @@ export type StartAppaGithubAppData = {
     body: {
         githubUrl: string;
         owner: string;
-        selfService?: boolean;
     };
     path?: never;
     query?: never;

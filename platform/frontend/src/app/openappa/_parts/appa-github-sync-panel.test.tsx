@@ -663,10 +663,15 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Use an existing repository"));
-  // The Self-service step comes first; nothing to change here.
-  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
-  // With a single App there is nothing to pick: it goes straight to its repositories.
+  // With a single App there is nothing to pick: it goes straight on to
+  // Self-service, which follows the App now that every App has Checks.
   fireEvent.click(await screen.findByText("Use an App I already have"));
+  expect(
+    await screen.findByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  ).not.toBeChecked();
+  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
   fireEvent.click(screen.getByRole("option", { name: /example\/policies/ }));
   expect(
@@ -745,10 +750,16 @@ test("starts fresh from the template, connects it through a chosen App and finis
     visibility: "private",
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  // The Self-service step comes first; nothing to change here.
-  fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByText("Use an App I already have"));
   fireEvent.click(await screen.findByRole("radio", { name: /Policy App/ }));
+  // Checks is among the permissions every App gets, self-service or not.
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The Self-service step follows the App; nothing to change here.
+  expect(
+    await screen.findByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  ).not.toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   // The new template copy is picked without a search.
   expect(
@@ -877,6 +888,117 @@ test("editing an App-backed source keeps its repository and only warns about mis
     selfService: true,
     selfServiceDirectory: "mcp",
   });
+});
+
+test("connecting an existing repository with self-service keeps the checklist open on the setup pull request, with the ruleset to import", async () => {
+  state = { ...state, hasPolicy: true, source: null };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  const actions: unknown[] = [];
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.post(`${url}/repository`, async ({ request }) => {
+      expect(await request.json()).toEqual({
+        owner: "example",
+        name: "policies",
+        githubAppConfigId: appId,
+        interval: "1h",
+        selfService: true,
+        existing: true,
+        replace: false,
+      });
+      // The repository holds its own policy: the current one goes in as a
+      // pull request, the servers' include with it.
+      state = {
+        ...state,
+        source: {
+          ...source,
+          githubAppConfigId: appId,
+          sourceCommit: null,
+          setupPullRequestNumber: 8,
+        },
+      };
+      return HttpResponse.json(state);
+    }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: {
+          folder: "mcp",
+          state: "pull_open",
+          pull: {
+            number: 8,
+            url: "https://github.com/example/policies/pull/8",
+          },
+        },
+        branchRules: {
+          state: "missing",
+          settingsUrl: "https://github.com/example/policies/settings/rules",
+          ruleset: { name: "Check OpenAPPA Guardrails" },
+        },
+      }),
+    ),
+    http.patch(url, async ({ request }) => {
+      actions.push(await request.json());
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Set up Git sync" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
+  fireEvent.change(screen.getByLabelText("Organization"), {
+    target: { value: "example" },
+  });
+  fireEvent.click(screen.getByText("Use an existing repository"));
+  fireEvent.click(await screen.findByText("Use an App I already have"));
+  // Self-service, after the App, with what the check needs spelled out.
+  const choice = await screen.findByRole("checkbox", {
+    name: "MCP Guardrails Self-Service",
+  });
+  expect(choice).not.toBeChecked();
+  fireEvent.click(choice);
+  expect(
+    screen.getByText(/created before self-service may lack the Checks/),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
+  fireEvent.click(screen.getByRole("option", { name: /example\/policies/ }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Connect repository" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  // No separate pull request dialog: the checklist names the setup pull
+  // request, the ruleset to import, and the include the pull request carries.
+  const dialog = await screen.findByRole("dialog");
+  const setup = await within(dialog).findByRole("link", {
+    name: "Pull request #8",
+  });
+  expect(setup).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/pull/8",
+  );
+  expect(setup.parentElement).toHaveTextContent(
+    "Repository connected. Pull request #8 carries the current policy: merge it, and the next sync finishes setup.",
+  );
+  expect(
+    await within(dialog).findByRole("button", { name: "Download ruleset" }),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(/The setup pull request includes/),
+  ).toHaveTextContent("The setup pull request includes mcp/*.toml.");
+  // Nothing else opened: the pull request on its way is the include.
+  expect(actions).toEqual([]);
+  expect(screen.queryByText("Finish Git sync")).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 });
 
 test("creates a private GitLab project in a group with the saved token", async () => {

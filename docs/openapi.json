@@ -487715,6 +487715,20 @@
         "tags": [
           "OpenAPPA"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "fresh",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -489321,9 +489335,6 @@
                     "type": "string",
                     "maxLength": 39,
                     "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$"
-                  },
-                  "selfService": {
-                    "type": "boolean"
                   }
                 },
                 "required": [

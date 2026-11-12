@@ -22,11 +22,11 @@ When setup is done, the card on **Settings → Guardrails** shows **Connected**.
 1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
    - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
    - **Use an existing repository:** one that already holds an OpenAPPA policy. Setup proposes your current policy to it in a pull request.
-2. **MCP Guardrails Self-Service:** tick it to let [MCP owners manage their servers' Guardrails](#mcp-guardrails-self-service), and pick the folder their policy files go to, `mcp` unless you change it. You can turn it on later too.
-3. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
+2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install it on the policy repository only.
+3. **MCP Guardrails Self-Service:** tick it to let [MCP owners manage their servers' Guardrails](#mcp-guardrails-self-service), and pick the folder their policy files go to, `mcp` unless you change it. You can turn it on later too.
 4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-The App needs **Read & write** on Contents and Pull requests, and on Workflows too on GitHub Enterprise Server. Self-service adds Checks. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass.
+The App needs **Read & write** on Contents, Pull requests, and Checks, and on Workflows too on GitHub Enterprise Server. Checks is for the policy check self-service posts on pull requests; the App asks for it up front, so turning self-service on later needs no change to the App. If repository rules block the first commit, setup opens a pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. With self-service on, the last step of setup keeps the checklist open: the pull request, the branch ruleset to import, and the include it carries.
 
 ### GitLab
 

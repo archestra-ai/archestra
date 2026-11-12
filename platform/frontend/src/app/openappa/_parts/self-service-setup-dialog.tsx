@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppaGithubAppGrants,
-  useAppaRepositoryProtection,
+  useFreshAppaRepositoryProtection,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -397,7 +397,8 @@ type Progress = "waiting" | "running" | "done" | "failed";
  * pull request that starts the folder and includes it, and the branch
  * ruleset, which the administrator imports on GitHub and checks here. Runs
  * once when shown; a failed part offers a retry. The Git sync wizard shows
- * it too, so the dialog stays open on the pull request.
+ * it too, so the dialog stays open on the pull request, and on the setup
+ * pull request a connect may open, which carries the include itself.
  */
 export function SelfServiceOutcomeStep({
   run: first,
@@ -405,15 +406,26 @@ export function SelfServiceOutcomeStep({
   directory,
   policyFile,
 }: {
-  /** The first row's work; the rest reads the protection once it settles. */
+  /**
+   * The first row's work; the rest reads the protection once it settles.
+   * A result with `setupPull` names the pull request that carries the
+   * current policy, so the first row waits on its merge.
+   */
   run: () => Promise<unknown>;
-  labels: { pending: string; done: string; failed: string };
+  labels: {
+    pending: string;
+    done: string;
+    /** The first row with a setup pull request, before its link. */
+    proposed?: string;
+    failed: string;
+  };
   directory: string;
   policyFile: string;
 }) {
   const update = useUpdateAppaGithubSync();
-  const protection = useAppaRepositoryProtection(false);
+  const fresh = useFreshAppaRepositoryProtection();
   const [switched, setSwitched] = useState<Progress>("waiting");
+  const [setupPull, setSetupPull] = useState<SetupPull | null>(null);
   const [rules, setRules] = useState<{
     /** `action`: the administrator imports or edits the ruleset on GitHub. */
     state: Progress | "action";
@@ -428,16 +440,19 @@ export function SelfServiceOutcomeStep({
   }>({ state: "waiting" });
   const started = useRef(false);
   const mutate = update.mutateAsync;
-  const refetch = protection.refetch;
+  // Read from GitHub each time: what the run just set up, and later what
+  // the administrator imported there.
+  const refetch = fresh.mutateAsync;
 
   async function run() {
     try {
       setSwitched("running");
-      await first();
+      const outcome = await first();
+      setSetupPull(setupPullOf(outcome));
       setSwitched("done");
       setRules({ state: "running" });
       setInclude({ state: "running" });
-      const read = (await refetch()).data ?? null;
+      const read = await refetch();
       setRules(rulesStateOf(read));
       if (
         read?.include.state === "included" ||
@@ -448,7 +463,7 @@ export function SelfServiceOutcomeStep({
       }
       try {
         await mutate({ action: "include_servers" });
-        const again = (await refetch()).data ?? null;
+        const again = await refetch();
         setInclude(
           again?.include.state === "included" ||
             again?.include.state === "pull_open"
@@ -473,7 +488,7 @@ export function SelfServiceOutcomeStep({
   // The administrator imported or edited the ruleset: read the branch again.
   async function checkRules() {
     setRules((current) => ({ ...current, state: "running" }));
-    setRules(rulesStateOf((await refetch()).data ?? null));
+    setRules(rulesStateOf(await refetch()));
   }
   // Runs once, when the step is shown.
   // biome-ignore lint/correctness/useExhaustiveDependencies: one run per showing
@@ -509,7 +524,7 @@ export function SelfServiceOutcomeStep({
         <BranchRuleActions
           rules={detail ?? { state: "error" }}
           checkName={check}
-          checking={protection.isFetching}
+          checking={fresh.isPending}
           onCheckAgain={() => void checkRules()}
         />
       );
@@ -523,6 +538,16 @@ export function SelfServiceOutcomeStep({
       return (
         <span>
           {policyFile} already includes <code>{directory}/*.toml</code>.
+        </span>
+      );
+    if (
+      include.state === "done" &&
+      detail?.pull &&
+      detail.pull.number === setupPull?.number
+    )
+      return (
+        <span>
+          The setup pull request includes <code>{directory}/*.toml</code>.
         </span>
       );
     if (include.state === "done" && detail?.pull)
@@ -560,13 +585,29 @@ export function SelfServiceOutcomeStep({
         aria-live="polite"
       >
         <ProgressRow state={switched}>
-          <span>
-            {switched === "done"
-              ? labels.done
-              : switched === "failed"
-                ? `${labels.failed}${include.error ? `: ${include.error}` : "."}`
-                : labels.pending}
-          </span>
+          {switched === "done" && setupPull ? (
+            <span>
+              {labels.proposed ?? labels.done}.{" "}
+              <a
+                href={setupPull.url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                Pull request #{setupPull.number}
+              </a>{" "}
+              carries the current policy: merge it, and the next sync finishes
+              setup.
+            </span>
+          ) : (
+            <span>
+              {switched === "done"
+                ? labels.done
+                : switched === "failed"
+                  ? `${labels.failed}${include.error ? `: ${include.error}` : "."}`
+                  : labels.pending}
+            </span>
+          )}
         </ProgressRow>
         <ProgressRow state={rules.state}>{rulesLine}</ProgressRow>
         <ProgressRow state={include.state}>{includeLine}</ProgressRow>
@@ -586,10 +627,8 @@ export function SelfServiceOutcomeStep({
                 .then((result) =>
                   setInclude({
                     state:
-                      result.data?.include.state === "missing"
-                        ? "failed"
-                        : "done",
-                    detail: result.data?.include,
+                      result?.include.state === "missing" ? "failed" : "done",
+                    detail: result?.include,
                   }),
                 )
                 .catch((error: unknown) =>
@@ -607,6 +646,20 @@ export function SelfServiceOutcomeStep({
       ) : null}
     </div>
   );
+}
+
+type SetupPull = { number: number; url: string };
+
+/** The setup pull request a run's result names, if any. */
+function setupPullOf(outcome: unknown): SetupPull | null {
+  if (typeof outcome !== "object" || outcome === null) return null;
+  const pull = (outcome as { setupPull?: unknown }).setupPull;
+  return typeof pull === "object" &&
+    pull !== null &&
+    typeof (pull as SetupPull).number === "number" &&
+    typeof (pull as SetupPull).url === "string"
+    ? (pull as SetupPull)
+    : null;
 }
 
 /**

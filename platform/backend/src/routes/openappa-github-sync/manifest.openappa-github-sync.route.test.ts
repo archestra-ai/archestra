@@ -40,25 +40,21 @@ describe("POST /api/openappa/github-app/manifest", () => {
     await app.close();
   });
 
-  const start = (owner: string, selfService?: boolean) =>
+  const start = (owner: string) =>
     app.inject({
       method: "POST",
       url: "/api/openappa/github-app/manifest",
-      payload: {
-        githubUrl: "https://github.com",
-        owner,
-        ...(selfService === undefined ? {} : { selfService }),
-      },
+      payload: { githubUrl: "https://github.com", owner },
     });
 
-  test("the manifest asks for the sync's permissions, and for self-service the policy check's too, never Administration", async () => {
+  test("the manifest asks for the sync's permissions and the policy check's, whether or not self-service is on, never Administration", async () => {
     server.use(
       http.get("https://api.github.com/users/:login", ({ params }) =>
         HttpResponse.json({ login: params.login, type: "Organization" }),
       ),
     );
-    const permissions = async (selfService?: boolean) => {
-      const started = await start("acme", selfService);
+    const permissions = async () => {
+      const started = await start("acme");
       expect(started.statusCode, started.body).toBe(200);
       return (
         JSON.parse(started.json().manifest) as {
@@ -66,25 +62,20 @@ describe("POST /api/openappa/github-app/manifest", () => {
         }
       ).default_permissions;
     };
-    // Reading and proposing (Contents, Pull requests); Metadata comes with
-    // every App.
-    const sync = {
+    // Reading and proposing (Contents, Pull requests), the policy check on
+    // pull requests (Checks); Metadata comes with every App. The branch
+    // ruleset that requires the check is the administrator's to import, so
+    // no Administration, and self-service turned on later changes nothing.
+    const expected = {
       contents: "write",
       pull_requests: "write",
+      checks: "write",
       metadata: "read",
     };
-    expect(await permissions()).toEqual(sync);
-    expect(await permissions(false)).toEqual(sync);
-    // Self-service: the policy check (Checks). The branch ruleset that
-    // requires it is the administrator's to import, so no Administration.
-    const selfService = { ...sync, checks: "write" };
-    expect(await permissions(true)).toEqual(selfService);
-    // The environment variable, while set, decides for every App.
-    config.openappa.selfService = "enabled";
+    expect(await permissions()).toEqual(expected);
+    config.openappa.selfService = "disabled";
     try {
-      expect(await permissions(false)).toEqual(selfService);
-      config.openappa.selfService = "disabled";
-      expect(await permissions(true)).toEqual(sync);
+      expect(await permissions()).toEqual(expected);
     } finally {
       delete config.openappa.selfService;
     }

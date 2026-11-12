@@ -1955,13 +1955,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
-      const mcpServer = await desktopMcpInstallService.updateArguments({
-        mcpServerId: id,
-        userId: user.id,
-        desktopArguments: body.desktopArguments,
-      });
-      broadcastMcpServersChanged({ organizationId, serverIds: [id] });
+    async (request, reply) => {
+      const { mcpServer, changed } =
+        await desktopMcpInstallService.updateArguments({
+          mcpServerId: request.params.id,
+          userId: request.user.id,
+          desktopArguments: request.body.desktopArguments,
+        });
+      if (changed) {
+        broadcastMcpServersChanged({
+          organizationId: request.organizationId,
+          serverIds: [mcpServer.id],
+        });
+      } else {
+        // The stored arguments: nothing was updated.
+        request.auditSkip = true;
+      }
       return reply.send(mcpServer);
     },
   );

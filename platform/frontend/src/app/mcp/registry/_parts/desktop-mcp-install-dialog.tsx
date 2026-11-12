@@ -53,7 +53,7 @@ type Props = {
   onClose: () => void;
   /**
    * Makes the installation. `desktopArguments` are what the user added to
-   * the command of the item; undefined for an item with no command.
+   * the command of the item; undefined when they added none.
    */
   onAdd: (
     catalogItem: CatalogItem,
@@ -149,9 +149,13 @@ function DesktopMcpAddFlow({
     command === null ? null : desktopMcpArgumentsError(desktopArguments);
 
   const add = async () => {
+    // None are not sent: should the user have an installation already, it
+    // keeps the arguments it has.
     const server = await onAdd(
       catalogItem,
-      command === null ? undefined : desktopArguments,
+      command === null || desktopArguments.length === 0
+        ? undefined
+        : desktopArguments,
     );
     if (!server) return;
     setAdded({

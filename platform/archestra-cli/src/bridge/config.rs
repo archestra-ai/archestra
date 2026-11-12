@@ -861,6 +861,12 @@ mcp:
                 "'single'",
                 "yes",
                 "007",
+                "a\ttab",
+                "  spaces around  ",
+                // Archestra refuses only a line break and a NUL.
+                "\u{1b}[31m \u{7} \u{85} \u{2028} \u{feff} \u{7f}",
+                // As long as Archestra accepts one, with spaces.
+                &"two words ".repeat(409),
             ]),
             ..item("7c1e", "MATLAB")
         }]);

@@ -32,7 +32,7 @@ vi.mock("./catalog-edit-access", () => ({
 
 const serverRulesHref = vi.fn<() => string | null>(() => null);
 vi.mock("./server-rules-launch", () => ({
-  SERVER_RULES_LABEL: "Edit Guardrails rules",
+  SERVER_RULES_LABEL: "Edit Guardrails",
   useServerRulesHref: () => serverRulesHref(),
 }));
 
@@ -338,7 +338,7 @@ describe("McpServerTable uninstall permission", () => {
     // Four actions fit as four buttons: a "⋯" holding one would hide it for nothing.
     expect(
       screen.getByRole("link", {
-        name: "Edit Guardrails rules some-remote-server",
+        name: "Edit Guardrails some-remote-server",
       }),
     ).toHaveAttribute("href", "/chat?agentId=keeper&user_prompt=rules");
     expect(
@@ -380,14 +380,14 @@ describe("McpServerTable uninstall permission", () => {
     // Uninstall, Edit, Credentials, Guardrails rules and Logs: five actions.
     expect(
       screen.queryByRole("link", {
-        name: "Edit Guardrails rules some-remote-server",
+        name: "Edit Guardrails some-remote-server",
       }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "More actions some-remote-server" }),
     );
     expect(
-      await screen.findByRole("menuitem", { name: "Edit Guardrails rules" }),
+      await screen.findByRole("menuitem", { name: "Edit Guardrails" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: "View logs" }),

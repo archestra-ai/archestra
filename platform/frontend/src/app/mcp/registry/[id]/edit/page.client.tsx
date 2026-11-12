@@ -3,9 +3,8 @@
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
-import { OpenAppaChatButton } from "@/app/openappa/_parts/openappa-chat-button";
-import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { OpenAppaIcon } from "@/components/openappa-icon";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +18,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
-import { useAppaSelfService } from "@/lib/openappa-github-sync.query";
 import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
 import {
   SETUP_STEPS,
@@ -39,7 +35,10 @@ import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
 import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
 // SPDX-SnippetEnd
 import type { CatalogItem } from "../../_parts/mcp-server-card";
-import { ServerRulesButton } from "../../_parts/server-rules-launch";
+import {
+  SERVER_RULES_LABEL,
+  ServerRulesButton,
+} from "../../_parts/server-rules-launch";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
   // The one item this page shows, by id, with its list figures (tool count,
@@ -130,23 +129,13 @@ function SetupWizard({
   const hideNext = step === "test" && !testTarget;
 
   const detailHref = `/mcp/registry/${item.id}`;
-  const openappaEnabled = useFeature("openappaEnabled") === true;
-  // Which Guardrails launch the last step offers. While MCP Guardrails
-  // Self-Service is on, every editor of this server configures its Guardrails
-  // through the server's own rules file in the policy repository, Guardrails
-  // permission or not: a change through the whole policy would land in the
-  // root policy file instead. While it is off, whoever may read the
-  // Guardrails policy reviews the whole policy's coverage of the server, and
-  // other editors get no launch. Nothing shows until the self-service state
-  // is known, so the wrong launch never flashes first.
+  // The last step's Guardrails action is the one the server's page and the
+  // registry row offer its editors: Edit Guardrails, the server's own rules
+  // file through the APPA Keeper while MCP Guardrails Self-Service is on.
+  // A change through the whole policy would land in the root policy file
+  // instead, so there is no other launch here; the button shows nothing
+  // while self-service is off or its state is not known yet.
   const { canModify } = useCanModifyCatalogItem(item);
-  const selfService = useAppaSelfService(openappaEnabled);
-  const guardrailsRead = useHasPermissions({ guardrailsPolicy: ["read"] });
-  const serverRules = canModify && selfService.data?.enabled === true;
-  const coverageReview =
-    selfService.data?.enabled === false &&
-    !guardrailsRead.isPending &&
-    guardrailsRead.data === true;
   // Which of the configuration step's two submit buttons asked for the save
   // in flight: "Save" finishes on the server's page (one field changed is one
   // save, not a walk through the remaining steps), "Save & Continue" moves on
@@ -293,22 +282,11 @@ function SetupWizard({
             )
           ) : (
             <div className="flex items-center gap-2">
-              {openappaEnabled && serverRules && (
+              {canModify && (
                 <ServerRulesButton variant="outline" size="sm" catalog={item}>
-                  <AppaKeeperIcon />
-                  <span>Configure Guardrails with agent</span>
+                  <OpenAppaIcon />
+                  <span>{SERVER_RULES_LABEL}</span>
                 </ServerRulesButton>
-              )}
-              {openappaEnabled && coverageReview && (
-                <OpenAppaChatButton
-                  variant="outline"
-                  size="sm"
-                  promptKey="improveCoverage"
-                  target={{ kind: "mcp_server", id: item.id, name: item.name }}
-                >
-                  <AppaKeeperIcon />
-                  <span>Configure Guardrails with agent</span>
-                </OpenAppaChatButton>
               )}
               <Button size="sm" onClick={() => router.push(detailHref)}>
                 Finish

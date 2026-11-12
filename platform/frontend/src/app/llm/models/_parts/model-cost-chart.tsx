@@ -23,6 +23,8 @@ import { formatModelCost } from "./model-cost-format";
 /** One calendar day of a model's history, at local midnight. */
 export interface ChartDay {
   day: Date;
+  /** Where the entry ends, for entries longer than a day. Default: next day. */
+  end?: Date;
   requests: number;
   recordedCost: number;
   recomputedCost: number;
@@ -47,6 +49,9 @@ export function CostChart({
   firstRequestAt,
   presetId,
   onPick,
+  compact = false,
+  sliderLabel = "Recompute from",
+  unit = "day",
 }: {
   /** Every calendar day from the first request to today. */
   days: ChartDay[];
@@ -54,14 +59,26 @@ export function CostChart({
   firstRequestAt: Date;
   presetId: string | null;
   onPick: (date: Date, preset?: string | null) => void;
+  /**
+   * Recorded cost only, for tight forms: a shorter plot, 7d/30d/90d presets,
+   * no recompute ticks or $0 flags, and the hovered day's cost in the header
+   * instead of a legend.
+   */
+  compact?: boolean;
+  /** Accessible name of the start slider. */
+  sliderLabel?: string;
+  /** What one entry of `days` spans, for the header ("Cost per week"). */
+  unit?: string;
 }) {
   const plotRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const bars = useMemo(() => toBars(days), [days]);
-  const zeroWindow = useMemo(() => findZeroCostWindow(days), [days]);
+  const zeroWindow = useMemo(
+    () => (compact ? null : findZeroCostWindow(days)),
+    [compact, days],
+  );
   const n = bars.length;
   const maxCost = Math.max(
     0.000001,
@@ -138,88 +155,40 @@ export function CostChart({
 
   const hovered = hoverIdx !== null && !isDragging ? bars[hoverIdx] : undefined;
   const midBar = n > 0 ? bars[Math.floor(n / 2)] : null;
-  const isCustom = presetId === null;
-  const presets = [
-    ...SINCE_PRESETS.map((preset) => ({
-      id: preset.id,
-      label: preset.label,
-      date: () => presetDate(preset.ms),
-    })),
-    { id: "all", label: "All", date: () => firstRequestAt },
-  ];
 
   return (
     <div className="rounded-md border bg-background/60 px-2.5 pt-2 pb-2">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          Cost per day
-        </span>
-        <div className="ml-auto inline-flex max-w-full items-center rounded-md border bg-background p-0.5 shadow-xs">
-          {presets.map((preset) => (
-            <Button
-              key={preset.id}
-              type="button"
-              size="xs"
-              variant="ghost"
-              aria-label={PRESET_ARIA_LABELS[preset.id]}
-              aria-pressed={presetId === preset.id}
-              onClick={() => onPick(preset.date(), preset.id)}
-              className={cn(
-                "tabular-nums",
-                presetId === preset.id
-                  ? "bg-muted text-foreground hover:bg-muted"
-                  : "text-muted-foreground",
-              )}
-            >
-              {preset.label}
-            </Button>
-          ))}
-          <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                aria-label={`Exact start: ${format(since, "MMM d, yyyy, h:mm a")}. Pick a date and time`}
-                aria-pressed={isCustom}
-                className={cn(
-                  "min-w-0 tabular-nums",
-                  isCustom || calendarOpen
-                    ? "bg-muted text-foreground hover:bg-muted"
-                    : "text-muted-foreground",
-                )}
-              >
-                <CalendarIcon className="size-3" aria-hidden />
-                <span className="truncate">
-                  {format(since, "MMM d")}
-                  <span className="hidden min-[420px]:inline">
-                    {format(since, ", HH:mm")}
-                  </span>
-                </span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <DateTimeCalendar
-                day={since}
-                time={[since.getHours(), since.getMinutes()]}
-                disabledDate={(date) => date.getTime() > Date.now()}
-                onChange={(date) => onPick(date, null)}
-                onDone={() => setCalendarOpen(false)}
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+        {compact && hovered ? (
+          <span className="min-w-0 truncate text-[11px] text-muted-foreground tabular-nums">
+            <span>{barLabel(hovered)}</span>
+            <span>{" · "}</span>
+            <span className="text-foreground">
+              {formatModelCost(hovered.recordedCost)}
+            </span>
+          </span>
+        ) : (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            Cost per {unit}
+          </span>
+        )}
+        <StartPresetPicker
+          since={since}
+          presetId={presetId}
+          onPick={onPick}
+          firstRequestAt={compact ? null : firstRequestAt}
+          className="ml-auto"
+        />
       </div>
 
       <div
         role="slider"
         tabIndex={0}
-        aria-label="Recompute from"
+        aria-label={sliderLabel}
         aria-valuemin={0}
         aria-valuemax={Math.max(0, n - 1)}
         aria-valuenow={sinceIdx}
-        aria-valuetext={sliderValueText(since, bars[sinceIdx])}
+        aria-valuetext={sliderValueText(since, bars[sinceIdx], compact)}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -252,7 +221,10 @@ export function CostChart({
           </div>
         </div>
 
-        <div ref={plotRef} className="relative h-28">
+        <div
+          ref={plotRef}
+          className={cn("relative", compact ? "h-14" : "h-28")}
+        >
           <div
             aria-hidden
             className="pointer-events-none absolute inset-y-0 right-0 rounded-r-sm bg-primary/5"
@@ -285,7 +257,7 @@ export function CostChart({
                   )}
                 >
                   {/* What a $0 day should have cost */}
-                  {bar.zero && (
+                  {bar.zero && !compact && (
                     <div
                       className={cn(
                         "absolute inset-x-0 bottom-0 transition-colors duration-150",
@@ -305,7 +277,7 @@ export function CostChart({
                     )}
                     style={{ height: `${recordedPct}%` }}
                   />
-                  {bar.requests > 0 && (
+                  {bar.requests > 0 && !compact && (
                     <div
                       className={cn(
                         "absolute inset-x-0 h-0.5 rounded-full transition-colors duration-150",
@@ -327,17 +299,19 @@ export function CostChart({
         </div>
 
         {/* $0 strip, aligned to the bars */}
-        <div aria-hidden className="mt-1 flex h-1 gap-px">
-          {bars.map((bar) => (
-            <div
-              key={bar.start.getTime()}
-              className={cn(
-                "min-w-0 flex-1 rounded-full",
-                bar.zero && "bg-amber-500/80 dark:bg-amber-400/70",
-              )}
-            />
-          ))}
-        </div>
+        {!compact && (
+          <div aria-hidden className="mt-1 flex h-1 gap-px">
+            {bars.map((bar) => (
+              <div
+                key={bar.start.getTime()}
+                className={cn(
+                  "min-w-0 flex-1 rounded-full",
+                  bar.zero && "bg-amber-500/80 dark:bg-amber-400/70",
+                )}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Handle line, from the pill through the $0 strip */}
         <div
@@ -357,7 +331,12 @@ export function CostChart({
       </div>
 
       {/* Legend, replaced by the hovered bar's readout */}
-      <div className="mt-1.5 flex min-h-4 items-center text-[11px]">
+      <div
+        className={cn(
+          "mt-1.5 flex min-h-4 items-center text-[11px]",
+          compact && "hidden",
+        )}
+      >
         {hovered ? (
           <span className="min-w-0 truncate text-muted-foreground tabular-nums">
             <span>{barLabel(hovered)}</span>
@@ -401,6 +380,104 @@ export function CostChart({
           onPick={() => onPick(zeroWindow.from, null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Where a range starts: preset windows back from now, and an exact date and
+ * time. With `firstRequestAt`, the 24h preset and "All" (back to it) are
+ * offered too; without it, 7d/30d/90d.
+ */
+export function StartPresetPicker({
+  since,
+  presetId,
+  onPick,
+  firstRequestAt = null,
+  className,
+}: {
+  since: Date;
+  presetId: string | null;
+  onPick: (date: Date, preset?: string | null) => void;
+  firstRequestAt?: Date | null;
+  className?: string;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const isCustom = presetId === null;
+  const presets = [
+    ...SINCE_PRESETS.filter(
+      (preset) => firstRequestAt !== null || preset.id !== "24h",
+    ).map((preset) => ({
+      id: preset.id,
+      label: preset.label,
+      date: () => presetDate(preset.ms),
+    })),
+    ...(firstRequestAt
+      ? [{ id: "all", label: "All", date: () => firstRequestAt }]
+      : []),
+  ];
+
+  return (
+    <div
+      className={cn(
+        "inline-flex max-w-full items-center rounded-md border bg-background p-0.5 shadow-xs",
+        className,
+      )}
+    >
+      {presets.map((preset) => (
+        <Button
+          key={preset.id}
+          type="button"
+          size="xs"
+          variant="ghost"
+          aria-label={PRESET_ARIA_LABELS[preset.id]}
+          aria-pressed={presetId === preset.id}
+          onClick={() => onPick(preset.date(), preset.id)}
+          className={cn(
+            "tabular-nums",
+            presetId === preset.id
+              ? "bg-muted text-foreground hover:bg-muted"
+              : "text-muted-foreground",
+          )}
+        >
+          {preset.label}
+        </Button>
+      ))}
+      <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-label={`Exact start: ${format(since, "MMM d, yyyy, h:mm a")}. Pick a date and time`}
+            aria-pressed={isCustom}
+            className={cn(
+              "min-w-0 tabular-nums",
+              isCustom || calendarOpen
+                ? "bg-muted text-foreground hover:bg-muted"
+                : "text-muted-foreground",
+            )}
+          >
+            <CalendarIcon className="size-3" aria-hidden />
+            <span className="truncate">
+              {format(since, "MMM d")}
+              <span className="hidden min-[420px]:inline">
+                {format(since, ", HH:mm")}
+              </span>
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <DateTimeCalendar
+            day={since}
+            time={[since.getHours(), since.getMinutes()]}
+            disabledDate={(date) => date.getTime() > Date.now()}
+            onChange={(date) => onPick(date, null)}
+            onDone={() => setCalendarOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -451,7 +528,8 @@ function toBars(days: ChartDay[]): Bar[] {
     const recordedCost = sum(group, (day) => day.recordedCost);
     bars.push({
       start: group[0].day,
-      end: addDays(group[group.length - 1].day, 1),
+      end:
+        group[group.length - 1].end ?? addDays(group[group.length - 1].day, 1),
       requests,
       recordedCost,
       recomputedCost: sum(group, (day) => day.recomputedCost),
@@ -541,8 +619,15 @@ function ZeroCostLine({
 }
 
 /** What the start slider announces: the start, and its day's cost both ways. */
-function sliderValueText(since: Date, bar: Bar | undefined): string {
+function sliderValueText(
+  since: Date,
+  bar: Bar | undefined,
+  recordedOnly: boolean,
+): string {
   const start = format(since, "MMM d, yyyy, h:mm a");
   if (!bar) return start;
+  if (recordedOnly) {
+    return `${start}. ${barLabel(bar)}: ${formatModelCost(bar.recordedCost)}`;
+  }
   return `${start}. ${barLabel(bar)}: ${formatModelCost(bar.recordedCost)} recorded, ${formatModelCost(bar.recomputedCost)} at the new prices`;
 }

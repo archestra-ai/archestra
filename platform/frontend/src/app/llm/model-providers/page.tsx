@@ -99,6 +99,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
+import { githubOrganizationLabel } from "@/lib/organization-subscription";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
@@ -527,6 +528,7 @@ export default function ApiKeysPage() {
       id: string;
       name: string;
       organization: string | null;
+      organizationName: string | null;
       reconnect: boolean;
     } | null;
   } | null>(null);
@@ -822,6 +824,7 @@ export default function ApiKeysPage() {
                   id: credential.id,
                   name: credential.name,
                   organization: credential.githubOrganization ?? null,
+                  organizationName: credential.githubOrganizationName ?? null,
                   reconnect: true,
                 },
               })
@@ -997,6 +1000,7 @@ export default function ApiKeysPage() {
               id: editingApiKey.id,
               name: editingApiKey.name,
               organization: editingApiKey.githubOrganization ?? null,
+              organizationName: editingApiKey.githubOrganizationName ?? null,
             }}
           />
         ) : null}
@@ -1076,7 +1080,8 @@ export default function ApiKeysPage() {
               isSubscription={deletingSubscription}
               githubAppOrganization={
                 selectedApiKey?.isGithubAppKey
-                  ? (selectedApiKey.githubOrganization ?? "the organization")
+                  ? (githubOrganizationLabel(selectedApiKey) ??
+                    "the organization")
                   : null
               }
               knowledgeBaseUsages={

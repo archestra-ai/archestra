@@ -370,6 +370,7 @@ describe("useSettingsTabs", () => {
         "Teams",
         "Roles",
         "Credentials",
+        "Blob Providers",
         "Identity Providers",
         "Secrets",
       ]);

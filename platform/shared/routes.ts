@@ -66,6 +66,7 @@ export const RouteId = {
   UpdateAutoRouter: "updateAutoRouter",
   DeleteAutoRouter: "deleteAutoRouter",
   GetAutoRoutingPlans: "getAutoRoutingPlans",
+  GetAutoRoutingUsage: "getAutoRoutingUsage",
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",
@@ -810,6 +811,20 @@ export const RouteId = {
   UpdateGithubPat: "updateGithubPat",
   DeleteGithubPat: "deleteGithubPat",
 
+  // Blob providers (organization object storage destinations)
+  ListBlobProviders: "listBlobProviders",
+  CreateBlobProvider: "createBlobProvider",
+  UpdateBlobProvider: "updateBlobProvider",
+  DeleteBlobProvider: "deleteBlobProvider",
+  TestBlobProvider: "testBlobProvider",
+
+  // Scheduled cost exports to blob providers
+  ListCostExports: "listCostExports",
+  CreateCostExport: "createCostExport",
+  UpdateCostExport: "updateCostExport",
+  DeleteCostExport: "deleteCostExport",
+  RunCostExport: "runCostExport",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
@@ -1015,6 +1030,9 @@ export const RouteId = {
   GetGuardrailsDeployment: "getGuardrailsDeployment",
   UpdateGuardrailsDeployment: "updateGuardrailsDeployment",
   GetAppaGithubSync: "getAppaGithubSync",
+  GetAppaRepositoryProtection: "getAppaRepositoryProtection",
+  GetAppaGithubAppGrants: "getAppaGithubAppGrants",
+  GetAppaSelfService: "getAppaSelfService",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
   StartAppaGithubApp: "startAppaGithubApp",

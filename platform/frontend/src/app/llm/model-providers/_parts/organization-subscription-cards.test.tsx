@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
@@ -96,21 +96,68 @@ describe("OrganizationSubscriptionCards", () => {
         "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to my-org.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("GitHub Copilot my-org")).toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();
     // One card per organization, no extra header or menu actions.
-    expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Connect another/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Manage access" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/models/)).not.toBeInTheDocument();
+    // The plan's card lists no models; the chat and Connect pickers do.
+    const plan = screen
+      .getByText("GitHub Copilot my-org")
+      .closest<HTMLElement>('[data-slot="card"]');
+    expect(within(plan as HTMLElement).queryByText(/models/)).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Manage" }));
     expect(handlers.onManage).toHaveBeenCalledWith(appKey());
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     expect(handlers.onDisconnect).toHaveBeenCalledWith(appKey());
+  });
+
+  it("names each organization's plan and offers another organization to someone who can add plans", async () => {
+    const user = userEvent.setup();
+    const handlers = renderCards([
+      appKey(),
+      appKey({
+        id: "key-2",
+        name: "GitHub Copilot (other-org)",
+        githubOrganization: "other-org",
+        githubOrganizationName: "Other Org Inc",
+      }),
+    ]);
+
+    expect(screen.getByText("GitHub Copilot my-org")).toBeInTheDocument();
+    expect(
+      screen.getByText("GitHub Copilot Other Org Inc"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Connected")).toHaveLength(2);
+    const another = screen.getByTestId("copilot-plan-connect-another");
+    expect(another).toHaveTextContent(
+      "Connect other GitHub Copilot organization",
+    );
+    expect(another).toHaveTextContent("Not connected");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(handlers.onConnect).toHaveBeenCalledOnce();
+    expect(handlers.onReconnect).not.toHaveBeenCalled();
+  });
+
+  it("offers no other organization to someone who cannot add plans", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: hasPermissions(
+            { llmProviderApiKey: ["read", "update", "delete"] },
+            permissions,
+          ),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    renderCards([appKey()]);
+
+    expect(screen.getByText("GitHub Copilot my-org")).toBeInTheDocument();
+    expect(screen.queryByTestId("copilot-plan-connect-another")).toBeNull();
   });
 
   it("asks for a reconnect when GitHub refused the App", async () => {

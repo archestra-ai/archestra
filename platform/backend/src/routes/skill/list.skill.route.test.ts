@@ -1,9 +1,13 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { makeSignature } from "better-auth/crypto";
+import { authPlugin } from "@/auth/fastify-plugin";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   AgentExcludedSkillModel,
   AgentModel,
   EnvironmentModel,
   SkillModel,
+  TeamModel,
 } from "@/models";
 import MemberModel from "@/models/member";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
@@ -814,5 +818,180 @@ describe("GET /api/skills", () => {
       url: "/api/skills?status=deleted",
     });
     expect(response.statusCode).toBe(403);
+  });
+});
+
+describe("GET /api/skills?visibleTo over authenticated HTTP", () => {
+  test("matches the target's grants and filters without inheriting the administrator's access", async ({
+    makeAgent,
+    makeCustomRole,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSession,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    const target = await makeUser();
+    const outsider = await makeUser();
+    const otherOrg = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+    await makeMember(outsider.id, otherOrg.id);
+    const team = await makeTeam(org.id, admin.id);
+    await makeTeamMember(team.id, target.id);
+    const seed = (name: string, authorId: string, access: TestAccess) =>
+      seedImportedSkill({
+        organizationId: org.id,
+        name,
+        authorId,
+        access,
+        sourceRef: `example/skills@main:${name}`,
+      });
+    const personal = await seed("a-personal", target.id, "personal");
+    const shared = await seed("b-shared", admin.id, {
+      users: [target.id],
+      preset: "view",
+    });
+    const teamSkill = await seed("c-team", admin.id, {
+      teams: [team.id],
+      level: "use",
+    });
+    const orgSkill = await seed("d-organization", admin.id, "org");
+    const privateAdmin = await seed("e-private-admin", admin.id, "personal");
+    const cookieFor = async (userId: string) => {
+      const session = await makeSession(userId, {
+        activeOrganizationId: org.id,
+      });
+      const signature = await makeSignature(
+        session.token,
+        process.env.ARCHESTRA_AUTH_SECRET as string,
+      );
+      return `archestra.session_token=${encodeURIComponent(`${session.token}.${signature}`)}`;
+    };
+    const adminCookie = await cookieFor(admin.id);
+    const targetCookie = await cookieFor(target.id);
+    const app = createFastifyInstance();
+    await app.register(authPlugin);
+    await app.register(skillRoutes);
+    const url = await app.listen({ port: 0, host: "127.0.0.1" });
+    const read = async (query: string, cookie?: string) => {
+      const response = await fetch(`${url}/api/skills${query}`, {
+        headers: cookie ? { cookie } : {},
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    try {
+      const own = await read("?sortBy=name&sortDirection=asc", targetCookie);
+      const preview = await read(
+        `?visibleTo=${target.id}&sortBy=name&sortDirection=asc`,
+        adminCookie,
+      );
+      expect(own.status, JSON.stringify(own.body)).toBe(200);
+      expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+      expect(preview.body).toEqual(own.body);
+      expect(
+        preview.body.data.map((skill: { id: string }) => skill.id),
+      ).toEqual([personal.id, shared.id, teamSkill.id, orgSkill.id]);
+      const adminList = await read("", adminCookie);
+      expect(
+        adminList.body.data.map((skill: { id: string }) => skill.id),
+      ).toContain(privateAdmin.id);
+      const filtered = await read(
+        `?visibleTo=${target.id}&search=shared&limit=1`,
+        adminCookie,
+      );
+      expect(
+        filtered.body.data.map((skill: { id: string }) => skill.id),
+      ).toEqual([shared.id]);
+      expect(filtered.body.pagination.total).toBe(1);
+      const page = await read(
+        `?visibleTo=${target.id}&sortBy=name&sortDirection=asc&limit=2&offset=2`,
+        adminCookie,
+      );
+      expect(page.body.data.map((skill: { id: string }) => skill.id)).toEqual([
+        teamSkill.id,
+        orgSkill.id,
+      ]);
+      expect(page.body.pagination.total).toBe(4);
+      const ownFilter = await read(
+        `?visibleTo=${target.id}&access=mine`,
+        adminCookie,
+      );
+      const ownFilterControl = await read("?access=mine", targetCookie);
+      expect(ownFilter.status).toBe(200);
+      expect(ownFilter.body).toEqual(ownFilterControl.body);
+      expect(
+        ownFilter.body.data.map((skill: { id: string }) => skill.id),
+      ).toEqual([personal.id]);
+      expect((await read(`?visibleTo=${target.id}`, targetCookie)).status).toBe(
+        403,
+      );
+      expect(
+        (await read(`?visibleTo=${outsider.id}`, adminCookie)).status,
+      ).toBe(404);
+      expect((await read("?visibleTo=unknown-user", adminCookie)).status).toBe(
+        404,
+      );
+      expect((await read(`?visibleTo=${target.id}`)).status).toBe(401);
+      const privateAgent = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        authorId: admin.id,
+        access: "personal",
+      });
+      expect(
+        (
+          await read(
+            `?visibleTo=${target.id}&forAgentId=${privateAgent.id}`,
+            adminCookie,
+          )
+        ).status,
+      ).toBe(404);
+      const ownAgent = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        authorId: target.id,
+        access: "personal",
+      });
+      const ownAgentPreview = await read(
+        `?visibleTo=${target.id}&forAgentId=${ownAgent.id}`,
+        adminCookie,
+      );
+      expect(ownAgentPreview.status).toBe(200);
+      expect(ownAgentPreview.body).toEqual(
+        (await read(`?forAgentId=${ownAgent.id}`, targetCookie)).body,
+      );
+      expect(
+        (await read(`?visibleTo=${target.id}&status=deleted`, adminCookie))
+          .status,
+      ).toBe(403);
+      const skillReader = await makeCustomRole(org.id, {
+        permission: { skill: ["read"] },
+      });
+      await MemberModel.updateRole(target.id, org.id, skillReader.role);
+      const gatewayPreview = await read(
+        `?visibleTo=${target.id}&mcpGatewayEnvironment=default`,
+        adminCookie,
+      );
+      expect(gatewayPreview.status).toBe(403);
+      expect(gatewayPreview.body).toEqual(
+        (await read("?mcpGatewayEnvironment=default", targetCookie)).body,
+      );
+      await MemberModel.updateRole(target.id, org.id, MEMBER_ROLE_NAME);
+      await TeamModel.removeMember(team.id, target.id);
+      const afterRevoke = await read(`?visibleTo=${target.id}`, adminCookie);
+      expect(
+        afterRevoke.body.data.map((skill: { id: string }) => skill.id),
+      ).not.toContain(teamSkill.id);
+      await MemberModel.deleteByMemberOrUserId(target.id, org.id);
+      expect((await read(`?visibleTo=${target.id}`, adminCookie)).status).toBe(
+        404,
+      );
+    } finally {
+      await app.close();
+    }
   });
 });

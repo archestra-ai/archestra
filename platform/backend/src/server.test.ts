@@ -1,4 +1,6 @@
+import net from "node:net";
 import { DrizzleQueryError } from "drizzle-orm/errors";
+import { errors as undiciErrors } from "undici";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
@@ -242,12 +244,29 @@ describe("createFastifyInstance", () => {
       }
     });
 
+    test("reports a connect timeout outside the provider routes as an upstream failure", async () => {
+      const app = createFastifyInstance();
+      try {
+        app.get("/test-connect-timeout", async () => {
+          throw Object.assign(new Error("Connect Timeout Error"), {
+            code: "UND_ERR_CONNECT_TIMEOUT",
+            statusCode: 500,
+          });
+        });
+        const response = await app.inject({
+          method: "GET",
+          url: "/test-connect-timeout",
+        });
+        expect(response.statusCode).toBe(503);
+        expect(response.json().error.message).toBe(
+          "Could not connect to an upstream service (UND_ERR_CONNECT_TIMEOUT). Check the service URL and network access, then retry.",
+        );
+      } finally {
+        await app.close();
+      }
+    });
+
     test.each([
-      [
-        "/test-connect-timeout",
-        "UND_ERR_CONNECT_TIMEOUT",
-        "Connect Timeout Error",
-      ],
       [
         "/v1/ollama/models",
         "FST_REPLY_FROM_INTERNAL_SERVER_ERROR",
@@ -299,6 +318,7 @@ describe("createFastifyInstance", () => {
           "MCP error -32603: request to https://api.example.com/v1 failed, reason: getaddrinfo ENOTFOUND api.example.com",
         ),
         "api.example.com",
+        "",
       ],
       [
         "an SDK wrapping a refused connection",
@@ -314,8 +334,9 @@ describe("createFastifyInstance", () => {
           ),
         }),
         "203.0.113.10:443",
+        " (ECONNREFUSED)",
       ],
-    ])("names the unreachable host instead of blaming the database for %s", async (_kind, thrown, host) => {
+    ])("names the unreachable host instead of blaming the database for %s", async (_kind, thrown, host, code) => {
       const app = createFastifyInstance();
       app.get("/test-outbound-unreachable", async () => {
         throw thrown;
@@ -329,11 +350,143 @@ describe("createFastifyInstance", () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         error: {
-          message: `Could not connect to ${host}. Check that the network egress policy allows this host and that the service is reachable, then retry.`,
+          message: `Could not connect to ${host}${code}. Check that the network egress policy allows this host and that the service is reachable, then retry.`,
           type: "api_service_unavailable_error",
         },
       });
       await app.close();
+    });
+
+    test("names the host of a native fetch whose connection was reset", async () => {
+      // A peer (or an egress policy) that resets the socket: fetch's cause is a
+      // bare `read ECONNRESET` that carries no address, port, or host name.
+      const peer = net.createServer((socket) => {
+        socket.on("data", () => socket.resetAndDestroy());
+      });
+      await new Promise<void>((resolve) =>
+        peer.listen(0, "127.0.0.1", resolve),
+      );
+      const { port } = peer.address() as net.AddressInfo;
+      const app = createFastifyInstance();
+      const warn = vi.spyOn(app.log, "warn");
+      app.get("/test-fetch-reset", async () => {
+        await fetch(`http://127.0.0.1:${port}/`);
+        return {};
+      });
+
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/test-fetch-reset",
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json().error.message).toBe(
+          `Could not connect to 127.0.0.1:${port} (ECONNRESET). Check that the network egress policy allows this host and that the service is reachable, then retry.`,
+        );
+        expect(warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            outboundTarget: `127.0.0.1:${port}`,
+            errorCode: "ECONNRESET",
+          }),
+          "HTTP 503 upstream service unavailable",
+        );
+      } finally {
+        await app.close();
+        await new Promise((resolve) => peer.close(resolve));
+      }
+    });
+
+    test("names the host of a fetch connect timeout from the timeout's own message", async () => {
+      // undici's connect timeout sets no address fields; only its message
+      // names the endpoint it was dialing.
+      const app = createFastifyInstance();
+      app.get("/test-fetch-connect-timeout", async () => {
+        throw new TypeError("fetch failed", {
+          cause: new undiciErrors.ConnectTimeoutError(
+            "Connect Timeout Error (attempted address: api.example.com:443, timeout: 10000ms)",
+          ),
+        });
+      });
+
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/test-fetch-connect-timeout",
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json().error.message).toBe(
+          "Could not connect to api.example.com:443 (UND_ERR_CONNECT_TIMEOUT). Check that the network egress policy allows this host and that the service is reachable, then retry.",
+        );
+      } finally {
+        await app.close();
+      }
+    });
+
+    test("does not report a client timeout that names no host as a database outage", async () => {
+      const app = createFastifyInstance();
+      const warn = vi.spyOn(app.log, "warn");
+      const error = vi.spyOn(app.log, "error");
+      app.get("/test-client-timeout", async () => {
+        throw Object.assign(new Error("Request timed out"), {
+          code: "ETIMEDOUT",
+        });
+      });
+
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/test-client-timeout",
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toEqual({
+          error: {
+            message:
+              "Could not connect to an upstream service (ETIMEDOUT). Check the service URL and network access, then retry.",
+            type: "api_service_unavailable_error",
+          },
+        });
+        expect(warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            outboundTarget: null,
+            errorCode: "ETIMEDOUT",
+          }),
+          "HTTP 503 upstream service unavailable",
+        );
+        expect(error).not.toHaveBeenCalledWith(
+          expect.anything(),
+          "HTTP 503 database temporarily unavailable",
+        );
+      } finally {
+        await app.close();
+      }
+    });
+
+    test("still reports a timeout raised by the database client as a database outage", async () => {
+      const app = createFastifyInstance();
+      app.get("/test-db-timeout", async () => {
+        throw new DrizzleQueryError(
+          'select "id" from "agents"',
+          [],
+          Object.assign(new Error("read ETIMEDOUT"), { code: "ETIMEDOUT" }),
+        );
+      });
+
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/test-db-timeout",
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json().error.message).toBe(
+          "Cannot reach the database. Retry shortly; if it continues, ask an administrator to check the database service and connection settings.",
+        );
+      } finally {
+        await app.close();
+      }
     });
 
     test.each([

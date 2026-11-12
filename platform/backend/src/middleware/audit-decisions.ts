@@ -6,8 +6,10 @@ import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import AutoRouterModel from "@/models/auto-router";
+import BlobProviderModel from "@/models/blob-provider";
 import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
+import CostExportModel from "@/models/cost-export";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -176,6 +178,8 @@ export const AUDIT_DECISIONS = {
     model: KnowledgeBaseConnectorModel,
   },
   limitsTable: { audited: true, model: LimitModel },
+  blobProvidersTable: { audited: true, model: BlobProviderModel },
+  costExportsTable: { audited: true, model: CostExportModel },
   userLimitUsageResetsTable: {
     audited: true,
     model: UserLimitUsageResetModel,
@@ -902,6 +906,11 @@ export const AUDIT_DECISIONS = {
   llmProviderApiKeyModelsTable: {
     audited: false,
     reason: "join: provider key × model; parent audited",
+  },
+  githubAppAccountsTable: {
+    audited: false,
+    reason:
+      "child: a GitHub Copilot plan's GitHub organization, written with its provider key; parent (LLM provider API key) audited",
   },
   limitModelUsageTable: {
     audited: false,

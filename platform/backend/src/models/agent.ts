@@ -1636,7 +1636,10 @@ class AgentModel {
 
   static async findRuntimeTargets(organizationId: string) {
     return db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -4128,6 +4131,7 @@ class AgentModel {
   ): Promise<{
     llmApiKeyId: string | null;
     modelId: string | null;
+    modelPoolId: string | null;
     autoRouterId: string | null;
     runtime: Agent["runtime"];
   } | null> {
@@ -4139,6 +4143,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        modelPoolId: schema.agentsTable.modelPoolId,
         autoRouterId: schema.agentsTable.autoRouterId,
         runtime: schema.agentsTable.runtime,
       })

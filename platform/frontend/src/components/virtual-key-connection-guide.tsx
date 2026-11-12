@@ -103,6 +103,8 @@ export function VirtualKeyConnectionGuide({
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
+  const isPoolOnly =
+    !isPassthrough && !includeFutureProviders && explicitKeys.length === 0;
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // As the proxy resolves it: a provider the key doesn't map falls back to
   // that provider's shared primary key, if that key is usable.
@@ -126,8 +128,9 @@ export function VirtualKeyConnectionGuide({
     ];
   }, [includeFutureProviders, explicitKeys, providerApiKeys]);
 
-  // A standard key only works on routes for the providers it maps; a
-  // passthrough key carries no provider key, so any chat provider route works.
+  // Direct mappings determine which native examples this guide can offer.
+  // Without them, offer the Unified Model API for pools. Passthrough keys
+  // can use any chat provider route with the caller's own credential.
   const providers = useMemo(
     () =>
       isPassthrough
@@ -138,11 +141,12 @@ export function VirtualKeyConnectionGuide({
   const routerProviders = isPassthrough
     ? []
     : providers.filter(isModelRouterSupportedProvider);
-  const routerAvailable = routerProviders.length > 0;
+  const routerAvailable = isPoolOnly || routerProviders.length > 0;
 
-  const [endpoint, setEndpoint] = useState<Endpoint>(
+  const [pickedEndpoint, setEndpoint] = useState<Endpoint>(
     routerAvailable ? "model-router" : "provider",
   );
+  const endpoint = isPoolOnly ? "model-router" : pickedEndpoint;
   const [pickedProvider, setPickedProvider] =
     useState<SupportedProvider | null>(null);
   const provider =
@@ -212,6 +216,7 @@ export function VirtualKeyConnectionGuide({
           value={endpoint}
           onChange={setEndpoint}
           routerAvailable={routerAvailable}
+          providerAvailable={!isPoolOnly}
         />
         {endpoint === "provider" && providers.length > 1 && (
           <Select
@@ -236,27 +241,46 @@ export function VirtualKeyConnectionGuide({
         <EndpointDetails
           target={target}
           isPassthrough={isPassthrough}
-          providerLabel={providerCatalog.label(provider)}
+          isPoolOnly={isPoolOnly}
+          providerLabel={provider ? providerCatalog.label(provider) : ""}
         />
       </Step>
 
       <Step number={3} title="Make your first request">
-        {virtualApiKeyId && endpoint === "model-router" && !isPassthrough && (
-          <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+        {isPoolOnly ? (
+          <p className="text-sm text-muted-foreground">
+            Open{" "}
+            <Link
+              href="/llm/model-pools"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              Model pools
+            </Link>
+            , select a pool assigned to this key, then open its Connect section
+            for a request example. Send the pool&apos;s name as the model.
+          </p>
+        ) : (
+          <>
+            {virtualApiKeyId &&
+              endpoint === "model-router" &&
+              !isPassthrough && (
+                <KeyAutoRouters virtualApiKeyId={virtualApiKeyId} />
+              )}
+            <RequestExample
+              // Remount on target change so the model resets to that target's
+              // recommended model instead of keeping one it can't serve.
+              key={endpoint === "model-router" ? endpoint : provider}
+              connectionBaseUrl={connectionBaseUrl}
+              target={target}
+              keyType={keyType}
+              keyValue={keyValue}
+              routerProviders={routerProviders}
+              mappedProviderKeys={mappedProviderKeys}
+              offerAutoModel={!!virtualApiKeyId && !isPassthrough}
+              virtualApiKeyId={virtualApiKeyId}
+            />
+          </>
         )}
-        <RequestExample
-          // Remount on target change so the model resets to that target's
-          // recommended model instead of keeping one it can't serve.
-          key={endpoint === "model-router" ? endpoint : provider}
-          connectionBaseUrl={connectionBaseUrl}
-          target={target}
-          keyType={keyType}
-          keyValue={keyValue}
-          routerProviders={routerProviders}
-          mappedProviderKeys={mappedProviderKeys}
-          offerAutoModel={!!virtualApiKeyId && !isPassthrough}
-          virtualApiKeyId={virtualApiKeyId}
-        />
         {isPassthrough && (
           <p className="text-xs text-muted-foreground">
             Using Claude Code or Claude Desktop? The{" "}
@@ -301,10 +325,12 @@ function EndpointPicker({
   value,
   onChange,
   routerAvailable,
+  providerAvailable,
 }: {
   value: Endpoint;
   onChange: (value: Endpoint) => void;
   routerAvailable: boolean;
+  providerAvailable: boolean;
 }) {
   const id = useId();
   const options = [
@@ -320,7 +346,7 @@ function EndpointPicker({
       label: "Native provider API",
       description: "Keep your provider's SDK, change only the base URL",
       icon: Plug,
-      disabled: false,
+      disabled: !providerAvailable,
     },
   ];
   return (
@@ -361,13 +387,24 @@ function EndpointPicker({
 function EndpointDetails({
   target,
   isPassthrough,
+  isPoolOnly,
   providerLabel,
 }: {
   target: RequestTarget;
   isPassthrough: boolean;
+  isPoolOnly: boolean;
   providerLabel: string;
 }) {
   if (target.kind === "model-router") {
+    if (isPoolOnly) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Use an OpenAI-compatible client with your virtual key as the API key
+          and an assigned pool&apos;s exact name as the model. Do not add a
+          provider prefix.
+        </p>
+      );
+    }
     return (
       <p className="text-xs text-muted-foreground">
         Use any OpenAI-compatible client with your virtual key as the API key.

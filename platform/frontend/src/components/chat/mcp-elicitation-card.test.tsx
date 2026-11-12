@@ -146,10 +146,7 @@ describe("McpElicitationCard", () => {
       <McpElicitationCard
         requests={[
           openappaReview({
-            coverage: [
-              "  - attention: human-approval",
-              "  - the readers must be the public audience",
-            ].join("\n"),
+            coverage: ["the readers must be the public audience"],
           }),
         ]}
         onRespond={vi.fn()}
@@ -159,8 +156,6 @@ describe("McpElicitationCard", () => {
     const card = screen.getByTestId("mcp-elicitation-card");
     expect(card).toHaveTextContent("Approving also accepts:");
     expect(card).toHaveTextContent("the readers must be the public audience");
-    expect(card).not.toHaveTextContent("What this ruling would cover");
-    expect(card).not.toHaveTextContent("attention: human-approval");
     expect(card).not.toHaveTextContent("APPA asks you to rule");
     await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
@@ -1446,27 +1441,19 @@ function singleChoice(params: {
 }
 
 function openappaReview(params?: {
-  coverage?: string;
+  coverage?: string[];
 }): ChatMcpElicitationRequest {
   return {
     id: "review-1",
     conversationId: CONVERSATION_ID,
     toolName: "archestra__execute_remedy_plan",
-    message: [
-      'APPA asks you to rule as the authority "operator".',
-      "",
-      "Tool: archestra__todo_write",
-      "Arguments:",
-      '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
-      "",
-      "What this ruling would cover:",
-      params?.coverage ?? "  attention: signoff",
-    ].join("\n"),
+    message: 'APPA asks you to rule as the authority "operator".',
     mode: "form",
     kind: "openappa_review",
     reviewedTool: "archestra__todo_write",
     reviewedArguments:
       '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
+    reviewedCoverage: params?.coverage ?? [],
     requestedSchema: {
       type: "object",
       properties: {

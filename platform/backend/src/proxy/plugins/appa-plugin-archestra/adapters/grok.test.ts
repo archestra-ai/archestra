@@ -146,6 +146,63 @@ describe("Grok native wire", () => {
     ).toBe("same");
   });
 
+  test("rejects mismatched Connect MCP session headers while admitting bound Agent Runtime workspace headers", () => {
+    const grokSession = headers["x-grok-session-id"];
+    expect(
+      extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        headers: { ...headers, "x-appa-session-id": grokSession },
+        body: { tools },
+      }),
+    ).toEqual({
+      sessionId: grokSession,
+      provenance: "appa-header",
+      parentId: undefined,
+    });
+    for (const mismatched of [
+      "other-session",
+      "   ",
+      [grokSession, "other-session"],
+    ]) {
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          headers: { ...headers, "x-appa-session-id": mismatched },
+          body: { tools },
+        }),
+      ).toThrow(
+        "Grok native and MCP session headers must identify the same session.",
+      );
+    }
+
+    const workload = "archestra-agent-ws-1234abcd";
+    expect(
+      extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        headers: { ...headers, "x-appa-session-id": workload },
+        body: { tools },
+        agentRuntimeRun: true,
+      }),
+    ).toEqual({
+      sessionId: workload,
+      provenance: "appa-header",
+      parentId: undefined,
+    });
+    // Native Grok session validation still runs inside Agent Runtime.
+    expect(() =>
+      extractAppaSessionIdentity({
+        family: "openai:chatCompletions",
+        headers: {
+          ...headers,
+          "x-grok-session-id": "bad session",
+          "x-appa-session-id": workload,
+        },
+        body: { tools },
+        agentRuntimeRun: true,
+      }),
+    ).toThrow("Grok sent an invalid or contradictory native session ID.");
+  });
+
   test.each([
     ["run_terminal_command", "Bash"],
     ["search_tool", "ToolSearch"],
@@ -541,6 +598,173 @@ describe("Grok protected child binding", () => {
         source: "receipt",
         childNativeId: child,
         spawnCallId: "spawn-one",
+      },
+    });
+  });
+  test("binds direct, nested, and resumed Grok children under an Agent Runtime workspace anchor", () => {
+    const workload = "archestra-agent-ws-grok";
+    const runtimeSessionId = `user:synthetic|${workload}`;
+    const rootContext: AppaMatchContext = {
+      headers: {
+        ...headers,
+        "x-grok-session-id": parent,
+        "x-appa-session-id": workload,
+      },
+      requestBody: { input: [{ role: "user", content: "hi" }] },
+      trustedContext: {
+        session: {
+          organization_id: "synthetic",
+          caller_id: "user:synthetic",
+          session_id: runtimeSessionId,
+        },
+        runtimeSessionId,
+        agentRuntimeRun: true,
+        claims: { sessionId: workload },
+        profileId: "synthetic",
+        toolIdentity: {
+          canonicalize: (name) => name,
+          attestationOf: () => undefined,
+          looseRunToolDispatch: false,
+        },
+        request: {
+          tools: undefined,
+          session: {},
+          customTools: new Set(),
+          declaredTools: [],
+        },
+      },
+    };
+    const rootSpawner = adapter.nativeConversationId(rootContext);
+    expect(rootSpawner).toBe(workload);
+
+    const directMarker = mintDelegationMarker({
+      organizationId: "synthetic",
+      callerId: "user:synthetic",
+      parentId: workload,
+      spawnerNativeId: rootSpawner ?? "",
+      prompt,
+      spawnCallId: "spawn-runtime-1",
+      runtimeSessionId,
+    });
+    const directBody = {
+      input: [{ role: "user", content: `${prompt}\n\n${directMarker}` }],
+    };
+    const directChild: AppaMatchContext = {
+      ...rootContext,
+      headers: {
+        ...headers,
+        "x-grok-session-id": child,
+        "x-appa-session-id": workload,
+      },
+      requestBody: directBody,
+      trustedContext: rootContext.trustedContext && {
+        ...rootContext.trustedContext,
+        request: {
+          ...rootContext.trustedContext.request,
+          delegation: {
+            markers: collectDelegationMarkers({
+              family: "openai:responses",
+              body: directBody,
+            }),
+          },
+        },
+      },
+    };
+    expect(adapter.bindChildTrajectory(directChild)).toMatchObject({
+      parentId: workload,
+      sessionId: `${workload}:${child}`,
+      lineage: {
+        source: "marker",
+        nativeParentId: workload,
+        childNativeId: child,
+        spawnCallId: "spawn-runtime-1",
+      },
+    });
+    expect(adapter.nativeConversationId(directChild)).toBe(child);
+
+    // Resuming that completed child under a new native UUID keeps the anchored actor.
+    const resumedNativeId = "00000000-0000-4000-8000-000000000099";
+    const resumeClaims = {
+      organizationId: "synthetic",
+      callerId: "user:synthetic",
+      parentId: workload,
+      spawnerNativeId: workload,
+      spawnCallId: "spawn-runtime-1",
+      runtimeSessionId,
+    };
+    const resumeMarker = mintDelegationMarker({ ...resumeClaims, prompt });
+    const resumeReceipt = mintChildTrajectoryReceipt({
+      ...resumeClaims,
+      childId: `${workload}:${child}`,
+    });
+    const resumeBody = {
+      input: [
+        {
+          role: "user",
+          content: `${prompt}\n\n${resumeMarker}\n\n${resumeReceipt}`,
+        },
+      ],
+    };
+    const resumedChild: AppaMatchContext = {
+      ...rootContext,
+      headers: {
+        ...headers,
+        "x-grok-session-id": resumedNativeId,
+        "x-appa-session-id": workload,
+      },
+      requestBody: resumeBody,
+      trustedContext: rootContext.trustedContext && {
+        ...rootContext.trustedContext,
+        request: {
+          ...rootContext.trustedContext.request,
+          delegation: {
+            markers: collectDelegationMarkers({
+              family: "openai:responses",
+              body: resumeBody,
+            }),
+          },
+          childTrajectoryReceipts: stripChildTrajectoryReceipts(
+            resumeReceipt ?? "",
+          ).receipts,
+        },
+      },
+    };
+    expect(adapter.bindChildTrajectory(resumedChild)).toMatchObject({
+      parentId: workload,
+      sessionId: `${workload}:${child}`,
+      lineage: {
+        source: "receipt",
+        childNativeId: resumedNativeId,
+        spawnCallId: "spawn-runtime-1",
+      },
+    });
+    expect(adapter.nativeConversationId(resumedChild)).toBe(child);
+
+    // Compaction on the resumed child keeps the original child session via its sealed receipt.
+    const sealedReceipt = mintChildTrajectoryReceipt({
+      ...resumeClaims,
+      childId: `${workload}:${child}`,
+      childNativeId: resumedNativeId,
+    });
+    const compactedResume: AppaMatchContext = {
+      ...resumedChild,
+      trustedContext: rootContext.trustedContext && {
+        ...rootContext.trustedContext,
+        request: {
+          ...rootContext.trustedContext.request,
+          delegation: { markers: [] },
+          childTrajectoryReceipts: stripChildTrajectoryReceipts(
+            sealedReceipt ?? "",
+          ).receipts,
+        },
+      },
+    };
+    expect(adapter.bindChildTrajectory(compactedResume)).toMatchObject({
+      parentId: workload,
+      sessionId: `${workload}:${child}`,
+      lineage: {
+        source: "receipt",
+        childNativeId: resumedNativeId,
       },
     });
   });

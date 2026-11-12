@@ -90,6 +90,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  // A server's own rules take no Guardrails permission: the handlers allow
+  // whoever may open the server in the MCP registry to read them, and whoever
+  // may edit it there to propose a change.
+  get_guardrails_server_rules: null,
+  preview_guardrails_server_rules_change: null,
+  propose_guardrails_server_rules_change: null,
+  get_guardrails_server_rules_change_status: null,
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },
@@ -387,7 +394,7 @@ export async function checkToolPermission(
     // previous wording ("User context not available") read as an internal
     // fault rather than a fixable choice of credential.
     return errorResult(
-      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. An OAuth client-credentials token without a service-account binding acts for an application, not a user. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
     );
   }
 

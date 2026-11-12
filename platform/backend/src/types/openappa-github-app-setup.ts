@@ -29,6 +29,11 @@ const GithubLoginSchema = z
 export const StartAppaGithubAppSchema = z.object({
   githubUrl: GithubUrlSchema,
   owner: GithubLoginSchema,
+  /**
+   * Ask for the Checks and Administration permissions too, for self-service
+   * Guardrails. ARCHESTRA_OPENAPPA_SELF_SERVICE, while set, decides instead.
+   */
+  selfService: z.boolean().optional(),
 });
 
 export const AppaGithubRepositoryQuerySchema = z.object({
@@ -133,5 +138,7 @@ export const AppaGithubAppAccountsSchema = z.array(
   z.object({
     id: z.string().uuid(),
     account: z.string().nullable(),
+    /** The App's page on GitHub, for a link to it. */
+    url: z.string().nullable(),
   }),
 );

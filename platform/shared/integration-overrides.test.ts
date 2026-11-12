@@ -6,6 +6,7 @@ import {
   integrationLabel,
   isCopilotPlanHidden,
   isIntegrationHidden,
+  isProviderKeyHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
   ModelProviderOverridesSchema,
@@ -234,6 +235,37 @@ describe("GitHub Copilot plans", () => {
     const overrides = { "github-copilot": { hidden: true } };
     expect(isCopilotPlanHidden(overrides, "personal")).toBe(true);
     expect(isCopilotPlanHidden(overrides, "enterprise")).toBe(true);
+  });
+
+  it("hides each GitHub Copilot key by its own plan's switch alone", () => {
+    const appKey = {
+      provider: "github-copilot" as const,
+      isGithubAppKey: true,
+    };
+    const signIn = {
+      provider: "github-copilot" as const,
+      isGithubAppKey: false,
+    };
+    const enterpriseOff = {
+      "github-copilot": { plans: { enterprise: { hidden: true } } },
+    };
+    const personalOff = {
+      "github-copilot": { plans: { personal: { hidden: true } } },
+    };
+
+    expect(isProviderKeyHidden(enterpriseOff, appKey)).toBe(true);
+    expect(isProviderKeyHidden(enterpriseOff, signIn)).toBe(false);
+    expect(isProviderKeyHidden(personalOff, appKey)).toBe(false);
+    expect(isProviderKeyHidden(personalOff, signIn)).toBe(true);
+    expect(
+      isProviderKeyHidden({ "github-copilot": { hidden: true } }, appKey),
+    ).toBe(true);
+    expect(
+      isProviderKeyHidden({ openai: { hidden: true } }, { provider: "openai" }),
+    ).toBe(true);
+    expect(isProviderKeyHidden(enterpriseOff, { provider: "openai" })).toBe(
+      false,
+    );
   });
 
   it("accepts one plan turned off on GitHub Copilot", () => {

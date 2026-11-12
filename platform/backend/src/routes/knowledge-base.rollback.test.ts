@@ -167,6 +167,60 @@ describe("knowledge base routes", () => {
     expect(JSON.stringify(audit)).not.toContain("local-fixture-token");
   });
 
+  test("GitHub file filters reject unsupported patterns on create and update without altering stored config", async () => {
+    const config = {
+      type: "github",
+      githubUrl: "https://api.github.com",
+      owner: "example-org",
+      fileTypes: ["*.md", "Dockerfile"],
+    };
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/connectors",
+      payload: {
+        name: "Invalid filter",
+        connectorType: "github",
+        config: { ...config, fileTypes: ["docs/*.md"] },
+        credentials: { apiToken: "fixture" },
+        enabled: false,
+      },
+    });
+    expect(invalid.statusCode, invalid.body).toBe(400);
+    expect(invalid.body).toContain("Paths and glob patterns are not supported");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/connectors",
+      payload: {
+        name: "Valid filters",
+        connectorType: "github",
+        config,
+        credentials: { apiToken: "fixture" },
+        enabled: false,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/connectors/${id}`,
+      payload: {
+        config: {
+          ...config,
+          repositoryOverrides: [
+            { repository: "example-org/docs", fileTypes: ["Dockerfile*"] },
+          ],
+        },
+      },
+    });
+    expect(updated.statusCode, updated.body).toBe(400);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/connectors/${id}`,
+    });
+    expect(read.json().config).toMatchObject(config);
+    expect(read.json().config.repositoryOverrides).toBeUndefined();
+  });
+
   test("single-resource responses expose persisted labels and label drift", async () => {
     const created = await app.inject({
       method: "POST",

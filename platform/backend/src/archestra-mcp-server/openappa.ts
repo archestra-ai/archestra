@@ -38,7 +38,6 @@ import {
   parseCurrentTrajectory,
 } from "@/openappa/current-trajectory";
 import {
-  acceptedCoverage,
   type ClosedHitlReviewOutcome,
   clearHitlReview,
   closureFromReviewOutcome,
@@ -63,6 +62,7 @@ import {
   verifyPeerProof,
 } from "@/openappa/peer-claims";
 import {
+  acceptedScope,
   displayedReview,
   reviewedCallArguments,
   reviewedToolLabel,
@@ -170,6 +170,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import * as serverRules from "./openappa-server-rules";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
@@ -1410,7 +1411,7 @@ const registry = defineArchestraTools([
                 });
                 const shown = displayedReview(review);
                 const shownArguments = reviewedCallArguments(shown);
-                const accepted = acceptedCoverage(shown.text);
+                const accepted = acceptedScope(shown.scope);
                 const outcome = await context.elicitation.elicit({
                   toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
                   message: prepared?.question ?? shown.text,
@@ -1424,7 +1425,9 @@ const registry = defineArchestraTools([
                           : shown.arguments,
                       }
                     : {}),
-                  ...(accepted?.length ? { reviewedCoverage: accepted } : {}),
+                  ...(accepted
+                    ? { reviewedCoverage: accepted }
+                    : { reviewedText: shown.text }),
                 });
                 if (outcome.status === "answered") {
                   const parsed = parseHitlRuling(outcome.result);
@@ -1603,11 +1606,15 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolEntries = registry.toolEntries;
-export const tools = registry.tools;
+// A server's own rules are OpenAPPA tools too, defined beside their service.
+export const toolEntries = {
+  ...registry.toolEntries,
+  ...serverRules.toolEntries,
+};
+export const tools = [...registry.tools, ...serverRules.tools];
 
 const OPENAPPA_TOOL_SHORT_NAMES: ReadonlySet<string | null | undefined> =
-  new Set(registry.toolShortNames);
+  new Set([...registry.toolShortNames, ...serverRules.toolShortNames]);
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return OPENAPPA_TOOL_SHORT_NAMES.has(shortName);

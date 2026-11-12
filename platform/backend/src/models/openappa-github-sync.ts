@@ -16,8 +16,15 @@ class OpenAppaGithubSyncModel {
   }
   static async save(
     organizationId: string,
-    source: Omit<AppaGithubSource, "gitlabTokenId"> & {
+    source: Omit<
+      AppaGithubSource,
+      "gitlabTokenId" | "selfService" | "selfServiceDirectory"
+    > & {
       gitlabTokenId?: string | null;
+      /** Off unless the source says otherwise. */
+      selfService?: boolean;
+      /** The servers' folder; mcp unless the source says otherwise. */
+      selfServiceDirectory?: string;
       setupPullRequestNumber?: number;
     },
   ) {
@@ -25,11 +32,15 @@ class OpenAppaGithubSyncModel {
       validationDirectory,
       setupPullRequestNumber = null,
       gitlabTokenId = null,
+      selfService = false,
+      selfServiceDirectory = "mcp",
       ...policySource
     } = source;
     const values = {
       setupPullRequestNumber,
       gitlabTokenId,
+      selfService,
+      selfServiceDirectory,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -64,6 +75,20 @@ class OpenAppaGithubSyncModel {
         .values({ organizationId, ...values })
         .onConflictDoUpdate({ target: table.organizationId, set: values });
     });
+  }
+  /** Turn self-service on or off for the source, and name its folder. */
+  static async setSelfService(
+    organizationId: string,
+    selfService: boolean,
+    selfServiceDirectory?: string,
+  ) {
+    await db
+      .update(table)
+      .set({
+        selfService,
+        ...(selfServiceDirectory ? { selfServiceDirectory } : {}),
+      })
+      .where(eq(table.organizationId, organizationId));
   }
   /** Change or stop the schedule. */
   static async setInterval(
@@ -155,6 +180,19 @@ class OpenAppaGithubSyncModel {
         and(
           isNotNull(table.interval),
           sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+        ),
+      );
+  }
+  /** Every source a pull has accepted a commit from: those with pull requests to check. */
+  static async findConnected() {
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          isNotNull(table.interval),
+          isNotNull(table.repo),
+          isNotNull(table.sourceCommit),
         ),
       );
   }

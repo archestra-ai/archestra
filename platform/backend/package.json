@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.5.0-rc.29",
+  "version": "1.5.0-rc.30",
   "description": "",
   "author": "",
   "private": true,
@@ -100,6 +100,7 @@
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/credential-providers": "^3.1003.0",
     "@azure/identity": "^4.13.0",
+    "@azure/storage-blob": "^12.34.0",
     "@better-auth/api-key": "1.7.7",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",

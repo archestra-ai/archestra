@@ -49,8 +49,16 @@ export const AuditEventNameSchema = z.enum([
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
+  "blobProvider.created",
+  "blobProvider.updated",
+  "blobProvider.deleted",
+  "blobProvider.tested",
   // An admin signed a member out of the browser: their saved cookies were deleted
   "browserStorageState.deleted",
+  "costExport.created",
+  "costExport.updated",
+  "costExport.deleted",
+  "costExport.run",
   "credential.created",
   "credential.updated",
   "credential.deleted",
@@ -261,6 +269,7 @@ export const AuditEventNameSchema = z.enum([
   "userToken.rotated",
   "userLimitUsage.reset",
   "virtualApiKey.created",
+  "virtualApiKey.updated",
   "virtualApiKey.deleted",
   "virtualApiKey.bulk_deleted",
   // Auth surface

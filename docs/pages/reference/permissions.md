@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-11-03
+lastUpdated: 2026-11-11
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -112,6 +112,10 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="chat:update"></span>`chat:update` | Edit chat messages and conversation settings |
 | <span id="chat:delete"></span>`chat:delete` | Delete chat conversations |
 | <span id="chat:full-view"></span>`chat:full-view` | Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view |
+| <span id="costExport:read"></span>`costExport:read` | View scheduled cost exports and their run status |
+| <span id="costExport:create"></span>`costExport:create` | Schedule cost exports to a blob provider |
+| <span id="costExport:update"></span>`costExport:update` | Change, pause, resume, and run cost exports |
+| <span id="costExport:delete"></span>`costExport:delete` | Delete cost exports |
 | <span id="credential:read"></span>`credential:read` | Open Credentials |
 | <span id="credential:create"></span>`credential:create` | Create saved credentials |
 | <span id="environment:read"></span>`environment:read` | View and list deployment environments |

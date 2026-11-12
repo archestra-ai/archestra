@@ -698,13 +698,20 @@ async function handleObservedLLMProxy<
     : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !internalCall;
+  // A sanitizer's log rows keep no content, so only the platform's own
+  // guardrail call may name that source; from anyone else it would hide the
+  // request from the logs.
+  const untrustedSanitizerSource =
+    parsedSource === "guardrail:sanitizer" && !proof.guardrail;
   // `model_router` is assigned by the route auth override, not accepted from
   // the public source header. APPA-capable Chat sources have the same
   // internal-proof-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
     openCodeSource ??
-    (parsedSource === "model_router" || untrustedAppaChatSource
+    (parsedSource === "model_router" ||
+    untrustedAppaChatSource ||
+    untrustedSanitizerSource
       ? "api"
       : parsedSource) ??
     "api";
@@ -1225,7 +1232,13 @@ async function handleObservedLLMProxy<
   // first-party clients a machine-readable signal (mirrors
   // ChatErrorCode.ProviderAuthRequired); the connect URL is in the message so
   // generic OpenAI/Anthropic clients surface something actionable too.
-  if (providerRequiresPerUserCredential(providerName) && !apiKey) {
+  // Pool-only credentials resolve their member's key after planning. The pool
+  // grant does not bypass the planner's or dispatcher's ownership checks.
+  if (
+    providerRequiresPerUserCredential(providerName) &&
+    !apiKey &&
+    !(authOverride?.modelPoolId ?? grantedPoolId)
+  ) {
     const providerLabel = providerDisplayNames[providerName];
     const connectUrl = `${config.frontendBaseUrl}/settings`;
     logger.info(
@@ -1342,7 +1355,7 @@ async function handleObservedLLMProxy<
   // deployment whose Log Content mode is Metadata only.
   const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
-    isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
+    isEncryptedChatSession || resolveLogContentMode(source) === "metadata_only";
   // Only internal calls may override the provider URL; accepting this header
   // from external clients would allow SSRF.
   const providerBaseUrlHeader =
@@ -1383,6 +1396,7 @@ async function handleObservedLLMProxy<
           poolId: chatModelPoolId,
           inbound: poolWire,
           caller: {
+            userId: authenticatedUserId,
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
             // An app OAuth client's own pools were checked at sign-in and come
@@ -2212,6 +2226,16 @@ async function handleObservedLLMProxy<
       );
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
+      }
+      if (
+        modelPoolPlan &&
+        (row.organizationId !== resolvedAgent.organizationId ||
+          (row.userId !== null && row.userId !== authenticatedUserId))
+      ) {
+        throw new ApiError(
+          403,
+          "This model pool member belongs to another user.",
+        );
       }
       const apiKey = row.secretId
         ? await getSecretValueForLlmProviderApiKey(row.secretId)

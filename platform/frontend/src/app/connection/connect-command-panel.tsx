@@ -134,6 +134,7 @@ import {
   defaultPerUserKeyId,
   initialConnectProvider,
   kimiCodeDefaultModel,
+  perUserAccountChoiceNeeded,
 } from "./connection-setup-payload";
 import {
   CopilotAccountCards,
@@ -508,8 +509,20 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  const { data: availableKeys, isPending: availableKeysPending } =
+  // A GitHub Copilot account whose plan the admins turned off is never offered,
+  // so a setup can't bind it: each plan's own switch decides. Other providers
+  // keep their own rules here (the provider list already drops hidden ones).
+  const { data: allAvailableKeys, isPending: availableKeysPending } =
     useAvailableLlmProviderApiKeys();
+  const availableKeys = useMemo(
+    () =>
+      allAvailableKeys?.filter(
+        (key) =>
+          key.provider !== "github-copilot" ||
+          !providerCatalog.isKeyHidden(key),
+      ),
+    [allAvailableKeys, providerCatalog],
+  );
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -621,7 +634,8 @@ export function ConnectCommandPanel({
   // A per-user provider can have more than one account the user may use: their
   // own sign-in and organization plans shared with them (GitHub Copilot paid by
   // a GitHub organization). Nothing picked binds the user's own sign-in, as the
-  // server does; without one, the first plan.
+  // server does; without one, their only plan. Plans of several organizations
+  // wait for a pick: each bills its own organization and serves its own models.
   const perUserKeys = useMemo(
     () =>
       providerIsPerUser
@@ -642,6 +656,15 @@ export function ConnectCommandPanel({
     ownSignIns.find((key) => key.isPrimary) ??
     ownSignIns[0] ??
     null;
+  const accountChoiceNeeded =
+    !!activeLlmProxyId &&
+    !!provider &&
+    !boundPerUserKey &&
+    perUserAccountChoiceNeeded(perUserKeys, provider);
+  // On the command page the choice is in the proxy editor, as the cards are.
+  useEffect(() => {
+    if (accountChoiceNeeded && !connectRequest) setEditing("proxy");
+  }, [accountChoiceNeeded, connectRequest]);
   const perUserKeyLabel = (key: (typeof perUserKeys)[number]) =>
     key.isGithubAppKey
       ? organizationSubscriptionName(key, providerCatalog.enterprisePlanName)
@@ -904,12 +927,15 @@ export function ConnectCommandPanel({
   const accountProblem =
     needsPerUserConnect && provider
       ? `Connect ${indefiniteArticle(providerCatalog.label(provider))} ${providerCatalog.label(provider)} account${optionsPlace} to approve.`
-      : null;
+      : accountChoiceNeeded && provider
+        ? `Choose the ${providerCatalog.label(provider)} account this setup uses${optionsPlace}. Each organization's plan is billed for its own requests.`
+        : null;
   const modelProblem =
     supportsModelChoice &&
     proxyActive &&
     !grokAutomaticModel &&
     !needsPerUserConnect &&
+    !accountChoiceNeeded &&
     !modelCatalogWaiting &&
     (!effectiveModel ||
       (client.id === "grok-build" &&
@@ -976,7 +1002,8 @@ export function ConnectCommandPanel({
     !!connectRequest &&
     ((selectionProblem !== null &&
       !(client.id === "grok-build" && selectionProblem === modelProblem)) ||
-      needsPerUserConnect) &&
+      needsPerUserConnect ||
+      accountChoiceNeeded) &&
     !availableKeysPending &&
     !modelCatalog.isLoading &&
     !modelCatalogWaiting;
@@ -1208,6 +1235,7 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
+      accountChoiceNeeded ||
       modelCatalogWaiting ||
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
@@ -1265,6 +1293,7 @@ export function ConnectCommandPanel({
     skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
+    accountChoiceNeeded,
     modelCatalogWaiting,
     selectionProblem,
     primaryRoutingBlocked,
@@ -1443,14 +1472,22 @@ export function ConnectCommandPanel({
   );
 
   // Which of the user's accounts the provider bills, when there is a choice.
+  // Empty until the person picks one of several organizations' plans.
   const accountPicker =
-    proxyActive && provider && perUserKeys.length > 1 && boundPerUserKey ? (
-      <Select value={boundPerUserKey.id} onValueChange={setPerUserKeyChoice}>
+    proxyActive &&
+    provider &&
+    perUserKeys.length > 1 &&
+    (boundPerUserKey || accountChoiceNeeded) ? (
+      <Select
+        value={boundPerUserKey?.id ?? ""}
+        onValueChange={setPerUserKeyChoice}
+      >
         <SelectTrigger
           aria-label={`${providerCatalog.label(provider)} account`}
+          aria-invalid={accountChoiceNeeded}
           size="sm"
         >
-          <SelectValue />
+          <SelectValue placeholder="Choose an account" />
         </SelectTrigger>
         <SelectContent>
           {perUserKeys.map((key) => (
@@ -1608,7 +1645,9 @@ export function ConnectCommandPanel({
 
   // What gets a model list, while there is none to choose from.
   const modelSourceHint =
-    !provider || modelSourceConnected ? null : providerIsPerUser ? (
+    !provider || modelSourceConnected ? null : accountChoiceNeeded ? (
+      <span>Choose an account above to list the models it serves.</span>
+    ) : providerIsPerUser ? (
       <span>
         {`Connect your ${providerCatalog.label(provider)} account above to list the models it serves.`}
       </span>
@@ -1870,17 +1909,19 @@ export function ConnectCommandPanel({
     ? "Loading plugins"
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
-      : modelCatalogWaiting
-        ? "Loading the models your account serves"
-        : selectionProblem
-          ? selectionProblem
-          : failed
-            ? "Setup command generation failed"
-            : result || adoptedSetupId
-              ? "Setup command ready"
-              : hasRunnableAnything
-                ? "Generating setup command"
-                : "No setup command selected";
+      : accountChoiceNeeded
+        ? `Choose the ${provider ? providerCatalog.label(provider) : "provider"} account to generate the setup command`
+        : modelCatalogWaiting
+          ? "Loading the models your account serves"
+          : selectionProblem
+            ? selectionProblem
+            : failed
+              ? "Setup command generation failed"
+              : result || adoptedSetupId
+                ? "Setup command ready"
+                : hasRunnableAnything
+                  ? "Generating setup command"
+                  : "No setup command selected";
 
   // The approval page's setup options: how models authenticate is shown, not
   // chosen — an admin's per-client key mapping decides it.
@@ -1938,7 +1979,9 @@ export function ConnectCommandPanel({
               ? "Everything is left out. Choose at least one thing to include."
               : needsPerUserConnect
                 ? `${commandStatus}. Use the Prompt option, or ask your admin.`
-                : selectionProblem
+                : accountChoiceNeeded
+                  ? `${commandStatus}.`
+                  : selectionProblem
         }
       />
     );
@@ -2219,7 +2262,9 @@ export function ConnectCommandPanel({
                     accountLabel:
                       providerIsPerUser && boundPerUserKey
                         ? routedAccountLabel(boundPerUserKey)
-                        : null,
+                        : accountChoiceNeeded
+                          ? "Choose an account"
+                          : null,
                     providerPicker: grokCredentialPicker ? (
                       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                         {grokCredentialPicker}
@@ -2428,9 +2473,12 @@ export function ConnectCommandPanel({
                 operating system. Choose another platform or add a connection
                 resource.
               </div>
-            ) : needsPerUserConnect && provider && !connectRequest ? (
+            ) : (needsPerUserConnect || accountChoiceNeeded) &&
+              provider &&
+              !connectRequest ? (
               <PerUserConnectNotice
                 providerLabel={providerCatalog.label(provider)}
+                choose={accountChoiceNeeded}
               />
             ) : connectRequest ? (
               <ClientConnectionApproval
@@ -2800,10 +2848,19 @@ function wrappedCommand(command: string): string {
  * selected and the person has no account for it yet. The accounts are
  * connected in the setup review, under the provider; this names that step.
  */
-function PerUserConnectNotice({ providerLabel }: { providerLabel: string }) {
+function PerUserConnectNotice({
+  providerLabel,
+  choose,
+}: {
+  providerLabel: string;
+  /** Accounts exist, but the person must pick which one the setup uses. */
+  choose: boolean;
+}) {
   return (
     <p className="px-5 py-4 text-[13px] text-foreground">
-      {`Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
+      {choose
+        ? `Choose the ${providerLabel} account in the setup review above to generate the command. Each organization's plan is billed for its own requests.`
+        : `Connect a ${providerLabel} account in the setup review above to generate the command. It runs through your own personal virtual key, so your token never leaves the server.`}
     </p>
   );
 }

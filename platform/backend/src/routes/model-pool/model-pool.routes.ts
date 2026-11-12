@@ -73,10 +73,14 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelPoolSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, user, body }, reply) => {
       assertModelPoolsEnabled();
       assertNameNotReserved(body);
-      await assertValidMembers({ organizationId, input: body });
+      await assertValidMembers({
+        organizationId,
+        userId: user.id,
+        input: body,
+      });
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -96,10 +100,20 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelPoolSchema),
       },
     },
-    async ({ organizationId, params, body }, reply) => {
+    async ({ organizationId, user, params, body }, reply) => {
       assertModelPoolsEnabled();
       assertNameNotReserved(body);
-      await assertValidMembers({ organizationId, input: body });
+      const existing = await ModelPoolModel.findById({
+        organizationId,
+        id: params.id,
+      });
+      if (!existing) throw new ApiError(404, "Model pool not found");
+      await assertValidMembers({
+        organizationId,
+        userId: user.id,
+        input: body,
+        retainedMembers: existing.members,
+      });
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,
@@ -174,14 +188,21 @@ async function assertNameHasNoOtherPool(params: {
 }
 
 /**
- * Members must be distinct shared keys of this organization on a provider a
- * pool can reach. A personal key belongs to one user (and subscription
- * credentials are personal), so pooling it would let other callers spend it.
+ * Members must be distinct keys of this organization on a reachable provider.
+ * Users may add their own personal subscriptions/keys; request planning keeps
+ * those members private even when the pool is granted to another caller.
  */
 async function assertValidMembers(params: {
   organizationId: string;
+  userId: string;
   input: ModelPoolInput;
+  retainedMembers?: ModelPoolInput["members"];
 }): Promise<void> {
+  const retained = new Set(
+    params.retainedMembers?.map(
+      (member) => `${member.providerApiKeyId}:${member.modelId}`,
+    ),
+  );
   const seen = new Set<string>();
   for (const member of params.input.members) {
     const id = `${member.providerApiKeyId}:${member.modelId}`;
@@ -201,10 +222,15 @@ async function assertValidMembers(params: {
     if (!key || key.organizationId !== params.organizationId) {
       throw new ApiError(400, `Provider key ${id} not found.`);
     }
-    if (key.userId !== null) {
+    const addsMember = params.input.members.some(
+      (member) =>
+        member.providerApiKeyId === id &&
+        !retained.has(`${id}:${member.modelId}`),
+    );
+    if (key.userId !== null && key.userId !== params.userId && addsMember) {
       throw new ApiError(
         400,
-        `Provider key "${key.name}" is a personal key; only shared keys can be pool members.`,
+        `Provider key "${key.name}" belongs to another user; only your own personal connections can be added.`,
       );
     }
     if (!isPoolableProvider(key.provider)) {

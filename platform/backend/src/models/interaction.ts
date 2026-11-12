@@ -3633,7 +3633,7 @@ class InteractionModel {
     // the deployment's Log Content mode withholds, or media the organization
     // keeps out of its logs, whether the call came from Chat, an agent
     // session or a client of the proxy.
-    const withheld = resolveLogContentMode() === "metadata_only";
+    const withheld = resolveLogContentMode(data.source) === "metadata_only";
     const keepMedia =
       withheld ||
       (agentSettings?.keepMediaInLogs ??

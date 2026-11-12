@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { autoModelChoice } from "@/lib/chat/auto-model";
@@ -15,6 +15,7 @@ const {
   pools,
   mutateConversation,
   hiddenProviders,
+  hiddenCopilotPlans,
   navigate,
 } = vi.hoisted(() => ({
   agents: [
@@ -72,6 +73,7 @@ const {
     },
   ],
   hiddenProviders: new Set<string>(),
+  hiddenCopilotPlans: new Set<string>(),
   keys: [
     {
       id: "key-org",
@@ -147,7 +149,13 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
     label: (provider: string) => (provider === "vllm" ? "vLLM" : provider),
     isHidden: (provider: string) => hiddenProviders.has(provider),
-    canAddKey: (provider: string) => !hiddenProviders.has(provider),
+    isKeyHidden: (key: { provider: string; isGithubAppKey?: boolean }) =>
+      hiddenProviders.has(key.provider) ||
+      (key.provider === "github-copilot" &&
+        hiddenCopilotPlans.has(key.isGithubAppKey ? "enterprise" : "personal")),
+    canAddKey: (provider: string) =>
+      !hiddenProviders.has(provider) &&
+      !(provider === "github-copilot" && hiddenCopilotPlans.has("personal")),
   }),
 }));
 
@@ -166,6 +174,7 @@ beforeEach(() => {
   vi.mocked(useFeature).mockReturnValue(true);
   keys.splice(0, keys.length, ...originalKeys);
   hiddenProviders.clear();
+  hiddenCopilotPlans.clear();
   navigate.mockClear();
   readiness.splice(0);
   pools.splice(0);
@@ -435,6 +444,46 @@ describe("ChatSetupMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists each GitHub Copilot account by its own plan's switch, and names a plan after its organization", async () => {
+    keys.push(
+      {
+        id: "copilot-plan",
+        name: "GitHub Copilot (acme)",
+        provider: "github-copilot",
+        scope: "org",
+        userId: null,
+        isGithubAppKey: true,
+        githubOrganization: "acme",
+        githubOrganizationName: "Acme Inc",
+      } as LlmProviderApiKey,
+      {
+        id: "copilot-mine",
+        name: "My Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: "user-1",
+      } as LlmProviderApiKey,
+    );
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(
+      screen.getByRole("option", { name: /GitHub Copilot Acme Inc/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
+    ).toBeInTheDocument();
+    cleanup();
+
+    hiddenCopilotPlans.add("enterprise");
+    renderMenu();
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(screen.queryByText("Enterprise plans")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /My Copilot/ }),
+    ).toBeInTheDocument();
+  });
+
   it("lets the footer keep its own Enter key without selecting the highlighted credential", async () => {
     const user = userEvent.setup();
     const props = renderMenu();
@@ -487,6 +536,60 @@ describe("ChatSetupMenu", () => {
       ).not.toBeInTheDocument();
     } finally {
       models.pop();
+    }
+  });
+
+  it("offers the existing reasoning control for verified Bedrock models but not unverified GPT", async () => {
+    models.push(
+      {
+        dbId: "bedrock-nova",
+        id: "eu.amazon.nova-2-lite-v1:0",
+        provider: "bedrock",
+        displayName: "Nova 2 Lite",
+        isBest: false,
+        isFree: false,
+        requiresUserConnection: false,
+        isConnected: true,
+        capabilities: {
+          contextLength: 1_000_000,
+          supportsReasoningEffort: true,
+        },
+      },
+      {
+        dbId: "bedrock-gpt",
+        id: "global.openai.gpt-6-luna",
+        provider: "bedrock",
+        displayName: "Bedrock GPT",
+        isBest: false,
+        isFree: false,
+        requiresUserConnection: false,
+        isConnected: true,
+        capabilities: {
+          contextLength: 1_000_000,
+          supportsReasoningEffort: true,
+        },
+      },
+    );
+    try {
+      const user = userEvent.setup();
+      const props = menuProps({
+        selectedModel: "bedrock-nova",
+        currentProvider: "bedrock",
+      });
+      const { rerender } = render(<ChatSetupMenu {...props} />);
+      const reasoning = screen.getByRole("radiogroup", {
+        name: "Reasoning effort",
+      });
+      await user.click(
+        within(reasoning).getByRole("radio", { name: "Reasoning: Auto" }),
+      );
+      expect(props.onThinkingEffortChange).toHaveBeenCalledWith("low");
+      rerender(<ChatSetupMenu {...props} selectedModel="bedrock-gpt" />);
+      expect(
+        screen.queryByRole("radiogroup", { name: "Reasoning effort" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      models.splice(-2);
     }
   });
 

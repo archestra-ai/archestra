@@ -443,6 +443,8 @@ type StoredPendingApp = z.infer<typeof StoredPendingAppSchema>;
 const AccountSchema = z.object({
   login: z.string(),
   type: z.enum(["User", "Organization"]),
+  /** The name GitHub shows for the account; often unset. */
+  name: z.string().nullish(),
 });
 
 /**

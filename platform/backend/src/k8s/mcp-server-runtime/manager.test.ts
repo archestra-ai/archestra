@@ -1070,9 +1070,13 @@ describe("McpServerRuntimeManager", () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockK8sDeploymentInstances.length = 0;
     });
 
-    test("tears down shared Deployment for all siblings then recreates via startServer", async () => {
+    test.each([
+      true,
+      false,
+    ])("restores distinct sibling deployments after shared reinstall (awaitReady=%s)", async (awaitReady) => {
       const mockLoadFromDefault = vi
         .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
         .mockImplementation(() => {});
@@ -1163,13 +1167,16 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sNetworkPolicy: vi.fn(),
       });
 
-      // Spy startServer so we don't exercise the full pod-creation flow —
-      // we only care that it was called for the representative install.
+      // Mirror startServer registering the new representative, without creating pods.
+      const representative = { waitForDeploymentReady };
       const startServerSpy = vi
         .spyOn(manager, "startServer")
-        .mockResolvedValue(undefined);
+        .mockImplementation(async () => {
+          // @ts-expect-error - accessing private property for testing
+          manager.mcpServerIdToDeploymentMap.set(tenantAId, representative);
+        });
 
-      await manager.reinstallSharedDeployment(catalogId);
+      await manager.reinstallSharedDeployment(catalogId, { awaitReady });
 
       // Stale HTTP sessions were dropped for both siblings.
       expect(
@@ -1186,11 +1193,22 @@ describe("McpServerRuntimeManager", () => {
       expect(deleteDockerRegistrySecrets).not.toHaveBeenCalled();
       expect(deleteK8sNetworkPolicy).not.toHaveBeenCalled();
 
-      // Tenant B's stale entry is cleared; tenant A is reloaded after recreate.
+      // Every sibling is reloaded without waiting for its next tool call.
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(true);
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(true);
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(false);
+      const tenantB = manager.mcpServerIdToDeploymentMap.get(tenantBId);
+      expect(
+        mockK8sDeploymentInstances.some(
+          (deployment) =>
+            (deployment.options.mcpServer as { id: string }).id === tenantBId,
+        ),
+      ).toBe(true);
+      // Distinct install identity must not alias the representative's object.
+      expect(tenantB).not.toBe(representative);
+      expect(tenantB).toMatchObject({
+        options: { mcpServer: { id: tenantBId } },
+      });
 
       // Recreate happened via startServer for the representative.
       expect(startServerSpy).toHaveBeenCalledTimes(1);

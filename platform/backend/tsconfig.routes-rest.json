@@ -38,6 +38,8 @@
     "src/routes/github-copilot-app/github-copilot-app.routes.ts",
     "src/routes/github-copilot-auth/github-copilot-auth.routes.ts",
     "src/routes/github-pat/github-pat.routes.ts",
+    "src/routes/blob-provider/blob-provider.routes.ts",
+    "src/routes/cost-export/cost-export.routes.ts",
     "src/routes/guardrails-policy/guardrails-deployment.routes.ts",
     "src/routes/guardrails-policy/guardrails-noop-annotator.routes.ts",
     "src/routes/guardrails-policy/guardrails-policy.routes.ts",

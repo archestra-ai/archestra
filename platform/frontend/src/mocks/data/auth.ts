@@ -87,6 +87,7 @@ export function makeUserPermissions(
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],
+    costExport: [...ALL],
     guardrailsPolicy: ["read", "update"],
     organizationSettings: ["read", "update"],
     knowledgeSource: [...ALL],

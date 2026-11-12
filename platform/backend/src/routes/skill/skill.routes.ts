@@ -36,6 +36,7 @@ import {
   AgentSkillModel,
   CreatedByModel,
   lookupCreator,
+  MemberModel,
   OrganizationModel,
   SkillEnvironmentModel,
   SkillFileModel,
@@ -382,6 +383,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Include manifest bodies (default true). False returns empty content for lightweight lists.",
             ),
+          visibleTo: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              "Admin-only: list skills visible to this user in the current organization, using the target user's permissions.",
+            ),
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           skillIds: z
@@ -461,6 +469,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           search,
+          visibleTo,
           sourceRepo,
           includeContent,
           skillIds: requestedSkillIds,
@@ -484,8 +493,26 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
+      if (visibleTo !== undefined) {
+        const callerChecker = await getSkillPermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        if (!callerChecker.canRead || !callerChecker.isAdmin) {
+          throw new ApiError(
+            403,
+            "Only users who manage all skills can preview another user's skills",
+          );
+        }
+        if (!(await MemberModel.getByUserId(visibleTo, organizationId))) {
+          throw new ApiError(404, "User not found in this organization");
+        }
+      }
+      // Keep all visibility, filter and agent checks in the target's context.
+      // The requesting administrator's broader grants must not affect the preview.
+      const visibilityUserId = visibleTo ?? user.id;
       const checker = await getSkillPermissionChecker({
-        userId: user.id,
+        userId: visibilityUserId,
         organizationId,
       });
 
@@ -507,7 +534,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let publishableOverMcp = false;
       if (forAgentId === undefined && mcpGatewayEnvironment !== undefined) {
         const agentChecker = await getAgentTypePermissionChecker({
-          userId: user.id,
+          userId: visibilityUserId,
           organizationId,
         });
         agentChecker.require("mcp_gateway", "create");
@@ -516,17 +543,21 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCanAssignEnvironment({
           environmentId,
           organizationId,
-          userId: user.id,
+          userId: visibilityUserId,
         });
         publishedToOrganization = true;
         publishableOverMcp = true;
       } else if (forAgentId !== undefined) {
-        const agent = await AgentModel.findById(forAgentId, user.id, true);
+        const agent = await AgentModel.findById(
+          forAgentId,
+          visibilityUserId,
+          true,
+        );
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
         }
         const agentChecker = await getAgentTypePermissionChecker({
-          userId: user.id,
+          userId: visibilityUserId,
           organizationId,
         });
         try {
@@ -536,7 +567,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (
           !agentChecker.isAdmin(agent.agentType) &&
-          !(await AgentModel.findById(forAgentId, user.id, false))
+          !(await AgentModel.findById(forAgentId, visibilityUserId, false))
         ) {
           throw new ApiError(404, "Agent not found");
         }
@@ -566,7 +597,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await assertCanAssignEnvironment({
                 environmentId,
                 organizationId,
-                userId: user.id,
+                userId: visibilityUserId,
               });
             }
           } else if (agent.accessAllSkills) {
@@ -615,7 +646,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Non-admins see only skills within their scope; admins see all.
       let accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
         organizationId,
-        userId: user.id,
+        userId: visibilityUserId,
       });
       if (allowedSkillIds !== undefined) {
         const accessibleSet = new Set(accessibleSkillIds);
@@ -640,10 +671,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorIds: checker.isAdmin ? authorIds : undefined,
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
         excludeOtherPersonalForUserId:
-          checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
+          checker.isAdmin && excludeOtherPersonalSkills
+            ? visibilityUserId
+            : undefined,
         status,
         access: await ResourcePermissionSubjectModel.resolveAccessFilter({
-          userId: user.id,
+          userId: visibilityUserId,
           organizationId,
           relations: access,
           sharedWith,
@@ -727,7 +760,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         skillPolicies.then((policies) =>
           agentSkillAssignmentService.getPublicationPermissions({
             organizationId,
-            userId: user.id,
+            userId: visibilityUserId,
             skillIds,
             grants: checker.grants,
             policies,

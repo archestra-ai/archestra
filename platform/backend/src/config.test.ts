@@ -32,6 +32,7 @@ import config, {
   getRumOtlpAuthHeaders,
   getSentryConfig,
   getTrustedOrigins,
+  isChatMaxOutputTokensConfigured,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
@@ -74,6 +75,7 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOpenAppaConfig,
+  parseOpenAppaPolicyCheckName,
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
@@ -1193,6 +1195,22 @@ describe("parseContentMaxLength", () => {
 });
 
 describe("parseChatMaxOutputTokens", () => {
+  test.each([
+    [undefined, false],
+    ["", false],
+    ["32k", false],
+    ["0", false],
+    ["1.5", false],
+    ["1000001", false],
+    [" 16000 ", true],
+    ["32768", true],
+    ["1e6", true],
+  ])("only accepted ceilings count as explicit (%s)", (value, expected) => {
+    expect(isChatMaxOutputTokensConfigured(value as string | undefined)).toBe(
+      expected,
+    );
+  });
+
   test("should return default 32768 when no value provided", () => {
     expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
   });
@@ -3830,6 +3848,38 @@ describe("OpenAPPA feature configuration", () => {
     );
   });
 
+  test("the policy check's name defaults to a product-free one, is trimmed, and is bounded", () => {
+    expect(parseOpenAppaPolicyCheckName(undefined)).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName("  ")).toBe(
+      "Check OpenAPPA Guardrails",
+    );
+    expect(parseOpenAppaPolicyCheckName(" Acme policy ")).toBe("Acme policy");
+    expect(() => parseOpenAppaPolicyCheckName("x".repeat(101))).toThrow(
+      "ARCHESTRA_OPENAPPA_POLICY_CHECK_NAME must be at most 100 characters",
+    );
+    expect(
+      parseOpenAppaConfig({ policyCheckName: "Acme policy" }),
+    ).toMatchObject({ policyCheckName: "Acme policy" });
+  });
+
+  test("self-service Guardrails is unset by default, and set only to enabled or disabled", () => {
+    expect(parseOpenAppaConfig()).not.toHaveProperty("selfService");
+    expect(parseOpenAppaConfig({ selfService: " " })).not.toHaveProperty(
+      "selfService",
+    );
+    expect(parseOpenAppaConfig({ selfService: "enabled" }).selfService).toBe(
+      "enabled",
+    );
+    expect(parseOpenAppaConfig({ selfService: "disabled" }).selfService).toBe(
+      "disabled",
+    );
+    expect(() => parseOpenAppaConfig({ selfService: "true" })).toThrow(
+      "ARCHESTRA_OPENAPPA_SELF_SERVICE must be one of: enabled, disabled",
+    );
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
@@ -3890,6 +3940,7 @@ describe("OpenAPPA feature configuration", () => {
   test("enables database policies without a container path", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
+      policyCheckName: "Check OpenAPPA Guardrails",
       yellEnabled: true,
       yellForwardingEnabled: false,
       offerSigningSecret: "",

@@ -2,7 +2,7 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-11-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,15 +30,16 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Credential | Where to get it | Runs as |
 | --- | --- | --- |
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
-| Team token | **Settings → Teams**, then the team's token | The team |
-| Organization token | **Settings → Auth** | The organization |
+| Legacy team or organization token | Its migrated account in **Settings → Service Accounts** | The migrated service account |
 | Service account API key | **Settings → Service Accounts**, then the account's API key | The account |
 | OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
 
 For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilities can share the same client credentials.
 
-Use a service account API key for automations. Team and organization tokens get no code sandbox: the agent cannot run commands, attached files it cannot read inline are dropped, and large tool results are truncated.
+Client-credentials tokens can invoke in-process agents, but cannot start or continue dedicated Agent Runtime runs. Binding the OAuth client to a service account does not remove this restriction. A service-account API key or a user authorization-code token is a different credential, subject to that account's agent, runtime and model access.
+
+Use a service account API key for automations. Legacy team and organization tokens run as their migrated service account, with the same sandbox behavior as other service-account keys.
 
 What to know:
 
@@ -210,5 +211,6 @@ Errors come back with HTTP status `200` and a JSON-RPC `error` object. Only Agen
 | `-32600` Invalid Request | The params do not match the schema. `data` names the field, for example a `role` that is not `ROLE_USER` |
 | `-32602` Context not found | A `contextId` that Archestra did not create, or that belongs to someone else |
 | `-32004` the task is in a terminal state | A message sent to a finished task. Send `contextId` without `taskId` |
+| `-32004` OAuth applications cannot use Agent Runtime | A client-credentials token targets a dedicated-runtime agent. Use an in-process agent or a permitted service-account API key or user credential. |
 | `-32009` Unsupported A2A-Version | An `A2A-Version` header other than `0.3` or `1.0` |
 | `-32603` Internal error | The run failed, for example at the LLM provider. `data.reason` has the provider's message |

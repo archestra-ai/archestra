@@ -19,7 +19,7 @@ describe("AutoRoutingLayout", () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
   });
 
-  it("renders the page as is while the alpha is enabled", () => {
+  it("renders the page as is while auto routing is enabled", () => {
     vi.mocked(useFeature).mockReturnValue(true);
 
     render(<AutoRoutingLayout>content</AutoRoutingLayout>);
@@ -28,7 +28,7 @@ describe("AutoRoutingLayout", () => {
     expect(screen.queryByTestId("page-layout")).not.toBeInTheDocument();
   });
 
-  it("explains that the alpha is off instead of rendering the page", () => {
+  it("explains that auto routing is off instead of rendering the page", () => {
     vi.mocked(useFeature).mockReturnValue(false);
 
     render(<AutoRoutingLayout>content</AutoRoutingLayout>);

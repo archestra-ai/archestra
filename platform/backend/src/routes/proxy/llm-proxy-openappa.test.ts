@@ -12529,6 +12529,21 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             chat: {
               completions: {
                 create: async (params: unknown) => {
+                  const messages = (
+                    params as { messages?: Array<{ role?: string }> }
+                  ).messages;
+                  if (messages?.some((m) => m?.role === "developer")) {
+                    throw Object.assign(
+                      new Error("400 role 'developer' is not allowed"),
+                      {
+                        status: 400,
+                        error: {
+                          message: "role 'developer' is not allowed",
+                          type: "invalid_request_error",
+                        },
+                      },
+                    );
+                  }
                   providerRequests.push(structuredClone(params));
                   const calls = providerCalls.map((call) => ({
                     id: call.id,

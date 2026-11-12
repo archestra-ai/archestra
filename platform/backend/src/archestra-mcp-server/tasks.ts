@@ -92,6 +92,7 @@ import {
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
   workspaceTransferTickets,
 } from "@/services/agent-runtime/workspace-transfers";
+import { resolveCandidateRuntimeSubagentIds } from "@/services/agent-subagent-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -303,55 +304,7 @@ export async function checkCallerSubagentAccess(
   return { allowed: true };
 }
 
-/**
- * Resolve all runtime subagent IDs eligible for pool routing on `callerAgent`.
- *
- * Supports both "All agents" (`accessAllSubagents: true`, excluding
- * `agent_excluded_subagents`) and "Manual" (`accessAllSubagents: false`,
- * explicit `delegateToAgentId` assignments).
- */
-export async function resolveCandidateRuntimeSubagentIds(params: {
-  callerAgent: Pick<
-    Agent,
-    "id" | "organizationId" | "environmentId" | "accessAllSubagents"
-  >;
-  actorUserId?: string | null;
-}): Promise<string[]> {
-  const { callerAgent, actorUserId } = params;
-  if (
-    callerAgent.accessAllSubagents &&
-    actorUserId &&
-    actorUserId !== "system"
-  ) {
-    const isAgentAdmin = await ResourcePermissions.allows({
-      userId: actorUserId,
-      organizationId: callerAgent.organizationId,
-      resource: "agent",
-      scope: "*",
-      action: "update",
-    });
-    const [targets, excludedIds] = await Promise.all([
-      AgentModel.findAccessibleDelegationTargets({
-        userId: actorUserId,
-        isAdmin: isAgentAdmin,
-        organizationId: callerAgent.organizationId,
-        excludeAgentId: callerAgent.id,
-        includeDetails: false,
-        environmentId: callerAgent.environmentId,
-      }),
-      AgentExcludedSubagentModel.findTargetAgentIdsByAgent(callerAgent.id),
-    ]);
-    const excluded = new Set(excludedIds);
-    return targets
-      .filter((target) => target.hasRuntime && !excluded.has(target.id))
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-      .map((target) => target.id);
-  }
-  return AgentModel.findAssignedRuntimeSubagentIds(
-    callerAgent.id,
-    callerAgent.environmentId,
-  );
-}
+export { resolveCandidateRuntimeSubagentIds };
 
 /**
  * Start a durable delegated run through the same lifecycle used by the MCP

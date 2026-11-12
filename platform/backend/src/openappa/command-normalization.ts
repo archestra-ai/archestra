@@ -32,23 +32,50 @@ export function normalizeToolArgumentsForPolicy(
   if (typeof args !== "object" || args === null) return args;
   const normalized = { ...(args as Record<string, unknown>) };
   if (isCommandExecutionTool(toolName)) {
-    if (normalized.command !== undefined && normalized.cmd === undefined) {
+    if (normalized.command != null && normalized.cmd == null) {
       normalized.cmd = normalized.command;
-    } else if (
-      normalized.cmd !== undefined &&
-      normalized.command === undefined
-    ) {
+    } else if (normalized.cmd != null && normalized.command == null) {
       normalized.command = normalized.cmd;
     }
   }
   if (
     PATH_FILE_TOOLS.has(localToolName(toolName)) &&
     typeof normalized.path === "string" &&
-    normalized.file_path === undefined
+    normalized.file_path == null
   ) {
     normalized.file_path = policyPath(normalized.path);
   }
   return normalized;
+}
+
+/**
+ * The refusal for a call that spells one argument both ways with different
+ * values, or null. The policy reads one spelling while the client's tool may
+ * execute the other, so the call is refused before it is ruled on. A value
+ * equal to the normalizer's own copy of the other is the same value.
+ */
+export function argumentSpellingConflict(
+  toolName: string,
+  args: unknown,
+): string | null {
+  if (typeof args !== "object" || args === null) return null;
+  const record = args as Record<string, unknown>;
+  const spellings = isCommandExecutionTool(toolName)
+    ? { ruled: "command", other: "cmd", copy: (value: string) => value }
+    : PATH_FILE_TOOLS.has(localToolName(toolName))
+      ? { ruled: "file_path", other: "path", copy: policyPath }
+      : null;
+  if (!spellings) return null;
+  const { ruled, other, copy } = spellings;
+  const [ruledValue, otherValue] = [record[ruled], record[other]];
+  if (ruledValue == null || otherValue == null) return null;
+  if (
+    typeof ruledValue === "string" &&
+    typeof otherValue === "string" &&
+    (ruledValue === otherValue || ruledValue === copy(otherValue))
+  )
+    return null;
+  return `[appa] Blocked: this call sets both \`${ruled}\` and \`${other}\`, to different values. The tool did not run. Make the call again with only the argument the tool defines.`;
 }
 
 /**

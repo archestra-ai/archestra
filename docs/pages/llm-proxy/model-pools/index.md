@@ -20,9 +20,9 @@ flowchart LR
 
 ## Create a Pool
 
-A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
+A pool is a model name and its members. Each member is a provider connection and the model ID that connection uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
 
-Before you start, add a shared key for each provider on [Model Providers](/docs/llm-proxy/providers). Personal and subscription keys can't be members. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+Before you start, add provider keys or connect your subscriptions on [Model Providers](/docs/llm-proxy/providers). You can add shared connections and your own personal connections, including GitHub Copilot. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 1. Go to **LLM → Model Pools** and click **Create pool**.
 2. Under **Model name**, pick or type the name clients ask for.
@@ -37,7 +37,7 @@ The dialog then shows that the pool is ready, with a request you can copy. Send 
 
 ## Order and Weight
 
-Order sets which members a request tries first, and weight splits traffic between members that share an order. Order and weight work as in LiteLLM.
+Order is a member's priority, and weight splits traffic between members of the same priority. A pool picks a member by these two settings alone, not by load, latency, cost, or how much of a key's rate or token limit is left.
 
 - **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
 - **Weight:** members of one order share its traffic by weight.
@@ -79,7 +79,7 @@ Under **Member overrides**, set a member's retries, delays or retries by error t
 
 ## Timeouts and Cooldown
 
-Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
+Set these under **Failover** when you edit a pool; a new pool starts with the defaults. They apply to every member of the pool, and a blank one keeps its default.
 
 | Setting | Default | What it sets |
 | --- | --- | --- |
@@ -102,6 +102,8 @@ A pool skips members whose known input types or estimated context limit cannot a
 A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) uses a pool only after you add the pool under **Model pools** when you create or edit the key. The same goes for an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) that [calls as the app](/docs/llm-proxy/authentication#call-as-the-app). Which provider keys the key or client maps doesn't matter: the pool answers with its members' keys. Remove the pool, and the key or client can no longer use it.
 
 Credentials that have no pools of their own, such as people who signed in through [Connect](/docs/get-started/connect) or an identity provider's token, use a pool when they can already reach one of its members.
+
+Personal members only serve requests authenticated as their owner, such as a personal virtual key or a signed-in user. A pool grant does not share a subscription: other callers skip personal members and use shared members. If none remain, the request fails with `403` before contacting a provider.
 
 Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
@@ -143,7 +145,7 @@ Each attempt is priced as the member that made it, with that member's provider a
 
 ## Limits
 
-- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI or Azure AI Foundry; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
+- Responses clients, including Codex and OpenCode, can use pools through `/responses` on the OpenAI or Unified Model API. Every enabled member must serve native Responses on OpenAI, Azure AI Foundry, or GitHub Copilot; other member providers are rejected rather than translated. Send the full conversation in `input`: Stored response, conversation, item, file, prompt, vector-store, container and skill references are not supported because they belong to one provider account. Use inline inputs and synchronous execution.
 - Members can use credentials for Anthropic, AWS Bedrock, Gemini (including Vertex AI), OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. OpenAI Chat Completions, Anthropic Messages, and native Gemini clients can mix these providers for text, inline images/PDFs, and client tool calls. Bedrock Converse clients require a Bedrock-only pool; incompatible members produce an error instead of being skipped.
 - Provider-hosted tools, provider-specific cache references, custom Gemini safety settings, structured output, and non-text output are not portable across providers. Incompatible requests fail explicitly; use a pool on the original provider for those features. Reasoning budgets and private thought signatures do not transfer between providers. Each destination uses its own reasoning defaults, so leave room in the output limit for models that think before answering.
-- Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.
+- Timeouts and cooldown are set for the whole pool, not for one member.

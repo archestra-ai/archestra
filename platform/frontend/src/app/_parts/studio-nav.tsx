@@ -40,7 +40,7 @@ import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
  * all, so it offered pages the reader could not open.
  */
 
-/** Shown only while the deployment enables the auto routing alpha. */
+/** Shown only while the deployment enables auto routing. */
 export const AUTO_ROUTING_URL = "/llm/auto-routing";
 
 export interface NavSubItem {
@@ -277,7 +277,7 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith(AUTO_ROUTING_URL),
         beta: true,
-        badgeLabel: "Alpha",
+        badgeLabel: "Beta",
       },
     ],
   },

@@ -6,7 +6,7 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
-/** The auto routing pages exist only where the deployment has the alpha on. */
+/** The auto routing pages exist only where the deployment has auto routing on. */
 export default function AutoRoutingLayout({
   children,
 }: {
@@ -22,8 +22,7 @@ export default function AutoRoutingLayout({
         <Info />
         <span className="font-medium">Auto routing is off</span>
         <InlineNoticeText>
-          This {appName} deployment does not have the auto routing alpha
-          enabled.
+          This {appName} deployment does not have auto routing enabled.
         </InlineNoticeText>
       </InlineNotice>
     </PageLayout>

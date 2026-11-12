@@ -1,5 +1,6 @@
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import pino from "pino";
+import { FAILED_QUERY_PREFIX } from "@/utils/db";
 
 /**
  * Credential-shaped keys censored in every log record, at the top level and
@@ -163,7 +164,31 @@ export function withholdErrorContent(
   // codes are safe; local classifications use mappedCode instead.
   if (typeof result.code === "string")
     result.code = "[not stored: log content mode]";
+  // Errors under any other key or nested deeper, and failed-query text copied
+  // into a string field, bypass the policies above. The exact err/error keys
+  // are handled by their serializers.
+  for (const [key, value] of Object.entries(result)) {
+    if (key !== "err" && key !== "error")
+      result[key] = withholdNestedErrorContent(value);
+  }
   return result;
+}
+
+/**
+ * Removes error content from values pino does not pass through the record
+ * formatter: child bindings, and the message and printf arguments, which call
+ * sites often build from `${error}` or `error.message`. The ORM's failed-query
+ * text lists every bound value, such as the chat messages being stored.
+ */
+export function withholdNestedErrorContent(value: unknown): unknown {
+  return withholdNested({ value, ancestors: new WeakSet(), depth: 0 });
+}
+
+/** A message or printf argument; `%s` would print an Error's message. */
+export function withholdLogArgument(value: unknown): unknown {
+  if (value instanceof Error)
+    return `${value.constructor.name}: ${WITHHELD_CONTENT}`;
+  return withholdNestedErrorContent(value);
 }
 
 // === Internal ===
@@ -242,11 +267,8 @@ function errorMetadata({
   databaseError ||= value instanceof DrizzleQueryError;
   if (value instanceof DrizzleQueryError) {
     // SQL itself may contain literals; only keep its statement classification.
-    const statement =
-      /^\s*(select|insert|update|delete|with|create|alter|drop|truncate)\b/i.exec(
-        value.query,
-      );
-    if (statement) metadata.statement = statement[1].toUpperCase();
+    const statement = sqlStatementKind(value.query);
+    if (statement) metadata.statement = statement;
     metadata.parameterCount = value.params.length;
   }
   if (databaseError) {
@@ -299,4 +321,62 @@ function errorMetadata({
   }
   ancestors.delete(value);
   return metadata;
+}
+
+const WITHHELD_CONTENT = "[not stored: log content mode]";
+
+/** Deep enough for ordinary log context, bounded for hostile or cyclic data. */
+const MAX_NESTED_LOG_DEPTH = 8;
+
+function withholdNested({
+  value,
+  ancestors,
+  depth,
+}: {
+  value: unknown;
+  ancestors: WeakSet<object>;
+  depth: number;
+}): unknown {
+  if (typeof value === "string") return withholdFailedQueryText(value);
+  if (value instanceof Error) return serializeErrorMetadata(value);
+  if (typeof value !== "object" || value === null) return value;
+  // Class instances (dates, buffers, URLs) serialize without error content.
+  const isArray = Array.isArray(value);
+  if (!isArray && !isPlainObject(value)) return value;
+  if (ancestors.has(value)) return "[Circular]";
+  if (depth >= MAX_NESTED_LOG_DEPTH) return WITHHELD_CONTENT;
+  ancestors.add(value);
+  const next = (child: unknown) =>
+    withholdNested({ value: child, ancestors, depth: depth + 1 });
+  const result = isArray
+    ? value.map(next)
+    : Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [key, next(child)]),
+      );
+  ancestors.delete(value);
+  return result;
+}
+
+/**
+ * Keeps the text before a failed query and its statement kind; the SQL can
+ * hold literals and the params line holds every bound value.
+ */
+function withholdFailedQueryText(text: string): string {
+  const index = text.indexOf(FAILED_QUERY_PREFIX);
+  if (index === -1) return text;
+  const statement = sqlStatementKind(
+    text.slice(index + FAILED_QUERY_PREFIX.length),
+  );
+  return `${text.slice(0, index)}${FAILED_QUERY_PREFIX} ${statement ? `${statement} ` : ""}${WITHHELD_CONTENT}`;
+}
+
+function sqlStatementKind(sql: string): string | undefined {
+  return /^\s*(select|insert|update|delete|with|create|alter|drop|truncate)\b/i
+    .exec(sql)?.[1]
+    .toUpperCase();
+}
+
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

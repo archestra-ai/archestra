@@ -6,6 +6,8 @@ import {
   serializeErrorBounded,
   serializeErrorMetadata,
   withholdErrorContent,
+  withholdLogArgument,
+  withholdNestedErrorContent,
 } from "@/logging/redaction";
 
 /**
@@ -24,7 +26,7 @@ export function createLogger({
   mixin?: pino.LoggerOptions["mixin"];
   level?: pino.LoggerOptions["level"];
 }): pino.Logger {
-  return pino(
+  const logger = pino(
     {
       level,
       mixin,
@@ -39,7 +41,11 @@ export function createLogger({
               logMethod(args, method) {
                 // Pino otherwise uses Error.message as msg for logger.error(error).
                 if (args[0] instanceof Error) {
-                  args = [{ err: args[0] }, args[1] ?? "Application error"];
+                  args = [
+                    { err: args[0] },
+                    args[1] ?? "Application error",
+                    ...args.slice(2),
+                  ] as typeof args;
                 } else if (
                   args.length === 1 &&
                   typeof args[0] === "object" &&
@@ -48,6 +54,14 @@ export function createLogger({
                 ) {
                   args = [args[0], "Application error"];
                 }
+                // The merging object goes through the log formatter. The
+                // message and printf arguments do not, and call sites build
+                // them from an error's text.
+                args = args.map((arg, index) =>
+                  index === 0 && typeof arg === "object" && arg !== null
+                    ? arg
+                    : withholdLogArgument(arg),
+                ) as typeof args;
                 method.apply(this, args);
               },
             },
@@ -65,5 +79,28 @@ export function createLogger({
       },
     },
     pino.multistream(streams),
+  );
+  if (contentMode === "metadata_only") {
+    // Pino skips the log formatter for child bindings and resets the bindings
+    // formatter for children. Children inherit this override.
+    const { child } = logger;
+    logger.child = function (this: typeof logger, bindings, options) {
+      return child.call(this, withholdChildBindings(bindings), options);
+    } as typeof child;
+  }
+  return logger;
+}
+
+// === Internal ===
+
+/** The exact err/error keys still reach their serializers. */
+function withholdChildBindings(bindings: pino.Bindings): pino.Bindings {
+  return Object.fromEntries(
+    Object.entries(bindings).map(([key, value]) => [
+      key,
+      key === "err" || key === "error"
+        ? value
+        : withholdNestedErrorContent(value),
+    ]),
   );
 }

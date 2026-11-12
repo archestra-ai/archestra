@@ -486251,6 +486251,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -486275,6 +486278,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -486311,12 +486315,49 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -486677,6 +486718,10 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
+                  },
+                  "selfServiceAutoMerge": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -486777,6 +486822,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -486801,6 +486849,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -486837,12 +486886,49 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -487214,6 +487300,25 @@
                       "action": {
                         "type": "string",
                         "enum": [
+                          "self_service_auto_merge"
+                        ]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
                           "include_servers"
                         ]
                       }
@@ -487316,6 +487421,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -487340,6 +487448,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -487376,12 +487485,49 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },
@@ -488710,6 +488856,9 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "pattern": "^(?!batteries(?:\\/|$))[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:\\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
+                  },
+                  "selfServiceAutoMerge": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -488810,6 +488959,9 @@
                         "selfServiceDirectory": {
                           "type": "string"
                         },
+                        "selfServiceAutoMerge": {
+                          "type": "boolean"
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -488834,6 +488986,7 @@
                         "setupPullRequestNumber",
                         "selfService",
                         "selfServiceDirectory",
+                        "selfServiceAutoMerge",
                         "lastSyncedAt",
                         "lastSyncError"
                       ],
@@ -488870,12 +489023,49 @@
                             "value"
                           ],
                           "additionalProperties": false
+                        },
+                        "autoMerge": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "setting": {
+                              "type": "boolean"
+                            },
+                            "environment": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "enum": [
+                                    "enabled",
+                                    "disabled"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "setting"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "enabled",
                         "setting",
-                        "directory"
+                        "directory",
+                        "autoMerge"
                       ],
                       "additionalProperties": false
                     },

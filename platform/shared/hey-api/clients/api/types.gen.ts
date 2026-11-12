@@ -125335,6 +125335,7 @@ export type GetAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125345,6 +125346,14 @@ export type GetAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125368,6 +125377,9 @@ export type UpdateAppaGithubSyncData = {
         action: 'self_service';
         enabled: boolean;
         directory?: string;
+    } | {
+        action: 'self_service_auto_merge';
+        enabled: boolean;
     } | {
         action: 'include_servers';
     };
@@ -125464,6 +125476,7 @@ export type UpdateAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125474,6 +125487,14 @@ export type UpdateAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125497,6 +125518,7 @@ export type ConfigureAppaGithubSyncData = {
         gitlabTokenId?: string | null;
         selfService?: boolean;
         selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -125591,6 +125613,7 @@ export type ConfigureAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -125601,6 +125624,14 @@ export type ConfigureAppaGithubSyncResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;
@@ -125916,6 +125947,7 @@ export type CreateAppaGithubRepositoryData = {
         replace?: boolean;
         selfService?: boolean;
         selfServiceDirectory?: string;
+        selfServiceAutoMerge?: boolean;
     };
     path?: never;
     query?: never;
@@ -126010,6 +126042,7 @@ export type CreateAppaGithubRepositoryResponses = {
             setupPullRequestNumber: number | null;
             selfService: boolean;
             selfServiceDirectory: string;
+            selfServiceAutoMerge: boolean;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
         } | null;
@@ -126020,6 +126053,14 @@ export type CreateAppaGithubRepositoryResponses = {
             environment?: {
                 variable: string;
                 value: 'enabled' | 'disabled';
+            };
+            autoMerge: {
+                enabled: boolean;
+                setting: boolean;
+                environment?: {
+                    variable: string;
+                    value: 'enabled' | 'disabled';
+                };
             };
         };
         hasPolicy: boolean;

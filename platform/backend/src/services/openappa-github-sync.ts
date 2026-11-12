@@ -11,7 +11,6 @@ import {
   type AllowedCacheKey,
   CacheKey,
   cacheManager,
-  LRUCacheManager,
 } from "@/cache-manager";
 import config, {
   OPENAPPA_SELF_SERVICE_DIRECTORY_VARIABLE,
@@ -1159,7 +1158,10 @@ async function forgetRefusedChecks(organizationId: string, repo: string) {
 }
 
 /** A shared cache key for the policy check, from its parts. */
-function checkKey(kind: "checked" | "refused", ...parts: string[]) {
+function checkKey(
+  kind: "checked" | "refused" | "protection",
+  ...parts: string[]
+) {
   return `${CacheKey.OpenAppaPolicyCheck}-${kind}-${createHash("sha256")
     .update(JSON.stringify(parts))
     .digest("hex")}` as const;
@@ -2432,11 +2434,34 @@ export async function getAppaGithubAppGrants(
   return grants ?? null;
 }
 
-/** The last protection read or applied, by organization, for a minute. */
-const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
-  maxSize: 1024,
-  defaultTtl: 60_000,
-});
+/** How long the last protection read or applied stands, by organization. */
+const PROTECTION_TTL = TimeInMs.Minute;
+
+/**
+ * The last protection read or applied, by organization, in the shared cache:
+ * what one replica applies on protect or a sync, every replica shows, and
+ * the setup-complete gate reads the same state everywhere. Null is a value
+ * (no protection to show); undefined is a miss.
+ */
+async function cachedProtection(
+  organizationId: string,
+): Promise<RepositoryProtection | null | undefined> {
+  const hit = await cacheManager.get<{
+    protection: RepositoryProtection | null;
+  }>(checkKey("protection", organizationId));
+  return hit ? hit.protection : undefined;
+}
+
+async function rememberProtection(
+  organizationId: string,
+  protection: RepositoryProtection | null,
+) {
+  await cacheManager.set(
+    checkKey("protection", organizationId),
+    { protection },
+    PROTECTION_TTL,
+  );
+}
 
 /**
  * The repository's protection as the Git sync settings show it: read at most
@@ -2445,10 +2470,10 @@ const protectionStatus = new LRUCacheManager<RepositoryProtection | null>({
 export async function getRepositoryProtection(
   organizationId: string,
 ): Promise<RepositoryProtection | null> {
-  const cached = protectionStatus.get(organizationId);
+  const cached = await cachedProtection(organizationId);
   if (cached !== undefined) return cached;
   const read = await repositoryProtection({ organizationId, apply: false });
-  protectionStatus.set(organizationId, read);
+  await rememberProtection(organizationId, read);
   return read;
 }
 
@@ -2472,7 +2497,7 @@ async function maintainRepositoryProtection(
     return null;
   }
   const applied = await repositoryProtection({ organizationId, apply: true });
-  protectionStatus.set(organizationId, applied);
+  await rememberProtection(organizationId, applied);
   return applied;
 }
 
@@ -2483,7 +2508,7 @@ async function maintainRepositoryProtection(
  * can no longer reach is logged, and the setting changes all the same.
  */
 async function withdrawRepositoryProtection(organizationId: string) {
-  protectionStatus.set(organizationId, null);
+  await rememberProtection(organizationId, null);
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.repo || !row.githubAppConfigId) return;
   try {

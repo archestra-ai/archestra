@@ -52,7 +52,7 @@ jobs:
       # dedicated service account reads only these secrets; it authenticates
       # first so the deploy identity below replaces it for GAR and GKE access.
       - name: Authenticate to read benchmark secrets
-        uses: archestra-ai/.github/actions/google-auth@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         with:
           service_account: ${{ vars.CI_BENCHMARK_SECRETS_SERVICE_ACCOUNT }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -72,7 +72,7 @@ jobs:
 
       # gcloud for GKE credentials only; images live on GHCR.
       - name: Authenticate to Google Cloud
-        uses: archestra-ai/.github/actions/google-auth@3a014e2fa0a740f1ec68f6379b602470a418cd6e # v1.13.0
+        uses: archestra-ai/.github/actions/google-auth@c3001f82a468e05482bd7c8cd08ff97f94e80d2e # v1.14.0
         with:
           service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

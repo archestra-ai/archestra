@@ -97,5 +97,55 @@ class CheckOrderTests(unittest.TestCase):
         self.assertEqual(calls[0][:2], ["cargo", "deny"])
 
 
+class RustGateTests(unittest.TestCase):
+    def run_gate(self, **overrides):
+        scripts = check_scripts("platform-rust-checks-gate", r"RUST_RESULT")
+        self.assertEqual(len(scripts), 1)
+        env = os.environ | {
+            "INPUTS_RESULT": "success",
+            "RUN_RUST": "true",
+            "DAGGER_RESULT": "success",
+            "RUST_RESULT": "success",
+        } | overrides
+        return subprocess.run(
+            ["bash", "-eo", "pipefail", "-c", scripts[0]],
+            env=env, text=True, capture_output=True,
+        ).returncode
+
+    def test_verified_unchanged_inputs_allow_a_skipped_runner(self):
+        self.assertEqual(self.run_gate(RUN_RUST="false", RUST_RESULT="skipped"), 0)
+
+    def test_completed_rust_validation_covers_failed_input_detection(self):
+        for result in ("success", "failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assertEqual(self.run_gate(INPUTS_RESULT=result), 0)
+
+    def test_unverified_or_changed_inputs_cannot_skip_rust(self):
+        for result, changed in (
+            ("success", "true"), ("success", ""), ("failure", "false"),
+            ("cancelled", "false"), ("skipped", "false"), ("", "false"),
+        ):
+            with self.subTest(result=result, changed=changed):
+                self.assertNotEqual(self.run_gate(
+                    INPUTS_RESULT=result, RUN_RUST=changed, RUST_RESULT="skipped",
+                ), 0)
+
+    def test_failed_cancelled_or_missing_rust_results_fail_the_gate(self):
+        for changed in ("true", "false"):
+            for result in ("failure", "cancelled", ""):
+                with self.subTest(changed=changed, result=result):
+                    self.assertNotEqual(self.run_gate(
+                        RUN_RUST=changed, RUST_RESULT=result,
+                    ), 0)
+
+    def test_dagger_must_pass_even_when_rust_passed_or_was_unneeded(self):
+        for result in ("failure", "cancelled", "skipped", ""):
+            for rust in ("success", "skipped"):
+                with self.subTest(result=result, rust=rust):
+                    self.assertNotEqual(self.run_gate(
+                        DAGGER_RESULT=result, RUN_RUST="false", RUST_RESULT=rust,
+                    ), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -262,6 +262,7 @@ assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false)
             "migration-kit-checks",
             "platform-lint-and-unit-tests",
             "platform-rust-checks",
+            "platform-rust-checks-gate",
             "openappa-native-tests",
             "ai-labs-rust-checks",
             "changed-inputs",

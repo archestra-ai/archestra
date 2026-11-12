@@ -25,6 +25,8 @@ export const DESKTOP_MCP_COPY = {
   removeTheirs: "Disconnect from their device",
   removing: "Disconnecting...",
   added: "Connected",
+  /** The status in the header of the server's page. */
+  addedFromDevice: "Connected from your device",
   waiting: "Waiting for your device",
   noDevice: "Device not linked",
   notAdded: "Not connected from your device",

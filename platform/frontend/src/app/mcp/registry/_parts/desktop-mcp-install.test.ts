@@ -51,6 +51,20 @@ function installation(ownerId: string, localInstallationStatus: string) {
 }
 
 describe("desktopInstallStateOfRow for a desktop MCP item", () => {
+  it("is checking while the installations are read, not 'not connected'", () => {
+    expect(
+      desktopInstallStateOfRow({
+        item: {
+          id: CATALOG_ID,
+          serverType: "desktop_mcp",
+          desktopConfig: COMMAND,
+        },
+        servers: undefined,
+        viewerId: VIEWER,
+      }),
+    ).toBe("checking");
+  });
+
   it("offers Add while only a colleague has an installation, even a waiting one", () => {
     expect(
       desktopMcpInstallState({

@@ -25,8 +25,8 @@ export type DesktopMcpInstallState =
   /** The viewer linked it, but has no device with the MCP bridge. */
   | "no-device"
   /**
-   * The viewer linked it, and their devices are still being read: neither
-   * Linked nor Device not linked is known, so nothing is shown yet.
+   * The installations, or the viewer's devices, are still being read: none
+   * of the other states is known, so nothing is shown yet.
    */
   | "checking"
   | "installed";
@@ -65,13 +65,16 @@ export function desktopInstallStateOfRow(params: {
 }): DesktopMcpInstallState | null {
   const { item, servers, viewerId, hasComputer } = params;
   if (item.serverType !== "desktop_mcp") return null;
+  // Not "not connected" before the installations are read: that would turn
+  // into "Connected" a moment later.
+  if (!servers) return "checking";
   const state = desktopMcpInstallState({
     catalogId: item.id,
     desktopConfig: item.desktopConfig,
-    servers: servers ?? [],
+    servers,
     viewerId,
   });
-  // Linked, but no device runs it: the viewer unlinked their device, or
+  // Connected, but no device runs it: the viewer unlinked their device, or
   // never set the MCP bridge up.
   if (state !== "installed" && state !== "waiting") return state;
   if (hasComputer === "checking") return "checking";

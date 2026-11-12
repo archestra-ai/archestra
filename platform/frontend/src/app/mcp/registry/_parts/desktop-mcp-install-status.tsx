@@ -75,7 +75,7 @@ export function DesktopMcpAddedStatus({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <Laptop className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span>{DESKTOP_MCP_COPY.added}</span>
+      <span>{DESKTOP_MCP_COPY.addedFromDevice}</span>
     </span>
   );
 }

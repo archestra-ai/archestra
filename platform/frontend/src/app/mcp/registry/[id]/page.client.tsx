@@ -583,7 +583,8 @@ function CatalogItemDetails({
   // its state is the viewer's own installation.
   const desktopState = useDesktopInstallState({
     items: [item],
-    servers: allServersForCatalog,
+    // Undefined while they load, so the header shows nothing until then.
+    servers: catalogMcpServers ? allServersForCatalog : undefined,
   })(item);
 
   // "Chat" spins up (or reuses) a personal agent with this catalog's tools —
@@ -652,14 +653,15 @@ function CatalogItemDetails({
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
           {/* Once installed, the next step is a client: the Connect page puts
-              these tools into Claude Code, Cursor and the rest. */}
+              these tools into Claude Code, Cursor and the rest. "a client"
+              keeps it apart from a desktop MCP server's "Connected". */}
           {showChatButton && (
             <Button variant="outline" size="sm" asChild>
               <Link href="/connection">
                 <Cable className="h-4 w-4" />
                 {/* On a phone only the icons show, so the actions still fit
                     beside the title; the names stay for screen readers. */}
-                <span className="max-sm:sr-only">Connect</span>
+                <span className="max-sm:sr-only">Connect a client</span>
               </Link>
             </Button>
           )}

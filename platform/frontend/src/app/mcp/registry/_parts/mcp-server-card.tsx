@@ -933,7 +933,8 @@ export function McpServerCard({
   // on that computer, with Remove from my computer.
   const desktopState = useDesktopInstallState({
     items: [item],
-    servers: allServersForCatalog,
+    // Undefined while they load, so the card shows nothing until then.
+    servers: allMcpServers ? allServersForCatalog : undefined,
   })(item);
   const desktopAdd = desktopAddAction({
     state: desktopState,

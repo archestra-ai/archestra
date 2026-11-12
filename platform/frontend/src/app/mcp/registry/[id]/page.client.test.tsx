@@ -193,7 +193,7 @@ vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
 
 const serverRulesHref = vi.fn<() => string | null>(() => null);
 vi.mock("../_parts/server-rules-launch", () => ({
-  SERVER_RULES_LABEL: "Edit Guardrails rules",
+  SERVER_RULES_LABEL: "Edit Guardrails",
   ServerRulesButton: ({
     children,
   }: {
@@ -453,16 +453,16 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(section("Connection").queryByRole("link")).toBeNull();
   });
 
-  it("shows Edit Guardrails rules beside the header's Edit, not in the overflow menu", async () => {
+  it("shows Edit Guardrails beside the header's Edit, not in the overflow menu", async () => {
     serverRulesHref.mockReturnValue("/chat?agent=keeper");
     renderPage();
 
     expect(
-      screen.getByRole("link", { name: "Edit Guardrails rules" }),
+      screen.getByRole("link", { name: "Edit Guardrails" }),
     ).toHaveAttribute("href", "/chat?agent=keeper");
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.queryByRole("menuitem", { name: "Edit Guardrails rules" }),
+      screen.queryByRole("menuitem", { name: "Edit Guardrails" }),
     ).toBeNull();
     serverRulesHref.mockReturnValue(null);
   });

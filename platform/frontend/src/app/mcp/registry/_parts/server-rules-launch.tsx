@@ -11,7 +11,7 @@ import { openAppaChatHref } from "@/lib/openappa-routes";
 
 export type ServerRulesCatalog = { id: string; name: string };
 
-export const SERVER_RULES_LABEL = "Edit Guardrails rules";
+export const SERVER_RULES_LABEL = "Edit Guardrails";
 
 /**
  * For a server's editors: change its own Guardrails rules with the APPA

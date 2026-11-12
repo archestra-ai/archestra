@@ -679,7 +679,7 @@ function serverRulesReadme(folder: string, policyPath: string): string {
     "",
     `Each MCP server's Guardrails rules live here, one \`<tool prefix>.toml\` file per server, which \`${policyFile}\` includes through \`${folder}/*.toml\`. A file holds rules for its own server's tools only; a rule in \`${policyFile}\` for the same tool wins.`,
     "",
-    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails rules** there, which opens a pull request. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
+    `The people who may edit a server in the ${archestraMcpBranding.appName} MCP registry change its file through **Edit Guardrails** there, which opens a pull request. The ${archestraMcpBranding.appName} policy check on each pull request confirms the change.`,
     "",
   ].join("\n");
 }

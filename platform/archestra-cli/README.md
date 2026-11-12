@@ -24,7 +24,7 @@ The commands of a component are `archestra <component> <action>`. `update` and `
 | --- | --- | --- |
 | `bridge start` | Starts the MCP bridge in the background. | Auto-start, except at the first start. |
 | `bridge stop` | Stops the MCP bridge that runs in the background. | Auto-start, the config file and the device key. |
-| `bridge status` | Shows if the MCP bridge runs, if auto-start is on, which Archestra the device is linked to, the version and the log file. | Everything: it only reads. |
+| `bridge status` | Shows if the MCP bridge runs, if auto-start is on, which Archestra the device is linked to, the version, the log file and, while it runs, the state of each MCP server. | Everything: it only reads. |
 | `bridge enable-auto-start` | Turns auto-start on: the MCP bridge starts at each login. | What runs now. |
 | `bridge disable-auto-start` | Turns auto-start off. | What runs now. |
 | `update` | Gets the program that Archestra serves now, and starts the MCP bridge again with it. | Auto-start, the config file and the device key. |

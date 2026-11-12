@@ -42,6 +42,7 @@ mod report;
 pub mod sign_in;
 pub mod start;
 pub mod state;
+pub mod state_file;
 pub mod status;
 mod stdio_server;
 pub mod stop;
@@ -362,7 +363,7 @@ impl Bridge {
 
     /// Runs the tunnel client: keeps the MCP servers of the config file in
     /// operation, polls Archestra, answers the commands, syncs the config
-    /// file, and reports the state to Archestra.
+    /// file, and reports the state to Archestra and to the state file.
     ///
     /// It returns only when Archestra rejects the device key (the status is
     /// then [`BridgeStatus::SignedOut`]). Dropping the future stops the MCP
@@ -388,6 +389,7 @@ impl Bridge {
         let supervisor = Supervisor::new(local_http, timings, Variables::of_this_device());
         // How many commands of Archestra are in work: an update waits for none.
         let in_flight = std::sync::atomic::AtomicUsize::new(0);
+        let state_file = state_file::path_beside(&options.config_path);
 
         // All parts run in this one task. Only the poll loop ends: when the
         // device is signed out. That stops the other parts and the MCP
@@ -404,6 +406,11 @@ impl Bridge {
                 state,
             ) => {}
             () = report::report_loop(&control_plane, state.subscribe(), timings.state_report_delay) => {}
+            () = state_file::write_loop(
+                &state_file,
+                state.subscribe(),
+                timings.state_report_delay,
+            ) => {}
             () = update::auto_update_loop(
                 options.auto_update.as_ref(),
                 &options.control_plane.base_url,

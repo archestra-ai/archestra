@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import GithubAppConfigModel from "@/models/github-app-config";
@@ -1519,6 +1520,18 @@ test("MCP servers whose tools share a prefix share one rules file: a change take
     message:
       "helpdesk has no rules file: some of its tools carry other prefixes than helpdesk__ (crm__).",
   });
+  // A catalog from before the API refused the built-in tools' name: its file
+  // would govern the built-in tools too, so it stays the policy's.
+  const builtIn = archestraMcpBranding.serverName;
+  const legacy = await addServer({
+    name: builtIn,
+    tools: [`${builtIn}__custom`],
+    editors: payments.id,
+  });
+  await expect(read(pat.id, legacy.id)).rejects.toMatchObject({
+    statusCode: 409,
+    message: `${builtIn} has no rules file: its tools carry the prefix ${builtIn}__ of the built-in ${archestraMcpBranding.catalogName} tools, which only the organization's own policy governs.`,
+  });
 
   const change = {
     organizationId: org.id,
@@ -2460,7 +2473,39 @@ test("the policy check asks for edit access to each shared server a rules file g
   }
   await connectApp({ organizationId: org.id });
   const root = `include = ["mcp/*.toml"]\n${RULES}`;
-  const results = { 1: "a".repeat(40), 2: "b".repeat(40), 3: "c".repeat(40) };
+  // A catalog from before the API refused the built-in tools' name, which
+  // Pat may edit: a file for its prefix stays the policy's own matter.
+  const builtIn = archestraMcpBranding.serverName;
+  const legacy = await InternalMcpCatalogModel.create(
+    {
+      name: builtIn,
+      serverType: "remote",
+      serverUrl: "https://legacy.example.com/mcp",
+      scope: "org",
+    },
+    {
+      organizationId: org.id,
+      authorId: admin.id,
+      initialPermissionGrants: [
+        {
+          subject: { type: "team", id: payments.id },
+          actions: ["read", "use", "update"],
+        },
+      ],
+    },
+  );
+  await ToolModel.createToolIfNotExists({
+    name: `${builtIn}__custom`,
+    description: "custom",
+    parameters: {},
+    catalogId: legacy.id,
+  });
+  const results = {
+    1: "a".repeat(40),
+    2: "b".repeat(40),
+    3: "c".repeat(40),
+    4: "d".repeat(40),
+  };
   serveRepository({
     head: FIRST,
     files: {
@@ -2489,7 +2534,12 @@ test("the policy check asks for edit access to each shared server a rules file g
   // who may edit payments_api only; and for Cody, who owns only the copy.
   // Everyone who reads the repository reads a check's summary, so it names
   // only the servers the requester may open in the registry.
-  const requesters = { 1: pat.email, 2: bea.email, 3: cody.email };
+  const requesters = {
+    1: pat.email,
+    2: bea.email,
+    3: cody.email,
+    4: pat.email,
+  };
   const runs: Array<{
     head_sha: string;
     conclusion: string;
@@ -2506,8 +2556,15 @@ test("the policy check asks for edit access to each shared server a rules file g
         })),
       ),
     ),
-    http.get(`${REPO}/pulls/:number/files`, () =>
-      HttpResponse.json([{ filename: "mcp/payments_api.toml" }]),
+    http.get(`${REPO}/pulls/:number/files`, ({ params }) =>
+      HttpResponse.json([
+        {
+          filename:
+            Number(params.number) === 4
+              ? `mcp/${builtIn}.toml`
+              : "mcp/payments_api.toml",
+        },
+      ]),
     ),
     http.get(`${REPO}/pulls/:number/commits`, ({ params }) => {
       const number = Number(params.number) as keyof typeof results;
@@ -2537,6 +2594,11 @@ test("the policy check asks for edit access to each shared server a rules file g
     title: "The requester may not change these rules",
     summary:
       "cody@example.com may not change mcp/payments_api.toml: that takes edit access to the MCP servers Payments API and an MCP server they cannot see in the MCP registry.",
+  });
+  expect(posted[results[4]]).toEqual({
+    conclusion: "failure",
+    title: "The requester may not change the policy",
+    summary: `pat@example.com may not change mcp/${builtIn}.toml: that takes the guardrailsPolicy:update permission.`,
   });
 });
 

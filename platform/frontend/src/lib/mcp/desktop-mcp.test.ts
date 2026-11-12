@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   addDesktopMcpServer,
   desktopHostingOffered,
+  desktopMcpArgumentsError,
+  desktopMcpCommandOf,
   desktopMcpTargetError,
   desktopMcpTargetOf,
   desktopMcpTargetToApi,
@@ -41,6 +43,99 @@ describe("addDesktopMcpServer", () => {
     await expect(
       addDesktopMcpServer({ install, catalogItem }),
     ).resolves.toBeNull();
+  });
+
+  it("sends the arguments the user added, also when there are none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({
+      install,
+      catalogItem,
+      desktopArguments: ["--root", "$HOME/My Models"],
+    });
+    await addDesktopMcpServer({ install, catalogItem, desktopArguments: [] });
+
+    expect(install).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        desktopArguments: ["--root", "$HOME/My Models"],
+      }),
+    );
+    expect(install).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ desktopArguments: [] }),
+    );
+  });
+
+  it("sends no arguments key for an item that takes none", async () => {
+    const install = vi.fn(async () => ({
+      installedServer: { id: "server-1" },
+      errorMessage: null,
+    }));
+
+    await addDesktopMcpServer({ install, catalogItem });
+
+    expect(install.mock.calls[0]).toEqual([
+      expect.not.objectContaining({ desktopArguments: expect.anything() }),
+    ]);
+  });
+});
+
+describe("desktopMcpCommandOf", () => {
+  it("gives the command exactly as stored", () => {
+    expect(
+      desktopMcpCommandOf({
+        command: "/Users/$USER/bins/mcp  serve --flag 'two words'",
+      }),
+    ).toBe("/Users/$USER/bins/mcp  serve --flag 'two words'");
+  });
+
+  it("gives none for an item with a URL, and for one that is not set up", () => {
+    expect(desktopMcpCommandOf({ command: null })).toBeNull();
+    expect(desktopMcpCommandOf({ command: "   " })).toBeNull();
+    expect(desktopMcpCommandOf({})).toBeNull();
+    expect(desktopMcpCommandOf(null)).toBeNull();
+    expect(desktopMcpCommandOf(undefined)).toBeNull();
+  });
+});
+
+describe("desktopMcpArgumentsError", () => {
+  it("accepts no arguments and ordinary ones", () => {
+    expect(desktopMcpArgumentsError([])).toBeNull();
+    expect(
+      desktopMcpArgumentsError(["--root", "$HOME/My Models", "--verbose"]),
+    ).toBeNull();
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 64 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBeNull();
+    expect(desktopMcpArgumentsError(["a".repeat(4096)])).toBeNull();
+  });
+
+  it("refuses more arguments than the backend stores", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 65 }, (_, index) => `--flag-${index}`),
+      ),
+    ).toBe("Use at most 64 arguments.");
+  });
+
+  it("refuses an argument that is too long", () => {
+    expect(desktopMcpArgumentsError(["--ok", "a".repeat(4097)])).toBe(
+      "Use at most 4096 characters in one argument.",
+    );
+  });
+
+  it("refuses arguments that are too long together", () => {
+    expect(
+      desktopMcpArgumentsError(
+        Array.from({ length: 5 }, () => "a".repeat(4000)),
+      ),
+    ).toBe("Use at most 16384 characters in all arguments together.");
   });
 });
 

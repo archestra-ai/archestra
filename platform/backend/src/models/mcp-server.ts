@@ -2740,6 +2740,8 @@ class McpServerModel {
       hasOauthConfig: row.catalogOauthConfig !== null,
       hasSecret: Boolean(s.secretId),
       localInstallationStatus: s.localInstallationStatus,
+      // What the owner added to the command of a desktop MCP catalog item.
+      desktopArguments: s.desktopArguments ?? null,
       oauthRefreshError: s.oauthRefreshError ?? null,
       // Lifecycle fields so the soft-delete/restore diff is non-empty: a
       // (flag-only) restore flips deletedAt → null and reinstallRequired → true.

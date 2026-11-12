@@ -42,7 +42,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDesktopTunnel,
         description:
-          "Tunnel metadata for the tunnel client, with the desktop MCP catalog items its user installed and the command or URL of each.",
+          "Tunnel metadata for the tunnel client, with the desktop MCP catalog items its user installed, the command or URL of each, and the arguments the user added to the command.",
         tags: ["Desktop Tunnel"],
         params: TunnelParamsSchema,
         response: constructResponseSchema(
@@ -55,6 +55,10 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: z.string(),
                 name: z.string(),
                 command: z.string().nullable(),
+                // What the user added for their own installation. The
+                // tunnel client puts them after the arguments of the
+                // command; one that does not know the key ignores them.
+                arguments: z.array(z.string()),
                 url: z.string().nullable(),
                 enabled: z.boolean(),
               }),
@@ -90,6 +94,7 @@ const desktopTunnelRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: server.catalogId,
             name: server.name,
             command: server.command,
+            arguments: server.arguments,
             url: server.url,
             enabled: server.enabled,
           }),

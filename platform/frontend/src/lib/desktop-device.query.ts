@@ -6,6 +6,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { mcpRegistryQueryKey } from "@/lib/mcp/mcp-registry.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -98,6 +99,42 @@ export function useDesktopMcpInstallationStatus(serverId: string | null) {
   }, [serverId, queryClient]);
 
   return query;
+}
+
+/**
+ * Stores the arguments the signed-in user adds to the command of a desktop
+ * MCP server, for their own installation. The MCP bridge on their device
+ * then starts the server again with them, and the installation waits until
+ * its tools are read again. Shows no success toast: the Connect dialog
+ * follows the installation and says it.
+ */
+export function useUpdateDesktopMcpArguments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; desktopArguments: string[] }) => {
+      const { data, error } =
+        await archestraApiSdk.updateMcpServerDesktopArguments({
+          path: { id: params.id },
+          body: { desktopArguments: params.desktopArguments },
+        });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: async (server, params) => {
+      // What the dialog that follows the installation reads first: without
+      // this it would show the status from before the change.
+      queryClient.setQueryData(
+        desktopMcpInstallationStatusKey(params.id),
+        server?.localInstallationStatus ?? null,
+      );
+      void queryClient.invalidateQueries({ queryKey: desktopDevicesQueryKey });
+      void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+    },
+  });
 }
 
 export function useDeleteDesktopDevice() {

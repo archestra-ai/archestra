@@ -14,6 +14,11 @@ export interface DesktopDeviceServerConfig {
   name: string;
   /** The command of the catalog item. A server has a command or a URL. */
   command: string | null;
+  /**
+   * The arguments the user added for their own installation. The device puts
+   * them after the arguments of the command. Empty without a command.
+   */
+  arguments: string[];
   /** The URL of the catalog item. */
   url: string | null;
   /** False after the user stopped the MCP server. */
@@ -52,14 +57,19 @@ export async function listDesktopDeviceServerConfigs(
     { expandSecrets: false },
   );
   const rowByCatalogId = new Map(rows.map((row) => [row.catalogId, row]));
+  const argumentsByCatalogId = new Map(
+    installs.map((install) => [install.catalogId, install.desktopArguments]),
+  );
   return [...items.values()]
     .filter((item) => item.serverType === "desktop_mcp")
     .map((item) => {
       const row = rowByCatalogId.get(item.id);
+      const command = item.desktopConfig?.command ?? null;
       return {
         catalogId: item.id,
         name: item.name,
-        command: item.desktopConfig?.command ?? null,
+        command,
+        arguments: command ? (argumentsByCatalogId.get(item.id) ?? []) : [],
         url: item.desktopConfig?.url ?? null,
         enabled: row?.enabled ?? true,
         reportedState: row?.state ?? null,

@@ -3,8 +3,8 @@
 //! edit the file.
 //!
 //! The keys are those of the OpenAI tunnel-client profile, plus `name`,
-//! `enabled` and `synced_at`. A key that the tunnel client does not know is
-//! ignored.
+//! `arguments`, `enabled` and `synced_at`. A key that the tunnel client does
+//! not know is ignored.
 
 use std::fs;
 use std::io::{self, Write};
@@ -36,6 +36,8 @@ const HEADER: &str = "\
 # - `mcp` is a copy of the config in Archestra: one entry for each desktop MCP
 #   server that you installed.
 # To change a command or a URL, change the catalog item in Archestra.
+# `arguments` are what you added to a command when you connected the MCP
+# server. To change them, edit the arguments of the MCP server in Archestra.
 ";
 
 #[derive(Debug, thiserror::Error)]
@@ -88,6 +90,12 @@ pub struct CommandEntry {
     /// As Archestra sent it: the variables are not replaced.
     #[serde(default)]
     pub command: String,
+    /// What the user added to the command in Archestra, as Archestra sent
+    /// them. They go after the arguments of the command, each as one
+    /// argument: they are not split. An entry with none has no such key, as
+    /// a file from before the arguments.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments: Vec<String>,
     /// `false`: the MCP server is stopped in Archestra.
     pub enabled: bool,
 }
@@ -146,7 +154,7 @@ impl Config {
 
     /// The config of a sync: one entry for each catalog item that Archestra
     /// lists, and no other entry. An item with a URL goes to `server_urls`;
-    /// each other item goes to `commands`.
+    /// each other item goes to `commands`. Only a command has arguments.
     pub fn from_catalog_items(
         control_plane: ControlPlaneConfig,
         items: &[CatalogItem],
@@ -166,6 +174,7 @@ impl Config {
                     channel: item.id.clone(),
                     name: item.name.clone(),
                     command: item.command.clone().unwrap_or_default(),
+                    arguments: item.arguments.clone(),
                     enabled: item.enabled,
                 }),
             }
@@ -250,7 +259,7 @@ impl McpConfig {
             channel: entry.channel.clone(),
             name: entry.name.clone(),
             target: if entry.enabled {
-                command_target(&entry.command, variables)
+                command_target(&entry.command, &entry.arguments, variables)
             } else {
                 ChannelTarget::Disabled
             },
@@ -288,13 +297,24 @@ impl McpConfig {
 /// no `~`, no pipes. The program is started directly. The variables of
 /// [`Variables`] are replaced in each argument after the split, so a value
 /// with a space stays in one argument.
-pub(crate) fn command_target(command: &str, variables: &Variables) -> ChannelTarget {
+///
+/// `arguments` are what the user added to the command. They go after the
+/// arguments of the command, each as one argument: they are not split, so a
+/// space, a quote or a backslash in one is a part of it on every system. The
+/// variables are replaced in them too. With no command there is no program
+/// to give them to: nothing is started.
+pub(crate) fn command_target(
+    command: &str,
+    arguments: &[String],
+    variables: &Variables,
+) -> ChannelTarget {
     match command_line::split(command) {
         None => ChannelTarget::Rejected(RejectReason::InvalidCommand),
         Some(argv) if argv.is_empty() => ChannelTarget::NotConfigured,
         Some(argv) => ChannelTarget::Stdio {
             argv: argv
                 .iter()
+                .chain(arguments)
                 .map(|argument| variables.expand(argument))
                 .collect(),
         },
@@ -400,6 +420,7 @@ mcp:
             id: id.to_owned(),
             name: name.to_owned(),
             command: None,
+            arguments: Vec::new(),
             url: None,
             enabled: true,
         }
@@ -434,12 +455,14 @@ mcp:
                     channel: "7c1e".to_owned(),
                     name: "MATLAB".to_owned(),
                     command: "/usr/local/bin/matlab-mcp-server --flag 'two words'".to_owned(),
+                    arguments: Vec::new(),
                     enabled: true,
                 },
                 CommandEntry {
                     channel: "3f02".to_owned(),
                     name: "eda-agent".to_owned(),
                     command: String::new(),
+                    arguments: Vec::new(),
                     enabled: true,
                 },
             ]
@@ -512,18 +535,21 @@ mcp:
                     channel: "7c1e".to_owned(),
                     name: "peekaboo".to_owned(),
                     command: "/Users/$USER/bins/peekaboo mcp serve".to_owned(),
+                    arguments: Vec::new(),
                     enabled: true,
                 },
                 CommandEntry {
                     channel: "3f02".to_owned(),
                     name: "eda-agent".to_owned(),
                     command: String::new(),
+                    arguments: Vec::new(),
                     enabled: true,
                 },
                 CommandEntry {
                     channel: "aa11".to_owned(),
                     name: "both".to_owned(),
                     command: "server".to_owned(),
+                    arguments: Vec::new(),
                     enabled: true,
                 },
             ]
@@ -646,6 +672,7 @@ mcp:
         assert_eq!(
             command_target(
                 "/usr/local/bin/matlab-mcp-server --flag 'two words' \"a b\"",
+                &[],
                 &variables()
             ),
             ChannelTarget::Stdio {
@@ -669,12 +696,12 @@ mcp:
             vec!["C:binmcp.exe".to_owned(), "c d".to_owned()]
         };
         assert_eq!(
-            command_target(r"C:\bin\mcp.exe c\ d", &variables()),
+            command_target(r"C:\bin\mcp.exe c\ d", &[], &variables()),
             ChannelTarget::Stdio { argv: expected }
         );
         // No shell: these stay as they are.
         assert_eq!(
-            command_target("server $PATH ~ | cat", &variables()),
+            command_target("server $PATH ~ | cat", &[], &variables()),
             ChannelTarget::Stdio {
                 argv: vec![
                     "server".to_owned(),
@@ -693,6 +720,7 @@ mcp:
         assert_eq!(
             command_target(
                 "$HOME/bins/peekaboo --user ${USER} --root=$HOME",
+                &[],
                 &variables()
             ),
             ChannelTarget::Stdio {
@@ -706,14 +734,183 @@ mcp:
         );
     }
 
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
     #[test]
-    fn an_empty_command_is_not_configured() {
+    fn the_arguments_of_the_user_go_after_those_of_the_command_and_are_not_split() {
         assert_eq!(
-            command_target("", &variables()),
+            command_target(
+                "/opt/matlab/mcp serve --flag 'two words'",
+                &arguments(&[
+                    "--root",
+                    "/data/My Models",
+                    r#"a "quote" and a \ backslash"#,
+                    "'kept'",
+                    "",
+                ]),
+                &variables()
+            ),
+            ChannelTarget::Stdio {
+                argv: vec![
+                    "/opt/matlab/mcp".to_owned(),
+                    "serve".to_owned(),
+                    "--flag".to_owned(),
+                    "two words".to_owned(),
+                    "--root".to_owned(),
+                    "/data/My Models".to_owned(),
+                    r#"a "quote" and a \ backslash"#.to_owned(),
+                    "'kept'".to_owned(),
+                    String::new(),
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn variables_are_replaced_in_the_arguments_of_the_user() {
+        assert_eq!(
+            command_target(
+                "server",
+                &arguments(&["--root=$HOME/models", "${USER}", "%USERNAME%", "$PATH"]),
+                &variables()
+            ),
+            ChannelTarget::Stdio {
+                argv: vec![
+                    "server".to_owned(),
+                    "--root=/Users/anna maria/models".to_owned(),
+                    "anna".to_owned(),
+                    "anna".to_owned(),
+                    "$PATH".to_owned(),
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn arguments_with_no_command_start_nothing() {
+        // The first argument of the user must not become the program.
+        assert_eq!(
+            command_target("  ", &arguments(&["/bin/sh", "-c"]), &variables()),
             ChannelTarget::NotConfigured
         );
         assert_eq!(
-            command_target("   ", &variables()),
+            command_target("server 'open", &arguments(&["--verbose"]), &variables()),
+            ChannelTarget::Rejected(RejectReason::InvalidCommand)
+        );
+    }
+
+    #[test]
+    fn a_sync_stores_the_arguments_of_a_command_and_none_for_a_url() {
+        let config = synced(&[
+            CatalogItem {
+                command: Some("/opt/matlab/mcp serve".to_owned()),
+                arguments: arguments(&["--root", "$HOME/My Models"]),
+                ..item("7c1e", "MATLAB")
+            },
+            // Archestra sends none for a URL; if it did, they are dropped.
+            CatalogItem {
+                url: Some("http://127.0.0.1:8080/mcp".to_owned()),
+                arguments: arguments(&["--verbose"]),
+                ..item("91bd", "Notes")
+            },
+        ]);
+        assert_eq!(
+            config.mcp.commands,
+            vec![CommandEntry {
+                channel: "7c1e".to_owned(),
+                name: "MATLAB".to_owned(),
+                command: "/opt/matlab/mcp serve".to_owned(),
+                // As Archestra sent them: the variables are not replaced.
+                arguments: arguments(&["--root", "$HOME/My Models"]),
+                enabled: true,
+            }]
+        );
+        assert_eq!(
+            config.mcp.channel_entries(&variables())[0].target,
+            ChannelTarget::Stdio {
+                argv: vec![
+                    "/opt/matlab/mcp".to_owned(),
+                    "serve".to_owned(),
+                    "--root".to_owned(),
+                    "/Users/anna maria/My Models".to_owned(),
+                ]
+            }
+        );
+        assert_eq!(
+            config.mcp.channel_entries(&variables())[1].target,
+            ChannelTarget::Http {
+                url: "http://127.0.0.1:8080/mcp".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn the_arguments_round_trip_through_the_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.yaml");
+        let config = synced(&[CatalogItem {
+            command: Some("server".to_owned()),
+            arguments: arguments(&[
+                "--name",
+                "two words",
+                r#"a "quote": and a \ backslash"#,
+                "- dash",
+                "#no comment",
+                "'single'",
+                "yes",
+                "007",
+            ]),
+            ..item("7c1e", "MATLAB")
+        }]);
+        config.save(&path).expect("save");
+        let loaded = Config::load(&path).expect("load").expect("the file exists");
+        assert_eq!(loaded, config);
+    }
+
+    #[test]
+    fn a_file_from_before_the_arguments_is_the_config_of_a_sync_with_none() {
+        // What the program before the arguments wrote for one command.
+        let before: Config = serde_saphyr::from_str(
+            "control_plane:\n  base_url: https://archestra.example.com\n  tunnel_id: tunnel_ab\n  api_key: archestra_dev_abc\nsynced_at: 2026-11-10T12:00:00Z\nmcp:\n  commands:\n  - channel: 7c1e\n    name: MATLAB\n    command: server\n    enabled: true\n",
+        )
+        .expect("parses");
+        let fresh = synced(&[CatalogItem {
+            command: Some("server".to_owned()),
+            ..item("7c1e", "MATLAB")
+        }]);
+        // Equal: the first sync of the new program does not write the file
+        // and does not start the MCP server again.
+        assert_eq!(before, fresh);
+
+        // And an entry with no arguments is written with no such key, as
+        // that program wrote it.
+        let yaml = serde_saphyr::to_string(&fresh).expect("serializes");
+        assert!(!yaml.contains("arguments"), "{yaml}");
+
+        // Other arguments are another config: the sync writes the file, and
+        // the supervisor starts the MCP server again.
+        let changed = synced(&[CatalogItem {
+            command: Some("server".to_owned()),
+            arguments: arguments(&["--verbose"]),
+            ..item("7c1e", "MATLAB")
+        }]);
+        assert_ne!(changed.mcp, fresh.mcp);
+        assert_ne!(
+            changed.mcp.channel_entries(&variables())[0].target,
+            fresh.mcp.channel_entries(&variables())[0].target
+        );
+    }
+
+    #[test]
+    fn an_empty_command_is_not_configured() {
+        assert_eq!(
+            command_target("", &[], &variables()),
+            ChannelTarget::NotConfigured
+        );
+        assert_eq!(
+            command_target("   ", &[], &variables()),
             ChannelTarget::NotConfigured
         );
     }
@@ -721,7 +918,7 @@ mcp:
     #[test]
     fn a_command_with_an_open_quote_is_rejected() {
         assert_eq!(
-            command_target("server 'open", &variables()),
+            command_target("server 'open", &[], &variables()),
             ChannelTarget::Rejected(RejectReason::InvalidCommand)
         );
     }

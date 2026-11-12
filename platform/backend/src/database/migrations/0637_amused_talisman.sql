@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "desktop_arguments" jsonb;

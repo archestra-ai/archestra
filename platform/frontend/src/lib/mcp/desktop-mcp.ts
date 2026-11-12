@@ -95,11 +95,44 @@ export function desktopMcpTargetError(target: {
 }
 
 /**
+ * The command of a desktop MCP catalog item, exactly as its admin stored it;
+ * null for an item that has none (it is not set up, or it is stored with a
+ * URL). Only an item with a command takes arguments from its user.
+ */
+export function desktopMcpCommandOf(
+  desktopConfig: { command?: string | null } | null | undefined,
+): string | null {
+  const command = desktopConfig?.command;
+  return command?.trim() ? command : null;
+}
+
+/**
+ * Why the arguments a user typed for their desktop MCP server cannot be
+ * saved, or null when they can. The limits are the backend's.
+ */
+export function desktopMcpArgumentsError(values: string[]): string | null {
+  if (values.length > DESKTOP_MCP_ARGUMENTS_MAX_COUNT) {
+    return `Use at most ${DESKTOP_MCP_ARGUMENTS_MAX_COUNT} arguments.`;
+  }
+  if (values.some((value) => value.length > DESKTOP_MCP_TARGET_MAX_LENGTH)) {
+    return `Use at most ${DESKTOP_MCP_TARGET_MAX_LENGTH} characters in one argument.`;
+  }
+  const total = values.reduce((sum, value) => sum + value.length, 0);
+  if (total > DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH) {
+    return `Use at most ${DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH} characters in all arguments together.`;
+  }
+  return null;
+}
+
+/**
  * Adds a desktop MCP catalog item to the caller's own computer, through the
  * caller's install mutation. The installation is always personal: the server
  * runs on the computer of the user who adds it. Resolves with the
  * installation, which the Add dialog then follows, or with null when it was
  * refused (a toast says why) and the dialog stays for another try.
+ *
+ * `desktopArguments` are what the caller adds to the command of the item.
+ * They are sent only when given: an item with no command takes none.
  */
 export async function addDesktopMcpServer<Server>(params: {
   install: (body: {
@@ -108,16 +141,19 @@ export async function addDesktopMcpServer<Server>(params: {
     scope: "personal";
     dontShowToast: true;
     desktop: true;
+    desktopArguments?: string[];
   }) => Promise<{ installedServer?: Server; errorMessage: string | null }>;
   catalogItem: { id: string; name: string };
+  desktopArguments?: string[];
 }): Promise<Server | null> {
-  const { install, catalogItem } = params;
+  const { install, catalogItem, desktopArguments } = params;
   const result = await install({
     name: catalogItem.name,
     catalogId: catalogItem.id,
     scope: "personal",
     dontShowToast: true,
     desktop: true,
+    ...(desktopArguments ? { desktopArguments } : {}),
   });
   return result.errorMessage ? null : (result.installedServer ?? null);
 }
@@ -278,8 +314,12 @@ function programOf(command: string | null | undefined): string | null {
   return text.split(/\s+/)[0] ?? null;
 }
 
-/** The limit the backend sets for a command and for a URL. */
+/** The limit the backend sets for a command, a URL and one argument. */
 const DESKTOP_MCP_TARGET_MAX_LENGTH = 4096;
+/** The limits the backend sets for the arguments of one installation. */
+const DESKTOP_MCP_ARGUMENTS_MAX_COUNT = 64;
+const DESKTOP_MCP_ARGUMENTS_MAX_TOTAL_LENGTH =
+  4 * DESKTOP_MCP_TARGET_MAX_LENGTH;
 
 function isHttpUrl(value: string): boolean {
   try {

@@ -71,6 +71,9 @@ const OPTIONS: Record<
             , which each device fills with its own user name and home folder.
           </span>
         </span>
+        <span className="block">
+          Each user can add arguments of their own after it.
+        </span>
       </>
     ),
     placeholder: "/Users/$USER/bins/mcp",

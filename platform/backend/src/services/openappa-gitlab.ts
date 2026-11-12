@@ -306,21 +306,24 @@ class OpenAppaGitlab {
     );
     const files = firstFileAtEachPath(params.files);
     // Files the project holds that the policy's globs would read, and that
-    // were never in the policy, go with the merge request.
-    const remove = hasRepositoryIncludeGlob(params.content)
+    // were never in the policy, go with the merge request. Only a glob
+    // needs the project's whole tree; otherwise each file is read alone.
+    const tree = hasRepositoryIncludeGlob(params.content)
+      ? (await withGitlabErrors(() => client.listTree(params.repo, baseSha)))
+          .filter((entry) => entry.type === "blob")
+          .map((entry) => entry.path)
+      : null;
+    const remove = tree
       ? strayGlobMatches({
           content: params.content,
           policyPath: params.policyPath,
-          paths: (
-            await withGitlabErrors(() => client.listTree(params.repo, baseSha))
-          )
-            .filter((entry) => entry.type === "blob")
-            .map((entry) => entry.path),
+          paths: tree,
           written: files.map((file) => file.path),
         })
       : [];
+    const present = new Set<string>(tree ?? []);
     const unchanged = await withGitlabErrors(async () => {
-      if (remove.length > 0) return false;
+      let same = remove.length === 0;
       for (const file of files) {
         const bytes = await client.readFile({
           repo: params.repo,
@@ -328,9 +331,10 @@ class OpenAppaGitlab {
           path: file.path,
           maxBytes: POLICY_MAX_BYTES,
         });
-        if (!bytes || !bytes.equals(Buffer.from(file.content))) return false;
+        if (bytes) present.add(file.path);
+        if (!bytes || !bytes.equals(Buffer.from(file.content))) same = false;
       }
-      return true;
+      return same;
     });
     if (unchanged) return null;
     return {
@@ -343,6 +347,7 @@ class OpenAppaGitlab {
         summary: params.summary,
         upsert: files,
         delete: remove,
+        present,
       })),
       branch,
     };
@@ -361,11 +366,23 @@ class OpenAppaGitlab {
     summary: string;
     upsert: { path: string; content: string }[];
     delete: string[];
+    /**
+     * Which of the paths exist at `baseSha`, when the caller read them
+     * already: the project's tree is not listed then.
+     */
+    present?: ReadonlySet<string>;
   }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
-      const tree = await client.listTree(params.repo, params.baseSha);
-      const existing = new Map(tree.map((entry) => [entry.path, entry]));
+      let existing: Map<string, { type: string; mode?: string }>;
+      if (params.present)
+        existing = new Map(
+          [...params.present].map((path) => [path, { type: "blob" }]),
+        );
+      else {
+        const tree = await client.listTree(params.repo, params.baseSha);
+        existing = new Map(tree.map((entry) => [entry.path, entry]));
+      }
       for (const path of [
         ...params.upsert.map((file) => file.path),
         ...params.delete,

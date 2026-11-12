@@ -128,6 +128,19 @@ describe("APPA GitLab sync", () => {
       sourceCommit: null,
       lastSyncError: null,
     });
+    // A policy with no include glob needs no look at the project's tree
+    // before the merge request is opened (the validations folder is listed
+    // after, by the connect).
+    const opened = gitlab.requests.findIndex(
+      (request) =>
+        request.method === "POST" && request.path.endsWith("/merge_requests"),
+    );
+    expect(opened).toBeGreaterThan(0);
+    expect(
+      gitlab.requests
+        .slice(0, opened)
+        .some((request) => request.path.includes("repository/tree")),
+    ).toBe(false);
     // Neither policy changes until the merge request merges.
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       local.content,

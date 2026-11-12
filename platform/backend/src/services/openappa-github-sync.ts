@@ -294,10 +294,12 @@ export async function createAppaGithubRepository(params: {
   const validationDirectory =
     params.validationDirectory ?? VALIDATION_DIRECTORY;
   // Everything the policy reads from its repository is read before anything
-  // is written, so a transfer that cannot be complete creates nothing.
+  // is written, so a transfer that cannot be complete creates nothing. The
+  // seed's include list decides, so a servers' folder the seed starts
+  // including comes along with the files already in it.
   const transfer = await collectSetupTransfer({
     organizationId: params.organizationId,
-    policy,
+    policy: { content: seed },
   });
 
   let created: {

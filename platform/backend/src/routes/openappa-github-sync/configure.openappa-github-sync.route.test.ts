@@ -1056,12 +1056,17 @@ describe("APPA GitHub sync", () => {
     const trace = "# A refund that must be refused\n";
     // The repository the policy is synced from, with the files it reads
     // beside the policy file and the validations in the validation folder.
+    // A server's file the policy does not include yet: self-service, which
+    // the new repository starts with, includes mcp/*.toml, so it comes along.
+    const payments =
+      '[policy]\nversion = 2\n\n[[policy.tool]]\nname = "payments_api__refund"\ndelta = {}\n';
     const previous: Record<string, string> = {
       "guardrails/appa.toml": root,
       "guardrails/rules/ledger.toml": ledger,
       "guardrails/rules/billing.toml": billing,
       "guardrails/rules/README.md": "# Not a rules file\n",
       "guardrails/teams/ops.toml": ops,
+      "guardrails/mcp/payments_api.toml": payments,
       "traces/refund.appa": trace,
       "traces/README.md": "# Not a validation\n",
     };
@@ -1133,18 +1138,30 @@ describe("APPA GitHub sync", () => {
         githubAppConfigId: githubApp.id,
         interval: "1h",
         replace: true,
+        selfService: true,
       },
     });
     expect(response.statusCode, response.body).toBe(200);
     // Every included file and validation, at its place beside appa.toml at
-    // the root; a file no include names stays behind.
-    expect(git.written()).toEqual({
-      "appa.toml": root,
+    // the root, the servers' file the seed starts including among them; a
+    // file no include names stays behind.
+    const written = git.written();
+    expect(written["appa.toml"]).toContain('"mcp/*.toml"');
+    expect(written).toMatchObject({
       "rules/billing.toml": billing,
       "rules/ledger.toml": ledger,
       "teams/ops.toml": ops,
+      "mcp/payments_api.toml": payments,
       "traces/refund.appa": trace,
     });
+    expect(Object.keys(written).sort()).toEqual([
+      "appa.toml",
+      "mcp/payments_api.toml",
+      "rules/billing.toml",
+      "rules/ledger.toml",
+      "teams/ops.toml",
+      "traces/refund.appa",
+    ]);
     expect(git.state.commits).toBe(1);
     // The first pull composes the same policy from the new repository.
     expect(response.json().source).toMatchObject({
@@ -1154,7 +1171,7 @@ describe("APPA GitHub sync", () => {
       lastSyncError: null,
     });
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
-      root,
+      written["appa.toml"],
     );
   });
 

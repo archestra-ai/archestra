@@ -132,7 +132,7 @@ export async function getServerRules(params: Caller & { catalogId: string }) {
     instruction: !repositoryView(source)
       ? "Git sync is not set up, so server rules cannot be proposed. Tell the user an administrator sets it up under Settings → Guardrails."
       : !server.canEdit
-        ? `The user may read these rules but not propose a change: that takes edit access to ${server.needs("an MCP server the user cannot see")} in the MCP registry.${sharedSentence(server)}`
+        ? `The user may read these rules but not propose a change: that takes edit access to ${server.needs(unseenServers("the user"))} in the MCP registry.${sharedSentence(server)}`
         : `${
             accepted === null
               ? `This server has no rules file of its own yet${rules.length > 0 ? "; `rules` lists the rules other files of the policy keep for its tools, which stay where they are" : ""}. Start from \`starter\`, which lists every tool with the organization's defaults; write the whole file, preview it with preview_guardrails_server_rules_change, explain it, and propose it with propose_guardrails_server_rules_change once the user agrees.`
@@ -375,15 +375,17 @@ async function serverFor(
     prefix,
     path: serverRulesPath(folder, prefix),
     canEdit: notEditable.length === 0,
-    /** The owners the caller may not edit, named unless hidden from them. */
-    needs: (hidden: string) =>
-      listedNames(
-        notEditable.map((server) =>
-          server.id === catalog.id || readable.has(server.id)
-            ? server.name
-            : hidden,
-        ),
-      ),
+    /**
+     * The owners the caller may not edit, named when the caller may see
+     * them; the rest counted as `hidden` words them.
+     */
+    needs: (hidden: (count: number) => string) => {
+      const named = notEditable
+        .filter((server) => server.id === catalog.id || readable.has(server.id))
+        .map((server) => server.name);
+      const unseen = notEditable.length - named.length;
+      return listedNames([...named, ...(unseen > 0 ? [hidden(unseen)] : [])]);
+    },
     owners: servers.filter((server) => server.owner),
     sharedWith: others.filter((server) => readable.has(server.id)),
     hiddenCopies: others.filter(
@@ -391,6 +393,14 @@ async function serverFor(
     ).length,
     tools,
   };
+}
+
+/** Owners of a file the caller cannot see, as a sentence counts them. */
+function unseenServers(who: string): (count: number) => string {
+  return (count) =>
+    count === 1
+      ? `an MCP server ${who} cannot see`
+      : `${count} MCP servers ${who} cannot see`;
 }
 
 /** What the Keeper says about a file other servers share, if any. */
@@ -426,7 +436,7 @@ async function checkedChange(
   if (!server.canEdit)
     throw new ApiError(
       403,
-      `You may propose ${server.name}'s Guardrails rules only if you may edit ${server.needs("an MCP server you cannot see")} in the MCP registry`,
+      `You may propose ${server.name}'s Guardrails rules only if you may edit ${server.needs(unseenServers("you"))} in the MCP registry`,
     );
   if (source.sourceCommit !== params.expectedCommit)
     throw new ApiError(

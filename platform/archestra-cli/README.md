@@ -140,7 +140,7 @@ mcp:
 - `arguments` are what the user added. The client puts them after the arguments of the command, each as one argument: it does not split them, so a space, a quote or a backslash in one is a part of it on every system. The same variables are replaced in them. The example above starts `matlab-mcp-server` with `--stdio`, `--root` and `/Users/anna/My Models`.
 - An entry with no arguments has no `arguments` key. A command that is empty starts nothing, with or without arguments.
 - A change of the command or of the arguments stops the MCP server and starts it again at the sync that brings the change. Archestra tells the client to sync at once.
-- A program from before the arguments (0.1.0) does not know the key: it starts the command with no arguments of the user.
+- A program from before the arguments (older than 0.1.2) does not know the key: it starts the command with no arguments of the user. Archestra stores the arguments all the same, and tells the user in the Connect dialog and in **Edit arguments** that they need a newer program; they apply once the device runs one. The first version with arguments is `DESKTOP_MCP_ARGUMENTS_MIN_PROGRAM_VERSION` in `platform/shared/desktop-mcp.ts`: keep it equal to the `version` of `Cargo.toml` that first has them.
 - The client runs the command with no question to the user.
 
 ## State, restart and log

@@ -74,8 +74,12 @@ describe("desktop MCP installations", () => {
     });
   }
 
-  function connect(userId = user.id) {
-    return connectTestDevice({ organizationId, userId });
+  function connect(params: { userId?: string; programVersion?: string } = {}) {
+    return connectTestDevice({
+      organizationId,
+      userId: params.userId ?? user.id,
+      programVersion: params.programVersion,
+    });
   }
 
   /** What the device takes from its queue for the tunnel client itself. */
@@ -416,7 +420,7 @@ describe("desktop MCP installations", () => {
     });
 
     test("the owner changes them later: the installation waits again and the device is told to sync", async () => {
-      const device = await connect();
+      const device = await connect({ programVersion: "0.1.2" });
       const installation = (
         await install({ desktopArguments: ["--a"] })
       ).json();
@@ -445,10 +449,51 @@ describe("desktop MCP installations", () => {
         "--b",
         "two words",
       ]);
-      // The state the device reported was of the MCP server it stops now.
+      // The state the device reported was of the MCP server it stops now:
+      // it starts again, and the next report of the device says how.
       expect(
         await DesktopDeviceServerModel.findByDeviceId(device.device.id),
-      ).toEqual([expect.objectContaining({ catalogId, state: null })]);
+      ).toEqual([
+        expect.objectContaining({
+          catalogId,
+          state: "starting",
+          enabled: true,
+        }),
+      ]);
+    });
+
+    test("with a device whose program is from before the arguments, they are stored and nothing waits; the device is still told to sync", async () => {
+      for (const programVersion of ["0.1.0", "0.1.1", undefined]) {
+        const device = await connect({ programVersion });
+        const installation = (await install()).json();
+        await McpServerModel.update(installation.id, {
+          localInstallationStatus: "success",
+        });
+        await DesktopDeviceServerModel.recordStates({
+          deviceId: device.device.id,
+          states: [{ catalogId, state: "running", lastError: null }],
+        });
+        await bridgeMethods(device);
+
+        const response = await setArguments(installation.id, ["--b"]);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json(), String(programVersion)).toMatchObject({
+          desktopArguments: ["--b"],
+          localInstallationStatus: "success",
+        });
+        expect(await bridgeMethods(device)).toEqual(["bridge/sync"]);
+        // What the device gets when it runs a newer program.
+        expect((await syncedConfig(device))[0].arguments).toEqual(["--b"]);
+        expect(
+          await DesktopDeviceServerModel.findByDeviceId(device.device.id),
+        ).toEqual([expect.objectContaining({ catalogId, state: "running" })]);
+
+        await app.inject({
+          method: "DELETE",
+          url: `/api/mcp_server/${installation.id}`,
+        });
+      }
     });
 
     test("the owner removes them with null or an empty list", async () => {
@@ -486,9 +531,15 @@ describe("desktop MCP installations", () => {
     test("works with no device: a device linked later gets the arguments", async () => {
       const installation = (await install()).json();
 
+      await McpServerModel.update(installation.id, {
+        localInstallationStatus: "success",
+      });
+
       const response = await setArguments(installation.id, ["--verbose"]);
 
       expect(response.statusCode).toBe(200);
+      // It waits for the first device, whose MCP server gets the arguments.
+      expect(response.json().localInstallationStatus).toBe("pending");
       const device = await connect();
       expect((await syncedConfig(device))[0].arguments).toEqual(["--verbose"]);
     });

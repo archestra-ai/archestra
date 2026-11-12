@@ -1,8 +1,15 @@
 "use client";
 
+import { TriangleAlert } from "lucide-react";
 import { ContainerArgumentsField } from "@/components/container-deployment-fields";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { DesktopArgumentsProgramNotice } from "@/lib/mcp/desktop-mcp";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 /**
@@ -10,6 +17,10 @@ import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
  * adds for their own device: the Command and Arguments pair of a
  * self-hosted server's form. The command is the catalog item's, exactly as
  * stored, and is not the user's to change. The arguments are optional.
+ *
+ * `notice` goes under the field when the viewer's device runs a program
+ * that does not apply arguments. The field stays in use: the arguments are
+ * stored, and apply once the device runs a newer program.
  */
 export function DesktopMcpArgumentsFields({
   idPrefix,
@@ -19,6 +30,7 @@ export function DesktopMcpArgumentsFields({
   onValueChange,
   error,
   disabled,
+  notice,
 }: {
   idPrefix: string;
   /** The name of the MCP server. */
@@ -29,6 +41,7 @@ export function DesktopMcpArgumentsFields({
   onValueChange: (value: string) => void;
   error?: string | null;
   disabled?: boolean;
+  notice?: DesktopArgumentsProgramNotice | null;
 }) {
   const commandId = `${idPrefix}-command`;
   return (
@@ -47,6 +60,34 @@ export function DesktopMcpArgumentsFields({
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         disabled={disabled}
       />
+      {notice ? <DesktopMcpArgumentsNotice notice={notice} /> : null}
     </div>
+  );
+}
+
+/**
+ * Says that the viewer's device runs a program from before the arguments,
+ * and how to get a newer one when the deployment serves it. See
+ * `desktopArgumentsProgramNotice`.
+ */
+export function DesktopMcpArgumentsNotice({
+  notice,
+}: {
+  notice: DesktopArgumentsProgramNotice;
+}) {
+  return (
+    <InlineNotice variant="warning">
+      <TriangleAlert />
+      <InlineNoticeBody>
+        <span className="font-medium">{notice.title}</span>
+        <InlineNoticeText>
+          <span>{notice.text.before}</span>
+          {notice.text.command ? (
+            <code className="font-mono">{notice.text.command}</code>
+          ) : null}
+          <span>{notice.text.after}</span>
+        </InlineNoticeText>
+      </InlineNoticeBody>
+    </InlineNotice>
   );
 }

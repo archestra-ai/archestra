@@ -122,21 +122,28 @@ class DesktopBridgeControlService {
    * the expected shape is dropped: a newer tunnel client must not break an
    * older Archestra. Keys the schema does not know, such as the
    * `permissions` of an older tunnel client, are ignored.
+   *
+   * Returns the catalog items whose MCP server the report says is running:
+   * an installation that waits for its MCP server can be completed now.
    */
   async recordState(params: {
     device: DesktopDevice;
     message: DesktopMcpJsonRpcMessage;
-  }): Promise<void> {
+  }): Promise<string[]> {
     const parsed = StateReportSchema.safeParse(params.message);
-    if (!parsed.success) return;
+    if (!parsed.success) return [];
+    const { servers } = parsed.data.params;
     await DesktopDeviceServerModel.recordStates({
       deviceId: params.device.id,
-      states: parsed.data.params.servers.map((server) => ({
+      states: servers.map((server) => ({
         catalogId: server.channel,
         state: server.state,
         lastError: server.error ?? null,
       })),
     });
+    return servers
+      .filter((server) => server.state === "running")
+      .map((server) => server.channel);
   }
 
   /**

@@ -1,3 +1,4 @@
+import { programAppliesDesktopMcpArguments } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -94,7 +95,9 @@ class DesktopMcpInstallService {
    * the user's own installation, and tells the user's device to get its
    * config again: the MCP bridge stops the MCP server and starts it with the
    * new arguments. The installation waits again until its tools are read
-   * from the server that the device started with them.
+   * from the server that the device started with them. A device whose
+   * program is from before the arguments starts nothing again, and the
+   * installation stays as it is (see `storeArguments`).
    *
    * Only the owner of the installation changes its arguments; for any other
    * caller the installation does not exist. Arguments that are the stored
@@ -139,9 +142,11 @@ class DesktopMcpInstallService {
   }
 
   /**
-   * Called on every poll with the channels the device reports as ready. Does
-   * not wait for the tool discovery and never throws: reading the tools needs
-   * the device to keep polling, and a failure must not fail the poll.
+   * Called on every poll with the channels the device reports as ready, and
+   * on every state report with the channels it says are running. Does not
+   * wait for the tool discovery and never throws: reading the tools needs
+   * the device to keep polling, and a failure must not fail the poll or the
+   * report.
    */
   completeReadyChannels(device: DesktopDevice, readyChannels: string[]): void {
     const catalogIds = readyChannels.filter(isUuid);
@@ -157,6 +162,13 @@ class DesktopMcpInstallService {
   /**
    * Completes each waiting installation the device owner has among the given
    * catalog items. Resolves when every attempt has ended.
+   *
+   * An installation is not completed while the stored state of its MCP
+   * server on the device is `starting`. Archestra stores that state when the
+   * config of the server changes (see `storeArguments`): until the device
+   * reports again, the MCP server that is ready there is the one from
+   * before the change. A device also reports `starting` itself; its report
+   * that the server is running then completes the installation.
    */
   async completeWaiting(
     device: DesktopDevice,
@@ -171,7 +183,16 @@ class DesktopMcpInstallService {
         install.serverType === "desktop_mcp" &&
         install.localInstallationStatus !== "success",
     );
+    if (waiting.length === 0) return;
+    const starting = new Set(
+      (await DesktopDeviceServerModel.findByDeviceId(device.id))
+        .filter((server) => server.state === "starting")
+        .map((server) => server.catalogId),
+    );
     for (const install of waiting) {
+      // Before the attempt is counted: an installation that is passed over
+      // here must be tried at once when the device reports.
+      if (install.catalogId && starting.has(install.catalogId)) continue;
       if (this.inProgress.has(install.id)) continue;
       this.inProgress.add(install.id);
       try {
@@ -185,13 +206,20 @@ class DesktopMcpInstallService {
 
   /**
    * Stores other arguments than the installation has. Returns null, and
-   * changes nothing, when they are the stored ones or are not given.
+   * changes nothing, when they are the stored ones or are not given. The
+   * caller tells the device to sync.
    *
-   * The MCP server that runs on the device has the arguments from before.
-   * So the installation waits again, the state its device reported for it
-   * is not known any more, and the tools are not read for a short time: the
-   * device needs it to get its config and stop that MCP server. The caller
-   * tells the device to sync.
+   * The MCP server that runs on the device has the arguments from before,
+   * and the device starts it again when it gets its config. So the
+   * installation waits again, and the state of its MCP server on the device
+   * is stored as `starting`: the tools are read when the device reports that
+   * the server runs (see `completeWaiting`), not from the one that still
+   * runs. With no device, the installation waits for the first one.
+   *
+   * A device whose program is from before the arguments does not start the
+   * MCP server again: it does not know them. Then the arguments are stored
+   * and nothing else changes, so nothing waits for a start that does not
+   * come. They apply when the device runs a newer program.
    */
   private async storeArguments(
     mcpServer: McpServer,
@@ -203,26 +231,33 @@ class DesktopMcpInstallService {
     ) {
       return null;
     }
-    await cacheManager.set(
-      attemptKey(mcpServer.id),
-      true,
-      ARGUMENTS_RESTART_HOLD_MS,
-    );
-    const updated = await McpServerModel.update(mcpServer.id, {
-      desktopArguments,
-      localInstallationStatus: "pending",
-      localInstallationError: null,
-    });
-    if (!updated) throw new ApiError(404, "MCP server not found");
     const device = mcpServer.ownerId
       ? await DesktopDeviceModel.findByUserId(mcpServer.ownerId)
       : null;
+    if (device && !programAppliesDesktopMcpArguments(device.clientVersion)) {
+      return updatedOrNotFound(
+        await McpServerModel.update(mcpServer.id, { desktopArguments }),
+      );
+    }
+
+    // In this order: once the installation waits, a poll of the device must
+    // find the state already stored.
     if (device && mcpServer.catalogId) {
-      await DesktopDeviceServerModel.clearState({
+      await DesktopDeviceServerModel.markStarting({
         deviceId: device.id,
         catalogId: mcpServer.catalogId,
       });
     }
+    // An attempt from before the change must not hold back the first one
+    // after it.
+    await cacheManager.delete(attemptKey(mcpServer.id));
+    const updated = updatedOrNotFound(
+      await McpServerModel.update(mcpServer.id, {
+        desktopArguments,
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      }),
+    );
     const { broadcastMcpInstallationStatus } = await port(
       "mcpInstallationEvents",
     );
@@ -325,18 +360,13 @@ export const desktopMcpInstallService = new DesktopMcpInstallService();
 
 const ATTEMPT_INTERVAL_MS = 60_000;
 
-/**
- * How long the tools of an installation are not read after its arguments
- * changed. In that time the device gets its config (it is told at once) and
- * stops the MCP server that has the arguments from before: the MCP bridge
- * reads its config file again every 2 seconds. Without the wait, the tools
- * would be read from that MCP server, and the installation would be complete
- * before the one with the new arguments started.
- */
-const ARGUMENTS_RESTART_HOLD_MS = 5_000;
-
 function attemptKey(mcpServerId: string) {
   return `${CacheKey.DesktopMcpInstallAttempt}-${mcpServerId}` as const;
+}
+
+function updatedOrNotFound(updated: McpServer | null): McpServer {
+  if (!updated) throw new ApiError(404, "MCP server not found");
+  return updated;
 }
 
 /** No arguments are stored as null, never as an empty list. */

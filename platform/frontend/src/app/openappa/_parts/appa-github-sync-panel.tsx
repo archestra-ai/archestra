@@ -39,7 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -415,11 +414,11 @@ function SelfServiceRow({
             onFinishSetup={canManage ? () => setSetup(true) : undefined}
           />
         ) : null}
-        {selfService.enabled ? (
-          <AutoMergeRow
-            autoMerge={selfService.autoMerge}
-            disabled={!canManage || !eligible}
-          />
+        {selfService.enabled && selfService.autoMerge.enabled ? (
+          // The setting lives in the wizard; the card says only what holds.
+          <p className="text-xs text-muted-foreground">
+            Admitted self-service pull requests merge automatically.
+          </p>
         ) : null}
       </div>
       {setup ? (
@@ -432,66 +431,6 @@ function SelfServiceRow({
         />
       ) : null}
     </GitSourceNotice>
-  );
-}
-
-/**
- * The auto-merge switch: whether the GitHub App merges each MCP server's
- * rules pull request once its policy check passes. Locked while the
- * environment variable sets it.
- */
-function AutoMergeRow({
-  autoMerge,
-  disabled,
-}: {
-  autoMerge: archestraApiTypes.GetAppaGithubSyncResponses["200"]["selfService"]["autoMerge"];
-  disabled: boolean;
-}) {
-  const update = useUpdateAppaGithubSync();
-  const { data: protection } = useAppaRepositoryProtection(true);
-  const checkName = protection?.checkName;
-  const title = "Auto-merge pull requests";
-  const description = (
-    <span>
-      Merge each MCP server&apos;s rules pull request as soon as the{" "}
-      {checkName ? <code>{checkName}</code> : <span>policy check</span>} check
-      passes, so MCP owners need no access to the repository.
-    </span>
-  );
-  if (autoMerge.environment)
-    return (
-      <DeploymentSettingRow
-        compact
-        title={title}
-        description={description}
-        value={autoMerge.enabled ? "enabled" : "disabled"}
-        disabled
-        environmentVariable={autoMerge.environment.variable}
-        options={[
-          { value: "enabled", label: "On" },
-          { value: "disabled", label: "Off" },
-        ]}
-        onChange={() => {}}
-      />
-    );
-  return (
-    <div className="flex items-start justify-between gap-4 border-t pt-2">
-      <div className="min-w-0 space-y-1">
-        <Label htmlFor="appa-self-service-auto-merge" className="text-sm">
-          {title}
-        </Label>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <Switch
-        id="appa-self-service-auto-merge"
-        className="shrink-0"
-        checked={autoMerge.enabled}
-        disabled={disabled || update.isPending}
-        onCheckedChange={(enabled) =>
-          update.mutate({ action: "self_service_auto_merge", enabled })
-        }
-      />
-    </div>
   );
 }
 

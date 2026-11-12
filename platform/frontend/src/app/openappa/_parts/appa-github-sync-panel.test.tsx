@@ -425,87 +425,32 @@ test("locks self-service while the environment variable sets it, naming the vari
   ).toBeVisible();
 });
 
-test("while self-service is on, auto-merge is a switch named after the policy check, and the environment variable locks it", async () => {
+test("while auto-merge is in force the card says admitted pull requests merge by themselves, and nothing otherwise", async () => {
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1" },
   };
-  const actions: unknown[] = [];
-  server.use(
-    http.get(`${url}/protection`, () =>
-      HttpResponse.json({
-        checkName: "Guardrails Policy Admission",
-        include: { folder: "mcp", state: "included" },
-        branchRules: { state: "active" },
-      }),
-    ),
-    http.patch(url, async ({ request }) => {
-      const body = (await request.json()) as { enabled: boolean };
-      actions.push(body);
-      state = {
-        ...state,
-        source: {
-          ...source,
-          githubAppConfigId: "app-1",
-          selfServiceAutoMerge: body.enabled,
-        },
-        selfService: {
-          ...state.selfService,
-          autoMerge: { enabled: body.enabled, setting: body.enabled },
-        },
-      };
-      return HttpResponse.json(state);
-    }),
-  );
   show();
-  const toggle = await screen.findByRole("switch", {
-    name: "Auto-merge pull requests",
-  });
-  expect(toggle).not.toBeChecked();
-  await waitFor(() =>
-    expect(toggle.closest("div")?.parentElement).toHaveTextContent(
-      "Merge each MCP server's rules pull request as soon as the Guardrails Policy Admission check passes, so MCP owners need no access to the repository.",
+  await screen.findByText("MCP Guardrails Self-Service");
+  expect(
+    screen.queryByText(
+      "Admitted self-service pull requests merge automatically.",
     ),
-  );
-  fireEvent.click(toggle);
-  await waitFor(() =>
-    expect(
-      screen.getByRole("switch", { name: "Auto-merge pull requests" }),
-    ).toBeChecked(),
-  );
-  expect(actions).toEqual([
-    { action: "self_service_auto_merge", enabled: true },
-  ]);
-  expect(toast.success).toHaveBeenCalledWith("Auto-merge turned on.");
+  ).toBeNull();
+  expect(screen.queryByRole("switch")).toBeNull();
   cleanup();
 
-  // Locked while the environment variable sets it.
   state = {
     ...state,
     selfService: {
       ...state.selfService,
-      autoMerge: {
-        enabled: true,
-        setting: false,
-        environment: {
-          variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
-          value: "enabled",
-        },
-      },
+      autoMerge: { enabled: true, setting: true },
     },
   };
   show();
-  const locked = await screen.findByRole("combobox", {
-    name: "Auto-merge pull requests",
-  });
-  expect(locked).toHaveTextContent("On");
-  expect(locked).toBeDisabled();
   expect(
-    screen.getByText(
-      (_, element) =>
-        element?.tagName === "CODE" &&
-        element.textContent ===
-          "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=enabled",
+    await screen.findByText(
+      "Admitted self-service pull requests merge automatically.",
     ),
   ).toBeVisible();
   expect(screen.queryByRole("switch")).toBeNull();

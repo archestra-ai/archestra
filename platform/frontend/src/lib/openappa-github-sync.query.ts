@@ -161,12 +161,6 @@ export function useUpdateAppaGithubSync() {
         );
         return;
       }
-      if (body.action === "self_service_auto_merge") {
-        toast.success(
-          body.enabled ? "Auto-merge turned on." : "Auto-merge turned off.",
-        );
-        return;
-      }
       if (body.action === "include_servers") {
         toast.success(
           "Pull request opened. Merge it so the servers' files apply.",

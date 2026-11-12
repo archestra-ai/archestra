@@ -202,11 +202,21 @@ export function GithubSyncSetupDialog({
   const [chosenSelfService, setSelfService] = useState(
     editing?.selfService ?? false,
   );
-  const selfServiceEnvironment =
-    useAppaGithubSync().data?.selfService.environment;
+  const syncStatus = useAppaGithubSync().data;
+  const selfServiceEnvironment = syncStatus?.selfService.environment;
   const selfService = selfServiceEnvironment
     ? selfServiceEnvironment.value === "enabled"
     : chosenSelfService;
+  // Whether the App merges each server's rules pull request once its check
+  // passes. Editing keeps the saved choice; the environment variable, while
+  // set, decides instead.
+  const [chosenAutoMerge, setAutoMerge] = useState(
+    editing?.selfServiceAutoMerge ?? false,
+  );
+  const autoMergeEnvironment = syncStatus?.selfService.autoMerge.environment;
+  const autoMerge = autoMergeEnvironment
+    ? autoMergeEnvironment.value === "enabled"
+    : chosenAutoMerge;
   const [advanced, setAdvanced] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [ref, setRef] = useState(editing?.ref ?? "");
@@ -441,6 +451,7 @@ export function GithubSyncSetupDialog({
         ...credential,
         selfService: withSelfService,
         selfServiceDirectory: serversFolder || DEFAULT_SELF_SERVICE_FOLDER,
+        selfServiceAutoMerge: withSelfService && chosenAutoMerge,
       };
       if (withSelfService) setOutcome(() => () => configure.mutateAsync(body));
       else
@@ -462,6 +473,7 @@ export function GithubSyncSetupDialog({
       ...(withSelfService && serversFolder !== DEFAULT_SELF_SERVICE_FOLDER
         ? { selfServiceDirectory: serversFolder }
         : {}),
+      ...(withSelfService ? { selfServiceAutoMerge: chosenAutoMerge } : {}),
       existing: !creatingProject,
       // Editing moves the running sync to the new repository, created or not.
       ...((!creatingProject || editing) && { replace: !!editing }),
@@ -815,6 +827,38 @@ export function GithubSyncSetupDialog({
       {step === "selfService" ? (
         <div className="space-y-5">
           {selfServiceChoice}
+          {selfService ? (
+            // Under the self-service checkbox's text, on its left edge.
+            <div className="flex items-start gap-3 pl-7">
+              <Checkbox
+                id="github-sync-self-service-auto-merge"
+                className="mt-0.5"
+                checked={autoMerge}
+                disabled={!!autoMergeEnvironment}
+                onCheckedChange={(checked) => setAutoMerge(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="github-sync-self-service-auto-merge">
+                  Auto-merge pull requests
+                </Label>
+                <FieldDescription>
+                  Merge each MCP server&apos;s rules pull request as soon as its
+                  policy check passes, so MCP owners need no access to the
+                  repository.
+                </FieldDescription>
+                {autoMergeEnvironment ? (
+                  <FieldDescription>
+                    Set with{" "}
+                    <code className="font-mono">
+                      {autoMergeEnvironment.variable}=
+                      {autoMergeEnvironment.value}
+                    </code>
+                    . Unset the environment variable to choose here.
+                  </FieldDescription>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {selfService ? (
             // Under the checkbox's text, on its left edge.
             <div className="space-y-2 pl-7">
@@ -1909,6 +1953,8 @@ type EditedSource = {
   selfService: boolean;
   /** The folder beside the policy file that holds each server's rules file. */
   selfServiceDirectory: string;
+  /** Whether the App merges each server's rules pull request once its check passes. */
+  selfServiceAutoMerge: boolean;
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;

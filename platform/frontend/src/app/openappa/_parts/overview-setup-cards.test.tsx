@@ -55,6 +55,7 @@ const source = {
   setupPullRequestNumber: null,
   selfService: false,
   selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -79,7 +80,12 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source: null,
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>

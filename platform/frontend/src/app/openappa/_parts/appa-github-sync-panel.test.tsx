@@ -63,6 +63,7 @@ const source = {
   lastSyncError: null,
   selfService: true,
   selfServiceDirectory: "mcp",
+  selfServiceAutoMerge: false,
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -83,7 +84,12 @@ beforeEach(() => {
     githubWebUrl: "https://github.com",
     provider: "github",
     source,
-    selfService: { enabled: true, setting: true, directory: "mcp" },
+    selfService: {
+      enabled: true,
+      setting: true,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
 });
@@ -229,7 +235,12 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
   state = {
     ...state,
     source: { ...source, githubAppConfigId: "app-1", selfService: false },
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   let include: Record<string, unknown> = { folder: "mcp", state: "missing" };
   const protection = vi.fn(() =>
@@ -284,11 +295,13 @@ test("Enable walks through the App's permissions, the folder, the ruleset and th
           githubAppConfigId: "app-1",
           selfService: on,
           selfServiceDirectory: on ? "rules/servers" : "mcp",
+          selfServiceAutoMerge: false,
         },
         selfService: {
           enabled: on,
           setting: on,
           directory: on ? "rules/servers" : "mcp",
+          autoMerge: { enabled: false, setting: false },
         },
       };
       return HttpResponse.json(state);
@@ -369,6 +382,7 @@ test("locks self-service while the environment variable sets it, naming the vari
       enabled: true,
       setting: false,
       directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
       environment: {
         variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE",
         value: "enabled",
@@ -411,11 +425,102 @@ test("locks self-service while the environment variable sets it, naming the vari
   ).toBeVisible();
 });
 
+test("while self-service is on, auto-merge is a switch named after the policy check, and the environment variable locks it", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: "app-1" },
+  };
+  const actions: unknown[] = [];
+  server.use(
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Guardrails Policy Admission",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "active" },
+      }),
+    ),
+    http.patch(url, async ({ request }) => {
+      const body = (await request.json()) as { enabled: boolean };
+      actions.push(body);
+      state = {
+        ...state,
+        source: {
+          ...source,
+          githubAppConfigId: "app-1",
+          selfServiceAutoMerge: body.enabled,
+        },
+        selfService: {
+          ...state.selfService,
+          autoMerge: { enabled: body.enabled, setting: body.enabled },
+        },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  const toggle = await screen.findByRole("switch", {
+    name: "Auto-merge pull requests",
+  });
+  expect(toggle).not.toBeChecked();
+  await waitFor(() =>
+    expect(toggle.closest("div")?.parentElement).toHaveTextContent(
+      "Merge each MCP server's rules pull request as soon as the Guardrails Policy Admission check passes, so MCP owners need no access to the repository.",
+    ),
+  );
+  fireEvent.click(toggle);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("switch", { name: "Auto-merge pull requests" }),
+    ).toBeChecked(),
+  );
+  expect(actions).toEqual([
+    { action: "self_service_auto_merge", enabled: true },
+  ]);
+  expect(toast.success).toHaveBeenCalledWith("Auto-merge turned on.");
+  cleanup();
+
+  // Locked while the environment variable sets it.
+  state = {
+    ...state,
+    selfService: {
+      ...state.selfService,
+      autoMerge: {
+        enabled: true,
+        setting: false,
+        environment: {
+          variable: "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE",
+          value: "enabled",
+        },
+      },
+    },
+  };
+  show();
+  const locked = await screen.findByRole("combobox", {
+    name: "Auto-merge pull requests",
+  });
+  expect(locked).toHaveTextContent("On");
+  expect(locked).toBeDisabled();
+  expect(
+    screen.getByText(
+      (_, element) =>
+        element?.tagName === "CODE" &&
+        element.textContent ===
+          "ARCHESTRA_OPENAPPA_SELF_SERVICE_AUTO_MERGE=enabled",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByRole("switch")).toBeNull();
+});
+
 test("self-service needs a GitHub App: a source without one cannot enable it", async () => {
   state = {
     ...state,
     source: { ...source, selfService: false },
-    selfService: { enabled: false, setting: false, directory: "mcp" },
+    selfService: {
+      enabled: false,
+      setting: false,
+      directory: "mcp",
+      autoMerge: { enabled: false, setting: false },
+    },
   };
   show();
   expect(await screen.findByRole("button", { name: "Enable" })).toBeDisabled();
@@ -798,6 +903,77 @@ test("editing an App-backed source keeps its repository and only warns about mis
     githubAppConfigId: appId,
     selfService: true,
     selfServiceDirectory: "mcp",
+    selfServiceAutoMerge: false,
+  });
+});
+
+test("editing keeps the saved auto-merge choice; the Self-service step shows it under self-service and changes it", async () => {
+  state = {
+    ...state,
+    source: { ...source, githubAppConfigId: appId, selfServiceAutoMerge: true },
+    selfService: {
+      ...state.selfService,
+      autoMerge: { enabled: true, setting: true },
+    },
+  };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  let saved: Record<string, unknown> | undefined;
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.put(url, async ({ request }) => {
+      saved = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json(state);
+    }),
+    http.get(`${url}/protection`, () =>
+      HttpResponse.json({
+        checkName: "Check OpenAPPA Guardrails",
+        include: { folder: "mcp", state: "included" },
+        branchRules: { state: "active" },
+      }),
+    ),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  const dialog = await screen.findByRole("dialog");
+  // Back to the Self-service step, past the App's list and its choice.
+  fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+  await within(dialog).findByText("Use an App I already have");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+  const autoMerge = await within(dialog).findByRole("checkbox", {
+    name: "Auto-merge pull requests",
+  });
+  expect(autoMerge).toBeChecked();
+  // Only while self-service is ticked.
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  );
+  expect(
+    within(dialog).queryByRole("checkbox", {
+      name: "Auto-merge pull requests",
+    }),
+  ).toBeNull();
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", {
+      name: "MCP Guardrails Self-Service",
+    }),
+  );
+  fireEvent.click(
+    within(dialog).getByRole("checkbox", { name: "Auto-merge pull requests" }),
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  // The lone App is picked again, and the repository step follows.
+  fireEvent.click(await within(dialog).findByText("Use an App I already have"));
+  fireEvent.click(await within(dialog).findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(saved).toBeDefined());
+  expect(saved).toMatchObject({
+    selfService: true,
+    selfServiceAutoMerge: false,
   });
 });
 

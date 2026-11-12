@@ -19,6 +19,7 @@ import {
   publishOpenAppaPolicyChange,
 } from "@/services/openappa-policy-change";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { FakeGitlab } from "@/test/fake-gitlab";
 import { useMswServer } from "@/test/msw";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -26,6 +27,8 @@ import routes from "./openappa-github-sync.routes";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
+// The setup request's commit is kept in the shared cache.
+setupTestCacheManager();
 const GITLAB = "https://gitlab.example.test";
 const TOKEN = "glpat-test-token";
 
@@ -310,8 +313,8 @@ describe("APPA GitLab sync", () => {
       errors: [],
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
-    // A commit someone else pushed onto the request: nothing is read from
-    // it, so nothing unmerged reaches the composition.
+    // A commit someone else pushed onto the request moves its branch, but
+    // the read stays at the commit Archestra opened it with.
     const branch = gitlab.sourceBranch(repo, 1);
     const own = gitlab.branchHead(repo, branch);
     gitlab.commit(
@@ -328,7 +331,8 @@ describe("APPA GitLab sync", () => {
           content: root,
         }),
       ).toMatchObject({
-        errors: [expect.stringContaining("accepted no repository commit")],
+        errors: [],
+        included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
       });
     } finally {
       vi.useRealTimers();

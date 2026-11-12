@@ -65,6 +65,7 @@ import {
   MissingGithubPermission,
   openappaRepositoryIncludes,
   type RepositorySource,
+  rememberSetupCommit,
   repositoryPath,
   resolveOpenAppaGithubAccess,
   resolveOpenAppaGitlabAccess,
@@ -327,6 +328,7 @@ export async function createAppaGithubRepository(params: {
   };
   const repo = `${params.owner}/${params.name}`;
   let setupPullRequestNumber: number | undefined;
+  let setupCommit: string | undefined;
   let seededEmpty = false;
   const custom =
     params.existing &&
@@ -352,6 +354,7 @@ export async function createAppaGithubRepository(params: {
     });
     created = { full_name: repo, default_branch: seeded.branch, private: true };
     setupPullRequestNumber = seeded.setupPullRequestNumber;
+    setupCommit = seeded.setupCommit;
     seededEmpty = true;
   } else if (params.existing) {
     const notTemplate = new ApiError(400, "Not a template copy");
@@ -463,6 +466,7 @@ export async function createAppaGithubRepository(params: {
         direct: true,
       });
       setupPullRequestNumber = outcome.setupPullRequestNumber;
+      setupCommit = outcome.setupCommit;
     } catch (error) {
       if (error instanceof ApiError)
         throw new ApiError(
@@ -493,6 +497,12 @@ export async function createAppaGithubRepository(params: {
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (setupPullRequestNumber && setupCommit)
+    await rememberSetupCommit({
+      repo,
+      number: setupPullRequestNumber,
+      sha: setupCommit,
+    });
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
 }
@@ -523,6 +533,7 @@ async function proposeSetupPullRequest(params: {
   const { api, repo, token, path } = params;
   const base = `${api}/repos/${repo}`;
   let setupPullRequestNumber: number | undefined;
+  let setupCommit: string | undefined;
   let branch = params.ref;
   try {
     branch ??= await defaultBranch({ token, base });
@@ -559,6 +570,7 @@ async function proposeSetupPullRequest(params: {
       direct: false,
     });
     setupPullRequestNumber = outcome.setupPullRequestNumber;
+    setupCommit = outcome.setupCommit;
   } catch (error) {
     if (error instanceof ApiError)
       throw new ApiError(
@@ -588,6 +600,12 @@ async function proposeSetupPullRequest(params: {
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (setupPullRequestNumber && setupCommit)
+    await rememberSetupCommit({
+      repo,
+      number: setupPullRequestNumber,
+      sha: setupCommit,
+    });
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (row?.lastSyncError) {
@@ -638,6 +656,7 @@ async function createAppaGitlabProject(params: {
     branch: string | null;
     path?: string;
     setupPullRequestNumber?: number;
+    setupCommit?: string;
   };
   // A project with a policy of its own is connected as a source: a first
   // pull that fails leaves the sync stopped, as connecting does.
@@ -674,6 +693,7 @@ async function createAppaGitlabProject(params: {
         branch: proposed ? proposed.branch : (params.ref ?? null),
         path,
         setupPullRequestNumber: proposed?.iid,
+        setupCommit: proposed?.sha,
       };
     } else
       seeded = {
@@ -721,6 +741,12 @@ async function createAppaGitlabProject(params: {
   };
   await beforeSourceChange(params.organizationId, source);
   await OpenAppaGithubSyncModel.save(params.organizationId, source);
+  if (seeded.setupPullRequestNumber && seeded.setupCommit)
+    await rememberSetupCommit({
+      repo: seeded.repo,
+      number: seeded.setupPullRequestNumber,
+      sha: seeded.setupCommit,
+    });
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
   if (holdsPolicy && row?.lastSyncError) {
@@ -2124,7 +2150,11 @@ async function seedEmptyRepository(params: {
   token: string;
   policy: string;
   transferred: SetupFile[];
-}): Promise<{ branch: string; setupPullRequestNumber?: number }> {
+}): Promise<{
+  branch: string;
+  setupPullRequestNumber?: number;
+  setupCommit?: string;
+}> {
   const { token } = params;
   const base = `${params.api}/repos/${params.repo}`;
   const files = OPENAPPA_TEMPLATE.files.map((file) =>
@@ -2150,7 +2180,7 @@ async function seedEmptyRepository(params: {
   if (!branch || !parent || !/^[a-f0-9]{40}$/.test(parent))
     throw new ApiError(502, "GitHub returned an unexpected repository");
   const message = "Add the OpenAPPA template and current policy";
-  const { setupPullRequestNumber } = await commitSetupFiles({
+  const { setupPullRequestNumber, setupCommit } = await commitSetupFiles({
     base,
     token,
     branch,
@@ -2163,7 +2193,7 @@ async function seedEmptyRepository(params: {
     },
     direct: true,
   });
-  return { branch, setupPullRequestNumber };
+  return { branch, setupPullRequestNumber, setupCommit };
 }
 
 /** A file setup writes into the policy repository, by its path there. */
@@ -2341,7 +2371,7 @@ async function commitSetupFiles(params: {
   message: string;
   pull: { title: string; body: string };
   direct: boolean;
-}): Promise<{ setupPullRequestNumber?: number }> {
+}): Promise<{ setupPullRequestNumber?: number; setupCommit?: string }> {
   const { base, token, branch, parent } = params;
   const files = firstFileAtEachPath(params.files);
   const removed = (params.remove ?? []).map((path) => ({
@@ -2403,7 +2433,7 @@ async function commitSetupFiles(params: {
     });
     if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
       throw new ApiError(502, "GitHub returned an invalid pull request");
-    return { setupPullRequestNumber: pull.number };
+    return { setupPullRequestNumber: pull.number, setupCommit: sha };
   };
   let commit = await commitFiles(files);
   if (!commit) return {};

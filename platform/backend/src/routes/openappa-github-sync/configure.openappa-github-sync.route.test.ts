@@ -3,6 +3,7 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -31,12 +32,15 @@ import {
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-github-sync.routes";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
+// The setup request's commit is kept in the shared cache.
+setupTestCacheManager();
 const commit = "a".repeat(40);
 /** The commit setup writes with the git data API. */
 const SETUP_COMMIT = "c".repeat(40);
@@ -1205,10 +1209,10 @@ describe("APPA GitHub sync", () => {
         "rules/README.md": "# Not a rules file\n",
       },
     });
-    let pull = { merged: false, state: "open" };
-    // What the setup pull request carries: Archestra's one commit, until
-    // someone pushes another.
-    let carried = [{ sha: SETUP_COMMIT, author: { login: "policy-app[bot]" } }];
+    let pull: { merged: boolean; state: string; head?: { sha: string } } = {
+      merged: false,
+      state: "open",
+    };
     server.use(
       http.post(
         `https://api.github.com/app/installations/${installationId}/access_tokens`,
@@ -1217,17 +1221,6 @@ describe("APPA GitHub sync", () => {
             token: "test-installation-token",
             expires_at: new Date(Date.now() + 3600000).toISOString(),
           }),
-      ),
-      http.get("https://api.github.com/app", () =>
-        HttpResponse.json({ slug: "policy-app", name: "Policy App" }),
-      ),
-      http.get(
-        `https://api.github.com/app/installations/${installationId}`,
-        () => HttpResponse.json({ html_url: "https://github.com/x" }),
-      ),
-      http.get(
-        "https://api.github.com/repos/example/other-policy/pulls/8/commits",
-        () => HttpResponse.json(carried),
       ),
       http.get("https://api.github.com/repos/example/other-policy", () =>
         HttpResponse.json({ default_branch: "main" }),
@@ -1249,7 +1242,7 @@ describe("APPA GitHub sync", () => {
       ),
       http.get(
         "https://api.github.com/repos/example/other-policy/pulls/8",
-        () => HttpResponse.json({ ...pull, head: { sha: SETUP_COMMIT } }),
+        () => HttpResponse.json({ head: { sha: SETUP_COMMIT }, ...pull }),
       ),
       http.get(
         "https://api.github.com/repos/example/other-policy/commits/main",
@@ -1293,13 +1286,11 @@ describe("APPA GitHub sync", () => {
       errors: [],
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
-    // A commit someone else pushed onto the request: nothing is read from
-    // it until the merge, so nothing unmerged reaches the composition.
+    // A commit someone else pushed onto the request moves its head, but the
+    // read stays at the commit Archestra opened it with: nothing unmerged
+    // reaches the composition.
     expect(git.state.treeReads).toBeGreaterThan(0);
-    carried = [
-      ...carried,
-      { sha: "d".repeat(40), author: { login: "someone-else" } },
-    ];
+    pull = { ...pull, head: { sha: "d".repeat(40) } };
     vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ["Date"] });
     try {
       expect(
@@ -1308,12 +1299,29 @@ describe("APPA GitHub sync", () => {
           content: root,
         }),
       ).toMatchObject({
-        errors: [expect.stringContaining("accepted no repository commit")],
+        errors: [],
+        included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
       });
+      // A replica that has not kept the request's commit reads nothing.
+      vi.setSystemTime(Date.now() + 61_000);
+      const get = vi
+        .spyOn(cacheManager, "get")
+        .mockResolvedValueOnce(undefined);
+      try {
+        expect(
+          await openappaRepositoryIncludes.expand({
+            organizationId,
+            content: root,
+          }),
+        ).toMatchObject({
+          errors: [expect.stringContaining("accepted no repository commit")],
+        });
+      } finally {
+        get.mockRestore();
+      }
     } finally {
       vi.useRealTimers();
     }
-    carried = carried.slice(0, 1);
     pull = { merged: true, state: "closed" };
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({

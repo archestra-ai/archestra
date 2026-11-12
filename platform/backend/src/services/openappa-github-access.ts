@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { parseFullToolName } from "@archestra/shared";
-import { LRUCacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  cacheManager,
+  LRUCacheManager,
+} from "@/cache-manager";
 import config from "@/config";
 import {
   type GitAccess,
@@ -526,11 +531,12 @@ class OpenAppaRepositoryIncludes {
   }
 
   /**
-   * The commit of the setup pull or merge request, for a minute: the one
-   * commit Archestra opened it with, which holds the files accepted before.
-   * A request that carries any other commit, pushed by someone else, or
-   * that was closed unmerged, has none to read: nothing unmerged reaches
-   * the composition, and the last one that opened stays in force.
+   * The commit a pending setup pull or merge request is read at: the one
+   * Archestra opened it with, kept when the request was opened, while the
+   * request is open or merged and not pulled yet. Whatever was pushed onto
+   * the request's branch since is not read; a request closed unmerged, or
+   * one whose commit is not kept, has none, and the last composition that
+   * opened stays in force.
    */
   private async pendingSetupCommit(
     source: RepositorySource & { setupPullRequestNumber: number },
@@ -538,68 +544,47 @@ class OpenAppaRepositoryIncludes {
     const key = `${source.repo}#${source.setupPullRequestNumber}`;
     const cached = this.pendingSetups.get(key);
     if (cached !== undefined) return cached;
-    const own = source.gitlabTokenId
-      ? await this.ownGitlabSetupCommit(source)
-      : await this.ownGithubSetupCommit(source);
-    if (own === null) return null;
-    if (!/^[a-f0-9]{40}$/.test(own))
-      throw new ApiError(502, "The setup request names an invalid commit");
-    this.pendingSetups.set(key, own);
-    return own;
+    const kept = await cacheManager.get<string>(
+      setupCommitKey(source.repo, source.setupPullRequestNumber),
+    );
+    if (typeof kept !== "string" || !/^[a-f0-9]{40}$/.test(kept)) return null;
+    const state = source.gitlabTokenId
+      ? await this.gitlabSetupState(source)
+      : await this.githubSetupState(source);
+    if (state === "closed") return null;
+    this.pendingSetups.set(key, kept);
+    return kept;
   }
 
-  private async ownGithubSetupCommit(
+  private async githubSetupState(
     source: RepositorySource & { setupPullRequestNumber: number },
-  ): Promise<string | null> {
+  ): Promise<"open" | "merged" | "closed"> {
     const { token, api } = await resolveOpenAppaGithubAccess(source, {
       pull_requests: "read",
     });
-    const base = `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`;
-    const read = async <T>(url: string): Promise<T> => {
-      const response = await githubFetch({ url, token: token || undefined });
-      if (!response.ok)
-        throw new ApiError(
-          502,
-          `GitHub returned HTTP ${response.status} for the setup pull request. Check repository access and App permissions.`,
-        );
-      return (await response.json()) as T;
-    };
-    const pull = await read<{
+    const response = await githubFetch({
+      url: `${api}/repos/${source.repo}/pulls/${source.setupPullRequestNumber}`,
+      token: token || undefined,
+    });
+    if (!response.ok)
+      throw new ApiError(
+        502,
+        `GitHub returned HTTP ${response.status} for the setup pull request. Check repository access and App permissions.`,
+      );
+    const pull = (await response.json()) as {
       state?: string;
       merged?: boolean;
-      head?: { sha?: string };
-    }>(base);
-    // Open, or merged and not pulled yet; a request closed unmerged is not.
-    if (pull.state !== "open" && pull.merged !== true) return null;
-    const [login, commits] = await Promise.all([
-      githubAppLogin(source),
-      read<
-        Array<{
-          sha?: string;
-          author?: { login?: string } | null;
-          committer?: { login?: string } | null;
-        }>
-      >(`${base}/commits?per_page=2`),
-    ]);
-    const only = commits.length === 1 ? commits[0] : undefined;
-    if (
-      !only?.sha ||
-      only.sha !== pull.head?.sha ||
-      !login ||
-      (only.author?.login ?? only.committer?.login) !== login
-    ) {
-      logger.info(
-        { repo: source.repo, number: source.setupPullRequestNumber },
-        "OpenAPPA does not read a setup pull request that carries more than its own commit",
-      );
-      return null;
-    }
-    return only.sha;
+    };
+    return pull.merged === true
+      ? "merged"
+      : pull.state === "open"
+        ? "open"
+        : "closed";
   }
 
-  private async ownGitlabSetupCommit(
+  private async gitlabSetupState(
     source: RepositorySource & { setupPullRequestNumber: number },
-  ): Promise<string | null> {
+  ): Promise<"open" | "merged" | "closed"> {
     const client = gitClient(
       await resolveOpenAppaGitlabAccess({
         organizationId: source.organizationId,
@@ -607,32 +592,12 @@ class OpenAppaRepositoryIncludes {
       }),
     );
     try {
-      const request = await client.gitlabMergeRequest(
-        source.repo,
-        source.setupPullRequestNumber,
-      );
-      if (request.state === "closed") return null;
-      const [me, commits] = await Promise.all([
-        client.gitlabCurrentUser(),
-        client.gitlabMergeRequestCommits(
+      return (
+        await client.gitlabMergeRequest(
           source.repo,
           source.setupPullRequestNumber,
-        ),
-      ]);
-      const only = commits.length === 1 ? commits[0] : undefined;
-      if (
-        !only ||
-        only.id !== request.sha ||
-        !me.email ||
-        only.authorEmail !== me.email
-      ) {
-        logger.info(
-          { repo: source.repo, number: source.setupPullRequestNumber },
-          "OpenAPPA does not read a setup merge request that carries more than its own commit",
-        );
-        return null;
-      }
-      return only.id;
+        )
+      ).state;
     } catch (error) {
       if (error instanceof GitHostError)
         throw new ApiError(
@@ -797,6 +762,41 @@ export function templateExampleBlob(): string {
  * been in it, so setup removes them in the same commit, where the reviewer
  * sees them go and can keep any on the branch.
  */
+/**
+ * The one commit Archestra opened a setup pull or merge request with, kept
+ * in the shared cache until the request is long merged: what a pending read
+ * reads, whatever the request's branch holds later.
+ */
+export async function rememberSetupCommit(params: {
+  repo: string;
+  number: number;
+  sha: string;
+}): Promise<void> {
+  try {
+    await cacheManager.set(
+      setupCommitKey(params.repo, params.number),
+      params.sha,
+      SETUP_COMMIT_TTL,
+    );
+  } catch (error) {
+    // Without it the request's files are not read until the merge is
+    // pulled, which is the safe side.
+    logger.warn(
+      { repo: params.repo, number: params.number, error },
+      "OpenAPPA could not keep the setup request's commit",
+    );
+  }
+}
+
+function setupCommitKey(repo: string, number: number): AllowedCacheKey {
+  return `${CacheKey.OpenAppaPolicyCheck}-setup-${createHash("sha256")
+    .update(JSON.stringify([repo.toLowerCase(), number]))
+    .digest("hex")}`;
+}
+
+/** Long past any review; a merge pulls the files from the accepted commit anyway. */
+const SETUP_COMMIT_TTL = 90 * 24 * 60 * 60_000;
+
 /** Whether the policy's include list has a glob over repository files. */
 export function hasRepositoryIncludeGlob(content: string): boolean {
   return repositoryIncludePaths(content).some((entry) => {

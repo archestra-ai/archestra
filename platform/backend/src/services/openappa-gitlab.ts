@@ -291,7 +291,12 @@ class OpenAppaGitlab {
     /** The policy text being written, for the globs it reads by. */
     policyPath: string;
     content: string;
-  }): Promise<{ iid: number; webUrl: string; branch: string } | null> {
+  }): Promise<{
+    iid: number;
+    webUrl: string;
+    branch: string;
+    sha: string;
+  } | null> {
     const client = gitClient(params.access);
     const branch = await withGitlabErrors(
       async () => params.ref ?? (await client.defaultBranch(params.repo)),
@@ -356,7 +361,7 @@ class OpenAppaGitlab {
     summary: string;
     upsert: { path: string; content: string }[];
     delete: string[];
-  }): Promise<{ iid: number; webUrl: string }> {
+  }): Promise<{ iid: number; webUrl: string; sha: string }> {
     const client = gitClient(params.access);
     return withGitlabErrors(async () => {
       const tree = await client.listTree(params.repo, params.baseSha);
@@ -373,7 +378,7 @@ class OpenAppaGitlab {
           );
       }
       const head = `archestra/openappa-${randomUUID()}`;
-      await client.commitGitlabFiles({
+      const sha = await client.commitGitlabFiles({
         repo: params.repo,
         branch: head,
         startBranch: params.branch,
@@ -393,20 +398,23 @@ class OpenAppaGitlab {
         ],
       });
       try {
-        return await client.createGitlabMergeRequest({
-          repo: params.repo,
-          sourceBranch: head,
-          targetBranch: params.branch,
-          title: params.title,
-          description: params.summary,
-        });
+        return {
+          ...(await client.createGitlabMergeRequest({
+            repo: params.repo,
+            sourceBranch: head,
+            targetBranch: params.branch,
+            title: params.title,
+            description: params.summary,
+          })),
+          sha,
+        };
       } catch (error) {
         // Without GitLab's answer the request may have opened all the same.
         const opened =
           error instanceof GitHostError && error.status === 0
             ? await openRequestFor({ client, repo: params.repo, head })
             : null;
-        if (opened) return opened;
+        if (opened) return { ...opened, sha };
         // A lookup that failed too leaves the branch: it may hold a request.
         if (opened === null)
           await deleteBranch({ client, repo: params.repo, branch: head });

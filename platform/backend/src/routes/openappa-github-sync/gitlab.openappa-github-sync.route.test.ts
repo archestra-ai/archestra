@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import {
   createFastifyInstance,
@@ -273,17 +274,34 @@ describe("APPA GitLab sync", () => {
       included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
     });
     // Merged, its branch removed, not pulled yet: still read, at its head.
+    // The open request's commit was kept for a minute; a minute later the
+    // merged request is looked up again.
     gitlab.merge(repo, 1);
     gitlab.deleteSourceBranch(repo, 1);
-    expect(
-      await openappaRepositoryIncludes.expand({
-        organizationId,
-        content: root,
-      }),
-    ).toMatchObject({
-      errors: [],
-      included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
-    });
+    vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ["Date"] });
+    try {
+      const before = gitlab.requests.length;
+      expect(
+        await openappaRepositoryIncludes.expand({
+          organizationId,
+          content: root,
+        }),
+      ).toMatchObject({
+        errors: [],
+        included: [{ path: "rules/current.toml", sha256: expect.any(String) }],
+      });
+      expect(
+        gitlab.requests
+          .slice(before)
+          .some(
+            (request) =>
+              request.method === "GET" &&
+              request.path.endsWith("/merge_requests/1"),
+          ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
     await syncAppaGithubPolicy(organizationId);
     const files = gitlab.files(repo, "main");
     expect(files).toMatchObject({
